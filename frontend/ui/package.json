@@ -35,7 +35,7 @@
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plugin-icons-spritesheet": "3.0.1",
+    "vite-plugin-icons-spritesheet": "3.1.0",
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
