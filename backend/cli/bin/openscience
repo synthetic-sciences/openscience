@@ -1,0 +1,116 @@
+#!/usr/bin/env node
+
+const childProcess = require("child_process")
+const fs = require("fs")
+const path = require("path")
+const os = require("os")
+
+function run(target) {
+  // Clean up files that confuse Bun compiled binaries.
+  // Install dir stays as ~/.openscience/ until the path-migration follow-up PR.
+  const openscienceDir = path.join(os.homedir(), ".openscience")
+  for (const poison of ["package.json", ".gitignore", "bun.lockb", "bunfig.toml"]) {
+    try { fs.unlinkSync(path.join(openscienceDir, poison)) } catch {}
+  }
+  try { fs.rmSync(path.join(openscienceDir, "node_modules"), { recursive: true }) } catch {}
+  // Clear macOS extended attributes that cause Bun binaries to hang
+  if (os.platform() === "darwin") {
+    try { childProcess.spawnSync("xattr", ["-rc", openscienceDir], { stdio: "ignore" }) } catch {}
+  }
+
+  const result = childProcess.spawnSync(target, process.argv.slice(2), {
+    stdio: "inherit",
+  })
+  if (result.error) {
+    console.error(result.error.message)
+    process.exit(1)
+  }
+  const code = typeof result.status === "number" ? result.status : 0
+  process.exit(code)
+}
+
+// Helper: check if a path points to a real binary (not this wrapper script)
+function isBinary(p) {
+  try {
+    if (!fs.existsSync(p)) return false
+    const real = fs.realpathSync(p)
+    // Skip if it resolves to this script (self-reference via symlink)
+    if (real === fs.realpathSync(__filename)) return false
+    // Skip if it's a .js file (another wrapper)
+    if (real.endsWith(".js")) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+// 1. Check OPENSCIENCE_BIN_PATH env var
+const envPath = process.env.OPENSCIENCE_BIN_PATH
+if (envPath && isBinary(envPath)) {
+  run(envPath)
+}
+
+const binary = os.platform() === "win32" ? "openscience.exe" : "openscience"
+const scriptPath = fs.realpathSync(__filename)
+const scriptDir = path.dirname(scriptPath)
+
+const platformMap = { darwin: "darwin", linux: "linux", win32: "windows" }
+const archMap = { x64: "x64", arm64: "arm64", arm: "arm" }
+const platform = platformMap[os.platform()] || os.platform()
+const arch = archMap[os.arch()] || os.arch()
+const base = "openscience-" + platform + "-" + arch
+const scopedBase = "openscience-" + platform + "-" + arch
+
+// 2. Search this install's node_modules for the matching platform package.
+// This must come before ~/.openscience or Homebrew fallbacks; otherwise an npm
+// install can accidentally launch an older globally-installed binary.
+let current = scriptDir
+while (true) {
+  const modules = path.join(current, "node_modules")
+  if (fs.existsSync(modules)) {
+    try {
+      const entries = fs.readdirSync(modules)
+      for (const entry of entries) {
+        if (entry.startsWith(base)) {
+          const candidate = path.join(modules, entry, "bin", binary)
+          if (isBinary(candidate)) run(candidate)
+        }
+      }
+      // Check scoped packages (@synsci/openscience-darwin-arm64)
+      const scoped = path.join(modules, "@synsci")
+      if (fs.existsSync(scoped)) {
+        const scopedEntries = fs.readdirSync(scoped)
+        for (const entry of scopedEntries) {
+          if (entry.startsWith(scopedBase)) {
+            const candidate = path.join(scoped, entry, "bin", binary)
+            if (isBinary(candidate)) run(candidate)
+          }
+        }
+      }
+    } catch {}
+  }
+  const parent = path.dirname(current)
+  if (parent === current) break
+  current = parent
+}
+
+// 3. Check ~/.openscience/bin (curl installer fallback; dir renamed later)
+const homeBin = path.join(os.homedir(), ".openscience", "bin", binary)
+if (isBinary(homeBin)) {
+  run(homeBin)
+}
+
+// 4. Check /opt/homebrew/bin (macOS)
+if (os.platform() === "darwin" && isBinary("/opt/homebrew/bin/openscience")) {
+  run("/opt/homebrew/bin/openscience")
+}
+
+// 5. Check /usr/local/bin
+if (isBinary("/usr/local/bin/openscience")) {
+  run("/usr/local/bin/openscience")
+}
+
+console.error("openscience binary not found.")
+console.error("Install with: curl -fsSL https://syntheticsciences.ai/install | bash")
+console.error("Or set OPENSCIENCE_BIN_PATH environment variable.")
+process.exit(1)

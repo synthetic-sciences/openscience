@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/package",
+  "name": "@synsci/script",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

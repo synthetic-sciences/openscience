@@ -1,0 +1,46 @@
+Review our entire conversation from the beginning. Your goal is to distill a reusable learned skill that captures the workflow pattern, failure modes, and key corrections.
+
+Analyze the following aspects:
+
+1. **Workflow Pattern**: What tools were used and in what sequence? What was the overall approach?
+2. **Failure Modes**: Where did things go wrong? What errors occurred? How were they recovered from?
+3. **User Corrections**: Where did the user steer the approach differently? What did they correct or improve?
+4. **Key Parameters**: What specific configurations, thresholds, or settings were important?
+5. **Reproducibility**: What would someone need to know to reproduce this workflow on a similar problem?
+
+Then call the `learn` tool with:
+- `name`: A descriptive kebab-case identifier (e.g., "debug-cuda-memory-leak", "deploy-vercel-prebuilt")
+- `description`: A one-line summary of what this skill teaches
+- `content`: A complete SKILL.md with this structure:
+
+```
+---
+name: {name}
+description: {description}
+source: rsi
+metadata:
+    skill-author: /learn command
+---
+
+# {name}
+
+## Overview
+[What this skill covers and when to use it]
+
+## Workflow Pattern
+[Numbered steps with tool names and key actions]
+
+## Failure Modes & Recovery
+[What went wrong and how it was fixed — the most valuable part]
+
+## User Corrections
+[Where the user steered the approach — captures human judgment]
+
+## Key Parameters
+[Important configurations, thresholds, file paths]
+
+## When to Use
+[Trigger conditions — what kind of problem/question matches this skill]
+```
+
+$ARGUMENTS
