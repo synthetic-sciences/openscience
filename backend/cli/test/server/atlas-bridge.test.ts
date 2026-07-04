@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { computeDedupeKey } from "../../src/server/routes/atlas-bridge"
+import { classifyInitFailure, computeDedupeKey, initProjectDetailed } from "../../src/server/routes/atlas-bridge"
 
 describe("computeDedupeKey", () => {
   test("derives repo:<host>/<owner>/<name> from a GitHub https remote", () => {
@@ -30,5 +30,62 @@ describe("computeDedupeKey", () => {
     const a = computeDedupeKey("/x", "https://github.com/o/n")
     const b = computeDedupeKey("/y", "https://github.com/o/n")
     expect(a).toBe(b)
+  })
+})
+
+describe("classifyInitFailure", () => {
+  test("401/403 are unauthenticated (key rejected)", () => {
+    expect(classifyInitFailure(401, "").kind).toBe("unauthenticated")
+    expect(classifyInitFailure(403, "").kind).toBe("unauthenticated")
+    expect(classifyInitFailure(401, "").host).toBeTruthy()
+  })
+
+  test("402 with the backend's plan_quota_exhausted payload is a plan failure", () => {
+    const body = JSON.stringify({
+      detail: { code: "plan_quota_exhausted", message: "Monthly quota exhausted", upgrade_url: "/billing" },
+    })
+    const failure = classifyInitFailure(402, body)
+    expect(failure.kind).toBe("plan")
+    expect(failure.message).toBe("Monthly quota exhausted")
+    expect(failure.status).toBe(402)
+  })
+
+  test("a plan-worded 4xx is a plan failure even without a 402 status", () => {
+    const failure = classifyInitFailure(400, JSON.stringify({ detail: "no active subscription" }))
+    expect(failure.kind).toBe("plan")
+    expect(failure.message).toBe("no active subscription")
+  })
+
+  test("5xx means the service could not be reached", () => {
+    expect(classifyInitFailure(500, "").kind).toBe("unreachable")
+    expect(classifyInitFailure(503, "upstream down").kind).toBe("unreachable")
+  })
+
+  test("other 4xx pass the backend message through", () => {
+    const failure = classifyInitFailure(404, JSON.stringify({ detail: "project not found" }))
+    expect(failure.kind).toBe("backend")
+    expect(failure.status).toBe(404)
+    expect(failure.message).toBe("project not found")
+  })
+
+  test("non-JSON bodies fall back to trimmed raw text", () => {
+    expect(classifyInitFailure(500, "  Bad Gateway  ").message).toBe("Bad Gateway")
+    expect(classifyInitFailure(500, "").message).toBeUndefined()
+  })
+})
+
+describe("initProjectDetailed", () => {
+  test("fails fast as unauthenticated with no managed session (no network)", async () => {
+    // Test env is XDG-isolated (see test/preload.ts) so no session file exists.
+    const result = await initProjectDetailed(process.cwd())
+    expect(result.projectId).toBeNull()
+    expect(result.failure?.kind).toBe("unauthenticated")
+    expect(result.failure?.host).toBeTruthy()
+  })
+
+  test("reports a backend failure for an empty directory instead of throwing", async () => {
+    const result = await initProjectDetailed("")
+    expect(result.projectId).toBeNull()
+    expect(result.failure?.kind).toBe("backend")
   })
 })

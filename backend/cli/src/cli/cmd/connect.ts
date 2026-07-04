@@ -1,7 +1,7 @@
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { OpenScience } from "../../openscience"
+import { OpenScience, API_BASE } from "../../openscience"
 import { openUrl } from "../../util/open-url"
 
 export const ConnectCommand = cmd({
@@ -38,7 +38,9 @@ const ConnectLoginCommand = cmd({
 
     const existing = await OpenScience.getSession()
     if (existing) {
-      prompts.log.success("Already authenticated")
+      // Name the backend: "authenticated" only means a key is saved locally.
+      // If requests then fail, the user can see WHICH host they point at.
+      prompts.log.success(`Already authenticated (backend: ${API_BASE})`)
       await syncAndReport()
       prompts.outro("Done")
       return
@@ -83,7 +85,18 @@ async function syncAndReport() {
   if (result) {
     const noun = result.credentials === 1 ? "credential" : "credentials"
     prompts.log.success(`Synced ${result.credentials} ${noun} from connected services`)
+    return
   }
+  // syncServices() returns null on every failure and clears the session when
+  // the backend rejected the key. Never leave "authenticated" looking healthy
+  // while every request silently fails — say what happened and against which host.
+  if (!(await OpenScience.getSession())) {
+    prompts.log.warn(`${API_BASE} rejected your saved key. Run \`openscience connect login\` to re-authenticate.`)
+    return
+  }
+  prompts.log.warn(
+    `Could not sync services from ${API_BASE} — the backend may be unreachable or your plan inactive. Provider keys/config were not updated.`,
+  )
 }
 
 /** Validate + persist a pasted/CI-supplied thk_ key. */
@@ -184,6 +197,7 @@ const ConnectStatusCommand = cmd({
     }
 
     prompts.log.success("Connected")
+    prompts.log.info(`Backend: ${API_BASE}`)
     if (session.user_id) prompts.log.info(`User: ${session.user_id}`)
     if (session.device_name) prompts.log.info(`Device: ${session.device_name}`)
 
@@ -195,6 +209,10 @@ const ConnectStatusCommand = cmd({
       if (result.user.subscription_status) {
         prompts.log.info(`Subscription: ${result.user.subscription_status}`)
       }
+    } else if (!(await OpenScience.getSession())) {
+      prompts.log.warn(`${API_BASE} rejected your saved key. Run \`openscience connect login\` to re-authenticate.`)
+    } else {
+      prompts.log.warn(`Could not reach ${API_BASE} to verify services — the saved session is untested against the backend.`)
     }
 
     prompts.outro("Done")
@@ -224,7 +242,7 @@ const ConnectSyncCommand = cmd({
       const noun = result.credentials === 1 ? "credential" : "credentials"
       spinner.stop(`Synced ${result.credentials} ${noun}`)
     } else {
-      spinner.stop("Sync failed", 1)
+      spinner.stop(`Sync failed (backend: ${API_BASE})`, 1)
     }
 
     prompts.outro("Done")

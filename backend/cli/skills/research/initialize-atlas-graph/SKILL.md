@@ -34,9 +34,22 @@ Run this skill when:
    ```bash
    openscience project init --format=json
    ```
-   This prints `{"project_id":"<id>"}` and writes `.openscience/project.json` at the
-   repo root so the canvas links to it immediately. `project_id: null` means it
-   could not reach Atlas — check login and that the account has an active plan.
+   On success this prints `{"project_id":"<id>"}` and writes `.openscience/project.json`
+   at the repo root so the canvas links to it immediately.
+
+   On failure it prints `project_id: null` plus an `error` kind (and `host`,
+   `status`, `message` when known). Relay the fix that matches the kind — do
+   NOT guess or tell the user to re-login for a network problem:
+   - `"unauthenticated"` — no session, or the backend rejected the saved key.
+     Tell the user to run `openscience connect login`.
+   - `"unreachable"` — the Atlas backend at the printed `host` could not be
+     reached (network/DNS error or 5xx). The user IS logged in; suggest checking
+     connectivity and any `OPENSCIENCE_API_BASE`/`SYNSC_API_BASE` override, then
+     retrying — not re-authenticating.
+   - `"plan"` — authenticated, but the account has no active Atlas plan. Point
+     the user at https://app.syntheticsciences.ai/cli (Plan tab); include the
+     backend `message` if present.
+   - `"backend"` — anything else; show the backend's `status`/`message` verbatim.
 
 3. **Confirm to the user.** Report the `project_id` and tell them the graph now
    shows in the canvas (Atlas pane). From here, milestones are recorded against

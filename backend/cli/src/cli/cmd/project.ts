@@ -4,7 +4,8 @@ import { mkdirSync, writeFileSync } from "fs"
 import { basename, join } from "path"
 import { UI } from "../ui"
 import { OpenScience, API_BASE } from "../../openscience"
-import { computeDedupeKey, initProject } from "../../server/routes/atlas-bridge"
+import { computeDedupeKey, initProjectDetailed } from "../../server/routes/atlas-bridge"
+import type { InitProjectFailure } from "../../server/routes/atlas-bridge"
 
 /**
  * `openscience project` — manage the Atlas project root for a folder.
@@ -36,31 +37,67 @@ const ProjectInitCommand = cmd({
     const json = args.format === "json"
     const session = await OpenScience.getSession()
     if (!session) {
+      // Fail fast: without a managed session no request can succeed, so don't
+      // let this surface later as a network error.
       if (json) {
-        process.stdout.write(JSON.stringify({ project_id: null, error: "unauthenticated" }) + "\n")
+        process.stdout.write(JSON.stringify({ project_id: null, error: "unauthenticated", host: API_BASE }) + "\n")
         return
       }
       UI.empty()
-      prompts.log.error("Not authenticated. Run `openscience connect login` first.")
+      prompts.log.error("Not connected to Atlas. Run `openscience connect login` first.")
       return
     }
     const opened = (args.dir as string | undefined) || process.cwd()
-    const projectId = await initProject(opened).catch(() => null)
+    const fallback: InitProjectFailure = { kind: "backend", host: API_BASE }
+    const result = await initProjectDetailed(opened).catch(() => ({ projectId: null, failure: fallback }))
     if (json) {
-      process.stdout.write(JSON.stringify({ project_id: projectId }) + "\n")
+      const failure = result.failure
+      process.stdout.write(
+        JSON.stringify({
+          project_id: result.projectId,
+          ...(failure ? { error: failure.kind, status: failure.status, message: failure.message, host: failure.host } : {}),
+        }) + "\n",
+      )
       return
     }
     UI.empty()
-    if (projectId) {
-      prompts.log.success(`Atlas research graph ready — project ${projectId}`)
+    if (result.projectId) {
+      prompts.log.success(`Atlas research graph ready — project ${result.projectId}`)
       prompts.log.info("Pinned to .openscience/project.json; the canvas will show it on next open.")
-    } else {
-      prompts.log.error(
-        "Could not initialize the graph. Check `openscience connect login` and that your account has an active Atlas plan.",
-      )
+      return
     }
+    reportInitFailure(result.failure)
   },
 })
+
+/** One honest, actionable line per failure class — never the old blanket
+ *  "check login and plan" for what is actually a DNS error or a 500. */
+function reportInitFailure(failure: InitProjectFailure | undefined) {
+  const f = failure ?? { kind: "backend" as const, host: API_BASE }
+  const detail = f.message ? ` — ${f.message}` : ""
+  switch (f.kind) {
+    case "unauthenticated":
+      prompts.log.error(
+        f.status
+          ? `${f.host} rejected your saved session (HTTP ${f.status})${detail}. Run \`openscience connect login\` to re-authenticate.`
+          : "Not connected to Atlas. Run `openscience connect login` first.",
+      )
+      break
+    case "unreachable":
+      prompts.log.error(`Could not reach the Atlas backend at ${f.host}${f.status ? ` (HTTP ${f.status})` : ""}${detail}.`)
+      prompts.log.info(
+        "You are logged in — this is a network/service issue, not an auth issue. Check connectivity (and any OPENSCIENCE_API_BASE/SYNSC_API_BASE override), then retry.",
+      )
+      break
+    case "plan":
+      prompts.log.error(`Authenticated against ${f.host}, but your account has no active Atlas plan${detail}.`)
+      prompts.log.info("Manage your plan at https://app.syntheticsciences.ai/cli (Plan tab).")
+      break
+    default:
+      prompts.log.error(`Atlas could not initialize the graph${f.status ? ` (HTTP ${f.status} from ${f.host})` : ""}${detail}.`)
+  }
+  if (Bun.which("atlas")) prompts.log.info("Atlas CLI detected — `atlas doctor --format=json` can help diagnose.")
+}
 
 async function git(args: string[], cwd: string): Promise<string> {
   try {

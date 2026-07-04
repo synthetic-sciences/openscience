@@ -130,6 +130,17 @@ async function repoContext(directory: string) {
   return { ...empty, repo_url: repo, branch_name: branch || null, head_commit_sha: head || null, origin_host: host, updated_by: user || null }
 }
 
+/** Non-2xx backend answer, carrying enough to classify WHY it failed. */
+class BackendHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(`HTTP ${status}`)
+    this.name = "BackendHttpError"
+  }
+}
+
 async function commitNew(input: {
   localID: string
   parentIDs: string[]
@@ -156,7 +167,7 @@ async function commitNew(input: {
       repo_context: input.context,
     },
   })
-  if (!res.ok) throw new Error(`commit-new failed: HTTP ${res.status}`)
+  if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
   const data = await res.json()
   return { node_id: nodeIdOf(data), raw: data }
 }
@@ -249,6 +260,92 @@ async function resolveProjectId(directory: string): Promise<string | null> {
   }
 }
 
+// ── graph-init failure classification ────────────────────────────────────
+// `project init` used to collapse EVERY failure (no session, DNS failure,
+// revoked key, no plan, backend 4xx/5xx) into `null` → one misleading
+// "check login and plan" message. Classify instead, so the CLI and the
+// initialize-atlas-graph skill can tell the user the actual fix.
+
+export type InitProjectFailureKind =
+  | "unauthenticated" // no session, or the backend rejected the key (401/403)
+  | "unreachable" // network/DNS error or 5xx — the service couldn't be reached
+  | "plan" // authenticated, but no active Atlas plan (402 / plan-coded 4xx)
+  | "backend" // any other backend answer — pass its message through
+
+export interface InitProjectFailure {
+  kind: InitProjectFailureKind
+  /** HTTP status when the backend answered; absent for network-level failures. */
+  status?: number
+  /** Backend-provided detail (or the network error), safe to show the user. */
+  message?: string
+  /** The managed base URL the request targeted — which backend auth points at. */
+  host: string
+}
+
+export interface InitProjectResult {
+  projectId: string | null
+  /** Present iff projectId is null. */
+  failure?: InitProjectFailure
+}
+
+/** Pull a human-readable detail out of a backend error body (FastAPI shapes:
+ *  `{detail: "..."}` or `{detail: {code, message, ...}}`), else the raw text. */
+function backendMessage(body: string): string | undefined {
+  try {
+    const parsed = JSON.parse(body)
+    const detail = parsed?.detail
+    if (typeof detail === "string") return detail
+    if (typeof detail?.message === "string" && detail.message) return detail.message
+    if (typeof parsed?.message === "string" && parsed.message) return parsed.message
+  } catch {}
+  const trimmed = body.trim()
+  return trimmed ? trimmed.slice(0, 300) : undefined
+}
+
+/** Classify a non-2xx backend answer. Mirrors the backend contract: 401/403 =
+ *  key rejected; 402 (`plan_quota_exhausted` / `collaboration_gated`) = plan
+ *  gating; 5xx = service not reachable/healthy; anything else passes through. */
+export function classifyInitFailure(status: number, body: string): InitProjectFailure {
+  const message = backendMessage(body)
+  const host = API_BASE
+  if (status === 401 || status === 403) return { kind: "unauthenticated", status, message, host }
+  const planCoded = /plan_quota_exhausted|collaboration_gated/.test(body)
+  const planWorded = /\b(plan|subscription)\b/i.test(message ?? "")
+  if (status === 402 || (status >= 400 && status < 500 && (planCoded || planWorded)))
+    return { kind: "plan", status, message, host }
+  if (status >= 500) return { kind: "unreachable", status, message, host }
+  return { kind: "backend", status, message, host }
+}
+
+function failureFromError(e: unknown): InitProjectFailure {
+  if (e instanceof BackendHttpError) return classifyInitFailure(e.status, e.body)
+  if (e instanceof Error && e.message === "unauthenticated") return { kind: "unauthenticated", host: API_BASE }
+  const cause = e instanceof Error && e.cause instanceof Error ? `: ${e.cause.message}` : ""
+  const message = e instanceof Error ? `${e.message}${cause}` : String(e)
+  return { kind: "unreachable", message, host: API_BASE }
+}
+
+// Lower rank = more actionable for the user; ties keep the primary attempt's
+// failure, except a primary 404 ("projects endpoint not deployed") defers to
+// the proven commit-new fallback's failure.
+const FAILURE_RANK: Record<InitProjectFailureKind, number> = {
+  unauthenticated: 0,
+  plan: 1,
+  unreachable: 2,
+  backend: 3,
+}
+
+function pickFailure(
+  primary: InitProjectFailure | undefined,
+  fallback: InitProjectFailure | undefined,
+): InitProjectFailure {
+  if (!primary) return fallback ?? { kind: "backend", host: API_BASE }
+  if (!fallback) return primary
+  if (primary.kind === "backend" && primary.status === 404) return fallback
+  if (FAILURE_RANK[fallback.kind] < FAILURE_RANK[primary.kind]) return fallback
+  return primary
+}
+
 // Find-or-create the repo's project root — the "initialize graph" action, shared
 // by the web bridge (POST /project/init) and the `openscience project init` CLI so
 // both take the exact same, dedupe-consistent path. Primary create is the
@@ -257,15 +354,26 @@ async function resolveProjectId(directory: string): Promise<string | null> {
 // still succeeds even if the projects endpoint is unavailable. Always writes the
 // pin on success. Exported for the CLI command.
 export async function initProject(directory: string): Promise<string | null> {
-  if (!directory) return null
+  return (await initProjectDetailed(directory)).projectId
+}
+
+/** Like initProject, but never throws and reports WHY init failed so callers
+ *  can print an actionable message instead of a blanket "check login/plan". */
+export async function initProjectDetailed(directory: string): Promise<InitProjectResult> {
+  if (!directory)
+    return { projectId: null, failure: { kind: "backend", message: "no directory provided", host: API_BASE } }
+  // Fail fast offline: no managed session means no request can succeed —
+  // don't turn a missing `openscience connect login` into a network error.
+  if (!(await token())) return { projectId: null, failure: { kind: "unauthenticated", host: API_BASE } }
   const existing = await resolveProjectId(directory)
-  if (existing) return existing
+  if (existing) return { projectId: existing }
   const root = await repoRoot(directory)
   const ctx = await repoContext(root)
   const key = computeDedupeKey(root, ctx.repo_url)
   const name = root.split("/").filter(Boolean).pop() || "project"
 
   // Primary: the projects find-or-create endpoint.
+  let primaryFailure: InitProjectFailure | undefined
   try {
     const res = await atlas("POST", "/api/agent/projects", {
       title: name,
@@ -277,12 +385,15 @@ export async function initProject(directory: string): Promise<string | null> {
       const id = projectIdOf(await res.json())
       if (id) {
         writeProjectPin(root, id, key)
-        return id
+        return { projectId: id }
       }
+      primaryFailure = { kind: "backend", message: "projects endpoint returned no project id", host: API_BASE }
     } else {
+      primaryFailure = classifyInitFailure(res.status, await res.text().catch(() => ""))
       log.warn("projects endpoint init failed, falling back to root node", { status: res.status })
     }
   } catch (e) {
+    primaryFailure = failureFromError(e)
     log.warn("projects endpoint init errored, falling back to root node", {
       error: e instanceof Error ? e.message : String(e),
     })
@@ -291,6 +402,7 @@ export async function initProject(directory: string): Promise<string | null> {
   // Fallback: create a dedupe-tagged root node via commit-new (proven path).
   // `external_transcript_ref` carries the dedupe key so `project merge` and a
   // future resolve can rediscover this root.
+  let fallbackFailure: InitProjectFailure | undefined
   try {
     const { node_id } = await commitNew({
       localID: `local-project-${stubNodeId(key)}`,
@@ -305,12 +417,14 @@ export async function initProject(directory: string): Promise<string | null> {
     })
     if (node_id) {
       writeProjectPin(root, node_id, key)
-      return node_id
+      return { projectId: node_id }
     }
+    fallbackFailure = { kind: "backend", message: "commit-new returned no node id", host: API_BASE }
   } catch (e) {
+    fallbackFailure = failureFromError(e)
     log.warn("root-node init fallback failed", { error: e instanceof Error ? e.message : String(e) })
   }
-  return null
+  return { projectId: null, failure: pickFailure(primaryFailure, fallbackFailure) }
 }
 
 export const AtlasBridgeRoutes = lazy(() =>
@@ -407,7 +521,17 @@ export const AtlasBridgeRoutes = lazy(() =>
     // Resolve / init the OPENED folder's project root, so the canvas scopes to
     // the folder the SPA has open (not the serve launch dir).
     .get("/project", async (c) => c.json({ project_id: await resolveProjectId(c.req.query("directory") || "") }))
-    .post("/project/init", async (c) => c.json({ project_id: await initProject(c.req.query("directory") || "") }))
+    .post("/project/init", async (c) => {
+      const result = await initProjectDetailed(c.req.query("directory") || "")
+      // Additive shape: the SPA reads project_id; error/message/host let it
+      // (and any curl-debugging user) see WHY init failed instead of a bare null.
+      return c.json({
+        project_id: result.projectId,
+        ...(result.failure
+          ? { error: result.failure.kind, status: result.failure.status, message: result.failure.message, host: result.failure.host }
+          : {}),
+      })
+    })
     // Quiet 200 for any other thesis path the SPA probes.
     .all("/*", (c) => c.json({}, 200)),
 )
