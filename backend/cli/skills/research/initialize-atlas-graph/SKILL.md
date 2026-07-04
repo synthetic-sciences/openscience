@@ -18,7 +18,7 @@ clone at a different path resolves to the **same** graph.
 Run this skill when:
 - The canvas shows "no graph for this project" / the folder isn't linked yet.
 - The user asks to "initialize", "set up Atlas", or "start tracking" research.
-- You are about to begin research/flywheel work that should be recorded.
+- You are about to begin research work that should be recorded.
 
 ## Steps
 
