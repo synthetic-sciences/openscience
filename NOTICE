@@ -1,0 +1,32 @@
+OpenScience
+Copyright 2025 Synthetic Sciences
+
+This product includes software developed at Synthetic Sciences.
+Licensed under the Apache License, Version 2.0.
+
+It bundles or accesses the following third-party software and services.
+
+--------------------------------------------------------------------------------
+markitdown (bundled skill: backend/cli/skills/data-engineering/markitdown)
+https://github.com/microsoft/markitdown
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT License. See the skill's LICENSE.txt.
+--------------------------------------------------------------------------------
+
+Third-party scientific data sources
+-----------------------------------
+The scientific database connectors under backend/cli/src/science/connectors/
+access third-party public web APIs (including, among others, UniProt, RCSB PDB,
+PDBe, AlphaFold DB, InterPro, Ensembl, NCBI E-utilities, ClinVar, gnomAD, UCSC,
+ChEMBL, PubChem, ChEBI, Reactome, KEGG, STRING, IntAct, WikiPathways,
+Open Targets, GEO, ArrayExpress, GTEx, the Human Protein Atlas, Europe PMC,
+Crossref, OpenAlex, Semantic Scholar, arXiv, and bioRxiv). OpenScience does not
+redistribute the data served by these APIs. Each source is governed by its own
+terms of use and licensing; users are responsible for complying with the terms
+of any data source they query.
+
+Client-side rendering libraries (Mol*, igv.js, RDKit.js, KaTeX, pdf.js, 3Dmol.js)
+are dependencies declared in package.json and retain their own licenses.
+
+A full third-party dependency license listing can be generated from the package
+manifests; see THIRD_PARTY_LICENSES.md (generated) where present.

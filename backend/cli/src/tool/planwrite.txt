@@ -1,0 +1,51 @@
+Use this tool to create and manage a structured plan for your current coding session. The plan is displayed in a persistent sidebar panel, giving the user real-time visibility into your approach and progress.
+
+## When to Use This Tool
+Use this tool proactively in these scenarios:
+
+1. Complex multistep tasks - When a task requires 3 or more distinct steps or actions
+2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations
+3. User explicitly requests a plan - When the user directly asks you to plan your work
+4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated)
+5. After receiving new instructions - Immediately capture user requirements as plan steps. Feel free to edit the plan based on new information.
+6. After completing a step - Mark it complete and add any new follow-up steps
+7. When you start working on a new step, mark it as in_progress. Ideally you should only have one step as in_progress at a time. Complete existing steps before starting new ones.
+
+## When NOT to Use This Tool
+
+Skip using this tool when:
+1. There is only a single, straightforward task
+2. The task is trivial and tracking it provides no organizational benefit
+3. The task can be completed in less than 3 trivial steps
+4. The task is purely conversational or informational
+
+NOTE that you should not use this tool if there is only one trivial task to do. In this case you are better off just doing the task directly.
+
+## Plan Philosophy
+
+Think of the plan as a **roadmap** visible to the user in their sidebar. Each item is a step in your approach, not just a task. Structure your plan hierarchically:
+- Break complex work into logical phases
+- Each step should represent a meaningful unit of progress
+- The user sees this in real-time, so keep descriptions clear and concise
+
+## Step States and Management
+
+1. **Step States**: Use these states to track progress:
+   - pending: Step not yet started
+   - in_progress: Currently working on (limit to ONE step at a time)
+   - completed: Step finished successfully
+   - cancelled: Step no longer needed
+
+2. **Step Management**:
+   - Update step status in real-time as you work
+   - Mark steps complete IMMEDIATELY after finishing (don't batch completions)
+   - Only have ONE step in_progress at any time
+   - Complete current steps before starting new ones
+   - Cancel steps that become irrelevant
+
+3. **Step Breakdown**:
+   - Create specific, actionable items
+   - Break complex steps into smaller, manageable pieces
+   - Use clear, descriptive step names
+
+When in doubt, use this tool. Being proactive with plan management demonstrates attentiveness and ensures you complete all requirements successfully.

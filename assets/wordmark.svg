@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 497 228" width="497" height="228" role="img" aria-label="OpenScience">
+  <style>
+    text { font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 15px; font-weight: 700; fill: #14b8a6; }
+  </style>
+  <text x="248" y="27" text-anchor="middle" xml:space="preserve"> ██████╗ ██████╗ ███████╗███╗   ██╗</text>
+  <text x="248" y="45" text-anchor="middle" xml:space="preserve">██╔═══██╗██╔══██╗██╔════╝████╗  ██║</text>
+  <text x="248" y="62" text-anchor="middle" xml:space="preserve">██║   ██║██████╔╝█████╗  ██╔██╗ ██║</text>
+  <text x="248" y="80" text-anchor="middle" xml:space="preserve">██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║</text>
+  <text x="248" y="98" text-anchor="middle" xml:space="preserve">╚██████╔╝██║     ███████╗██║ ╚████║</text>
+  <text x="248" y="116" text-anchor="middle" xml:space="preserve"> ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝</text>
+  <text x="248" y="133" text-anchor="middle" xml:space="preserve">███████╗ ██████╗██╗███████╗███╗   ██╗ ██████╗███████╗</text>
+  <text x="248" y="151" text-anchor="middle" xml:space="preserve">██╔════╝██╔════╝██║██╔════╝████╗  ██║██╔════╝██╔════╝</text>
+  <text x="248" y="169" text-anchor="middle" xml:space="preserve">███████╗██║     ██║█████╗  ██╔██╗ ██║██║     █████╗</text>
+  <text x="248" y="186" text-anchor="middle" xml:space="preserve">╚════██║██║     ██║██╔══╝  ██║╚██╗██║██║     ██╔══╝</text>
+  <text x="248" y="204" text-anchor="middle" xml:space="preserve">███████║╚██████╗██║███████╗██║ ╚████║╚██████╗███████╗</text>
+  <text x="248" y="222" text-anchor="middle" xml:space="preserve">╚══════╝ ╚═════╝╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝</text>
+</svg>

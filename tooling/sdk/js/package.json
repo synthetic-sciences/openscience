@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@synsci/sdk",
+  "version": "1.2.2",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "build": "./script/build.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./server": "./src/server.ts",
+    "./v2": "./src/v2/index.ts",
+    "./v2/client": "./src/v2/client.ts",
+    "./v2/server": "./src/v2/server.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.90.10",
+    "@tsconfig/node22": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  },
+  "dependencies": {},
+  "publishConfig": {
+    "directory": "dist"
+  }
+}

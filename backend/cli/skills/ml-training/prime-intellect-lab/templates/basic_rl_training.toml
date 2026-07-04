@@ -1,0 +1,82 @@
+# Prime Intellect Lab — RL Training Configuration
+# Copy this file to configs/rl/my-run.toml and customize for your task.
+#
+# Usage:
+#   prime rl run configs/rl/my-run.toml
+#
+# IMPORTANT: Use [[env]] (double brackets) for environments — this is TOML
+# array-of-tables syntax. Using [env] (single bracket) will NOT work.
+#
+# Three size presets below. Uncomment ONE set of top-level fields.
+
+# =============================================================================
+# Model Selection
+# =============================================================================
+# Run `prime models list` for the full supported list.
+model = "Qwen/Qwen3-4B-Instruct-2507"
+# Other options:
+#   "Qwen/Qwen3-4B-Thinking-2507"       — Reasoning-focused (thinking mode)
+#   "Qwen/Qwen3-30B-Instruct-2507"      — Strong general purpose (MoE)
+#   "Qwen/Qwen3-30B-Thinking-2507"      — Reasoning at scale (MoE)
+#   "Qwen/Qwen3-235B-Instruct-2507"     — Frontier-level (MoE)
+#   "Qwen/Qwen3-235B-Thinking-2507"     — Frontier reasoning (MoE)
+#   "PrimeIntellect/INTELLECT-3"         — Prime Intellect's own model
+
+# =============================================================================
+# SMALL RUN — Quick iteration / prototyping (~30 min, low cost)
+# =============================================================================
+max_steps = 50
+batch_size = 8
+rollouts_per_example = 4
+
+# =============================================================================
+# MEDIUM RUN — Solid training (~2-4 hours)
+# Uncomment below and comment out SMALL RUN above to use.
+# =============================================================================
+# max_steps = 200
+# batch_size = 16
+# rollouts_per_example = 8
+
+# =============================================================================
+# LARGE RUN — Full training (~8-24 hours)
+# Uncomment below and comment out SMALL RUN above to use.
+# =============================================================================
+# max_steps = 1000
+# batch_size = 32
+# rollouts_per_example = 16
+
+# =============================================================================
+# Sampling — controls rollout generation
+# =============================================================================
+[sampling]
+temperature = 0.7            # Higher = more exploration (0.6-1.0)
+top_p = 0.95
+max_tokens = 2048            # Max output tokens per rollout
+
+# =============================================================================
+# Environment — what the model trains on
+# IMPORTANT: Use [[env]] (double brackets), NOT [env]
+# =============================================================================
+[[env]]
+id = "primeintellect/alphabet-sort"      # Environment ID (owner/name)
+args = { min_turns = 3, max_turns = 5 }  # Environment-specific arguments
+
+# For multi-environment training, add more [[env]] blocks:
+# [[env]]
+# id = "primeintellect/gsm8k"
+# weight = 0.3
+
+# =============================================================================
+# Weights & Biases logging (optional but recommended)
+# =============================================================================
+[wandb]
+project = "prime-rl-training"
+name = "qwen3-4b-alphabet-sort"
+# entity = "my-team"         # Optional: W&B team/org
+
+# =============================================================================
+# Evaluation — periodic eval during training
+# =============================================================================
+[eval]
+interval = 50                # Eval every N steps
+n_samples = 100              # Number of eval examples

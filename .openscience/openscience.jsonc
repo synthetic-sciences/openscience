@@ -1,0 +1,19 @@
+{
+  "$schema": "https://syntheticsciences.ai/config.json",
+  // "plugin": ["openscience-openai-codex-auth"],
+  "provider": {
+    "synsci": {
+      "options": {},
+    },
+  },
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+    },
+  },
+  "tools": {
+    "github-triage": false,
+    "github-pr-search": false,
+  },
+}

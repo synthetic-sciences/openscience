@@ -1,0 +1,112 @@
+name: publish
+run-name: "${{ format('release {0}', inputs.bump) }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Bump major, minor, or patch"
+        required: false
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+      version:
+        description: "Override version (optional)"
+        required: false
+        type: string
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    if: github.repository == 'synthetic-sciences/OpenScience'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - id: version
+        run: ./tooling/repo/version.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_BUMP: ${{ inputs.bump }}
+          OPENSCIENCE_VERSION: ${{ inputs.version }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+      tag: ${{ steps.version.outputs.tag }}
+
+  build-cli:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build
+        run: ./backend/cli/script/build.ts
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Cache CLI build
+        uses: actions/cache/save@v4
+        with:
+          path: backend/cli/dist
+          key: cli-build-${{ github.run_id }}
+
+    outputs:
+      version: ${{ needs.version.outputs.version }}
+
+  publish:
+    needs:
+      - version
+      - build-cli
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup git committer
+        run: |
+          git config user.email "openscience@syntheticsciences.dev"
+          git config user.name "openscience"
+
+      - name: Restore CLI build
+        uses: actions/cache/restore@v4
+        with:
+          path: backend/cli/dist
+          key: cli-build-${{ github.run_id }}
+          fail-on-cache-miss: true
+
+      - name: Publish
+        run: ./tooling/repo/publish.ts
+        env:
+          HUSKY: "0"
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
+          GITHUB_TOKEN: ${{ github.token }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+

@@ -1,0 +1,67 @@
+@import "@synsci/ui/styles/tailwind";
+@import "./styles/thesis.css";
+
+/*
+  OpenScience editorial typography.
+
+  A research-workbench voice: Computer Modern (Latin Modern Roman) is the single
+  UI typeface — headings and body both resolve to it via --font-family-serif /
+  --font-family-sans; JetBrains Mono is reserved for code. Kept in @layer base
+  with bare-element selectors so any component class or inline style still wins —
+  this only sets the resting default.
+*/
+@layer base {
+  /* Computer Modern ships 400 + 700 only — declare the weights that actually
+     render (intermediate weights would silently map onto these anyway). */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-family-serif);
+    font-feature-settings: var(--font-family-serif--font-feature-settings, normal);
+    font-optical-sizing: auto;
+    font-weight: 400;
+    letter-spacing: -0.011em;
+    line-height: 1.18;
+    color: var(--text-strong, var(--color-text));
+    text-wrap: balance;
+  }
+
+  h1 {
+    font-weight: 700;
+    letter-spacing: -0.018em;
+  }
+}
+
+/*
+  Opt-in editorial prose block for long-form rendered content (papers, run
+  notes, markdown). Airy measure and calm rhythm, paper-like.
+*/
+.prose-editorial {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-large, 15px);
+  line-height: 1.7;
+  color: var(--text-base, var(--color-text));
+  max-width: 68ch;
+}
+
+.prose-editorial h1,
+.prose-editorial h2,
+.prose-editorial h3 {
+  margin-top: 1.6em;
+  margin-bottom: 0.5em;
+}
+
+.prose-editorial p,
+.prose-editorial ul,
+.prose-editorial ol {
+  margin-bottom: 1em;
+}
+
+.prose-editorial code,
+.prose-editorial pre {
+  font-family: var(--font-family-mono);
+  font-feature-settings: var(--font-family-mono--font-feature-settings, normal);
+}

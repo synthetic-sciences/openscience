@@ -1,0 +1,28 @@
+{
+  "name": "synsci",
+  "version": "1.2.2",
+  "description": "Install wizard for OpenScience, the open-source AI research workspace (optionally with Atlas)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "synsci": "bin/synsci.mjs"
+  },
+  "files": [
+    "bin"
+  ],
+  "keywords": [
+    "openscience",
+    "synsci",
+    "synthetic-sciences",
+    "atlas",
+    "ai",
+    "ml",
+    "research",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/synthetic-sciences/OpenScience.git"
+  },
+  "homepage": "https://syntheticsciences.ai"
+}
