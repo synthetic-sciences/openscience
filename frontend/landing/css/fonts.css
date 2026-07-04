@@ -1,0 +1,39 @@
+/* CMU Concrete — the slab serif from the Computer Modern (TeX) family.
+   Roman + Bold only, no italic. Self-hosted, no external requests. */
+@font-face {
+  font-family: "CMU Concrete";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/cmu-concrete-roman.woff") format("woff");
+}
+@font-face {
+  font-family: "CMU Concrete";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/cmu-concrete-bold.woff") format("woff");
+}
+
+/* JetBrains Mono — the terminal, command blocks, labels, and data chips. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-700.woff2") format("woff2");
+}

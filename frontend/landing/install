@@ -1,0 +1,96 @@
+#!/bin/sh
+# =============================================================================
+#  OpenScience installer  ·  https://openscience.sh
+#
+#  The open-source research agent, in your terminal.
+#  This script installs the `synsci` CLI (npm package @synsci/cli).
+#
+#  Usage:
+#     curl -fsSL https://openscience.sh/install | bash
+#
+#  It is intentionally short and readable, so inspect it before you run it:
+#     curl -fsSL https://openscience.sh/install | less
+#
+#  AGPL-3.0 licensed. No account required. Source: github.com/synthetic-sciences
+# =============================================================================
+set -eu
+
+PKG="@synsci/cli"
+BIN="synsci"
+
+# --- pretty output (only colorize a real terminal) --------------------------
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  R="$(printf '\033[0m')"; B="$(printf '\033[1m')"
+  RED="$(printf '\033[38;5;167m')"; DIM="$(printf '\033[2m')"
+  GRN="$(printf '\033[38;5;71m')"; YEL="$(printf '\033[38;5;179m')"
+else
+  R=""; B=""; RED=""; DIM=""; GRN=""; YEL=""
+fi
+
+say()  { printf '%s\n' "$*"; }
+step() { printf '  %s▸%s %s\n' "$RED" "$R" "$*"; }
+ok()   { printf '  %s✓%s %s\n' "$GRN" "$R" "$*"; }
+die()  { printf '\n  %serror:%s %s\n\n' "$RED" "$R" "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# --- banner -----------------------------------------------------------------
+say ""
+say "  ${RED}❯${R} ${B}OpenScience${R} ${DIM}· the open-source research agent${R}"
+say "  ${DIM}  installing ${PKG} …${R}"
+say ""
+
+# --- environment ------------------------------------------------------------
+OS="$(uname -s 2>/dev/null || echo unknown)"
+ARCH="$(uname -m 2>/dev/null || echo unknown)"
+case "$OS" in
+  Darwin) PLATFORM="macOS" ;;
+  Linux)  PLATFORM="Linux" ;;
+  MINGW*|MSYS*|CYGWIN*) PLATFORM="Windows" ;;
+  *)      PLATFORM="$OS" ;;
+esac
+step "Detected ${B}${PLATFORM}${R} (${ARCH})"
+
+# --- pick a package manager: prefer bun, then npm, then pnpm ----------------
+if have bun; then
+  MGR="bun";  INSTALL="bun add -g $PKG"
+elif have npm; then
+  MGR="npm";  INSTALL="npm install -g $PKG"
+elif have pnpm; then
+  MGR="pnpm"; INSTALL="pnpm add -g $PKG"
+else
+  die "no JavaScript runtime found.
+         Install one of:
+           • Bun   →  curl -fsSL https://bun.sh/install | bash
+           • Node  →  https://nodejs.org  (ships npm)
+         then re-run this installer."
+fi
+step "Using ${B}${MGR}${R} to install globally"
+say ""
+
+# --- install ----------------------------------------------------------------
+if ! $INSTALL; then
+  die "installation failed.
+         Try again manually:  ${INSTALL}
+         Or report it:        github.com/synthetic-sciences/synsci-cli/issues"
+fi
+
+# --- verify -----------------------------------------------------------------
+say ""
+if have "$BIN"; then
+  VER="$($BIN --version 2>/dev/null || echo '')"
+  ok "Installed ${B}${BIN}${R} ${VER:+${DIM}${VER}${R}}"
+else
+  ok "Installed ${B}${PKG}${R}"
+  say "  ${YEL}note:${R} ${DIM}'${BIN}' isn't on your PATH yet. open a new shell,${R}"
+  say "        ${DIM}or add your global bin dir to PATH.${R}"
+fi
+
+# --- next steps -------------------------------------------------------------
+say ""
+say "  ${B}Next${R}"
+say "    ${RED}❯${R} ${B}${BIN}${R}                 ${DIM}launch the agent in your project${R}"
+say "    ${RED}❯${R} ${B}${BIN}${R} --help          ${DIM}see everything it can do${R}"
+say ""
+say "  ${DIM}Docs & source · github.com/synthetic-sciences/synsci-cli${R}"
+say "  ${DIM}Free forever · AGPL-3.0 licensed${R}"
+say ""

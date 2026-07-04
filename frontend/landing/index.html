@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- flag JS live (so the rise animation only hides content it can restore) -->
+  <script>document.documentElement.classList.add("js");</script>
+
+  <title>OpenScience: the open-source research agent, in your browser or your terminal</title>
+  <meta name="description" content="OpenScience is a free, open-source agent for scientific research and ML engineering. It runs the research loop in your browser or your terminal, wires into ~30 scientific databases, and ships 17 domains of built-in skills. AGPL-3.0 licensed." />
+  <meta name="author" content="Synthetic Sciences" />
+  <meta name="theme-color" content="#14110d" />
+  <link rel="canonical" href="https://openscience.sh/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="OpenScience: the open-source research agent" />
+  <meta property="og:description" content="An open-source research agent. Runs the research loop in your browser or your terminal, connects to ~30 scientific databases, ships 17 domains of skills. Free and open source, AGPL-3.0." />
+  <meta property="og:url" content="https://openscience.sh/" />
+  <meta property="og:site_name" content="OpenScience" />
+  <meta property="og:image" content="https://openscience.sh/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="OpenScience: the open-source research agent." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@SynScience" />
+  <meta name="twitter:title" content="OpenScience: the open-source research agent" />
+  <meta name="twitter:description" content="An open-source research agent. Runs the research loop in your browser or your terminal, connects to ~30 scientific databases, 17 domains of skills. AGPL-3.0." />
+  <meta name="twitter:image" content="https://openscience.sh/og.png" />
+
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <link rel="preload" href="/fonts/cmu-concrete-roman.woff" as="font" type="font/woff" crossorigin />
+  <link rel="preload" href="/fonts/cmu-concrete-bold.woff" as="font" type="font/woff" crossorigin />
+  <link rel="preload" href="/fonts/jetbrains-mono-400.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/css/fonts.css" />
+  <link rel="stylesheet" href="/css/main.css" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "OpenScience",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Linux, Windows",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+    "description": "Open-source agent for scientific research and ML engineering, in your browser or your terminal.",
+    "author": { "@type": "Organization", "name": "Synthetic Sciences", "url": "https://syntheticsciences.ai" }
+  }
+  </script>
+</head>
+<body>
+  <!-- ============================================================ nav -->
+  <header class="nav" id="nav">
+    <a class="brand" href="#top" aria-label="OpenScience home">
+      <span class="prompt">❯</span>
+      <span><span class="mk">Open</span>Science</span>
+    </a>
+    <nav class="nav-right" aria-label="Primary">
+      <a class="nav-link hide-xs" href="#loop">Loop</a>
+      <a class="nav-link hide-xs" href="#skills">Skills</a>
+      <a class="nav-link hide-xs" href="#data">Data</a>
+      <a class="nav-link hide-xs" href="#install">Install</a>
+      <a class="btn" href="https://github.com/synthetic-sciences/synsci-cli" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1 0-.4-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+        <span class="gh-label">GitHub</span>
+      </a>
+      <a class="btn btn-primary" href="https://app.syntheticsciences.ai/cli" target="_blank" rel="noopener">Try it out</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- ========================================================== hero (grainy art + text) -->
+    <section class="hero hero-art-host">
+      <div class="hero-art" aria-hidden="true">
+        <div class="veil"></div>
+      </div>
+      <div class="wrap">
+        <div class="hero-lead reveal">
+          <h1 class="text-balance">The open-source<br><span class="accent">research agent.</span></h1>
+          <p class="lede">It reads the papers, writes the code, runs the experiment, and keeps the record. Work in your browser, or drop to the terminal, and bring your own model.</p>
+          <div class="hero-cta2">
+            <a class="btn btn-primary" href="https://app.syntheticsciences.ai/cli" target="_blank" rel="noopener">Try it out</a>
+            <a class="btn" href="https://github.com/synthetic-sciences/synsci-cli" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1 0-.4-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+              Star on GitHub
+            </a>
+          </div>
+          <div class="hero-chip-row">
+            <button class="chip" id="heroChip" aria-label="Copy install command">
+              <span><span class="c-prompt">$</span> curl -fsSL https://openscience.sh/install | bash</span>
+              <span class="cp" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================== row 1: the loop (terminal) -->
+    <section class="section" id="loop">
+      <div class="wrap">
+        <div class="showcase term-row">
+          <div class="card g-red reveal">
+            <div class="k">The loop</div>
+            <h3>It runs the whole loop, out loud.</h3>
+            <p>Read, hypothesize, implement, run, decide. Every turn is a real command you can watch, and it writes down what it did so the next run can pick it up.</p>
+          </div>
+          <div class="term-shot reveal">
+            <svg class="term-svg" viewBox="0 0 604 476" width="604" height="476" preserveAspectRatio="xMidYMid meet" xml:space="preserve" role="img" aria-label="A synsci terminal session analyzing the PIK3CA E545K mutation">
+              <defs><clipPath id="termclip"><rect x="1" y="1" width="602" height="474" rx="10"/></clipPath></defs>
+              <g clip-path="url(#termclip)">
+                <rect x="0" y="0" width="604" height="476" fill="hsl(28 14% 6%)"/>
+                <rect x="0" y="0" width="604" height="42" fill="hsl(30 12% 9%)"/>
+                <line x1="0" y1="42" x2="604" y2="42" stroke="hsl(32 10% 14%)"/>
+                <circle cx="22" cy="21" r="5" fill="#e0644b"/><circle cx="40" cy="21" r="5" fill="hsl(36 55% 70%)"/><circle cx="58" cy="21" r="5" fill="hsl(140 34% 52%)"/>
+                <text x="302" y="26" text-anchor="middle" class="tttl">openscience.sh · synsci session</text>
+                <g class="tl" style="--d:220ms">
+                  <text x="24" y="78"><tspan class="tp">synsci ❯</tspan> is the E545K mutation in PIK3CA in the kinase</text>
+                  <text x="24" y="104">domain, and does it destabilize the fold?</text>
+                </g>
+                <g class="tl" style="--d:620ms"><text x="24" y="142" class="td">plan · structure + literature + a ΔΔG estimate · 3 skills, 4 sources</text></g>
+                <g class="tl" style="--d:920ms"><text y="180"><tspan x="24" class="tt">research</tspan><tspan x="120">OpenAlex · Europe PMC · arXiv</tspan></text><text x="580" y="180" text-anchor="end" class="tk">14 papers</text></g>
+                <g class="tl" style="--d:1140ms"><text y="206"><tspan x="24" class="tt">biology</tspan><tspan x="120">UniProt </tspan><tspan class="tk">P42336</tspan><tspan> · PIK3CA · 1068 aa</tspan></text><text x="580" y="206" text-anchor="end" class="to">✓</text></g>
+                <g class="tl" style="--d:1360ms"><text y="232"><tspan x="24" class="tt">biology</tspan><tspan x="120">RCSB PDB </tspan><tspan class="tk">4OVU</tspan><tspan> · PI3Kα · 2.20 Å</tspan></text><text x="580" y="232" text-anchor="end" class="to">✓</text></g>
+                <g class="tl" style="--d:1580ms"><text y="258"><tspan x="24" class="tt">chemistry</tspan><tspan x="120">FoldX  ΔΔG(E545K)</tspan></text><text x="580" y="258" text-anchor="end" class="ta">+2.9 kcal/mol</text></g>
+                <g class="tl" style="--d:1880ms"><text x="24" y="296"><tspan class="td">▸ wrote</tspan> <tspan class="tc">analysis.py</tspan> <tspan class="td">· 41 lines</tspan></text></g>
+                <g class="tl" style="--d:2080ms"><text x="24" y="322"><tspan class="tp">$</tspan> <tspan class="tc">python</tspan> analysis.py</text></g>
+                <g class="tl" style="--d:2280ms"><text x="40" y="348" class="td">E545K lands in the <tspan class="tb">helical</tspan> domain, not the kinase domain.</text></g>
+                <g class="tl" style="--d:2420ms"><text x="40" y="374" class="td">Modestly destabilizing (+2.9 kcal/mol); the oncogenic effect</text></g>
+                <g class="tl" style="--d:2560ms"><text x="40" y="400" class="td">is lost nSH2 autoinhibition, not global unfolding.</text></g>
+                <g class="tl" style="--d:2860ms"><text x="24" y="438"><tspan class="to">✓</tspan> recorded · <tspan class="td">3 citations · fully reproducible</tspan></text></g>
+              </g>
+              <rect x="1" y="1" width="602" height="474" rx="10" fill="none" stroke="hsl(32 10% 17%)"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================== row 2: the workspace -->
+    <section class="section" id="workspace">
+      <div class="wrap">
+        <div class="showcase flip">
+          <div class="shot reveal">
+            <div class="shot-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="u">openscience.sh · synsci web</span></div>
+            <div class="shot-body">
+              <div class="ws">
+                <div class="ws-side">
+                  <div class="s-h">Sessions</div>
+                  <div class="s-i on">PIK3CA · E545K</div>
+                  <div class="s-i">scRNA pipeline</div>
+                  <div class="s-i">finetune · eval sweep</div>
+                  <div class="s-i">docking screen</div>
+                  <div class="s-i" style="color:var(--fg-dim)">+ new session</div>
+                </div>
+                <div class="ws-main">
+                  <div class="bubble-u">reproduce the ΔΔG in <span class="m">@analysis.py</span> with <span class="m" style="color:var(--blue)">/foldx</span></div>
+                  <div class="agent">Re-running FoldX on the E545K mutant and diffing it against the value you recorded.<span class="tool">▸ foldx --mutant E545K … <span class="ok">+2.9 kcal/mol · matches ✓</span></span></div>
+                  <div class="prompt"><span class="at">@</span>&nbsp;file &nbsp;<span class="sl">/</span>&nbsp;skill &nbsp;· ask anything<span class="car"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card g-purple reveal">
+            <div class="k">The workspace</div>
+            <h3>Not a chatbot.<br>A workspace.</h3>
+            <p>Point it at your repo and it reads your files, runs your tools, and edits real code. Work in your browser, or drop to the terminal for the same session.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================== row 3: the record / Atlas -->
+    <section class="section" id="atlas">
+      <div class="wrap">
+        <div class="showcase">
+          <div class="card g-blue reveal">
+            <div class="k">The record</div>
+            <h3>Your work outlives the terminal.</h3>
+            <p>Every session, result, and citation syncs to Atlas, the shared graph your team and your agents can search, fork, and build on.</p>
+            <div class="card-cta"><a class="mini" href="https://tryatlas.sh" target="_blank" rel="noopener">Explore Atlas →</a></div>
+          </div>
+          <div class="shot reveal">
+            <div class="shot-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="u">tryatlas.sh · graph</span></div>
+            <div class="shot-body">
+              <div class="gr">
+                <span class="lbl">E545K reproduction · Atlas graph</span>
+                <svg viewBox="0 0 460 300" fill="none" aria-hidden="true">
+                  <!-- neutral edges -->
+                  <g stroke="hsl(32 12% 24%)" stroke-width="1">
+                    <line x1="230" y1="150" x2="150" y2="214"/><line x1="230" y1="150" x2="322" y2="208"/>
+                    <line x1="230" y1="150" x2="92" y2="150"/><line x1="230" y1="150" x2="372" y2="150"/>
+                    <line x1="230" y1="150" x2="196" y2="202"/><line x1="230" y1="150" x2="272" y2="200"/>
+                    <line x1="120" y1="88" x2="62" y2="64"/><line x1="120" y1="88" x2="150" y2="44"/>
+                    <line x1="120" y1="88" x2="74" y2="118"/><line x1="120" y1="88" x2="92" y2="150"/>
+                    <line x1="120" y1="88" x2="198" y2="100"/>
+                    <line x1="338" y1="96" x2="300" y2="48"/><line x1="338" y1="96" x2="404" y2="116"/>
+                    <line x1="338" y1="96" x2="372" y2="150"/><line x1="338" y1="96" x2="268" y2="102"/>
+                    <line x1="150" y1="214" x2="92" y2="252"/><line x1="150" y1="214" x2="176" y2="262"/>
+                    <line x1="150" y1="214" x2="58" y2="202"/><line x1="150" y1="214" x2="92" y2="150"/>
+                    <line x1="150" y1="214" x2="196" y2="202"/>
+                    <line x1="322" y1="208" x2="298" y2="258"/><line x1="322" y1="208" x2="412" y2="182"/>
+                    <line x1="322" y1="208" x2="372" y2="150"/><line x1="322" y1="208" x2="272" y2="200"/>
+                    <line x1="92" y1="150" x2="74" y2="118"/><line x1="372" y1="150" x2="404" y2="116"/>
+                    <line x1="372" y1="150" x2="412" y2="182"/>
+                  </g>
+                  <!-- emphasized edges from the session hub -->
+                  <g stroke="hsl(14 66% 60%)" stroke-width="1.4" stroke-opacity="0.42">
+                    <line x1="230" y1="150" x2="120" y2="88"/><line x1="230" y1="150" x2="338" y2="96"/>
+                    <line x1="230" y1="150" x2="198" y2="100"/><line x1="230" y1="150" x2="268" y2="102"/>
+                    <line x1="338" y1="96" x2="396" y2="64"/><line x1="322" y1="208" x2="392" y2="244"/>
+                  </g>
+                  <!-- neutral nodes -->
+                  <g fill="hsl(30 20% 15%)" stroke="hsl(32 12% 30%)" stroke-width="1">
+                    <circle cx="150" cy="214" r="6"/><circle cx="322" cy="208" r="6"/>
+                    <circle cx="198" cy="100" r="5"/><circle cx="268" cy="102" r="5"/>
+                    <circle cx="196" cy="202" r="5"/><circle cx="272" cy="200" r="5"/>
+                    <circle cx="62" cy="64" r="4"/><circle cx="150" cy="44" r="5"/><circle cx="74" cy="118" r="4"/>
+                    <circle cx="300" cy="48" r="4"/><circle cx="404" cy="116" r="4"/>
+                    <circle cx="92" cy="252" r="4"/><circle cx="176" cy="262" r="5"/><circle cx="58" cy="202" r="4"/>
+                    <circle cx="298" cy="258" r="4"/><circle cx="412" cy="182" r="4"/>
+                  </g>
+                  <!-- accent nodes -->
+                  <circle cx="120" cy="88" r="7" fill="hsl(14 66% 60%)"/>
+                  <circle cx="338" cy="96" r="7" fill="hsl(14 66% 60%)"/>
+                  <circle cx="92" cy="150" r="6" fill="hsl(205 45% 58%)"/>
+                  <circle cx="372" cy="150" r="6" fill="hsl(36 55% 64%)"/>
+                  <circle cx="396" cy="64" r="5" fill="hsl(14 66% 60%)" opacity="0.85"/>
+                  <circle cx="392" cy="244" r="5" fill="hsl(36 55% 64%)" opacity="0.85"/>
+                  <!-- session hub with halo -->
+                  <circle cx="230" cy="150" r="26" fill="hsl(14 66% 60%)" opacity="0.12"/>
+                  <circle cx="230" cy="150" r="16" fill="hsl(14 66% 60%)" opacity="0.2"/>
+                  <circle cx="230" cy="150" r="10" fill="hsl(14 72% 62%)"/>
+                </svg>
+                <span class="gl">23 nodes · 4 branches · fully reproducible</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================== skills -->
+    <section class="section" id="skills">
+      <div class="wrap">
+        <div class="loop-head">
+          <h2 class="h-big text-balance reveal">Seventeen domains, out of the box.</h2>
+          <p class="lede reveal">Skills are packaged expertise: the connectors, conventions, and code patterns a working scientist reaches for. The agent already knows how to align a genome, launch a training job, or parse a PDF table.</p>
+        </div>
+        <div class="skill-groups reveal" aria-label="Built-in skill domains">
+          <div class="skill-group">
+            <h3 class="sg-h">Bench science</h3>
+            <p class="sg-d">Structure, simulation, and first-principles chemistry.</p>
+            <ul class="sg-list">
+              <li>Biology</li><li>Chemistry</li><li>Physics</li><li>Quantum</li><li>Quantum chemistry</li>
+            </ul>
+          </div>
+          <div class="skill-group">
+            <h3 class="sg-h">ML &amp; engineering</h3>
+            <p class="sg-d">Train models, serve them, and ship the code around them.</p>
+            <ul class="sg-list">
+              <li>ML training</li><li>ML inference</li><li>LLM tools</li><li>Coding</li><li>Cloud compute</li><li>Data engineering</li>
+            </ul>
+          </div>
+          <div class="skill-group">
+            <h3 class="sg-h">Data &amp; research</h3>
+            <p class="sg-d">Pull the sources, read the literature, and write it up.</p>
+            <ul class="sg-list">
+              <li>Databases</li><li>Document parsing</li><li>Research</li><li>Scholar evaluation</li><li>Visualization</li><li>Writing</li>
+            </ul>
+          </div>
+        </div>
+        <p class="mq-foot reveal">Seventeen domains today, and every one is open. <b>Read it, fork it, or write your own.</b></p>
+      </div>
+    </section>
+
+    <!-- ========================================================== connectors -->
+    <section class="section" id="data">
+      <div class="wrap">
+        <div class="showcase data-row">
+          <div class="data-lead reveal">
+            <h2 class="h-big text-balance">Wired into ~30 scientific databases.</h2>
+            <p class="lede">An agent is only as good as what it can reach. Ask about a protein and it queries UniProt and the PDB; ask about the literature, OpenAlex and Europe PMC. Every source is open, and every fact carries a citation you can follow.</p>
+          </div>
+          <div class="shot reveal">
+            <div class="shot-bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="u">openscience.sh · connectors</span></div>
+            <div class="shot-body">
+              <div class="orbit">
+                <span class="lbl">primary sources · queried live</span>
+                <svg viewBox="0 0 440 300" fill="none" aria-hidden="true">
+                  <!-- orbit rings -->
+                  <g stroke="hsl(32 11% 20%)" stroke-width="1" stroke-dasharray="3 5">
+                    <circle cx="220" cy="150" r="64"/><circle cx="220" cy="150" r="104"/><circle cx="220" cy="150" r="138"/>
+                  </g>
+                  <!-- core to category spokes -->
+                  <g stroke="hsl(14 66% 60%)" stroke-width="1.2" stroke-opacity="0.4">
+                    <line x1="220" y1="150" x2="220" y2="46"/><line x1="220" y1="150" x2="310" y2="98"/>
+                    <line x1="220" y1="150" x2="310" y2="202"/><line x1="220" y1="150" x2="220" y2="254"/>
+                    <line x1="220" y1="150" x2="130" y2="202"/><line x1="220" y1="150" x2="130" y2="98"/>
+                  </g>
+                  <!-- category to source leaves -->
+                  <g stroke="hsl(32 11% 22%)" stroke-width="1">
+                    <line x1="220" y1="46" x2="184" y2="15"/><line x1="220" y1="46" x2="256" y2="15"/>
+                    <line x1="310" y1="98" x2="319" y2="51"/><line x1="310" y1="98" x2="355" y2="114"/>
+                    <line x1="310" y1="202" x2="355" y2="186"/><line x1="310" y1="202" x2="319" y2="249"/>
+                    <line x1="220" y1="254" x2="256" y2="285"/><line x1="220" y1="254" x2="184" y2="285"/>
+                    <line x1="130" y1="202" x2="121" y2="249"/><line x1="130" y1="202" x2="85" y2="186"/>
+                    <line x1="130" y1="98" x2="85" y2="114"/><line x1="130" y1="98" x2="121" y2="51"/>
+                  </g>
+                  <!-- outer source dots -->
+                  <g fill="hsl(30 20% 16%)" stroke="hsl(32 12% 30%)" stroke-width="1">
+                    <circle cx="184" cy="15" r="3.5"/><circle cx="256" cy="15" r="3.5"/><circle cx="319" cy="51" r="3.5"/>
+                    <circle cx="355" cy="114" r="3.5"/><circle cx="355" cy="186" r="3.5"/><circle cx="319" cy="249" r="3.5"/>
+                    <circle cx="256" cy="285" r="3.5"/><circle cx="184" cy="285" r="3.5"/><circle cx="121" cy="249" r="3.5"/>
+                    <circle cx="85" cy="186" r="3.5"/><circle cx="85" cy="114" r="3.5"/><circle cx="121" cy="51" r="3.5"/>
+                  </g>
+                  <!-- category nodes -->
+                  <g fill="hsl(36 55% 62%)">
+                    <circle cx="220" cy="46" r="6"/><circle cx="310" cy="98" r="6"/><circle cx="310" cy="202" r="6"/>
+                    <circle cx="220" cy="254" r="6"/><circle cx="130" cy="202" r="6"/><circle cx="130" cy="98" r="6"/>
+                  </g>
+                  <!-- category labels -->
+                  <g fill="hsl(40 15% 68%)" font-size="10" letter-spacing="0.02em">
+                    <text x="220" y="34" text-anchor="middle">Literature</text>
+                    <text x="324" y="99" text-anchor="start">Chemistry</text>
+                    <text x="324" y="205" text-anchor="start">Pathways</text>
+                    <text x="220" y="276" text-anchor="middle">Expression</text>
+                    <text x="116" y="205" text-anchor="end">Genomes</text>
+                    <text x="116" y="99" text-anchor="end">Proteins</text>
+                  </g>
+                  <!-- core -->
+                  <circle cx="220" cy="150" r="26" fill="hsl(14 66% 60%)" opacity="0.12"/>
+                  <circle cx="220" cy="150" r="17" fill="hsl(14 66% 60%)" opacity="0.2"/>
+                  <circle cx="220" cy="150" r="12" fill="hsl(14 72% 62%)"/>
+                  <text x="220" y="154" text-anchor="middle" font-size="10.5" fill="hsl(28 30% 10%)" font-weight="700">~30</text>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================== install / quickstart -->
+    <section class="section dither-warm" id="install">
+      <div class="wrap">
+        <div class="qs-head reveal">
+          <h2 class="h-big text-balance">From nothing to a first result in three commands.</h2>
+          <p class="lede">No account, no signup, no lock-in. It installs in seconds, runs on your own machine, and writes everything it does to disk where you can read it.</p>
+        </div>
+        <div class="qs-steps">
+          <div class="qs-step reveal">
+            <div class="qs-lead"><span class="qs-n">1</span><h3>Install it</h3></div>
+            <div class="qs-do">
+              <div class="qs-cmd">
+                <code><span class="c-prompt">$</span> curl -fsSL https://openscience.sh/install | bash</code>
+                <button class="qs-copy" id="installCopy" aria-label="Copy install command">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+              <p class="qs-alt">or <code>npm install -g @synsci/cli</code></p>
+            </div>
+          </div>
+          <div class="qs-step reveal">
+            <div class="qs-lead"><span class="qs-n">2</span><h3>Point it at your work</h3></div>
+            <div class="qs-do">
+              <div class="qs-cmd"><code><span class="c-prompt">$</span> cd my-project &amp;&amp; synsci</code></div>
+              <p class="qs-alt">Bring your own model. Aim it at a repo, a dataset, or an empty folder.</p>
+            </div>
+          </div>
+          <div class="qs-step reveal">
+            <div class="qs-lead"><span class="qs-n">3</span><h3>Ask a real question</h3></div>
+            <div class="qs-do">
+              <div class="qs-cmd"><code><span class="c-prompt">synsci&nbsp;❯</span> is E545K a kinase-domain mutation?</code></div>
+              <p class="qs-alt">It plans, reads the sources, runs the code, and records a result you can reproduce.</p>
+            </div>
+          </div>
+        </div>
+        <div class="qs-meta reveal">
+          <span class="os">macOS · Linux · Windows</span>
+          <span>AGPL-3.0 · runs locally · no telemetry by default · <a href="https://github.com/synthetic-sciences/synsci-cli" target="_blank" rel="noopener">read the source</a></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================== closing CTA -->
+    <section class="section cta dither-warm">
+      <div class="wrap">
+        <h2 class="h-huge text-balance reveal">Do the <span class="accent">open</span> kind of science.</h2>
+        <p class="reveal">The whole research loop, in your browser or your terminal. Free forever, and yours to read.</p>
+        <div class="cta-actions reveal">
+          <a class="btn btn-primary" href="https://app.syntheticsciences.ai/cli" target="_blank" rel="noopener">Try it out</a>
+          <a class="btn" href="https://github.com/synthetic-sciences/synsci-cli" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1 0-.4-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+            Star on GitHub
+          </a>
+        </div>
+        <div class="cta-chip reveal">
+          <button class="chip" id="ctaChip" aria-label="Copy install command">
+            <span><span class="c-prompt">$</span> curl -fsSL https://openscience.sh/install | bash</span>
+            <span class="cp" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </span>
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================================================ footer -->
+  <footer class="footer">
+    <div class="wrap">
+      <div class="foot-grid">
+        <div class="foot-brand">
+          <div class="fb-mk"><span class="mk">Open</span>Science</div>
+          <p>The open-source research agent, in your browser or your terminal. A Synthetic Sciences project, released free under the AGPL-3.0 license.</p>
+        </div>
+        <div class="foot-col">
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/synthetic-sciences/synsci-cli" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1 0-.4-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+              GitHub</a></li>
+            <li><a href="#install">Install</a></li>
+            <li><a href="https://github.com/synthetic-sciences/synsci-cli/blob/main/README.md" target="_blank" rel="noopener">Documentation</a></li>
+            <li><a href="https://github.com/synthetic-sciences/synsci-cli/blob/main/LICENSE" target="_blank" rel="noopener">AGPL-3.0 License</a></li>
+          </ul>
+        </div>
+        <div class="foot-col">
+          <h4>Synthetic Sciences</h4>
+          <ul>
+            <li><a href="https://syntheticsciences.ai" target="_blank" rel="noopener">Website</a></li>
+            <li><a href="https://www.ycombinator.com/companies/synthetic-sciences" target="_blank" rel="noopener">Y Combinator</a></li>
+            <li><a href="https://www.linkedin.com/company/synsci" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.35V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.55V9h3.57v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/></svg>
+              LinkedIn</a></li>
+            <li><a href="https://x.com/SynScience" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.24 2.25h3.31l-7.23 8.26 8.5 11.24h-6.66l-5.22-6.82-5.97 6.82H1.66l7.73-8.84L1.24 2.25h6.83l4.71 6.23 5.46-6.23zm-1.16 17.52h1.83L7.01 4.13H5.05l12.03 15.64z"/></svg>
+              X / Twitter</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <span>© 2026 InkVell Inc. &nbsp;·&nbsp; OpenScience is a Synthetic Sciences product.</span>
+        <span class="fb-links">
+          <a href="https://syntheticsciences.ai/terms" target="_blank" rel="noopener">Terms</a>
+          <a href="https://syntheticsciences.ai/privacy" target="_blank" rel="noopener">Privacy</a>
+          <a href="mailto:team@syntheticsciences.ai">team@syntheticsciences.ai</a>
+        </span>
+      </div>
+    </div>
+    <div class="foot-mark" aria-hidden="true">openscience</div>
+  </footer>
+
+  <script src="/js/main.js" defer></script>
+  <script>
+    setTimeout(function () {
+      if (window.__osReady) return;
+      var r = document.querySelectorAll(".reveal");
+      for (var i = 0; i < r.length; i++) r[i].classList.add("in");
+      var t = document.querySelector(".term-svg");
+      if (t) t.classList.add("play");
+    }, 1000);
+  </script>
+</body>
+</html>
