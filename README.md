@@ -2,7 +2,7 @@
 
 <img src="assets/wordmark.svg" alt="OpenScience" width="440">
 
-### The open-source AI co-scientist
+### The open-source AI workbench for scientific research
 
 Give it a goal. It reads the literature, writes and runs code, runs the experiments, and writes up what it found.
 
@@ -19,7 +19,7 @@ Give it a goal. It reads the literature, writes and runs code, runs the experime
 
 ---
 
-OpenScience is an AI agent for research. You give it a goal, and it works through the research loop the way a capable collaborator would. It reads the papers that matter, forms a hypothesis, writes and runs code, runs experiments on real compute, queries the major scientific databases, and writes up the result. It runs as a workspace in your browser and works with any frontier or open-weight model from Anthropic, OpenAI, Google, and dozens of other providers, using your own API keys. No account is required.
+OpenScience is an AI workbench for scientific research. You give it a goal, and it works through the research loop the way a capable collaborator would. It reads the papers that matter, forms a hypothesis, writes and runs code, runs experiments on real compute, queries the major scientific databases, and writes up the result. It runs as a workspace in your browser and works with any frontier or open-weight model from Anthropic, OpenAI, Google, and dozens of other providers, using your own API keys. No account is required.
 
 It is model-agnostic, open source, and built to do real work in machine learning, biology, physics, and chemistry.
 
