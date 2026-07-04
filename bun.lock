@@ -19,7 +19,7 @@
     },
     "backend/cli": {
       "name": "@synsci/openscience",
-      "version": "1.2.3",
+      "version": "1.2.4",
       "bin": {
         "openscience": "./bin/openscience",
       },
@@ -123,7 +123,7 @@
     },
     "frontend/docs": {
       "name": "@synsci/docs",
-      "version": "1.2.2",
+      "version": "1.2.4",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
@@ -154,7 +154,7 @@
     },
     "frontend/ui": {
       "name": "@synsci/ui",
-      "version": "1.2.2",
+      "version": "1.2.4",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@pierre/diffs": "catalog:",
@@ -196,7 +196,7 @@
     },
     "frontend/workspace": {
       "name": "@synsci/workspace",
-      "version": "1.2.2",
+      "version": "1.2.4",
       "dependencies": {
         "3dmol": "^2.5.5",
         "@kobalte/core": "catalog:",
@@ -260,7 +260,7 @@
     },
     "tooling/plugin": {
       "name": "@synsci/plugin",
-      "version": "1.2.2",
+      "version": "1.2.4",
       "dependencies": {
         "@synsci/sdk": "workspace:*",
         "zod": "catalog:",
@@ -280,7 +280,7 @@
     },
     "tooling/sdk/js": {
       "name": "@synsci/sdk",
-      "version": "1.2.2",
+      "version": "1.2.4",
       "devDependencies": {
         "@hey-api/openapi-ts": "0.90.10",
         "@tsconfig/node22": "catalog:",
@@ -291,7 +291,7 @@
     },
     "tooling/util": {
       "name": "@synsci/util",
-      "version": "1.2.2",
+      "version": "1.2.4",
       "dependencies": {
         "zod": "catalog:",
       },

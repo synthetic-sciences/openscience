@@ -2,7 +2,7 @@
   "name": "@synsci/docs",
   "type": "module",
   "license": "Apache-2.0",
-  "version": "1.2.2",
+  "version": "1.2.4",
   "scripts": {
     "dev": "astro dev",
     "dev:remote": "VITE_API_URL=https://api.syntheticsciences.ai astro dev",
