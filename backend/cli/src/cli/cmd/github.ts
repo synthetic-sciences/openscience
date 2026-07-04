@@ -355,7 +355,7 @@ export const GithubInstallCommand = cmd({
 
             async function getInstallation() {
               return await fetch(
-                `https://api.syntheticsciences.ai/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`,
+                `https://app.syntheticsciences.ai/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`,
               )
                 .then((res) => res.json())
                 .then((data) => data.installation)
@@ -664,7 +664,7 @@ export const GithubRunCommand = cmd({
 
       function normalizeOidcBaseUrl(): string {
         const value = process.env["OIDC_BASE_URL"]
-        if (!value) return "https://api.syntheticsciences.ai"
+        if (!value) return "https://app.syntheticsciences.ai"
         return value.replace(/\/+$/, "")
       }
 

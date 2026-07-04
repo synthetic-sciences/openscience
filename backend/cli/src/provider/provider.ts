@@ -109,7 +109,7 @@ export namespace Provider {
    * Blocker (c) — the inverse of requireAtlasProxyForManagedKey.
    *
    * A prior managed sync may have injected an Atlas proxy `*_BASE_URL` (e.g.
-   * ANTHROPIC_BASE_URL → api.syntheticsciences.ai). If the resolved key is the
+   * ANTHROPIC_BASE_URL → app.syntheticsciences.ai). If the resolved key is the
    * user's OWN key (BYOK), that key must NEVER be sent to the Atlas proxy — it
    * would leak the credential and mis-bill. Pin the base URL back to the
    * provider's public endpoint and drop the managed routing.

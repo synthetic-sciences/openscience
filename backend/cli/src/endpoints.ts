@@ -17,7 +17,7 @@
  */
 
 /** Neutral public default. Contains no internal codename. */
-export const DEFAULT_MANAGED_API_BASE = "https://api.syntheticsciences.ai"
+export const DEFAULT_MANAGED_API_BASE = "https://app.syntheticsciences.ai"
 
 function stripTrailingSlashes(url: string): string {
   return url.replace(/\/+$/, "")
