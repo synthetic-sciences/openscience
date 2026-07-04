@@ -431,20 +431,49 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             // Check if token needs refresh
             if (!currentAuth.access || currentAuth.expires < Date.now()) {
               log.info("refreshing codex access token")
-              const tokens = await refreshAccessTokenSingleFlight(currentAuth.refresh)
-              const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
-              await input.client.auth.set({
-                path: { id: "openai-codex" },
-                body: {
-                  type: "oauth",
-                  refresh: tokens.refresh_token,
-                  access: tokens.access_token,
-                  expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                  ...(newAccountId && { accountId: newAccountId }),
-                },
-              })
-              currentAuth.access = tokens.access_token
-              authWithAccount.accountId = newAccountId
+              let tokens: TokenResponse | undefined
+              try {
+                tokens = await refreshAccessTokenSingleFlight(currentAuth.refresh)
+              } catch (e) {
+                // ChatGPT rotates the refresh token on every refresh, and the
+                // single-flight guard only covers this process. When two
+                // openscience processes (CLI + workspace server) race a
+                // refresh — common while requests are being retried against an
+                // exhausted usage limit — the loser is left holding a revoked
+                // token and every later refresh fails, even after the limit
+                // resets. The winner has already persisted the rotated pair,
+                // so re-read auth before giving up.
+                const latest = (await getAuth()) as typeof currentAuth & { accountId?: string }
+                if (latest.type === "oauth" && latest.access && latest.expires > Date.now()) {
+                  currentAuth.access = latest.access
+                  authWithAccount.accountId = latest.accountId ?? authWithAccount.accountId
+                } else {
+                  if (latest.type === "oauth" && latest.refresh && latest.refresh !== currentAuth.refresh) {
+                    tokens = await refreshAccessTokenSingleFlight(latest.refresh).catch(() => undefined)
+                  }
+                  if (!tokens) {
+                    log.warn("codex token refresh failed", { error: String(e) })
+                    throw new Error(
+                      "Codex sign-in expired. Reconnect it with `openscience auth login` and choose Codex — Sign in with ChatGPT.",
+                    )
+                  }
+                }
+              }
+              if (tokens) {
+                const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
+                await input.client.auth.set({
+                  path: { id: "openai-codex" },
+                  body: {
+                    type: "oauth",
+                    refresh: tokens.refresh_token,
+                    access: tokens.access_token,
+                    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                    ...(newAccountId && { accountId: newAccountId }),
+                  },
+                })
+                currentAuth.access = tokens.access_token
+                authWithAccount.accountId = newAccountId
+              }
             }
 
             // Build headers
