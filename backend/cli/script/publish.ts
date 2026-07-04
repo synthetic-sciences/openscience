@@ -39,6 +39,12 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
       version: version,
+      // npm provenance refuses packages whose repository.url doesn't match
+      // the repo the workflow ran from (case-sensitive)
+      repository: {
+        type: "git",
+        url: "git+https://github.com/synthetic-sciences/openscience.git",
+      },
       optionalDependencies: binaries,
     },
     null,

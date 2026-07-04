@@ -24,5 +24,9 @@
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/synthetic-sciences/openscience.git"
   }
 }

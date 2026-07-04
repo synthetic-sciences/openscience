@@ -59,11 +59,17 @@ if (Script.release) {
   await $`gh release edit v${Script.version} --draft=false`.nothrow()
 }
 
+// Sections keep publishing past an earlier failure so a broken CLI publish
+// doesn't block the SDK, but any failure must fail the workflow at the end —
+// a green run previously meant nothing reached npm at all.
+const failures: string[] = []
+
 console.log("\n=== cli ===\n")
 try {
   await import(`../../backend/cli/script/publish.ts`)
 } catch (e) {
   console.error("CLI publish failed:", e)
+  failures.push("cli")
 }
 
 console.log("\n=== sdk ===\n")
@@ -71,6 +77,7 @@ try {
   await import(`../sdk/js/script/publish.ts`)
 } catch (e) {
   console.error("SDK publish failed:", e)
+  failures.push("sdk")
 }
 
 console.log("\n=== plugin ===\n")
@@ -78,6 +85,7 @@ try {
   await import(`../plugin/script/publish.ts`)
 } catch (e) {
   console.error("Plugin publish failed:", e)
+  failures.push("plugin")
 }
 
 console.log("\n=== launcher (openscience) ===\n")
@@ -104,10 +112,17 @@ try {
   // without polluting node_modules/.bin in the npx temp tree.
   delete launcherPkg.dependencies
   await Bun.file(`${launcherDir}/package.json`).write(JSON.stringify(launcherPkg, null, 2))
-  await $`cd ${launcherDir} && npm publish --access public --tag ${Script.channel}`.nothrow()
+  const result = await $`cd ${launcherDir} && npm publish --access public --tag ${Script.channel}`.nothrow()
+  if (result.exitCode !== 0) throw new Error(`npm publish exited with ${result.exitCode}`)
 } catch (e) {
   console.error("Launcher publish failed:", e)
+  failures.push("launcher")
 }
 
 const dir = new URL("../..", import.meta.url).pathname
 process.chdir(dir)
+
+if (failures.length > 0) {
+  console.error(`\npublish failed for: ${failures.join(", ")}`)
+  process.exit(1)
+}

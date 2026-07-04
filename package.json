@@ -81,7 +81,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/synthetic-sciences/OpenScience"
+    "url": "https://github.com/synthetic-sciences/openscience"
   },
   "license": "Apache-2.0",
   "prettier": {
