@@ -47,6 +47,29 @@ export namespace Snapshot {
     log.info("cleanup", { prune })
   }
 
+  // A failed `git add` must never be swallowed: write-tree would then snapshot a
+  // stale (or empty) index, and a later revert() against that tree deletes every
+  // file the tree is missing. Retry once for transient failures (index.lock
+  // contention), then report the failure to the caller.
+  async function stageAll(git: string) {
+    let result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+    if (result.exitCode !== 0) {
+      log.warn("add failed, retrying", { exitCode: result.exitCode, stderr: result.stderr.toString() })
+      result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`
+        .quiet()
+        .cwd(Instance.directory)
+        .nothrow()
+    }
+    if (result.exitCode !== 0) {
+      log.error("add failed", { exitCode: result.exitCode, stderr: result.stderr.toString() })
+      return false
+    }
+    return true
+  }
+
   export async function track() {
     if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()
@@ -65,14 +88,18 @@ export namespace Snapshot {
       await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
       log.info("initialized")
     }
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
-    const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
+    if (!(await stageAll(git))) return
+    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
       .quiet()
       .cwd(Instance.directory)
       .nothrow()
-      .text()
+    if (result.exitCode !== 0) {
+      log.error("write-tree failed", { exitCode: result.exitCode, stderr: result.stderr.toString() })
+      return
+    }
+    const hash = result.text().trim()
     log.info("tracking", { hash, cwd: Instance.directory, git })
-    return hash.trim()
+    return hash
   }
 
   export const Patch = z.object({
@@ -83,7 +110,7 @@ export namespace Snapshot {
 
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await stageAll(git)
     const result =
       await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
         .quiet()
@@ -145,7 +172,15 @@ export namespace Snapshot {
               .quiet()
               .cwd(Instance.worktree)
               .nothrow()
-          if (checkTree.exitCode === 0 && checkTree.text().trim()) {
+          if (checkTree.exitCode !== 0) {
+            // Deleting on an unverified miss is destructive: if ls-tree itself
+            // failed we know nothing about the snapshot, so keep the file.
+            log.warn("could not verify file against snapshot, keeping", {
+              file,
+              exitCode: checkTree.exitCode,
+              stderr: checkTree.stderr.toString(),
+            })
+          } else if (checkTree.text().trim()) {
             log.info("file existed in snapshot but checkout failed, keeping", {
               file,
             })
@@ -161,7 +196,7 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    await stageAll(git)
     const result =
       await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
         .quiet()
