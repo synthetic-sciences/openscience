@@ -1,0 +1,78 @@
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index 4b0502f71fcdf5f10cb1b4f227b42d123a5ba304..49a69db094805d388abe3f833294ca5f38445877 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -71,6 +71,8 @@ declare const anthropicProviderOptions: z.ZodObject<{
+         low: "low";
+         medium: "medium";
+         high: "high";
++        xhigh: "xhigh";
++        max: "max";
+     }>>;
+ }, z.core.$strip>;
+ type AnthropicProviderOptions = z.infer<typeof anthropicProviderOptions>;
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 4b0502f71fcdf5f10cb1b4f227b42d123a5ba304..49a69db094805d388abe3f833294ca5f38445877 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -71,6 +71,8 @@ declare const anthropicProviderOptions: z.ZodObject<{
+         low: "low";
+         medium: "medium";
+         high: "high";
++        xhigh: "xhigh";
++        max: "max";
+     }>>;
+ }, z.core.$strip>;
+ type AnthropicProviderOptions = z.infer<typeof anthropicProviderOptions>;
+diff --git a/dist/index.js b/dist/index.js
+index e273a3cb0a7468481bc9b66baa1c434fbfdadd88..7fd82aecf5c65d334fe7d4ad7b5a805b37d3fd4a 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -615,7 +615,7 @@ var anthropicProviderOptions = import_v43.z.object({
+   /**
+    * @default 'high'
+    */
+-  effort: import_v43.z.enum(["low", "medium", "high"]).optional()
++  effort: import_v43.z.enum(["low", "medium", "high", "xhigh", "max"]).optional()
+ });
+ 
+ // src/anthropic-prepare-tools.ts
+diff --git a/dist/index.mjs b/dist/index.mjs
+index dc4157434cbf3f4afbf70b83c5d40fe85d40b883..c02a76236c048a4313683105a59100f71743cfac 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -610,7 +610,7 @@ var anthropicProviderOptions = z3.object({
+   /**
+    * @default 'high'
+    */
+-  effort: z3.enum(["low", "medium", "high"]).optional()
++  effort: z3.enum(["low", "medium", "high", "xhigh", "max"]).optional()
+ });
+ 
+ // src/anthropic-prepare-tools.ts
+diff --git a/dist/internal/index.js b/dist/internal/index.js
+index c80b1e9d5c73f3256f4f645a614339db4b734cbb..d50cead1eb997e767a9fabe4c1ec0c5bb923d673 100644
+--- a/dist/internal/index.js
++++ b/dist/internal/index.js
+@@ -608,7 +608,7 @@ var anthropicProviderOptions = import_v43.z.object({
+   /**
+    * @default 'high'
+    */
+-  effort: import_v43.z.enum(["low", "medium", "high"]).optional()
++  effort: import_v43.z.enum(["low", "medium", "high", "xhigh", "max"]).optional()
+ });
+ 
+ // src/anthropic-prepare-tools.ts
+diff --git a/dist/internal/index.mjs b/dist/internal/index.mjs
+index cd1c18d50c2f1a1d8a3d8d73cac4f34149cb1626..73eb8682bf56af01efaf9d6811e3f266ffb384a6 100644
+--- a/dist/internal/index.mjs
++++ b/dist/internal/index.mjs
+@@ -595,7 +595,7 @@ var anthropicProviderOptions = z3.object({
+   /**
+    * @default 'high'
+    */
+-  effort: z3.enum(["low", "medium", "high"]).optional()
++  effort: z3.enum(["low", "medium", "high", "xhigh", "max"]).optional()
+ });
+ 
+ // src/anthropic-prepare-tools.ts

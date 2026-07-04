@@ -1676,10 +1676,11 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/anthropic adaptive thinking (Opus 4.7+ / Claude 5+)", () => {
-    // The installed @ai-sdk/anthropic only accepts effort ∈ {low, medium, high}
-    // (anthropicProviderOptions zod enum). Emitting xhigh/max here throws
-    // "AI_InvalidArgumentError: invalid anthropic provider options" at request time.
-    const ALLOWED_EFFORTS = ["low", "medium", "high"]
+    // The @ai-sdk/anthropic effort enum is widened to {low, medium, high, xhigh,
+    // max} by tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch, so those values
+    // are accepted at request time. xhigh is the Opus 4.8+ deep-reasoning tier;
+    // every adaptive Claude also exposes max.
+    const ALLOWED_EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 
     const adaptiveModel = (id: string) =>
       createMockModel({
@@ -1700,17 +1701,31 @@ describe("ProviderTransform.variants", () => {
           .filter((e): e is string => typeof e === "string")
         expect(efforts.length).toBeGreaterThan(0)
         for (const e of efforts) expect(ALLOWED_EFFORTS).toContain(e)
-        expect(Object.keys(result)).not.toContain("xhigh")
-        expect(Object.keys(result)).not.toContain("max")
       })
     }
 
-    test("claude-opus-4-8 returns low/medium/high effort variants", () => {
+    // xhigh is gated to Opus 4.8+ (and Opus 5+); other adaptive Claudes cap at max.
+    test("claude-opus-4-8 exposes the full low→max effort range including xhigh", () => {
       const result = ProviderTransform.variants(adaptiveModel("claude-opus-4-8"))
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
       expect(result.low).toEqual({ effort: "low" })
-      expect(result.medium).toEqual({ effort: "medium" })
       expect(result.high).toEqual({ effort: "high" })
+      expect(result.xhigh).toEqual({ effort: "xhigh" })
+      expect(result.max).toEqual({ effort: "max" })
+    })
+
+    test("claude-opus-5 also exposes xhigh", () => {
+      const result = ProviderTransform.variants(adaptiveModel("claude-opus-5"))
+      expect(Object.keys(result)).toContain("xhigh")
+      expect(Object.keys(result)).toContain("max")
+    })
+
+    test("non-Opus adaptive Claudes stop at max (no xhigh)", () => {
+      for (const id of ["claude-sonnet-4-7", "claude-sonnet-5", "claude-haiku-5", "claude-opus-4-7"]) {
+        const result = ProviderTransform.variants(adaptiveModel(id))
+        expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+        expect(Object.keys(result)).not.toContain("xhigh")
+      }
     })
   })
 

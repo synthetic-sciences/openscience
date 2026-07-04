@@ -101,6 +101,7 @@
     "ws": "8.21.0"
   },
   "patchedDependencies": {
-    "ghostty-web@0.3.0": "tooling/patches/ghostty-web@0.3.0.patch"
+    "ghostty-web@0.3.0": "tooling/patches/ghostty-web@0.3.0.patch",
+    "@ai-sdk/anthropic@2.0.57": "tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch"
   }
 }

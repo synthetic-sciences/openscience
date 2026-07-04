@@ -565,14 +565,18 @@ export namespace ProviderTransform {
           // Therefore for adaptive models we OMIT thinking entirely and only
           // send effort. The model defaults to adaptive thinking on the wire.
           //
-          // The provider's `effort` is a strict zod enum of low|medium|high
-          // (dist/index.mjs:613). Emitting "xhigh"/"max" throws
-          // "AI_InvalidArgumentError: invalid anthropic provider options" before
-          // the request ever leaves — so we only expose what the SDK accepts.
+          // The provider's stock `effort` zod enum stops at high; the pinned
+          // patch in tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch widens it
+          // to low|medium|high|xhigh|max so the full adaptive range is usable.
+          // xhigh is the Opus 4.8+ deep-reasoning tier; other adaptive Claudes
+          // cap at max.
+          const supportsXhigh = /^claude-opus-4-[8-9]\b/.test(id) || /^claude-opus-[5-9]\b/.test(id)
           return {
             low: { effort: "low" },
             medium: { effort: "medium" },
             high: { effort: "high" },
+            ...(supportsXhigh ? { xhigh: { effort: "xhigh" } } : {}),
+            max: { effort: "max" },
           }
         }
 
