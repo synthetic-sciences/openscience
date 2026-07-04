@@ -87,6 +87,7 @@ export const dict = {
   "ui.message.collapse": "メッセージを折りたたむ",
   "ui.message.copy": "コピー",
   "ui.message.copied": "コピーしました！",
+  "ui.message.revert": "ここから元に戻す",
   "ui.message.attachment.alt": "添付ファイル",
 
   "ui.patch.action.deleted": "削除済み",

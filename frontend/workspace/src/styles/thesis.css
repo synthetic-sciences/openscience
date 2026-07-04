@@ -164,16 +164,13 @@ html[data-color-scheme="dark"] {
 }
 
 /* ==========================================================
-   Base — softly textured ambient mesh.
+   Base — flat, quiet canvas. (The colored ambient mesh that used
+   to sit here read as a random gradient bleeding around the chat
+   and message boxes, so it's gone.)
    ========================================================== */
 .thesis-root {
   position: relative;
   background: var(--color-bg);
-  background-image:
-    radial-gradient(at 8% -2%, rgba(99, 102, 241, 0.075), transparent 38%),
-    radial-gradient(at 98% 2%, rgba(249, 115, 22, 0.06), transparent 36%),
-    radial-gradient(at 50% 100%, rgba(34, 197, 94, 0.05), transparent 42%),
-    radial-gradient(at 0% 100%, rgba(59, 130, 246, 0.05), transparent 36%);
   color: var(--color-text);
   font-family: var(--font-sans);
   letter-spacing: -0.011em;
@@ -182,19 +179,10 @@ html[data-color-scheme="dark"] {
   font-feature-settings: "ss01", "ss02";
 }
 
-.dark .thesis-root,
-html[data-color-scheme="dark"] .thesis-root {
-  background-image:
-    radial-gradient(at 8% -2%, rgba(99, 102, 241, 0.16), transparent 38%),
-    radial-gradient(at 98% 2%, rgba(249, 115, 22, 0.10), transparent 36%),
-    radial-gradient(at 50% 100%, rgba(34, 197, 94, 0.08), transparent 42%),
-    radial-gradient(at 0% 100%, rgba(59, 130, 246, 0.10), transparent 36%);
-}
-
-/* The ambient mesh above is kept; the 40px ruled grid overlay that used to
-   live in .thesis-root::before was removed — it read as distracting horizontal
-   lines in empty areas (e.g. the chat), and its full-viewport masked repaint
-   was costly during layout changes like opening the right pane. */
+/* The 40px ruled grid overlay that used to live in .thesis-root::before was
+   removed — it read as distracting horizontal lines in empty areas (e.g. the
+   chat), and its full-viewport masked repaint was costly during layout changes
+   like opening the right pane. */
 
 .thesis-root > * {
   position: relative;

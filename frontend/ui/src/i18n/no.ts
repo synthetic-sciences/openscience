@@ -90,6 +90,7 @@ export const dict: Record<Keys, string> = {
   "ui.message.collapse": "Skjul melding",
   "ui.message.copy": "Kopier",
   "ui.message.copied": "Kopiert!",
+  "ui.message.revert": "Angre herfra",
   "ui.message.attachment.alt": "vedlegg",
 
   "ui.patch.action.deleted": "Slettet",

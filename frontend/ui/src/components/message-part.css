@@ -93,6 +93,9 @@
       position: absolute;
       top: 7px;
       right: 7px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
       opacity: 0;
       transition: opacity 0.15s ease;
     }

@@ -12,6 +12,7 @@ import {
   IconSearch,
   IconSparkles,
   IconStop,
+  IconX,
 } from "@/thesis/shared/Icon"
 import { AsciiSpinner } from "@/thesis/shared/AsciiSpinner"
 import { toast } from "@/thesis/Toast"
@@ -208,6 +209,32 @@ export function Composer(): JSX.Element {
   // Highlighted row index for keyboard nav inside the model search.
   const [modelIndex, setModelIndex] = createSignal(0)
   const [submitting, setSubmitting] = createSignal(false)
+
+  // ── Prompt queue ─────────────────────────────────────────────────────────
+  // The composer never locks while the agent is streaming. Sends that arrive
+  // mid-turn are queued (with the agent/model/effort chosen at enqueue time)
+  // and dispatched in order the moment the session goes idle. `inflight`
+  // covers the whole server turn (session.prompt resolves when the turn
+  // completes), which also bridges the SSE gap before session_status flips
+  // to non-idle — without it two queued prompts could race out together.
+  type QueuedPrompt = {
+    id: string
+    text: string
+    attachments: Attachment[]
+    agent: string
+    model: ModelKey
+    variant: string | undefined
+    fast: boolean | undefined
+  }
+  const [queue, setQueue] = createSignal<QueuedPrompt[]>([])
+  const [inflight, setInflight] = createSignal(false)
+  createEffect(
+    on(
+      () => params.id,
+      () => setQueue([]),
+      { defer: true },
+    ),
+  )
   const [focused, setFocused] = createSignal(false)
   const [dragOver, setDragOver] = createSignal(false)
   const [attachments, setAttachments] = createSignal<Attachment[]>([])
@@ -696,6 +723,41 @@ export function Composer(): JSX.Element {
     const trimmed = text().trim()
     const atts = attachments()
     if ((!trimmed && atts.length === 0) || submitting()) return
+    const chosen = model()
+    if (!chosen) {
+      toast.error(
+        "no model selected",
+        `Connect a provider key at ${BYOK_URL} to enable a model.`,
+      )
+      return
+    }
+    const payload: QueuedPrompt = {
+      id: Identifier.ascending("message"),
+      text: trimmed,
+      attachments: atts,
+      agent: agent(),
+      model: chosen,
+      variant: models.variant.get(chosen),
+      fast: isGpt55(chosen.modelID) ? fast() : undefined,
+    }
+    // Clear the input immediately in both paths so typing can continue.
+    setText("")
+    setAttachments([])
+    if (textareaRef) textareaRef.style.height = "auto"
+
+    // Mid-turn sends queue; the drain effect below fires them when idle.
+    if (isWorking() || inflight()) {
+      setQueue((q) => [...q, payload])
+      return
+    }
+    await dispatch(payload)
+  }
+
+  const dispatch = async (p: QueuedPrompt) => {
+    if (submitting()) {
+      setQueue((q) => [p, ...q])
+      return
+    }
     setSubmitting(true)
     try {
       let sessionID = sessionPending()
@@ -712,18 +774,9 @@ export function Composer(): JSX.Element {
         navigate(`/${params.dir}/session/${sessionID}`, { replace: true })
       }
 
-      const chosen = model()
-      if (!chosen) {
-        toast.error(
-          "no model selected",
-          `Connect a provider key at ${BYOK_URL} to enable a model.`,
-        )
-        return
-      }
-      const agentName = agent()
       const messageID = Identifier.ascending("message")
 
-      const filePartsBase = atts.map((a) => ({
+      const filePartsBase = p.attachments.map((a) => ({
         id: Identifier.ascending("part"),
         type: "file" as const,
         mime: a.mime,
@@ -735,10 +788,10 @@ export function Composer(): JSX.Element {
       // so the agent persists each attachment to .context/<filename>.
       // The agent's `write` tool handles binary via base64 from the
       // data URL we sent.
-      const userText = trimmed || (atts.length > 0 ? "(see attachments)" : "")
+      const userText = p.text || (p.attachments.length > 0 ? "(see attachments)" : "")
       const guidance =
-        atts.length > 0
-          ? `\n\n---\nAttachments: ${atts
+        p.attachments.length > 0
+          ? `\n\n---\nAttachments: ${p.attachments
               .map((a) => safeFilename(a.filename))
               .join(", ")}.\nIf they aren't already there, save each attachment to \`.context/\` at the project root (create the directory if missing). For text-like files use the write tool; for binaries decode the data URL with bash. Treat \`.context/\` as the durable scratchpad for files dropped into chat.`
           : ""
@@ -754,28 +807,33 @@ export function Composer(): JSX.Element {
       sync.session.addOptimisticMessage({
         sessionID,
         messageID,
-        agent: agentName,
-        model: chosen,
-        parts: promptParts.map((p) => ({ ...p, sessionID, messageID }) as any),
+        agent: p.agent,
+        model: p.model,
+        parts: promptParts.map((part) => ({ ...part, sessionID, messageID }) as any),
       })
 
-      // Clear input + attachments now that they're persisted.
-      setText("")
-      setAttachments([])
-      if (textareaRef) textareaRef.style.height = "auto"
+      // Fire-and-forget: session.prompt resolves only when the whole turn
+      // completes, so awaiting it here is what used to freeze the composer
+      // for the entire generation. `inflight` tracks the turn instead.
+      setInflight(true)
+      sdk.client.session
+        .prompt({
+          sessionID,
+          messageID,
+          directory: sync.project?.worktree ?? sync.data.path.directory,
+          model: p.model,
+          agent: p.agent,
+          variant: p.variant,
+          fast: p.fast,
+          parts: promptParts,
+        } as any)
+        .catch((e: any) => {
+          console.error("session.prompt failed", e)
+          toast.error("send failed", e?.message ?? String(e))
+        })
+        .finally(() => setInflight(false))
 
-      await sdk.client.session.prompt({
-        sessionID,
-        messageID,
-        directory: sync.project?.worktree ?? sync.data.path.directory,
-        model: chosen,
-        agent: agentName,
-        variant: models.variant.get(chosen),
-        fast: isGpt55(chosen.modelID) ? fast() : undefined,
-        parts: promptParts,
-      } as any)
-
-      models.recent.push(chosen)
+      models.recent.push(p.model)
     } catch (e: any) {
       console.error("session.prompt failed", e)
       toast.error("send failed", e?.message ?? String(e))
@@ -783,6 +841,16 @@ export function Composer(): JSX.Element {
       setSubmitting(false)
     }
   }
+
+  // Drain the queue: whenever the session is idle and nothing is in flight,
+  // send the next queued prompt.
+  createEffect(() => {
+    if (isWorking() || inflight() || submitting()) return
+    const next = queue()[0]
+    if (!next) return
+    setQueue((q) => q.slice(1))
+    void dispatch(next)
+  })
 
   const onKey = (e: KeyboardEvent) => {
     if (slashOpen() && slashItems().length > 0) {
@@ -869,6 +937,82 @@ export function Composer(): JSX.Element {
           transition: "background 120ms ease, box-shadow 120ms ease, border-color 120ms ease",
         }}
       >
+        <Show when={queue().length > 0}>
+          <div
+            style={{
+              display: "flex",
+              "flex-wrap": "wrap",
+              "align-items": "center",
+              gap: "6px",
+              "margin-bottom": "2px",
+            }}
+          >
+            <span
+              style={{
+                "font-family": FONT_MONO,
+                "font-size": "10px",
+                color: "var(--color-text-faint)",
+                "letter-spacing": "0.05em",
+                "text-transform": "lowercase",
+              }}
+            >
+              queued · {queue().length}
+            </span>
+            <For each={queue()}>
+              {(q) => (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    "align-items": "center",
+                    gap: "6px",
+                    border: "1px solid var(--color-border)",
+                    "border-radius": "4px",
+                    padding: "3px 8px",
+                    "font-family": FONT_SANS,
+                    "font-size": "12px",
+                    color: "var(--color-text-secondary, var(--color-text))",
+                    background: "var(--color-bg-elevated)",
+                    "max-width": "340px",
+                  }}
+                >
+                  <span
+                    title="click to edit — moves back into the input"
+                    style={{
+                      overflow: "hidden",
+                      "text-overflow": "ellipsis",
+                      "white-space": "nowrap",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => {
+                      if (text().trim().length > 0) {
+                        toast.info("input not empty", "clear the input to pull a queued message back")
+                        return
+                      }
+                      setQueue((qs) => qs.filter((x) => x.id !== q.id))
+                      setAttachments(q.attachments)
+                      grow(q.text)
+                    }}
+                  >
+                    {q.text || "(attachments)"}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="remove from queue"
+                    onClick={() => setQueue((qs) => qs.filter((x) => x.id !== q.id))}
+                    style={{
+                      all: "unset",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      color: "var(--color-text-faint)",
+                    }}
+                  >
+                    <IconX size={11} strokeWidth={1.5} />
+                  </button>
+                </span>
+              )}
+            </For>
+          </div>
+        </Show>
         <Show when={attachments().length > 0}>
           <div
             style={{
@@ -904,7 +1048,6 @@ export function Composer(): JSX.Element {
                   ? "ask a research question · / for skills"
                   : "ask the agent · drop or paste a file · / for skills"
             }
-            disabled={submitting()}
             style={{
               all: "unset",
               "font-family": FONT_SANS,
@@ -1622,7 +1765,7 @@ export function Composer(): JSX.Element {
 
           <span style={{ flex: 1 }} />
 
-          <Show when={submitting()}>
+          <Show when={isWorking() || inflight()}>
             <span
               style={{
                 "font-family": FONT_MONO,
@@ -1646,50 +1789,41 @@ export function Composer(): JSX.Element {
                 color: "var(--color-text-faint)",
               }}
             >
-              ↵ to send · ⇧↵ newline
+              {isWorking() || inflight() ? "↵ to queue · ⇧↵ newline" : "↵ to send · ⇧↵ newline"}
             </span>
           </Show>
 
-          <Show
-            when={isWorking()}
-            fallback={
-              <button
-                onClick={() => void submit()}
-                disabled={
-                  (text().trim().length === 0 && attachments().length === 0) || submitting()
-                }
-                type="button"
-                style={{
-                  all: "unset",
-                  "box-sizing": "border-box",
-                  cursor:
-                    (text().trim() || attachments().length > 0) && !submitting()
-                      ? "pointer"
-                      : "not-allowed",
-                  height: "28px",
-                  padding: "0 12px",
-                  display: "inline-flex",
-                  "align-items": "center",
-                  gap: "5px",
-                  "border-radius": "4px",
-                  background:
-                    (text().trim().length === 0 && attachments().length === 0) || submitting()
-                      ? "var(--color-bg-elevated)"
-                      : "var(--color-accent)",
-                  color:
-                    (text().trim().length === 0 && attachments().length === 0) || submitting()
-                      ? "var(--color-text-faint)"
-                      : "var(--color-on-accent)",
-                  "font-family": FONT_MONO,
-                  "font-size": "12px",
-                  transition: "all 120ms ease",
-                }}
-              >
-                <IconArrowUp size={12} strokeWidth={2} />
-                send
-              </button>
-            }
-          >
+          <Show when={text().trim().length > 0 || attachments().length > 0}>
+            <button
+              onClick={() => void submit()}
+              disabled={submitting()}
+              type="button"
+              title={isWorking() || inflight() ? "queue — sends when the agent finishes" : "send"}
+              style={{
+                all: "unset",
+                "box-sizing": "border-box",
+                cursor: submitting() ? "not-allowed" : "pointer",
+                height: "28px",
+                padding: "0 12px",
+                display: "inline-flex",
+                "align-items": "center",
+                gap: "5px",
+                "border-radius": "4px",
+                background: isWorking() || inflight() ? "transparent" : "var(--color-accent)",
+                color: isWorking() || inflight() ? "var(--color-text)" : "var(--color-on-accent)",
+                border:
+                  isWorking() || inflight() ? "1px solid var(--color-border)" : "1px solid transparent",
+                "font-family": FONT_MONO,
+                "font-size": "12px",
+                transition: "all 120ms ease",
+              }}
+            >
+              <IconArrowUp size={12} strokeWidth={2} />
+              {isWorking() || inflight() ? "queue" : "send"}
+            </button>
+          </Show>
+
+          <Show when={isWorking() || inflight()}>
             <button
               onClick={() => void stop()}
               type="button"

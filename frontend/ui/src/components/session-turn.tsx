@@ -140,6 +140,7 @@ export function SessionTurn(
     stepsExpanded?: boolean
     onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
+    onRevertMessage?: (messageID: string) => void
     hideTools?: string[]
     classes?: {
       root?: string
@@ -572,7 +573,13 @@ export function SessionTurn(
                     <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
                       <div data-slot="session-turn-message-content" aria-live="off">
-                        <Message message={msg()} parts={stickyParts()} />
+                        <Message
+                          message={msg()}
+                          parts={stickyParts()}
+                          onRevert={
+                            props.onRevertMessage ? () => props.onRevertMessage?.(msg().id) : undefined
+                          }
+                        />
                       </div>
 
                       {/* Trigger (sticky) */}

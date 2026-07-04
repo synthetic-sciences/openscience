@@ -28,6 +28,7 @@ import { FONT_MONO, FONT_SANS, FONT_SERIF, sectionTitle } from "@/styles/tokens"
 import { uiStore } from "@/thesis/store/ui"
 import { useGlobalKeys } from "@/thesis/useGlobalKeys"
 import { useDialog } from "@synsci/ui/context/dialog"
+import { confirmDialog } from "@/thesis/dialogs"
 import { DialogSettings } from "@/components/dialog-settings"
 import { DisconnectedPanel } from "@/thesis/DisconnectedPanel"
 import { CommandPalette } from "@/thesis/CommandPalette"
@@ -182,7 +183,50 @@ export default function Page(): JSX.Element {
   // each of the (often hundreds of) assistant messages paint an empty turn plus
   // a divider, which stacked up as faint horizontal lines down the chat and
   // bloated the DOM (slowing the reflow when the right pane opens).
-  const turnMessages = createMemo(() => messages().filter((m) => m.role === "user"))
+  // When the session is in a reverted state, turns at or past the revert point
+  // stay hidden until the user restores them or sends a new message (which
+  // makes the revert permanent server-side).
+  const activeSession = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const revertInfo = createMemo(() => activeSession()?.revert)
+  const turnMessages = createMemo(() => {
+    const revertID = revertInfo()?.messageID
+    return messages().filter((m) => m.role === "user" && (!revertID || m.id < revertID))
+  })
+  const revertedCount = createMemo(() => {
+    const revertID = revertInfo()?.messageID
+    if (!revertID) return 0
+    return messages().filter((m) => m.role === "user" && m.id >= revertID).length
+  })
+
+  const revertTo = async (messageID: string) => {
+    const id = params.id
+    if (!id) return
+    const ok = await confirmDialog(dialog, {
+      title: "Undo from here?",
+      message:
+        "Hides this message and everything after it, and rolls back the file changes they made. You can restore until you send the next message.",
+      confirmLabel: "undo",
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await sync.session.revert(id, messageID)
+      toast.success("reverted", "files rolled back. send a message to continue from here")
+    } catch (e: any) {
+      toast.error("undo failed", e?.message ?? String(e))
+    }
+  }
+
+  const restoreRevert = async () => {
+    const id = params.id
+    if (!id) return
+    try {
+      await sync.session.unrevert(id)
+      toast.success("messages restored")
+    } catch (e: any) {
+      toast.error("restore failed", e?.message ?? String(e))
+    }
+  }
 
   const [stepsExpanded, setStepsExpanded] = createSignal<Record<string, boolean>>({})
   const toggleSteps = (id: string) =>
@@ -380,6 +424,7 @@ export default function Page(): JSX.Element {
                             lastUserMessageID={lastUserMessage()?.id}
                             stepsExpanded={stepsExpanded()[message.id] ?? false}
                             onStepsExpandedToggle={() => toggleSteps(message.id)}
+                            onRevertMessage={(id) => void revertTo(id)}
                             hideTools={["task"]}
                             classes={{
                               root: "min-w-0 w-full relative",
@@ -407,6 +452,46 @@ export default function Page(): JSX.Element {
                   <ChatWelcome />
                 </Match>
               </Switch>
+
+              <Show when={revertInfo()}>
+                <div style={{ padding: "8px 16px 0" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      "align-items": "center",
+                      gap: "12px",
+                      padding: "8px 12px",
+                      border: "1px solid var(--color-border)",
+                      "border-radius": "6px",
+                      "font-size": "12px",
+                      "font-family": FONT_SANS,
+                      color: "var(--color-text-secondary, var(--color-text))",
+                      background: "var(--color-bg)",
+                    }}
+                  >
+                    <span style={{ flex: 1, "min-width": 0 }}>
+                      Conversation reverted. {revertedCount()} turn{revertedCount() === 1 ? "" : "s"} hidden and
+                      file changes rolled back. Sending a new message makes this permanent.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void restoreRevert()}
+                      style={{
+                        border: "1px solid var(--color-border)",
+                        background: "transparent",
+                        color: "inherit",
+                        padding: "4px 10px",
+                        "border-radius": "4px",
+                        "font-size": "12px",
+                        cursor: "pointer",
+                        "white-space": "nowrap",
+                      }}
+                    >
+                      restore
+                    </button>
+                  </div>
+                </div>
+              </Show>
 
               <Composer />
             </div>
@@ -924,12 +1009,18 @@ function ChatWelcome(): JSX.Element {
                 cursor: "pointer",
                 padding: "5px 12px",
                 "border-radius": "4px",
-                border: uiStore.agent() === m.name ? "1px solid var(--color-text)" : "1px solid var(--color-border)",
+                border: uiStore.agent() === m.name ? "1px solid var(--color-border)" : "1px solid transparent",
                 background: uiStore.agent() === m.name ? "var(--color-accent-subtle)" : "transparent",
                 "font-family": FONT_MONO,
                 "font-size": "11px",
                 color: uiStore.agent() === m.name ? "var(--color-text)" : "var(--color-text-muted)",
                 transition: "border-color 120ms ease, background 120ms ease, color 120ms ease",
+              }}
+              onMouseEnter={(e) => {
+                if (uiStore.agent() !== m.name) e.currentTarget.style.background = "var(--color-bg-elevated)"
+              }}
+              onMouseLeave={(e) => {
+                if (uiStore.agent() !== m.name) e.currentTarget.style.background = "transparent"
               }}
             >
               {m.name}

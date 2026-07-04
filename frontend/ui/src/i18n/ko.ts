@@ -87,6 +87,7 @@ export const dict = {
   "ui.message.collapse": "메시지 접기",
   "ui.message.copy": "복사",
   "ui.message.copied": "복사됨!",
+  "ui.message.revert": "여기서부터 실행 취소",
   "ui.message.attachment.alt": "첨부 파일",
 
   "ui.patch.action.deleted": "삭제됨",
