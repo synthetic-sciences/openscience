@@ -15,6 +15,14 @@ Give it a goal. It reads the literature, writes and runs code, runs the experime
 
 [Install](#install) · [Quickstart](#quickstart) · [Docs](https://syntheticsciences.ai/docs) · [Atlas](#atlas)
 
+<br/>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/hero-light.png">
+  <img src="assets/hero-dark.png" alt="The Pharos of Alexandria casting its beam across a dark sea, a small ship steering by the light" width="100%">
+</picture>
+
 </div>
 
 ---

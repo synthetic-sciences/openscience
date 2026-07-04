@@ -302,24 +302,32 @@ html.js .term-svg .tl { opacity: 0; }
   background-image: url("/img/hero.jpg");
   background-image: -webkit-image-set(url("/img/hero.webp") type("image/webp"), url("/img/hero.jpg") type("image/jpeg"));
   background-repeat: no-repeat; background-position: right center; background-size: auto 114%;
-  filter: grayscale(1) contrast(1.07);   /* fully black and white; coral accent lives outside .hero-art */
+  /* the engraving is already monochrome warm sepia — same hue family as --fg cream,
+     so it ships unfiltered; coral accent lives outside .hero-art */
 }
 @media (max-width: 720px) { .hero-art { background-size: cover; background-position: 62% 14%; } }
 .hero-art::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.32; mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-/* veil: darken the left + bottom so the headline stays crisp over the art */
+/* veil: a light uniform scrim softens the plate; a top-left corner shield keeps
+   the headline crisp while the beam and the ship at bottom-left stay in view */
 .hero-art .veil { position: absolute; inset: 0; background:
-  linear-gradient(90deg, var(--bg) 0%, var(--bg) 38%, hsl(30 14% 7% / 0.85) 50%, hsl(30 14% 7% / 0.32) 65%, transparent 78%),
-  linear-gradient(0deg, var(--bg) 0%, transparent 17%),
+  linear-gradient(hsl(30 14% 7% / 0.2), hsl(30 14% 7% / 0.2)),
+  radial-gradient(ellipse 95% 80% at 6% 8%, var(--bg) 0%, hsl(30 14% 7% / 0.86) 42%, hsl(30 14% 7% / 0.3) 68%, transparent 92%),
+  linear-gradient(0deg, var(--bg) 0%, transparent 14%),
   linear-gradient(180deg, hsl(28 18% 4% / 0.5) 0%, transparent 15%); }
 @media (max-width: 720px) { .hero-art .veil { background:
+  linear-gradient(hsl(30 14% 7% / 0.26), hsl(30 14% 7% / 0.26)),
   linear-gradient(0deg, var(--bg) 40%, hsl(30 14% 7% / 0.8) 55%, hsl(30 14% 7% / 0.28) 72%, transparent 86%),
   linear-gradient(180deg, hsl(28 18% 4% / 0.42) 0%, transparent 20%); } }
 .hero-art .orbits { display: none; }
-.hero.hero-art-host { min-height: clamp(560px, 82vh, 760px); display: flex; align-items: flex-end; }
-.hero.hero-art-host .wrap { position: relative; z-index: 2; width: 100%; padding-bottom: clamp(46px, 6vw, 84px); }
+.hero.hero-art-host { min-height: clamp(560px, 82vh, 760px); display: flex; align-items: flex-start; }
+.hero.hero-art-host .wrap { position: relative; z-index: 2; width: 100%; padding-top: clamp(88px, 12vh, 132px); padding-bottom: clamp(46px, 6vw, 84px); }
+@media (max-width: 720px) {
+  .hero.hero-art-host { align-items: flex-end; }
+  .hero.hero-art-host .wrap { padding-top: clamp(56px, 8vw, 104px); }
+}
 .hero-lead { max-width: 700px; }
 .hero.hero-art-host h1 { font-size: clamp(40px, 5.8vw, 76px); line-height: 0.97; letter-spacing: -0.035em; margin-bottom: 22px; text-shadow: 0 2px 30px rgba(0,0,0,0.5); }
 .hero.hero-art-host h1 .accent { color: var(--coral); }
