@@ -158,53 +158,68 @@ export namespace Snapshot {
     const files = new Set<string>()
     const git = gitdir()
     for (const item of patches) {
-      // One full listing per snapshot instead of a per-file ls-tree pathspec:
-      // membership is checked in code on quotepath=false output, the same
-      // mechanism patch() uses, so unusual filenames behave identically on
-      // every platform. If the listing itself fails we know nothing about the
-      // snapshot, and deleting on an unverified miss would be destructive —
-      // keep files in that case.
-      const listing = await $`git -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} ls-tree -r --name-only ${item.hash}`
+      // Restore never builds a per-file git pathspec: `git checkout <tree> --
+      // <path>` proved unreliable for unusual filenames depending on platform.
+      // Instead the tree is listed once (-z: NUL-delimited, unquoted raw
+      // paths), and each file is rewritten from its blob via `cat-file`, which
+      // addresses content by sha only. If the listing itself fails we know
+      // nothing about the snapshot, and deleting on an unverified miss would
+      // be destructive — keep everything in that case.
+      const listing = await $`git --git-dir ${git} --work-tree ${Instance.worktree} ls-tree -r -z ${item.hash}`
         .quiet()
         .cwd(Instance.worktree)
         .nothrow()
-      const snapshotFiles =
-        listing.exitCode === 0
-          ? new Set(
-              listing
-                .text()
-                .split("\n")
-                .map((x) => x.trim())
-                .filter(Boolean)
-                .map((x) => path.join(Instance.worktree, x)),
-            )
-          : undefined
-      if (!snapshotFiles)
-        log.warn("could not list snapshot tree", {
+      if (listing.exitCode !== 0) {
+        log.warn("could not list snapshot tree, keeping files", {
           hash: item.hash,
           exitCode: listing.exitCode,
           stderr: listing.stderr.toString(),
         })
+        continue
+      }
+      // each entry: <mode> SP <type> SP <sha> TAB <path>
+      const entries = new Map<string, { mode: string; sha: string }>()
+      for (const line of listing.text().split("\0")) {
+        const tab = line.indexOf("\t")
+        if (tab < 0) continue
+        const [mode, , sha] = line.slice(0, tab).split(" ")
+        entries.set(path.join(Instance.worktree, line.slice(tab + 1)), { mode, sha })
+      }
       for (const file of item.files) {
         if (files.has(file)) continue
-        log.info("reverting", { file, hash: item.hash })
-        const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} checkout ${item.hash} -- ${file}`
-          .quiet()
-          .cwd(Instance.worktree)
-          .nothrow()
-        if (result.exitCode !== 0) {
-          if (!snapshotFiles) {
-            log.warn("could not verify file against snapshot, keeping", { file })
-          } else if (snapshotFiles.has(file)) {
-            log.info("file existed in snapshot but checkout failed, keeping", {
-              file,
-            })
-          } else {
-            log.info("file did not exist in snapshot, deleting", { file })
-            await fs.unlink(file).catch(() => {})
-          }
-        }
         files.add(file)
+        log.info("reverting", { file, hash: item.hash })
+        const entry = entries.get(file)
+        if (!entry) {
+          log.info("file did not exist in snapshot, deleting", { file })
+          await fs.rm(file, { force: true }).catch(() => {})
+          continue
+        }
+        if (entry.mode === "160000") {
+          log.info("skipping submodule entry", { file })
+          continue
+        }
+        const blob = await $`git --git-dir ${git} cat-file blob ${entry.sha}`.quiet().cwd(Instance.worktree).nothrow()
+        if (blob.exitCode !== 0) {
+          log.warn("could not read blob, keeping file", {
+            file,
+            sha: entry.sha,
+            stderr: blob.stderr.toString(),
+          })
+          continue
+        }
+        await fs.mkdir(path.dirname(file), { recursive: true }).catch(() => {})
+        // remove the current entry first: it may be a symlink (writing through
+        // it would clobber the target) or have the wrong file type
+        await fs.rm(file, { force: true }).catch(() => {})
+        if (entry.mode === "120000") {
+          await fs
+            .symlink(blob.text(), file)
+            .catch((e) => log.warn("could not restore symlink", { file, error: String(e) }))
+          continue
+        }
+        await fs.writeFile(file, blob.bytes())
+        await fs.chmod(file, entry.mode === "100755" ? 0o755 : 0o644).catch(() => {})
       }
     }
   }
