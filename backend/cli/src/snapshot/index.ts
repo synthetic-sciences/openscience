@@ -158,6 +158,33 @@ export namespace Snapshot {
     const files = new Set<string>()
     const git = gitdir()
     for (const item of patches) {
+      // One full listing per snapshot instead of a per-file ls-tree pathspec:
+      // membership is checked in code on quotepath=false output, the same
+      // mechanism patch() uses, so unusual filenames behave identically on
+      // every platform. If the listing itself fails we know nothing about the
+      // snapshot, and deleting on an unverified miss would be destructive —
+      // keep files in that case.
+      const listing = await $`git -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} ls-tree -r --name-only ${item.hash}`
+        .quiet()
+        .cwd(Instance.worktree)
+        .nothrow()
+      const snapshotFiles =
+        listing.exitCode === 0
+          ? new Set(
+              listing
+                .text()
+                .split("\n")
+                .map((x) => x.trim())
+                .filter(Boolean)
+                .map((x) => path.join(Instance.worktree, x)),
+            )
+          : undefined
+      if (!snapshotFiles)
+        log.warn("could not list snapshot tree", {
+          hash: item.hash,
+          exitCode: listing.exitCode,
+          stderr: listing.stderr.toString(),
+        })
       for (const file of item.files) {
         if (files.has(file)) continue
         log.info("reverting", { file, hash: item.hash })
@@ -166,21 +193,9 @@ export namespace Snapshot {
           .cwd(Instance.worktree)
           .nothrow()
         if (result.exitCode !== 0) {
-          const relativePath = path.relative(Instance.worktree, file)
-          const checkTree =
-            await $`git --git-dir ${git} --work-tree ${Instance.worktree} ls-tree ${item.hash} -- ${relativePath}`
-              .quiet()
-              .cwd(Instance.worktree)
-              .nothrow()
-          if (checkTree.exitCode !== 0) {
-            // Deleting on an unverified miss is destructive: if ls-tree itself
-            // failed we know nothing about the snapshot, so keep the file.
-            log.warn("could not verify file against snapshot, keeping", {
-              file,
-              exitCode: checkTree.exitCode,
-              stderr: checkTree.stderr.toString(),
-            })
-          } else if (checkTree.text().trim()) {
+          if (!snapshotFiles) {
+            log.warn("could not verify file against snapshot, keeping", { file })
+          } else if (snapshotFiles.has(file)) {
             log.info("file existed in snapshot but checkout failed, keeping", {
               file,
             })
