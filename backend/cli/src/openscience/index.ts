@@ -185,8 +185,8 @@ export class InsufficientCreditsError extends Error {
 
 // ── Bundled atlas CLI resolution ─────────────────────────────────────────
 // The @synsci/atlas package ships as a dependency; its `atlas` binary lives in
-// node_modules. The agent shells out to native `atlas` commands (the research /
-// flywheel prompts drive the map + managed-compute path through it), so the
+// node_modules. The agent shells out to native `atlas` commands (the research
+// prompts drive the map + managed-compute path through it), so the
 // binary must be on the subprocess PATH without requiring a separate global
 // install. We resolve the package, prefer the npm-generated `.bin/atlas` shim,
 // and otherwise synthesize a tiny launcher in the openscience data dir that runs the

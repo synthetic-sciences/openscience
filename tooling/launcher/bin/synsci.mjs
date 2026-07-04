@@ -178,10 +178,22 @@ async function main() {
       cliPath = resolveCli()
       if (!cliPath) throw new Error("openscience not on PATH after install")
       s.ok("Installed OpenScience")
-    } catch (e) {
-      s.fail(`Install failed${e && e.message ? ": " + e.message : ""}`)
-      console.log(`\n  Try manually: ${CYAN}npm i -g @synsci/openscience${RESET}\n`)
-      process.exit(1)
+    } catch {
+      // Global npm installs commonly fail on permissions. Fall back to the
+      // standalone installer, which lands in ~/.openscience/bin without sudo
+      // (resolveCli already checks that location).
+      s.update("npm -g failed, trying the standalone installer...")
+      try {
+        execSync("curl -fsSL https://openscience.sh/install | bash", { stdio: "pipe" })
+        cliPath = resolveCli()
+        if (!cliPath) throw new Error("openscience not found after install")
+        s.ok("Installed OpenScience")
+      } catch (e2) {
+        s.fail(`Install failed${e2 && e2.message ? ": " + e2.message : ""}`)
+        console.log(`\n  Try manually: ${CYAN}npm i -g @synsci/openscience${RESET}`)
+        console.log(`  or:           ${CYAN}curl -fsSL https://openscience.sh/install | bash${RESET}\n`)
+        process.exit(1)
+      }
     }
   }
 

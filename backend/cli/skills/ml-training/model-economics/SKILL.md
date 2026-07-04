@@ -13,7 +13,7 @@ dependencies: []
 
 ## When to Use This Skill
 
-Use this skill as the **first step** of any flywheel assessment to determine:
+Use this skill as the **first step** of any model-specialization assessment to determine:
 - Is it worth training a specialized model?
 - What will the total investment be?
 - When will the specialized model break even vs frontier APIs?
