@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import workspaceShot from "@/assets/workspace.png";
 import modelPickerShot from "@/assets/model-picker.png";
+import heroPlate from "@/assets/hero.webp";
 
 /* OpenScience. CMU Concrete, warm dark, coral accents.
    Same design family as the Atlas landing page.
@@ -259,100 +260,25 @@ function Section({
   );
 }
 
-/* --------------------------- Hero constellation ------------------------- */
-/* A slow, drifting field of faint points joined into a constellation.
-   Cream nodes, a few coral. Pure canvas, no library. */
+/* ----------------------------- Hero plate ------------------------------- */
+/* The Pharos of Alexandria engraving — the beam sweeps from the tower at the
+   right down to a small ship steering by its light at bottom-left. The plate
+   is already monochrome warm sepia, the same hue family as the site's cream,
+   so it ships unfiltered. Anchored right; on wide viewports the background
+   color fills the left edge and the veil blends the seam. */
 
-function Constellation() {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    let raf = 0;
-    let w = 0;
-    let h = 0;
-    type Pt = { x: number; y: number; vx: number; vy: number; r: number; hot: boolean };
-    let pts: Pt[] = [];
+const HERO_NOISE =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
 
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      w = rect.width;
-      h = rect.height;
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const count = Math.min(120, Math.max(50, Math.floor((w * h) / 15000)));
-      pts = Array.from({ length: count }, () => ({
-        x: Math.random() * w,
-        y: Math.random() * h,
-        vx: (Math.random() - 0.5) * 0.14,
-        vy: (Math.random() - 0.5) * 0.14,
-        r: Math.random() < 0.14 ? 1.7 : 1.05,
-        hot: Math.random() < 0.055,
-      }));
-    };
-
-    const LINK = 120;
-    const draw = () => {
-      ctx.clearRect(0, 0, w, h);
-      for (let i = 0; i < pts.length; i++) {
-        const a = pts[i];
-        for (let j = i + 1; j < pts.length; j++) {
-          const b = pts[j];
-          const dx = a.x - b.x;
-          const dy = a.y - b.y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < LINK * LINK) {
-            const t = 1 - Math.sqrt(d2) / LINK;
-            ctx.strokeStyle = `hsla(42, 32%, 88%, ${(t * 0.13).toFixed(3)})`;
-            ctx.lineWidth = 0.6;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.stroke();
-          }
-        }
-      }
-      for (const p of pts) {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = p.hot ? "hsla(14, 70%, 64%, 0.75)" : "hsla(42, 32%, 88%, 0.4)";
-        ctx.fill();
-      }
-    };
-
-    const step = () => {
-      for (const p of pts) {
-        p.x += p.vx;
-        p.y += p.vy;
-        if (p.x < -8) p.x = w + 8;
-        if (p.x > w + 8) p.x = -8;
-        if (p.y < -8) p.y = h + 8;
-        if (p.y > h + 8) p.y = -8;
-      }
-      draw();
-      raf = window.requestAnimationFrame(step);
-    };
-
-    resize();
-    draw();
-    if (!reduced) raf = window.requestAnimationFrame(step);
-    const onResize = () => {
-      resize();
-      draw();
-    };
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.cancelAnimationFrame(raf);
-      window.removeEventListener("resize", onResize);
-    };
-  }, []);
-  return <canvas ref={ref} className="absolute inset-0 w-full h-full" aria-hidden />;
-}
+/* Veil: a light uniform scrim softens the plate; a soft top-left shield sits
+   under the wordmark and a bottom-right shield under the copy, so the beam
+   and the ship at bottom-left stay in view. */
+const HERO_VEIL = [
+  "linear-gradient(hsl(30 14% 7% / 0.2), hsl(30 14% 7% / 0.2))",
+  "radial-gradient(ellipse 55% 45% at 5% 6%, hsl(30 14% 7% / 0.8) 0%, hsl(30 14% 7% / 0.4) 55%, transparent 85%)",
+  "radial-gradient(ellipse 85% 75% at 96% 94%, hsl(var(--background)) 0%, hsl(30 14% 7% / 0.84) 38%, hsl(30 14% 7% / 0.28) 66%, transparent 90%)",
+  "linear-gradient(180deg, hsl(28 18% 4% / 0.5) 0%, transparent 15%)",
+].join(", ");
 
 /* ------------------------------ Hero ----------------------------------- */
 
@@ -389,46 +315,44 @@ function Hero() {
   return (
     <section className="relative h-screen min-h-[680px] w-full bg-background overflow-hidden grain">
       <div ref={backdrop} className="absolute inset-0 will-change-transform" aria-hidden>
-        <div className="absolute inset-0 graticule opacity-[0.05]" />
         <div
-          className="absolute inset-0"
-          style={{
-            maskImage: "linear-gradient(to bottom, black 55%, transparent 96%)",
-            WebkitMaskImage: "linear-gradient(to bottom, black 55%, transparent 96%)",
-          }}
-        >
-          <Constellation />
-        </div>
+          className="absolute inset-0 bg-background bg-no-repeat [background-position:62%_14%] [background-size:cover] sm:[background-position:right_center] sm:[background-size:auto_114%]"
+          style={{ backgroundImage: `url(${heroPlate})` }}
+        />
+        <div
+          className="absolute inset-0 opacity-[0.32] mix-blend-overlay"
+          style={{ backgroundImage: HERO_NOISE }}
+        />
+        <div className="absolute inset-0" style={{ background: HERO_VEIL }} />
       </div>
 
       <div
         className="pointer-events-none absolute inset-x-0 bottom-0 z-[5]"
         style={{
-          height: "56%",
-          background:
-            "linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background) / 0.9) 18%, hsl(var(--background) / 0.55) 46%, hsl(var(--background) / 0) 100%)",
+          height: "16%",
+          background: "linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background) / 0) 100%)",
         }}
       />
 
       <div className="absolute inset-0 z-10 mx-auto flex h-full max-w-[1400px] flex-col px-6 sm:px-10">
-        <div className="hero-text rise self-end text-right mt-[9vh]" style={{ animationDelay: "120ms" }}>
+        <div className="hero-text rise self-start mt-[9vh]" style={{ animationDelay: "120ms" }}>
           <div className="text-[clamp(40px,6.4vw,96px)] leading-[0.9] tracking-[-0.04em]">openscience</div>
-          <div className="mt-3 text-[13px] tracking-[0.04em] text-foreground/50">by Synthetic Sciences</div>
+          <div className="mt-3 text-[13px] tracking-[0.04em] text-foreground/55">by Synthetic Sciences</div>
         </div>
 
-        <div ref={copy} className="hero-text mt-auto mb-[7vh] max-w-[820px]">
+        <div ref={copy} className="hero-text mt-auto mb-[7vh] self-end text-right max-w-[820px]">
           <div className="rise" style={{ animationDelay: "260ms" }}>
             <h1 className="text-balance text-[clamp(34px,4.6vw,62px)] leading-[1.04] tracking-[-0.024em] text-foreground">
               The open-source AI workbench for scientists.
             </h1>
           </div>
           <div className="rise" style={{ animationDelay: "420ms" }}>
-            <p className={`mt-6 max-w-[54ch] ${P_BIG} text-foreground/80`}>
+            <p className={`mt-6 ml-auto max-w-[44ch] ${P_BIG} text-foreground/85`}>
               One environment for the whole loop: literature, code, experiments, figures,
               and the write-up. In your browser, on any model, with your keys.
             </p>
           </div>
-          <div className="rise mt-9 flex flex-wrap items-center gap-3 [text-shadow:none]" style={{ animationDelay: "580ms" }}>
+          <div className="rise mt-9 flex flex-wrap items-center justify-end gap-3 [text-shadow:none]" style={{ animationDelay: "580ms" }}>
             <Cta href="#install">Install OpenScience</Cta>
             <Cta href={GITHUB} variant="ghost" arrow={false} external>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
