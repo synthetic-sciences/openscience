@@ -22,6 +22,7 @@ const version = Object.values(binaries)[0]
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
+await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
@@ -32,6 +33,9 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         openscience: `./bin/openscience`,
       },
       scripts: {
+        // best-effort: clears a stale global @synsci/cli whose `openscience`
+        // bin link would make npm refuse the install (EEXIST); never fails
+        preinstall: "node ./preinstall.mjs || exit 0",
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
       version: version,

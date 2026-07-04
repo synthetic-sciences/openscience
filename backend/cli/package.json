@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
+    "preinstall": "node ./script/preinstall.mjs || exit 0",
     "typecheck": "tsgo --noEmit",
     "test": "bun test",
     "build": "bun run script/build.ts",

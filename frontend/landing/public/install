@@ -429,6 +429,16 @@ if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
     print_message info "Added $INSTALL_DIR to \$GITHUB_PATH"
 fi
 
+# An `openscience` from another package manager can sit earlier on PATH and
+# shadow this install — most commonly the deprecated @synsci/cli npm package,
+# whose stale bin link also blocks `npm i -g @synsci/openscience` with EEXIST.
+shadow=$(command -v openscience 2>/dev/null || true)
+if [[ -n "$shadow" && "$shadow" != "$INSTALL_DIR/openscience" ]]; then
+    print_message warning "Another openscience binary at ${shadow} may shadow this install."
+    print_message info "${MUTED}If it was installed by npm (the deprecated ${NC}@synsci/cli${MUTED} package), remove it with:${NC}"
+    print_message info "  npm rm -g @synsci/cli"
+fi
+
 echo -e ""
 echo -e "${MUTED}                    ${NC}OpenScience"
 echo -e "${MUTED}                    by Synthetic Sciences${NC}"

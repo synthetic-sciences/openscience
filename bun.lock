@@ -19,7 +19,7 @@
     },
     "backend/cli": {
       "name": "@synsci/openscience",
-      "version": "1.2.2",
+      "version": "1.2.3",
       "bin": {
         "openscience": "./bin/openscience",
       },
@@ -253,7 +253,7 @@
     },
     "tooling/launcher": {
       "name": "synsci",
-      "version": "1.2.2",
+      "version": "1.2.4",
       "bin": {
         "synsci": "bin/synsci.mjs",
       },

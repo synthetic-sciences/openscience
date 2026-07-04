@@ -115,6 +115,19 @@ function resolveCli() {
   return null
 }
 
+// The deprecated `@synsci/cli` package links the same `openscience` bin. npm
+// refuses to overwrite a bin file owned by another package (EEXIST), so a
+// stale global install dead-ends the upgrade — and its old binary shadows the
+// real one on PATH. `npm ls` exits nonzero when the package is absent but
+// still prints JSON, so read stdout either way.
+function hasDeprecatedCli() {
+  let out = ""
+  try { out = execSync("npm ls -g @synsci/cli --depth=0 --json", { encoding: "utf-8", stdio: "pipe" }) }
+  catch (e) { out = e && typeof e.stdout === "string" ? e.stdout : "" }
+  try { return Boolean(JSON.parse(out).dependencies["@synsci/cli"]) }
+  catch { return false }
+}
+
 function isConnected() {
   const xdgData = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share")
   const sessionPath = join(xdgData, "openscience", "openscience-session.json")
@@ -149,6 +162,15 @@ async function main() {
   console.log()
 
   // --- Step 1: Install or upgrade the OpenScience CLI ---
+  if (hasDeprecatedCli()) {
+    const s = spinner("Removing the deprecated @synsci/cli so it can't shadow the openscience command...")
+    if (runQuiet("npm rm -g @synsci/cli") !== null) {
+      s.ok("Removed the deprecated @synsci/cli")
+    } else {
+      s.warn(`Couldn't remove the deprecated @synsci/cli — if install fails, run: ${CYAN}npm rm -g @synsci/cli${RESET}`)
+    }
+  }
+
   let cliPath = resolveCli()
   if (cliPath) {
     const raw = runFileQuiet(cliPath, ["--version"]) || "unknown"
@@ -174,7 +196,20 @@ async function main() {
   } else {
     const s = spinner("Installing OpenScience...")
     try {
-      execSync("npm i -g @synsci/openscience@latest", { stdio: "pipe" })
+      try {
+        execSync("npm i -g @synsci/openscience@latest", { stdio: "pipe" })
+      } catch (e) {
+        // npm refuses to overwrite a bin file owned by another package
+        // (EEXIST). If the conflict is the deprecated @synsci/cli, remove it
+        // and retry once before falling back to the standalone installer.
+        const stderr = e && e.stderr ? String(e.stderr) : ""
+        const conflict = stderr.includes("EEXIST") && (stderr.includes("@synsci/cli") || hasDeprecatedCli())
+        if (!conflict) throw e
+        s.update("Removing the deprecated @synsci/cli so it can't shadow the openscience command...")
+        runQuiet("npm rm -g @synsci/cli")
+        s.update("Retrying the OpenScience install...")
+        execSync("npm i -g @synsci/openscience@latest", { stdio: "pipe" })
+      }
       cliPath = resolveCli()
       if (!cliPath) throw new Error("openscience not on PATH after install")
       s.ok("Installed OpenScience")
@@ -238,7 +273,7 @@ async function main() {
   console.log(`  ${DIM}Opening the workspace in your browser…${RESET}`)
   console.log()
 
-  const child = spawn(cliPath, ["web"], { stdio: "inherit" })
+  const child = spawn(cliPath, ["web", ...process.argv.slice(2)], { stdio: "inherit" })
   child.on("close", (code) => process.exit(code ?? 0))
 }
 
