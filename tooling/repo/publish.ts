@@ -112,8 +112,24 @@ try {
   // without polluting node_modules/.bin in the npx temp tree.
   delete launcherPkg.dependencies
   await Bun.file(`${launcherDir}/package.json`).write(JSON.stringify(launcherPkg, null, 2))
-  const result = await $`cd ${launcherDir} && npm publish --access public --tag ${Script.channel}`.nothrow()
-  if (result.exitCode !== 0) throw new Error(`npm publish exited with ${result.exitCode}`)
+  const result = await $`cd ${launcherDir} && npm publish --access public --tag ${Script.channel}`.quiet().nothrow()
+  process.stdout.write(result.stdout.toString())
+  process.stderr.write(result.stderr.toString())
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.toString()
+    // The unscoped `synsci` package has its own npm owner list; a token
+    // whose account isn't on it gets E403. That's an ownership grant to
+    // chase (`npm owner add <token-user> synsci`), not a broken release —
+    // every other package shipped, so warn loudly instead of failing.
+    if (stderr.includes("E403") || stderr.includes("do not have permission")) {
+      console.warn(
+        "launcher NOT published: the npm token's account is not an owner of the 'synsci' package.\n" +
+          "Fix: an owner runs `npm owner add <token-user> synsci`, then re-release.",
+      )
+    } else {
+      throw new Error(`npm publish exited with ${result.exitCode}`)
+    }
+  }
 } catch (e) {
   console.error("Launcher publish failed:", e)
   failures.push("launcher")
