@@ -264,8 +264,9 @@ function Section({
 /* The Pharos of Alexandria engraving — the beam sweeps from the tower at the
    right down to a small ship steering by its light at bottom-left. The plate
    is already monochrome warm sepia, the same hue family as the site's cream,
-   so it ships unfiltered. Anchored right; on wide viewports the background
-   color fills the left edge and the veil blends the seam. */
+   so it ships unfiltered. Covered and biased right so the tower sits on the
+   right and the ship stays in view at bottom-left; the veil blends the edges.
+   One rule at every width — the crop reads the same on any screen. */
 
 const HERO_NOISE =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
@@ -316,7 +317,7 @@ function Hero() {
     <section className="relative h-screen min-h-[680px] w-full bg-background overflow-hidden grain">
       <div ref={backdrop} className="absolute inset-0 will-change-transform" aria-hidden>
         <div
-          className="absolute inset-0 bg-background bg-no-repeat [background-position:62%_14%] [background-size:cover] sm:[background-position:right_center] sm:[background-size:auto_114%]"
+          className="absolute inset-0 bg-background bg-no-repeat [background-position:62%_center] [background-size:cover]"
           style={{ backgroundImage: `url(${heroPlate})` }}
         />
         <div
