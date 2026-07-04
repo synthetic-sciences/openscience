@@ -1404,6 +1404,9 @@ export namespace Provider {
     return undefined
   }
 
+  export const NO_PROVIDER_HINT =
+    "No model providers are available. Add an API key for a provider (`openscience auth login`) or connect a managed account (`openscience connect login`), then choose a model."
+
   const priority = ["claude-sonnet-4", "claude-opus-4", "gpt-5", "gemini-3-pro"]
   export function sort(models: Model[]) {
     return sortBy(
@@ -1420,10 +1423,18 @@ export namespace Provider {
 
   export async function defaultModel() {
     const cfg = await Config.get()
-    if (cfg.model) return parseModel(cfg.model)
+    const available = await list()
+    if (cfg.model) {
+      // Only honor the configured model when its provider is actually available
+      // (e.g. a saved `anthropic/...` model with no API key must not be returned)
+      // — otherwise fall through to the priority-based selection below.
+      const parsed = parseModel(cfg.model)
+      if (available[parsed.providerID]?.models[parsed.modelID]) return parsed
+      log.warn("configured model is not available, falling back to default selection", parsed)
+    }
 
     const managed = await hasManagedSession()
-    const providers = await list().then((val) => Object.values(val))
+    const providers = Object.values(available)
     const configured = (p: Info) => !cfg.provider || Object.keys(cfg.provider).includes(p.id)
     // Drop the hosted `openscience` provider from DEFAULT priority unless a managed
     // session is active, then pick the first provider that actually has models.
@@ -1434,9 +1445,9 @@ export namespace Provider {
       candidates.find((p) => Object.keys(p.models).length > 0) ??
       candidates[0] ??
       providers.find(configured)
-    if (!provider) throw new Error("no providers found")
+    if (!provider) throw new Error(NO_PROVIDER_HINT)
     const [model] = sort(Object.values(provider.models))
-    if (!model) throw new Error("no models found")
+    if (!model) throw new Error(NO_PROVIDER_HINT)
     return {
       providerID: provider.id,
       modelID: model.id,

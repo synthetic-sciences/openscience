@@ -170,7 +170,16 @@ export namespace SessionPrompt {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
-    const message = await createUserMessage(input)
+    const message = await createUserMessage(input).catch((e) => {
+      // e.g. no providers are available at all — surface the failure to the
+      // session (the web UI listens for session.error) instead of only throwing.
+      const message = e instanceof Error ? e.message : String(e)
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: new NamedError.Unknown({ message }).toObject(),
+      })
+      throw e
+    })
     await Session.touch(input.sessionID)
 
     // this is backwards compatibility for allowing `tools` to be specified when
@@ -331,9 +340,47 @@ export namespace SessionPrompt {
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
           history: msgs,
-        })
+        }).catch((error) => log.error("failed to generate session title", { error }))
 
-      const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
+      const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
+        if (Provider.ModelNotFoundError.isInstance(e)) return undefined
+        throw e
+      })
+      // The requested model has no available provider (e.g. the API key was
+      // removed) — surface a session error instead of crashing the loop.
+      if (!model) {
+        const error = new NamedError.Unknown({
+          message: `Model ${lastUser.model.providerID}/${lastUser.model.modelID} is not available. Add an API key for a provider (\`openscience auth login\`) or connect a managed account (\`openscience connect login\`), then choose a model.`,
+        }).toObject()
+        Bus.publish(Session.Event.Error, { sessionID, error })
+        await Session.updateMessage({
+          id: await MessageV2.nextMessageID(sessionID),
+          role: "assistant",
+          parentID: lastUser.id,
+          sessionID,
+          mode: lastUser.agent,
+          agent: lastUser.agent,
+          path: {
+            cwd: Instance.directory,
+            root: Instance.worktree,
+          },
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: lastUser.model.modelID,
+          providerID: lastUser.model.providerID,
+          error,
+          time: {
+            created: Date.now(),
+            completed: Date.now(),
+          },
+        })
+        break
+      }
       const task = tasks.pop()
 
       // pending subtask
@@ -686,7 +733,14 @@ export namespace SessionPrompt {
 
   async function lastModel(sessionID: string) {
     for await (const item of MessageV2.stream(sessionID)) {
-      if (item.info.role === "user" && item.info.model) return item.info.model
+      if (item.info.role !== "user" || !item.info.model) continue
+      // A historical model can reference a provider that is no longer available
+      // (e.g. its API key was removed) — validate before reusing it.
+      const model = item.info.model
+      const provider = await Provider.getProvider(model.providerID)
+      if (provider?.models[model.modelID]) return model
+      log.warn("last used model is no longer available, falling back to default", model)
+      break
     }
     return Provider.defaultModel()
   }

@@ -700,7 +700,11 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID })
+          // fire-and-forget: session-level failures are published as session.error
+          // events inside prompt(); catch here so nothing becomes an unhandled rejection
+          SessionPrompt.prompt({ ...body, sessionID }).catch((error) => {
+            log.error("prompt_async failed", { sessionID, error })
+          })
         })
       },
     )
