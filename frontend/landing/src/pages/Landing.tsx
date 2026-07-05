@@ -338,22 +338,23 @@ function Hero() {
       <div className="absolute inset-0 z-10 mx-auto flex h-full max-w-[1400px] flex-col px-6 sm:px-10">
         <div className="hero-text rise self-start mt-[9vh]" style={{ animationDelay: "120ms" }}>
           <div className="text-[clamp(40px,6.4vw,96px)] leading-[0.9] tracking-[-0.04em]">openscience</div>
-          <div className="mt-3 text-[13px] tracking-[0.04em] text-foreground/55">by Synthetic Sciences</div>
+          <a
+            href="https://syntheticsciences.ai"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-block text-[13px] tracking-[0.04em] text-foreground/55 transition-colors duration-300 hover:text-foreground/85"
+          >
+            by Synthetic Sciences
+          </a>
         </div>
 
-        <div ref={copy} className="hero-text mt-auto mb-[7vh] self-end text-right max-w-[820px]">
+        <div ref={copy} className="hero-text mt-auto mb-[5vh] self-end text-right max-w-[820px]">
           <div className="rise" style={{ animationDelay: "260ms" }}>
             <h1 className="text-balance text-[clamp(34px,4.6vw,62px)] leading-[1.04] tracking-[-0.024em] text-foreground">
               The open-source AI workbench for scientists.
             </h1>
           </div>
-          <div className="rise" style={{ animationDelay: "420ms" }}>
-            <p className={`mt-6 ml-auto max-w-[44ch] ${P_BIG} text-foreground/85`}>
-              One environment for the whole loop: literature, code, experiments, figures,
-              and the write-up. In your browser, on any model, with your keys.
-            </p>
-          </div>
-          <div className="rise mt-9 flex flex-wrap items-center justify-end gap-3 [text-shadow:none]" style={{ animationDelay: "580ms" }}>
+          <div className="rise mt-9 flex flex-wrap items-center justify-end gap-3 [text-shadow:none]" style={{ animationDelay: "420ms" }}>
             <Cta href="#install">Install OpenScience</Cta>
             <Cta href={GITHUB} variant="ghost" arrow={false} external>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
