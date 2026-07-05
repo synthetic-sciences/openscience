@@ -159,6 +159,10 @@ export const AccountRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        // Best-effort server-side revocation of this device's key while the
+        // session can still authenticate the call; local cleanup follows
+        // regardless of the outcome.
+        await OpenScience.revokeCurrentDevice()
         await OpenScience.clearSession()
         Provider.invalidate()
         await Instance.disposeAll()

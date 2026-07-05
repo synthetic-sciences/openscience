@@ -175,8 +175,16 @@ const ConnectLogoutCommand = cmd({
       return
     }
 
+    // Revoke this device's key server-side while it can still authenticate
+    // the call, then clear every local credential artifact.
+    const revoked = await OpenScience.revokeCurrentDevice()
     await OpenScience.clearSession()
     prompts.log.success("Disconnected")
+    if (!revoked) {
+      prompts.log.info(
+        "Could not revoke this device's key server-side — remove it from the Devices tab at app.syntheticsciences.ai if needed",
+      )
+    }
     prompts.outro("Done")
   },
 })

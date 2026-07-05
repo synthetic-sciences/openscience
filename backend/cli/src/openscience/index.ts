@@ -417,11 +417,123 @@ export namespace OpenScience {
     })()
   }
 
-  export async function clearSession() {
+  /** Read the on-disk synced-env snapshot (what preload-env.ts replayed into
+   *  process.env at boot). Returns an empty map when missing or corrupt. */
+  async function readSyncedSnapshot(): Promise<Map<string, string>> {
+    const result = new Map<string, string>()
     try {
-      const fs = await import("fs/promises")
+      const raw = await fs.readFile(path.join(getSyncedConfigDir(), "synced-env.json"), "utf-8")
+      const parsed: unknown = JSON.parse(raw)
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return result
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value === "string") result.set(key, value)
+      }
+    } catch {}
+    return result
+  }
+
+  /** Drop a synced env var from the live process, but only when its current
+   *  value is still the one sync injected — an explicit shell export wins. */
+  function unsetSyncedVar(key: string, value: string) {
+    if (process.env[key] !== value) return
+    delete process.env[key]
+    try {
+      Env.remove(key)
+    } catch {
+      /* Instance not initialized — process.env delete is enough */
+    }
+  }
+
+  /** Clear the api_key this CLI seeded into the bundled atlas CLI's config
+   *  (see ensureAtlasCliConfig). Only removes the key when it is the one the
+   *  session seeded (or, with no readable session, when the profile points at
+   *  our backend), so a hand-configured atlas profile survives. Best-effort. */
+  async function clearAtlasCliConfig(session: OpenScienceSession | null): Promise<void> {
+    try {
+      const configPath =
+        process.env.ATLAS_CLI_CONFIG_PATH || path.join(os.homedir(), ".config", "atlas-cli", "config.json")
+      const existing: unknown = JSON.parse(await fs.readFile(configPath, "utf8"))
+      if (!existing || typeof existing !== "object") return
+      const profiles = (existing as Record<string, unknown>).profiles
+      if (!profiles || typeof profiles !== "object") return
+      const profile = (profiles as Record<string, unknown>).default
+      if (!profile || typeof profile !== "object") return
+      const record = profile as Record<string, unknown>
+      if (typeof record.api_key !== "string" || !record.api_key) return
+      const seeded = session?.api_key
+        ? record.api_key === session.api_key
+        : record.base_url === `${API_BASE}/api/v1`
+      if (!seeded) return
+      delete record.api_key
+      await fs.writeFile(configPath, JSON.stringify(existing, null, 2) + "\n", { mode: 0o600 })
+    } catch {
+      /* missing/unreadable config — nothing to clear */
+    }
+  }
+
+  /** Delete queued usage rows. They were produced under the signed-out
+   *  account's key; flushing them after a different account logs in would
+   *  bill that account for someone else's usage. */
+  async function dropUsageQueue(): Promise<void> {
+    try {
+      const raw = await fs.readFile(pendingQueuePath, "utf-8")
+      const rows = raw.split("\n").filter(Boolean).length
+      await fs.unlink(pendingQueuePath)
+      if (rows) log.info("dropped queued usage on sign-out so it cannot bill a different account", { rows })
+    } catch {
+      /* no queue — nothing to drop */
+    }
+  }
+
+  /**
+   * Sign out locally: remove the session file and every credential artifact
+   * the sync path created. Without this, `synced-env.json` is replayed into
+   * process.env on every boot (preload-env.ts) and the still-valid managed
+   * key keeps debiting the signed-out account's wallet. Covers both explicit
+   * logout and the 401-triggered clear. Best-effort; never throws.
+   */
+  export async function clearSession() {
+    const session = await getSession()
+    try {
       await fs.unlink(filepath)
     } catch {}
+    // Union of what this process synced (in-memory map) and what the last
+    // sync persisted (disk snapshot, replayed by preload-env.ts at boot) —
+    // a fresh `connect logout` process has only the latter.
+    const synced = await readSyncedSnapshot()
+    for (const [key, value] of syncedSecretValues.entries()) synced.set(key, value)
+    for (const name of ["synced-env.json", "openscience-synced.json"]) {
+      try {
+        await fs.unlink(path.join(getSyncedConfigDir(), name))
+      } catch {}
+    }
+    for (const [key, value] of synced.entries()) unsetSyncedVar(key, value)
+    syncedSecretValues.clear()
+    await clearAtlasCliConfig(session)
+    await dropUsageQueue()
+  }
+
+  /**
+   * Best-effort server-side revocation of THIS device's key, for logout paths.
+   * The session stores only the raw api_key (never its key_id), so the device
+   * is identified by a unique `key_prefix` match against the devices list —
+   * when zero or several devices match, we skip rather than guess. Call
+   * BEFORE clearSession(); returns whether the key was revoked.
+   */
+  export async function revokeCurrentDevice(): Promise<boolean> {
+    try {
+      const session = await getSession()
+      if (!session) return false
+      const devices = await listDevices()
+      if (!devices) return false
+      const matches = devices.filter(
+        (d) => d.key_prefix.length > "thk_".length && session.api_key.startsWith(d.key_prefix),
+      )
+      if (matches.length !== 1) return false
+      return await revokeDevice(matches[0].key_id)
+    } catch {
+      return false
+    }
   }
 
   export async function isAuthenticated(): Promise<boolean> {
@@ -638,19 +750,39 @@ export namespace OpenScience {
       // those are one credential, not four.
       const credentialValues = new Set<string>()
 
+      // Rebuild the synced snapshot from THIS response only. Accumulating
+      // across syncs meant a provider disconnected (or a key rotated) on the
+      // dashboard stayed live in the CLI forever.
+      const fresh = new Map<string, string>()
       for (const [, svc] of Object.entries(data.services)) {
         if (svc.connected && svc.env) {
           for (const [key, value] of Object.entries(svc.env)) {
             if (value) {
-              try { Env.set(key, value) } catch { /* Instance not initialized */ }
-              process.env[key] = value
-              syncedSecretValues.set(key, value)
+              fresh.set(key, value)
               if (!key.endsWith("_BASE_URL")) credentialValues.add(value)
             }
           }
         }
       }
       const credentials = credentialValues.size
+
+      // Unset previously-synced vars that are absent from the new response —
+      // mirrors the ownedKeys cleanup in server/routes/settings/credentials.ts.
+      // "Previously synced" is the union of this process's map and the on-disk
+      // snapshot preload-env.ts replayed at boot; a var is only removed when
+      // its live value still matches, so shell exports survive.
+      const previous = await readSyncedSnapshot()
+      for (const [key, value] of syncedSecretValues.entries()) previous.set(key, value)
+      for (const [key, value] of previous.entries()) {
+        if (fresh.has(key)) continue
+        unsetSyncedVar(key, value)
+      }
+      syncedSecretValues.clear()
+      for (const [key, value] of fresh.entries()) {
+        try { Env.set(key, value) } catch { /* Instance not initialized */ }
+        process.env[key] = value
+        syncedSecretValues.set(key, value)
+      }
 
       // Write model lockdown config to managed config dir (highest priority config layer)
       if (data.config) {
@@ -681,7 +813,7 @@ export namespace OpenScience {
         const managedDir = getSyncedConfigDir()
         await fs.mkdir(managedDir, { recursive: true })
         const envSnapshot: Record<string, string> = {}
-        for (const [k, v] of syncedSecretValues.entries()) {
+        for (const [k, v] of fresh.entries()) {
           envSnapshot[k] = v
         }
         await Bun.write(
