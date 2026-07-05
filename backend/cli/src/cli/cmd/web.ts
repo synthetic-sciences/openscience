@@ -5,6 +5,7 @@ import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import open from "open"
 import { openUrl } from "../../util/open-url"
+import { needsOnboarding, runOnboarding, isConfigured } from "../onboard"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -80,6 +81,14 @@ export const WebCommand = cmd({
     UI.println(UI.logo("  "))
     UI.empty()
 
+    // First launch on this machine with nothing configured → walk the user
+    // through setup (managed vs BYOK vs skip) before we bind the server, so
+    // the browser's first request already sees a usable model.
+    if (await needsOnboarding()) {
+      await runOnboarding()
+      UI.empty()
+    }
+
     // Run the dashboard sync BEFORE starting the server — and without
     // the 5s race timeout the global middleware uses. The model picker
     // and provider whitelist live in ~/.config/openscience/openscience-synced.json;
@@ -90,10 +99,18 @@ export const WebCommand = cmd({
     // request sees the freshly-synced whitelist.
     const authed = await OpenScience.isAuthenticated()
     if (!authed) {
-      UI.println(UI.Style.TEXT_WARNING_BOLD + "  ⚠  Not connected to Synthetic Sciences", UI.Style.TEXT_NORMAL)
-      UI.println(UI.Style.TEXT_NORMAL, "  Run `openscience connect login` to sync provider keys + managed config.")
-      UI.println(UI.Style.TEXT_DIM, "  Continuing with whatever env vars are already in your shell.")
-      UI.empty()
+      // Only nudge when there's genuinely no way to run a model. A BYOK key
+      // (env var or `keys add`) is a first-class, account-free setup — don't
+      // badger those users to connect Atlas.
+      if (!(await isConfigured())) {
+        UI.println(UI.Style.TEXT_WARNING_BOLD + "  ⚠  No model configured", UI.Style.TEXT_NORMAL)
+        UI.println(
+          UI.Style.TEXT_NORMAL,
+          "  Run `openscience login` for Atlas managed models, or `openscience keys add` for your own key.",
+        )
+        UI.println(UI.Style.TEXT_DIM, "  Continuing with free demo models for now.")
+        UI.empty()
+      }
     } else {
       // Sync managed config before binding so the browser's first request sees
       // the fresh provider whitelist. But cap the wait: syncServices() has no

@@ -32,10 +32,18 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
-import { ConnectCommand } from "./cli/cmd/connect"
+import {
+  ConnectCommand,
+  LoginCommand,
+  LogoutCommand,
+  StatusCommand,
+  SyncCommand,
+  DevicesCommand,
+} from "./cli/cmd/connect"
 import { ProjectCommand } from "./cli/cmd/project"
-import { BillingCommand } from "./cli/cmd/billing"
-import { AuthCommand, LogoutCommand } from "./cli/cmd/auth"
+import { WalletCommand } from "./cli/cmd/billing"
+import { KeysCommand } from "./cli/cmd/auth"
+import { InitCommand, DoctorCommand } from "./cli/onboard"
 import { OpenScience } from "./openscience"
 
 process.on("unhandledRejection", (e) => {
@@ -126,11 +134,17 @@ const cli = yargs(hideBin(process.argv))
   .command(GithubCommand)
   .command(PrCommand)
   .command(SessionCommand)
-  .command(ConnectCommand)
-  .command(ProjectCommand)
-  .command(BillingCommand)
-  .command(AuthCommand)
+  .command(InitCommand)
+  .command(LoginCommand)
   .command(LogoutCommand)
+  .command(StatusCommand)
+  .command(SyncCommand)
+  .command(DevicesCommand)
+  .command(KeysCommand)
+  .command(WalletCommand)
+  .command(DoctorCommand)
+  .command(ProjectCommand)
+  .command(ConnectCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

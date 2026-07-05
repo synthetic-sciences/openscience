@@ -5,9 +5,9 @@ import { OpenScience } from "../../openscience"
 
 const PLAN_URL = process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || "https://app.syntheticsciences.ai/cli"
 
-export const BillingCommand = cmd({
-  command: "billing",
-  describe: "show CLI wallet balance and how key routing works",
+export const WalletCommand = cmd({
+  command: ["wallet", "billing"],
+  describe: "Atlas wallet — balance, top up, and key routing",
   builder: (yargs) => yargs.command(BillingShowCommand).command(BillingTopupCommand).demandCommand(),
   async handler() {},
 })
@@ -21,7 +21,7 @@ const BillingShowCommand = cmd({
 
     const session = await OpenScience.getSession()
     if (!session) {
-      prompts.log.warn("Not authenticated. Run `openscience connect login` first.")
+      prompts.log.warn("Not authenticated. Run `openscience login` first.")
       prompts.outro("Done")
       return
     }

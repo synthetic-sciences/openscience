@@ -174,10 +174,10 @@ async function handlePluginAuth(
   return false
 }
 
-export const AuthCommand = cmd({
-  command: "login",
+export const KeysCommand = cmd({
+  command: "keys",
   aliases: ["auth"],
-  describe: "manage credentials",
+  describe: "manage your own provider API keys (BYOK)",
   builder: (yargs) =>
     yargs
       .command(AuthLoginCommand)
@@ -236,8 +236,8 @@ export const AuthListCommand = cmd({
 })
 
 export const AuthLoginCommand = cmd({
-  command: "login [url]",
-  describe: "log in to a provider",
+  command: ["add [url]", "login [url]"],
+  describe: "add a provider API key (BYOK)",
   builder: (yargs) =>
     yargs.positional("url", {
       describe: "openscience auth provider",
@@ -421,8 +421,8 @@ async function backendHasCodex(): Promise<boolean | null> {
 }
 
 export const AuthCodexCommand = cmd({
-  command: "codex",
-  describe: "log in to Codex (Sign in with ChatGPT Plus/Pro/Business)",
+  command: ["signin", "codex"],
+  describe: "sign in with ChatGPT / Codex (Plus/Pro/Business subscription)",
   async handler() {
     await Instance.provide({
       directory: process.cwd(),
@@ -474,8 +474,8 @@ export const AuthCodexCommand = cmd({
 })
 
 export const AuthLogoutCommand = cmd({
-  command: "logout",
-  describe: "log out from a configured provider",
+  command: ["remove", "rm", "logout"],
+  describe: "remove a saved provider key",
   async handler() {
     UI.empty()
     const credentials = await Auth.all().then((x) => Object.entries(x))
@@ -494,6 +494,13 @@ export const AuthLogoutCommand = cmd({
     })
     if (prompts.isCancel(providerID)) throw new UI.CancelledError()
     await Auth.remove(providerID)
+    // Removing Codex must also revoke it on the Atlas backend and re-sync so
+    // the provider list drops openai-codex/* immediately — otherwise the CLI
+    // and backend drift (local removed, backend still connected).
+    if (providerID === "openai-codex") {
+      await revokeCodexOnBackend()
+      await OpenScience.syncServices?.().catch(() => {})
+    }
     prompts.outro("Logout successful")
   },
 })
@@ -518,37 +525,3 @@ async function revokeCodexOnBackend(): Promise<void> {
     log.warn("backend codex revoke errored", { error: String(e) })
   }
 }
-
-export const LogoutCodexCommand = cmd({
-  command: "codex",
-  describe: "log out of Codex (clears local OAuth + revokes on Atlas backend)",
-  async handler() {
-    UI.empty()
-    prompts.intro("Codex logout")
-    const existing = await Auth.get("openai-codex")
-    if (!existing) {
-      prompts.log.info("Not signed in to Codex.")
-      prompts.outro("Done")
-      return
-    }
-    await Auth.remove("openai-codex")
-    await revokeCodexOnBackend()
-    // Re-sync so the local provider list drops openai-codex/* immediately.
-    await OpenScience.syncServices?.().catch((e: unknown) => {
-      log.warn("post-logout sync failed", { error: String(e) })
-    })
-    prompts.outro("Logout successful")
-  },
-})
-
-export const LogoutCommand = cmd({
-  command: "logout",
-  describe: "log out of a connected provider (use `logout codex` for Codex)",
-  builder: (yargs) => yargs.command(LogoutCodexCommand),
-  // Default (no subcommand) falls through to the same interactive flow as
-  // `openscience login logout`. Keeps the existing UX for users who don't know
-  // the provider id.
-  async handler() {
-    await AuthLogoutCommand.handler({} as never)
-  },
-})
