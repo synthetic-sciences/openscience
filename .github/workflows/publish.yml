@@ -110,3 +110,36 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
 
+  # Record the npm release as a GitHub deployment so it shows up in the
+  # repo's Deployments sidebar next to the Vercel Production/Preview entries.
+  deployment:
+    needs:
+      - version
+      - publish
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    steps:
+      - uses: actions/github-script@v8
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        with:
+          script: |
+            const version = process.env.VERSION
+            const deployment = await github.rest.repos.createDeployment({
+              ...context.repo,
+              ref: context.sha,
+              environment: "npm",
+              auto_merge: false,
+              required_contexts: [],
+              description: `@synsci/openscience ${version}`,
+              production_environment: true,
+            })
+            await github.rest.repos.createDeploymentStatus({
+              ...context.repo,
+              deployment_id: deployment.data.id,
+              state: "success",
+              environment_url: `https://www.npmjs.com/package/@synsci/openscience/v/${version}`,
+              description: `Published @synsci/openscience@${version}`,
+            })
+
