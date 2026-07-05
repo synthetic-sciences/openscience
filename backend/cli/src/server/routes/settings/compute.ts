@@ -5,6 +5,8 @@ import crypto from "crypto"
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "../../../global"
+import { Env } from "../../../env"
+import { OpenScience } from "../../../openscience"
 import { errors } from "../../error"
 import { lazy } from "../../../util/lazy"
 
@@ -20,6 +22,15 @@ import { lazy } from "../../../util/lazy"
 //     NEVER returned to the client — only presence + metadata are surfaced.
 //   • SSH hosts the agent can dispatch runs to.
 //   • Model endpoints (local or remote inference URLs).
+//
+// How a stored key actually does something: applyComputeEnv() (mirroring
+// applyCredentialEnv in ./credentials.ts) decrypts each connected provider's
+// key and injects it into the process environment under the canonical env var
+// names the real consumers read — the cloud-compute/ml-training skills and
+// every bash subprocess via OpenScience.subprocessEnv. It runs at CLI/server
+// boot (index.ts) and again after each provider connect/disconnect, so a saved
+// key applies live without a restart. Decrypted values are registered for
+// output redaction, and an explicit shell export always wins.
 
 export namespace ComputeSettings {
   const storePath = path.join(Global.Path.data, "settings-compute.json")
@@ -43,6 +54,19 @@ export namespace ComputeSettings {
     const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()])
     const tag = cipher.getAuthTag()
     return Buffer.concat([iv, tag, enc]).toString("base64")
+  }
+
+  // Inverse of encrypt(): iv(12) | tag(16) | ciphertext. Throws on a bad
+  // key/tag, which callers treat as "unreadable key, skip it".
+  async function decrypt(payload: string): Promise<string> {
+    const key = await machineKey()
+    const buf = Buffer.from(payload, "base64")
+    const iv = buf.subarray(0, 12)
+    const tag = buf.subarray(12, 28)
+    const enc = buf.subarray(28)
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv)
+    decipher.setAuthTag(tag)
+    return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8")
   }
 
   // ── GPU provider catalog ──
@@ -133,6 +157,83 @@ export namespace ComputeSettings {
 
   function id() {
     return crypto.randomUUID().slice(0, 8)
+  }
+
+  // ── Runtime env injection ──
+  // This is the ONLY thing that turns a stored provider key into a working one.
+
+  // Canonical env var names each provider's real consumers read (skill scripts,
+  // session prompts, dashboard sync). Where two spellings exist in the wild
+  // both are set. Modal is handled separately — its single pasted key
+  // ("ak-… : as-…") splits into a token id + secret pair.
+  const PROVIDER_ENV: Record<string, string[]> = {
+    tensorpool: ["TENSORPOOL_KEY", "TENSORPOOL_API_KEY"],
+    lambda: ["LAMBDA_API_KEY", "LAMBDA_LABS_API_KEY"],
+    prime: ["PRIME_API_KEY", "PRIME_INTELLECT_API_KEY"],
+    vast: ["VAST_API_KEY"],
+    runpod: ["RUNPOD_API_KEY"],
+  }
+
+  /** Map one provider's decrypted key to the canonical env var names its real
+   *  consumers read. Modal's combined "token_id : token_secret" key is split;
+   *  a half-pasted modal key maps to nothing (both vars are required). */
+  function mapProviderEnv(target: string, key: string): Record<string, string> {
+    if (target === "modal") {
+      const [token, secret] = key.split(":").map((part) => part.trim())
+      if (!token || !secret) return {}
+      return { MODAL_TOKEN_ID: token, MODAL_TOKEN_SECRET: secret }
+    }
+    return Object.fromEntries((PROVIDER_ENV[target] ?? []).map((name) => [name, key]))
+  }
+
+  // Env keys this module has set, so a re-apply after save can update our own
+  // values while still never clobbering an explicit shell export.
+  const ownedKeys = new Set<string>()
+
+  /** Decrypt stored GPU provider keys and inject them into the process
+   *  environment so the real consumers use them (see the module header).
+   *  Explicit shell exports always win. Registers key values for redaction.
+   *  Best-effort; never throws. Call at boot and after every connect/disconnect. */
+  export async function applyComputeEnv(): Promise<void> {
+    try {
+      const stored = await read()
+      const env: Record<string, string> = {}
+      const secrets: string[] = []
+      for (const [target, entry] of Object.entries(stored.providers)) {
+        const key = await decrypt(entry.key).catch(() => undefined)
+        // Unreadable (rotated key / corrupt) — skip; the UI still shows it connected.
+        if (!key) continue
+        for (const [name, value] of Object.entries(mapProviderEnv(target, key))) {
+          env[name] = value
+          secrets.push(value)
+        }
+      }
+      // Drop vars we previously injected that are gone now (provider removed) —
+      // but never touch a key the user exported in their own shell.
+      for (const name of [...ownedKeys]) {
+        if (name in env) continue
+        delete process.env[name]
+        try {
+          Env.remove(name)
+        } catch {
+          /* Instance state not initialized — process.env delete is enough */
+        }
+        ownedKeys.delete(name)
+      }
+      for (const [name, value] of Object.entries(env)) {
+        if (process.env[name] && !ownedKeys.has(name)) continue
+        process.env[name] = value
+        ownedKeys.add(name)
+        try {
+          Env.set(name, value)
+        } catch {
+          // Instance state not initialized yet — process.env alone is enough here.
+        }
+      }
+      OpenScience.registerSecretValues(secrets)
+    } catch {
+      // best-effort; a broken store must not break boot or a save response
+    }
   }
 
   // Build the client-facing view — never includes the encrypted key.
@@ -240,7 +341,9 @@ export const ComputeSettingsRoutes = lazy(() =>
       async (c) => {
         const target = c.req.valid("param").id
         if (!ComputeSettings.isProvider(target)) return c.json({ error: "Unknown provider" }, 400)
-        return c.json(await ComputeSettings.connectProvider(target, c.req.valid("json").key.trim()))
+        const info = await ComputeSettings.connectProvider(target, c.req.valid("json").key.trim())
+        await ComputeSettings.applyComputeEnv() // apply the new key to the running process
+        return c.json(info)
       },
     )
     .delete(
@@ -253,7 +356,11 @@ export const ComputeSettingsRoutes = lazy(() =>
         },
       }),
       validator("param", z.object({ id: z.string() })),
-      async (c) => c.json(await ComputeSettings.disconnectProvider(c.req.valid("param").id)),
+      async (c) => {
+        const info = await ComputeSettings.disconnectProvider(c.req.valid("param").id)
+        await ComputeSettings.applyComputeEnv() // re-sync process env after removal
+        return c.json(info)
+      },
     )
     .post(
       "/ssh",

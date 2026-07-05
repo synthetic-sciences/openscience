@@ -34,3 +34,20 @@ test("PUT persists the toggle without baking resolved secrets into the config fi
   const written = JSON.parse(text)
   expect(written.billing).toEqual({ llm: "byok" })
 })
+
+test("PUT llm null sets the toggle back to auto", async () => {
+  await fs.mkdir(Global.Path.config, { recursive: true })
+  await Bun.write(file, JSON.stringify({ billing: { llm: "managed" } }, null, 2))
+
+  const res = await BillingSettingsRoutes().request("/", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ llm: null }),
+  })
+  expect(res.status).toBe(200)
+  const state = await res.json()
+  expect(state.llm).toBeNull()
+
+  const written = JSON.parse(await Bun.file(file).text())
+  expect(written.billing.llm).toBeNull()
+})

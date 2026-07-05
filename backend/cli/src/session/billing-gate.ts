@@ -24,9 +24,10 @@ export type CredentialSource = "byok" | "managed" | "oauth-free"
 export type BillingMode = "managed" | "byok"
 
 /** The user-facing LLM spend toggle (Settings → Spend). `undefined` = auto-detect
- *  from the resolved credential (legacy behaviour). */
+ *  from the resolved credential (legacy behaviour; `null` in the config file —
+ *  the toggle set back to auto — normalizes to the same thing). */
 export async function llmBillingMode(): Promise<BillingMode | undefined> {
-  return (await Config.get()).billing?.llm
+  return (await Config.get()).billing?.llm ?? undefined
 }
 
 /** The user-facing compute spend toggle. Defaults to "byok" (own GPU providers). */
