@@ -44,13 +44,32 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       return map
     })
 
-    const list = createMemo(() =>
-      available().map((m) => ({
-        ...m,
-        name: m.name.replace("(latest)", "").trim(),
-        latest: m.name.includes("(latest)"),
-      })),
-    )
+    // "latest" = the newest model per (provider, family), decided by release_date
+    // rather than a catalog "(latest)" name string. That string goes stale the
+    // moment a newer model ships — e.g. Opus 4.8 lands but 4.5 keeps the tag — so
+    // it mislabelled superseded models as latest across every provider.
+    const list = createMemo(() => {
+      const items = available()
+      const newestByFamily = new Map<string, string>()
+      for (const m of items) {
+        const family = m.family?.trim()
+        const released = m.release_date?.trim()
+        if (!family || !released) continue
+        const key = `${m.provider.id}:${family}`
+        const current = newestByFamily.get(key)
+        if (!current || released > current) newestByFamily.set(key, released)
+      }
+      return items.map((m) => {
+        const family = m.family?.trim()
+        const released = m.release_date?.trim()
+        const latest = !!family && !!released && newestByFamily.get(`${m.provider.id}:${family}`) === released
+        return {
+          ...m,
+          name: m.name.replace("(latest)", "").trim(),
+          latest,
+        }
+      })
+    })
 
     const find = (key: ModelKey) => list().find((m) => m.id === key.modelID && m.provider.id === key.providerID)
 
