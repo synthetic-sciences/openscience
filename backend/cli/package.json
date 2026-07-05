@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.2.3",
+  "version": "1.2.5",
   "name": "@synsci/openscience",
   "type": "module",
   "description": "AI-powered CLI for ML research and development workflows",
