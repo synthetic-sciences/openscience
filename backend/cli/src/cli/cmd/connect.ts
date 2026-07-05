@@ -4,69 +4,6 @@ import { UI } from "../ui"
 import { OpenScience, API_BASE } from "../../openscience"
 import { openUrl } from "../../util/open-url"
 
-export const ConnectCommand = cmd({
-  command: "connect",
-  describe: "connect to the Synthetic Sciences dashboard",
-  builder: (yargs) =>
-    yargs
-      .command(ConnectLoginCommand)
-      .command(ConnectLogoutCommand)
-      .command(ConnectStatusCommand)
-      .command(ConnectSyncCommand)
-      .command(ConnectDevicesCommand)
-      .demandCommand(),
-  async handler() {},
-})
-
-const ConnectLoginCommand = cmd({
-  command: "login",
-  describe: "authenticate CLI with the dashboard",
-  builder: (yargs) =>
-    yargs
-      .option("key", {
-        type: "string",
-        describe: "paste a thk_ API key directly (for headless / CI machines)",
-      })
-      .option("browser", {
-        type: "boolean",
-        default: true,
-        describe: "open a browser to log in; pass --no-browser on headless machines",
-      }),
-  async handler(args) {
-    UI.empty()
-    prompts.intro("OpenScience")
-
-    const existing = await OpenScience.getSession()
-    if (existing) {
-      // Name the backend: "authenticated" only means a key is saved locally.
-      // If requests then fail, the user can see WHICH host they point at.
-      prompts.log.success(`Already authenticated (backend: ${API_BASE})`)
-      await syncAndReport()
-      prompts.outro("Done")
-      return
-    }
-
-    // Non-interactive / CI: a key from --key or env short-circuits the
-    // whole interactive flow.
-    const provided = (args.key as string | undefined) || process.env.SYNSC_CLI_KEY || process.env.SYNSC_API_KEY
-    if (provided) {
-      if (await finishWithKey(provided)) prompts.outro("Done")
-      return
-    }
-
-    // Interactive with a usable browser → loopback login (zero typing).
-    if (args.browser !== false && !isHeadless()) {
-      if (await tryBrowserLogin()) {
-        prompts.outro("Done")
-        return
-      }
-      // Browser flow failed/timed out — fall through to manual paste.
-    }
-
-    if (await manualKeyLogin()) prompts.outro("Done")
-  },
-})
-
 /** Best-effort detection of environments where opening a browser and
  *  binding a loopback callback won't work (CI, SSH without a display,
  *  non-TTY pipelines). When true we skip straight to the paste flow. */
@@ -88,7 +25,7 @@ async function syncAndReport() {
   // the backend rejected the key. Never leave "authenticated" looking healthy
   // while every request silently fails — say what happened and against which host.
   if (!(await OpenScience.getSession())) {
-    prompts.log.warn(`${API_BASE} rejected your saved key. Run \`openscience connect login\` to re-authenticate.`)
+    prompts.log.warn(`${API_BASE} rejected your saved key. Run \`openscience login\` to re-authenticate.`)
     return
   }
   prompts.log.warn(
@@ -157,16 +94,65 @@ async function manualKeyLogin(): Promise<boolean> {
   return await finishWithKey(pasted)
 }
 
-const ConnectLogoutCommand = cmd({
+/** Core Atlas sign-in, shared by `openscience login` and the setup wizard.
+ *  Returns true if the CLI is authenticated when it finishes. Carries no
+ *  intro/outro framing so callers own the surrounding UI. */
+export async function runAtlasLogin(args: { key?: string; browser?: boolean } = {}): Promise<boolean> {
+  const existing = await OpenScience.getSession()
+  if (existing) {
+    // "authenticated" only means a key is saved locally. Name the backend so
+    // that, if requests then fail, the user can see WHICH host they point at.
+    prompts.log.success(`Already authenticated (backend: ${API_BASE})`)
+    await syncAndReport()
+    return true
+  }
+
+  // Non-interactive / CI: a key from --key or env short-circuits the flow.
+  const provided = args.key || process.env.SYNSC_CLI_KEY || process.env.SYNSC_API_KEY
+  if (provided) return await finishWithKey(provided)
+
+  // Interactive with a usable browser → loopback login (zero typing).
+  if (args.browser !== false && !isHeadless()) {
+    if (await tryBrowserLogin()) return true
+    // Browser flow failed/timed out — fall through to manual paste.
+  }
+
+  return await manualKeyLogin()
+}
+
+export const LoginCommand = cmd({
+  command: "login",
+  describe: "log in to your Atlas account (managed models, wallet, sync)",
+  builder: (yargs) =>
+    yargs
+      .option("key", {
+        type: "string",
+        describe: "paste a thk_ API key directly (for headless / CI machines)",
+      })
+      .option("browser", {
+        type: "boolean",
+        default: true,
+        describe: "open a browser to log in; pass --no-browser on headless machines",
+      }),
+  async handler(args) {
+    UI.empty()
+    prompts.intro("OpenScience")
+    const ok = await runAtlasLogin({ key: args.key as string | undefined, browser: args.browser as boolean })
+    prompts.outro(ok ? "Done" : "Not signed in")
+  },
+})
+
+export const LogoutCommand = cmd({
   command: "logout",
-  describe: "disconnect from the dashboard",
+  describe: "log out of your Atlas account",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")
 
     const session = await OpenScience.getSession()
     if (!session) {
-      prompts.log.warn("Not connected")
+      prompts.log.warn("Not signed in to Atlas.")
+      prompts.log.info("To remove a saved provider key instead, use `openscience keys rm`.")
       prompts.outro("Done")
       return
     }
@@ -175,7 +161,7 @@ const ConnectLogoutCommand = cmd({
     // the call, then clear every local credential artifact.
     const revoked = await OpenScience.revokeCurrentDevice()
     await OpenScience.clearSession()
-    prompts.log.success("Disconnected")
+    prompts.log.success("Signed out of Atlas")
     if (!revoked) {
       prompts.log.info(
         "Could not revoke this device's key server-side — remove it from the Devices tab at app.syntheticsciences.ai if needed",
@@ -185,17 +171,17 @@ const ConnectLogoutCommand = cmd({
   },
 })
 
-const ConnectStatusCommand = cmd({
-  command: "status",
-  describe: "show connection status",
+export const StatusCommand = cmd({
+  command: ["status", "whoami"],
+  describe: "show Atlas connection, account, and wallet",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")
 
     const session = await OpenScience.getSession()
     if (!session) {
-      prompts.log.warn("Not connected")
-      prompts.log.info("Run `openscience connect login` to authenticate")
+      prompts.log.warn("Not connected to Atlas")
+      prompts.log.info("Run `openscience login` to connect, or `openscience keys add` to use your own key.")
       prompts.outro("Done")
       return
     }
@@ -214,20 +200,26 @@ const ConnectStatusCommand = cmd({
         prompts.log.info(`Subscription: ${result.user.subscription_status}`)
       }
     } else if (!(await OpenScience.getSession())) {
-      prompts.log.warn(`${API_BASE} rejected your saved key. Run \`openscience connect login\` to re-authenticate.`)
+      prompts.log.warn(`${API_BASE} rejected your saved key. Run \`openscience login\` to re-authenticate.`)
     } else {
       prompts.log.warn(
         `Could not reach ${API_BASE} to verify services — the saved session is untested against the backend.`,
       )
     }
 
+    const mode = await OpenScience.getBillingMode().catch(() => null)
+    if (mode) {
+      prompts.log.info(`Wallet: $${mode.balance_usd.toFixed(2)}`)
+      prompts.log.info("Routing: per-provider (auto) — your key if set, else Atlas managed (debits wallet).")
+    }
+
     prompts.outro("Done")
   },
 })
 
-const ConnectSyncCommand = cmd({
+export const SyncCommand = cmd({
   command: "sync",
-  describe: "sync service credentials from the dashboard",
+  describe: "sync service credentials from your Atlas account",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience")
@@ -235,7 +227,7 @@ const ConnectSyncCommand = cmd({
     const session = await OpenScience.getSession()
     if (!session) {
       prompts.log.warn("Not connected")
-      prompts.log.info("Run `openscience connect login` to authenticate")
+      prompts.log.info("Run `openscience login` to authenticate")
       prompts.outro("Done")
       return
     }
@@ -255,7 +247,7 @@ const ConnectSyncCommand = cmd({
   },
 })
 
-const ConnectDevicesCommand = cmd({
+export const DevicesCommand = cmd({
   command: "devices",
   describe: "list authenticated devices",
   async handler() {
@@ -265,7 +257,7 @@ const ConnectDevicesCommand = cmd({
     const session = await OpenScience.getSession()
     if (!session) {
       prompts.log.warn("Not connected")
-      prompts.log.info("Run `openscience connect login` to authenticate")
+      prompts.log.info("Run `openscience login` to authenticate")
       prompts.outro("Done")
       return
     }
@@ -288,4 +280,20 @@ const ConnectDevicesCommand = cmd({
     prompts.log.info("Revoke a device from the Devices tab in your CLI page on app.syntheticsciences.ai")
     prompts.outro("Done")
   },
+})
+
+/** Back-compat umbrella: `openscience connect <login|logout|status|sync|devices>`
+ *  still works and forwards to the promoted top-level commands. */
+export const ConnectCommand = cmd({
+  command: "connect",
+  describe: "Atlas account (alias for `login` / `logout` / `status` / `sync` / `devices`)",
+  builder: (yargs) =>
+    yargs
+      .command(LoginCommand)
+      .command(LogoutCommand)
+      .command(StatusCommand)
+      .command(SyncCommand)
+      .command(DevicesCommand)
+      .demandCommand(),
+  async handler() {},
 })
