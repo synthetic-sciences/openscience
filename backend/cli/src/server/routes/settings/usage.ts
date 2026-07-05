@@ -18,9 +18,7 @@ const Tokens = z.object({
 const Summary = z.object({
   sessions: z.number(),
   total: z.object({ cost: z.number(), tokens: Tokens }),
-  latest: z
-    .object({ id: z.string(), title: z.string(), cost: z.number(), tokens: Tokens })
-    .nullable(),
+  latest: z.object({ id: z.string(), title: z.string(), cost: z.number(), tokens: Tokens }).nullable(),
   weekly: z.array(z.object({ date: z.string(), cost: z.number(), tokens: z.number() })),
   by_model: z.array(
     z.object({ key: z.string(), provider: z.string(), model: z.string(), cost: z.number(), tokens: z.number() }),

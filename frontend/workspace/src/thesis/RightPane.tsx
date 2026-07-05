@@ -1,4 +1,15 @@
-import { createSignal, createMemo, createResource, createEffect, onCleanup, type JSX, For, Show, Switch, Match } from "solid-js"
+import {
+  createSignal,
+  createMemo,
+  createResource,
+  createEffect,
+  onCleanup,
+  type JSX,
+  For,
+  Show,
+  Switch,
+  Match,
+} from "solid-js"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
 import { FONT_MONO, FONT_SANS, FONT_SERIF, sectionTitle } from "@/styles/tokens"
@@ -71,13 +82,12 @@ export function RightPane(): JSX.Element {
   const [width, setWidth] = createSignal(readSavedWidth())
   const [panelMenu, setPanelMenu] = createSignal(false)
   const openSkillLibrary = () =>
-    dialog.show(() => (
-      <SkillLibraryDialog onPick={(name) => uiStore.setPrefill(`/${name} `)} />
-    ))
-  const TABS: { k: RightPaneTab; label?: string; Icon: (p: { size?: number; strokeWidth?: number }) => JSX.Element }[] = [
-    { k: "canvas", label: "atlas", Icon: IconLayoutGrid },
-    { k: "terminal", Icon: IconTerminal },
-  ]
+    dialog.show(() => <SkillLibraryDialog onPick={(name) => uiStore.setPrefill(`/${name} `)} />)
+  const TABS: { k: RightPaneTab; label?: string; Icon: (p: { size?: number; strokeWidth?: number }) => JSX.Element }[] =
+    [
+      { k: "canvas", label: "atlas", Icon: IconLayoutGrid },
+      { k: "terminal", Icon: IconTerminal },
+    ]
   const visibleTabs = createMemo(() => TABS.filter((t) => !uiStore.isTabHidden(t.k)))
   // Keep the active tab pointed at a visible one.
   createEffect(() => {
@@ -95,10 +105,7 @@ export function RightPane(): JSX.Element {
   const onHandlePointerMove = (e: PointerEvent) => {
     if (!dragStart) return
     // Drag left = wider (handle is on left edge of right pane).
-    const next = Math.max(
-      MIN_PANE_WIDTH,
-      Math.min(MAX_PANE_WIDTH, dragStart.w + (dragStart.x - e.clientX)),
-    )
+    const next = Math.max(MIN_PANE_WIDTH, Math.min(MAX_PANE_WIDTH, dragStart.w + (dragStart.x - e.clientX)))
     setWidth(next)
   }
   const onHandlePointerUp = (e: PointerEvent) => {
@@ -124,132 +131,128 @@ export function RightPane(): JSX.Element {
         />
       }
     >
-    <aside
-      style={{
-        flex: `0 0 ${width()}px`,
-        width: `${width()}px`,
-        display: "flex",
-        "flex-direction": "column",
-        "border-left": "1px solid var(--color-border)",
-        background: "var(--color-bg-subtle)",
-        "min-width": `${MIN_PANE_WIDTH}px`,
-        position: "relative",
-      }}
-    >
-      {/* Drag handle on the left edge of the right pane. 6px wide, full
-          height, invisible until hover. Cursor goes ew-resize. */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        on:pointerdown={onHandlePointerDown}
-        on:pointermove={onHandlePointerMove}
-        on:pointerup={onHandlePointerUp}
-        on:pointercancel={onHandlePointerUp}
+      <aside
         style={{
-          position: "absolute",
-          left: "-3px",
-          top: 0,
-          width: "6px",
-          height: "100%",
-          cursor: "ew-resize",
-          "z-index": 5,
-          "touch-action": "none",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-accent-subtle)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-      />
-      <div
-        role="tablist"
-        style={{
+          flex: `0 0 ${width()}px`,
+          width: `${width()}px`,
           display: "flex",
-          "align-items": "stretch",
-          "border-bottom": "1px solid var(--color-border)",
+          "flex-direction": "column",
+          "border-left": "1px solid var(--color-border)",
           background: "var(--color-bg-subtle)",
-          "flex-shrink": 0,
+          "min-width": `${MIN_PANE_WIDTH}px`,
+          position: "relative",
         }}
       >
-        <div style={{ display: "flex", gap: "5px", padding: "7px 10px", flex: 1, "min-width": 0, "overflow-x": "auto" }}>
-          <For each={visibleTabs()}>
-            {(t) => (
-              <TabBtn
-                k={t.k}
-                label={t.label}
-                Icon={t.Icon}
-                active={tab() === t.k}
-                onClick={() => setTab(t.k)}
-              />
-            )}
-          </For>
-        </div>
-        <div style={{ position: "relative", display: "flex", "align-items": "center", "flex-shrink": 0 }}>
-          <button onClick={openSkillLibrary} title="skill library" style={paneCtl(false)}>
-            <IconBraces size={12} strokeWidth={1.5} />
-          </button>
-          <button onClick={() => setPanelMenu((v) => !v)} title="panel settings" style={paneCtl(panelMenu())}>
-            <IconSettings size={12} strokeWidth={1.5} />
-          </button>
-          <Show when={panelMenu()}>
-            <div
-              onMouseLeave={() => setPanelMenu(false)}
-              style={{
-                position: "absolute",
-                top: "100%",
-                right: "2px",
-                "margin-top": "2px",
-                background: "var(--color-surface-solid)",
-                border: "1px solid var(--color-border-strong)",
-                "border-radius": "4px",
-                "box-shadow": "var(--shadow-md)",
-                padding: "5px",
-                "z-index": 40,
-                "min-width": "150px",
-              }}
-            >
-              <div style={paneMenuLabel}>show in panel</div>
-              <For each={TABS}>
-                {(t) => (
-                  <button onClick={() => uiStore.toggleTabHidden(t.k)} style={paneMenuRow()}>
-                    <t.Icon size={12} strokeWidth={1.5} />
-                    <span style={{ flex: 1, "text-align": "left" }}>{t.label ?? t.k}</span>
-                    <span
-                      style={{
-                        "font-family": FONT_MONO,
-                        "font-size": "10px",
-                        color: uiStore.isTabHidden(t.k) ? "var(--color-text-faint)" : "var(--color-success)",
-                      }}
-                    >
-                      {uiStore.isTabHidden(t.k) ? "off" : "on"}
-                    </span>
-                  </button>
-                )}
-              </For>
-              <div style={{ height: "1px", background: "var(--color-border)", margin: "4px 2px" }} />
-              <button
-                onClick={() => {
-                  uiStore.setRightPaneOpen(false)
-                  setPanelMenu(false)
+        {/* Drag handle on the left edge of the right pane. 6px wide, full
+          height, invisible until hover. Cursor goes ew-resize. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          on:pointerdown={onHandlePointerDown}
+          on:pointermove={onHandlePointerMove}
+          on:pointerup={onHandlePointerUp}
+          on:pointercancel={onHandlePointerUp}
+          style={{
+            position: "absolute",
+            left: "-3px",
+            top: 0,
+            width: "6px",
+            height: "100%",
+            cursor: "ew-resize",
+            "z-index": 5,
+            "touch-action": "none",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-accent-subtle)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        />
+        <div
+          role="tablist"
+          style={{
+            display: "flex",
+            "align-items": "stretch",
+            "border-bottom": "1px solid var(--color-border)",
+            background: "var(--color-bg-subtle)",
+            "flex-shrink": 0,
+          }}
+        >
+          <div
+            style={{ display: "flex", gap: "5px", padding: "7px 10px", flex: 1, "min-width": 0, "overflow-x": "auto" }}
+          >
+            <For each={visibleTabs()}>
+              {(t) => (
+                <TabBtn k={t.k} label={t.label} Icon={t.Icon} active={tab() === t.k} onClick={() => setTab(t.k)} />
+              )}
+            </For>
+          </div>
+          <div style={{ position: "relative", display: "flex", "align-items": "center", "flex-shrink": 0 }}>
+            <button onClick={openSkillLibrary} title="skill library" style={paneCtl(false)}>
+              <IconBraces size={12} strokeWidth={1.5} />
+            </button>
+            <button onClick={() => setPanelMenu((v) => !v)} title="panel settings" style={paneCtl(panelMenu())}>
+              <IconSettings size={12} strokeWidth={1.5} />
+            </button>
+            <Show when={panelMenu()}>
+              <div
+                onMouseLeave={() => setPanelMenu(false)}
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: "2px",
+                  "margin-top": "2px",
+                  background: "var(--color-surface-solid)",
+                  border: "1px solid var(--color-border-strong)",
+                  "border-radius": "4px",
+                  "box-shadow": "var(--shadow-md)",
+                  padding: "5px",
+                  "z-index": 40,
+                  "min-width": "150px",
                 }}
-                style={paneMenuRow()}
               >
-                <IconChevronRight size={12} strokeWidth={1.5} />
-                <span style={{ flex: 1, "text-align": "left" }}>hide panel</span>
-              </button>
-            </div>
-          </Show>
-          <button onClick={() => uiStore.setRightPaneOpen(false)} title="hide panel" style={paneCtl(false)}>
-            <IconChevronRight size={13} strokeWidth={1.5} />
-          </button>
+                <div style={paneMenuLabel}>show in panel</div>
+                <For each={TABS}>
+                  {(t) => (
+                    <button onClick={() => uiStore.toggleTabHidden(t.k)} style={paneMenuRow()}>
+                      <t.Icon size={12} strokeWidth={1.5} />
+                      <span style={{ flex: 1, "text-align": "left" }}>{t.label ?? t.k}</span>
+                      <span
+                        style={{
+                          "font-family": FONT_MONO,
+                          "font-size": "10px",
+                          color: uiStore.isTabHidden(t.k) ? "var(--color-text-faint)" : "var(--color-success)",
+                        }}
+                      >
+                        {uiStore.isTabHidden(t.k) ? "off" : "on"}
+                      </span>
+                    </button>
+                  )}
+                </For>
+                <div style={{ height: "1px", background: "var(--color-border)", margin: "4px 2px" }} />
+                <button
+                  onClick={() => {
+                    uiStore.setRightPaneOpen(false)
+                    setPanelMenu(false)
+                  }}
+                  style={paneMenuRow()}
+                >
+                  <IconChevronRight size={12} strokeWidth={1.5} />
+                  <span style={{ flex: 1, "text-align": "left" }}>hide panel</span>
+                </button>
+              </div>
+            </Show>
+            <button onClick={() => uiStore.setRightPaneOpen(false)} title="hide panel" style={paneCtl(false)}>
+              <IconChevronRight size={13} strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
-      </div>
-      <div style={{ flex: 1, "min-height": 0, position: "relative", display: "flex", "flex-direction": "column" }}>
-        <KeepAlive show={tab() === "canvas"} mounted={visited().has("canvas")}>
-          <CanvasTab />
-        </KeepAlive>
-        <KeepAlive show={tab() === "terminal"} mounted={visited().has("terminal")}>
-          <TerminalTab />
-        </KeepAlive>
-      </div>
-    </aside>
+        <div style={{ flex: 1, "min-height": 0, position: "relative", display: "flex", "flex-direction": "column" }}>
+          <KeepAlive show={tab() === "canvas"} mounted={visited().has("canvas")}>
+            <CanvasTab />
+          </KeepAlive>
+          <KeepAlive show={tab() === "terminal"} mounted={visited().has("terminal")}>
+            <TerminalTab />
+          </KeepAlive>
+        </div>
+      </aside>
     </Show>
   )
 }
@@ -551,7 +554,13 @@ function TabBtn(props: {
         if (!props.active) e.currentTarget.style.background = "transparent"
       }}
     >
-      <span style={{ display: "inline-flex", color: props.active ? "var(--color-text)" : "var(--color-text-faint)", "flex-shrink": 0 }}>
+      <span
+        style={{
+          display: "inline-flex",
+          color: props.active ? "var(--color-text)" : "var(--color-text-faint)",
+          "flex-shrink": 0,
+        }}
+      >
         <props.Icon size={12} strokeWidth={1.6} />
       </span>
       <span>{props.label ?? props.k}</span>
@@ -634,7 +643,12 @@ function FilesTab(): JSX.Element {
           "overflow-x": "auto",
         }}
       >
-        <SubTab Icon={IconArchive} label="workspace" active={sub() === "workspace"} onClick={() => setSub("workspace")} />
+        <SubTab
+          Icon={IconArchive}
+          label="workspace"
+          active={sub() === "workspace"}
+          onClick={() => setSub("workspace")}
+        />
         <SubTab label="changes" active={sub() === "changes"} onClick={() => setSub("changes")} />
         <SubTab Icon={IconNetwork} label="repo" active={sub() === "repo"} onClick={() => setSub("repo")} />
         <SubTab label="artifacts" active={sub() === "artifacts"} onClick={() => setSub("artifacts")} />
@@ -805,9 +819,7 @@ function SubTab(props: {
         transition: "all var(--duration-fast) var(--ease-standard)",
       }}
     >
-      <Show when={props.Icon}>
-        {props.Icon!({ size: 11, strokeWidth: 1.7 })}
-      </Show>
+      <Show when={props.Icon}>{props.Icon!({ size: 11, strokeWidth: 1.7 })}</Show>
       {props.label}
     </button>
   )
@@ -821,11 +833,18 @@ function WorkspaceView(): JSX.Element {
   // pane for a cramped textarea.
   const [path, setPath] = createSignal<string | undefined>()
   return (
-    <div style={{ flex: 1, "min-height": 0, "min-width": 0, overflow: "hidden", display: "flex", "flex-direction": "column" }}>
+    <div
+      style={{
+        flex: 1,
+        "min-height": 0,
+        "min-width": 0,
+        overflow: "hidden",
+        display: "flex",
+        "flex-direction": "column",
+      }}
+    >
       <OpenScienceFileTree onOpen={setPath} />
-      <Show when={path()}>
-        {(p) => <FilePreview path={p()} onClose={() => setPath(undefined)} />}
-      </Show>
+      <Show when={path()}>{(p) => <FilePreview path={p()} onClose={() => setPath(undefined)} />}</Show>
     </div>
   )
 }
@@ -892,15 +911,21 @@ function RepoView(): JSX.Element {
   const sdk = useSDK()
   const directory = () => sync.project?.worktree || sync.data.path.directory || sdk.directory
   const [refresh, setRefresh] = createSignal(0)
-  const [repo] = createResource(() => [directory(), refresh()] as const, async ([dir]) => repoStatus(dir))
+  const [repo] = createResource(
+    () => [directory(), refresh()] as const,
+    async ([dir]) => repoStatus(dir),
+  )
   const [githubRefresh, setGithubRefresh] = createSignal(0)
-  const [github] = createResource(() => String(githubRefresh()), async () => {
-    try {
-      return await thesisAPI.githubStatus()
-    } catch (e: any) {
-      return { error: e?.message ?? String(e) }
-    }
-  })
+  const [github] = createResource(
+    () => String(githubRefresh()),
+    async () => {
+      try {
+        return await thesisAPI.githubStatus()
+      } catch (e: any) {
+        return { error: e?.message ?? String(e) }
+      }
+    },
+  )
   const [remote, setRemote] = createSignal("")
   const [message, setMessage] = createSignal("")
   const [install, setInstall] = createSignal("")
@@ -1014,9 +1039,7 @@ function RepoView(): JSX.Element {
       <div style={repoHeaderStyle()}>
         <div style={{ display: "flex", "align-items": "center", gap: "8px", "min-width": 0 }}>
           <IconNetwork size={13} strokeWidth={1.5} />
-          <span style={{ "font-family": FONT_MONO, "font-size": "11px", color: "var(--color-text)" }}>
-            repository
-          </span>
+          <span style={{ "font-family": FONT_MONO, "font-size": "11px", color: "var(--color-text)" }}>repository</span>
           <Show when={status()?.github}>
             <a
               href={status()!.github!.url}
@@ -1070,10 +1093,16 @@ function RepoView(): JSX.Element {
               <Badge text={`-${status()!.counts.deleted}`} />
               <Badge text={`?${status()!.counts.untracked}`} />
             </div>
-            <div style={{ display: "flex", "flex-direction": "column", gap: "2px", "max-height": "120px", overflow: "auto" }}>
-              <For each={status()!.files}>
-                {(file) => <code style={repoFileLine()}>{file}</code>}
-              </For>
+            <div
+              style={{
+                display: "flex",
+                "flex-direction": "column",
+                gap: "2px",
+                "max-height": "120px",
+                overflow: "auto",
+              }}
+            >
+              <For each={status()!.files}>{(file) => <code style={repoFileLine()}>{file}</code>}</For>
             </div>
             <div style={{ display: "flex", gap: "6px" }}>
               <input
@@ -1133,10 +1162,7 @@ function RepoView(): JSX.Element {
             <IconRefresh size={11} strokeWidth={1.5} />
           </button>
         </div>
-        <Show
-          when={!github.loading || github.latest}
-          fallback={<div style={repoEmptyStyle()}>loading GitHub…</div>}
-        >
+        <Show when={!github.loading || github.latest} fallback={<div style={repoEmptyStyle()}>loading GitHub…</div>}>
           <Show
             when={githubStatus()}
             fallback={<div style={repoEmptyStyle()}>{githubError() || "GitHub status unavailable"}</div>}
@@ -1151,17 +1177,21 @@ function RepoView(): JSX.Element {
               <Badge text={githubStatus()!.has_repo_scope ? "repo scope" : "public repo only"} />
             </div>
             <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap" }}>
-              <button
-                onClick={openGitHubSetup}
-                disabled={!!busy()}
-                style={repoButton("primary", !!busy())}
-              >
+              <button onClick={openGitHubSetup} disabled={!!busy()} style={repoButton("primary", !!busy())}>
                 {githubStatus()!.connected ? "settings" : "connect"}
               </button>
-              <button onClick={() => void refreshGitHub()} disabled={!!busy()} style={repoButton("secondary", !!busy())}>
+              <button
+                onClick={() => void refreshGitHub()}
+                disabled={!!busy()}
+                style={repoButton("secondary", !!busy())}
+              >
                 refresh repos
               </button>
-              <button onClick={() => void disconnectGitHub()} disabled={!!busy()} style={repoButton("secondary", !!busy())}>
+              <button
+                onClick={() => void disconnectGitHub()}
+                disabled={!!busy()}
+                style={repoButton("secondary", !!busy())}
+              >
                 disconnect
               </button>
               <Show when={status()?.github?.url}>
@@ -1175,7 +1205,14 @@ function RepoView(): JSX.Element {
               </Show>
             </div>
             <Show when={githubStatus()!.token_expires_at || githubStatus()!.scopes?.length}>
-              <div style={{ "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-text-faint)", "line-height": 1.55 }}>
+              <div
+                style={{
+                  "font-family": FONT_MONO,
+                  "font-size": "10px",
+                  color: "var(--color-text-faint)",
+                  "line-height": 1.55,
+                }}
+              >
                 <Show when={githubStatus()!.token_expires_at}>
                   <div>token expires {githubStatus()!.token_expires_at}</div>
                 </Show>
@@ -1208,12 +1245,17 @@ function RepoView(): JSX.Element {
           </button>
         </div>
         <details>
-          <summary style={{ "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-text-muted)", cursor: "pointer" }}>
+          <summary
+            style={{
+              "font-family": FONT_MONO,
+              "font-size": "10px",
+              color: "var(--color-text-muted)",
+              cursor: "pointer",
+            }}
+          >
             raw status
           </summary>
-          <pre style={githubRaw()}>
-            {JSON.stringify(github() ?? {}, null, 2)}
-          </pre>
+          <pre style={githubRaw()}>{JSON.stringify(github() ?? {}, null, 2)}</pre>
         </details>
       </div>
     </div>
@@ -1223,9 +1265,7 @@ function RepoView(): JSX.Element {
 function Stat(props: { label: string; value: string }): JSX.Element {
   return (
     <div style={repoStat()}>
-      <span style={sectionTitle}>
-        {props.label}
-      </span>
+      <span style={sectionTitle}>{props.label}</span>
       <span
         style={{
           color: "var(--color-text)",
@@ -1555,12 +1595,7 @@ function EmptyRow(props: { text: string }): JSX.Element {
   )
 }
 
-function Section(props: {
-  label: string
-  count: number
-  children: JSX.Element
-  refreshable?: boolean
-}): JSX.Element {
+function Section(props: { label: string; count: number; children: JSX.Element; refreshable?: boolean }): JSX.Element {
   return (
     <section>
       <div

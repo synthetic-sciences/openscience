@@ -162,4 +162,3 @@ jobs:
               environment_url: `https://www.npmjs.com/package/@synsci/openscience/v/${version}`,
               description: `Published @synsci/openscience@${version}`,
             })
-

@@ -41,7 +41,7 @@ function toHit(r: Result): ConnectorHit {
   const meta = [r.authorString, r.journalTitle, r.pubYear].filter(Boolean).join(". ")
   return {
     id: r.source && r.id ? `${r.source}/${r.id}` : (r.id ?? ""),
-    title: snippet(r.title, 300) ?? (r.id ?? "Untitled"),
+    title: snippet(r.title, 300) ?? r.id ?? "Untitled",
     summary: snippet(r.abstractText) ?? (meta.length ? meta : undefined),
     url: url(r),
     score: typeof r.citedByCount === "number" ? r.citedByCount : undefined,
@@ -67,10 +67,7 @@ export const europepmc: Connector = {
 
   async fetch(id, opts) {
     const slash = id.indexOf("/")
-    const query =
-      slash > 0
-        ? `ext_id:${id.slice(slash + 1)} AND src:${id.slice(0, slash)}`
-        : id
+    const query = slash > 0 ? `ext_id:${id.slice(slash + 1)} AND src:${id.slice(0, slash)}` : id
     const data = await getJSON<SearchResponse>(
       `${BASE}/search?query=${encodeURIComponent(query)}&format=json&resultType=core&pageSize=1`,
       { signal: opts?.signal },

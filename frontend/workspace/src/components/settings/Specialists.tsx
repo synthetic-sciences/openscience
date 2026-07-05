@@ -52,12 +52,24 @@ export default function Specialists() {
       .filter((a) => m === "all" || a.mode === m || (m === "primary" && a.mode === "all"))
       .filter((a) => !q || a.name.toLowerCase().includes(q) || (a.description ?? "").toLowerCase().includes(q))
   })
-  const builtIn = createMemo(() => visible().filter((a) => a.native).sort(byName))
-  const custom = createMemo(() => visible().filter((a) => !a.native).sort(byName))
+  const builtIn = createMemo(() =>
+    visible()
+      .filter((a) => a.native)
+      .sort(byName),
+  )
+  const custom = createMemo(() =>
+    visible()
+      .filter((a) => !a.native)
+      .sort(byName),
+  )
 
   const modeOptions = createMemo(() => [
     { id: "all", label: "All", count: (agents() ?? []).length },
-    { id: "primary", label: "Primary", count: (agents() ?? []).filter((a) => a.mode === "primary" || a.mode === "all").length },
+    {
+      id: "primary",
+      label: "Primary",
+      count: (agents() ?? []).filter((a) => a.mode === "primary" || a.mode === "all").length,
+    },
     { id: "subagent", label: "Subagents", count: (agents() ?? []).filter((a) => a.mode === "subagent").length },
   ])
 
@@ -166,7 +178,8 @@ export default function Specialists() {
 }
 
 function AgentRow(props: { agent: Agent; onDelete?: () => void; busy: boolean }) {
-  const modeLabel = () => (props.agent.mode === "subagent" ? "subagent" : props.agent.mode === "all" ? "primary · subagent" : "primary")
+  const modeLabel = () =>
+    props.agent.mode === "subagent" ? "subagent" : props.agent.mode === "all" ? "primary · subagent" : "primary"
   return (
     <Row>
       <div
@@ -207,7 +220,12 @@ function CreateForm(props: {
     <div class="flex flex-col gap-4">
       <SectionLabel label="Create a custom specialist" />
       <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[4px] bg-surface-base/40">
-        <FormField label="Name" value={name()} onInput={setName} placeholder="my-specialist (letters, digits, - and _)" />
+        <FormField
+          label="Name"
+          value={name()}
+          onInput={setName}
+          placeholder="my-specialist (letters, digits, - and _)"
+        />
         <FormField
           label="Description"
           value={description()}

@@ -443,9 +443,7 @@ export const AuthCodexCommand = cmd({
             // through to a fresh OAuth flow. The user expects logging out
             // from the web to clear their CLI session too.
             await Auth.remove("openai-codex")
-            prompts.log.info(
-              "Codex was disconnected on the web — starting a fresh login.",
-            )
+            prompts.log.info("Codex was disconnected on the web — starting a fresh login.")
             // fall through to the OAuth flow below
           } else {
             // backend === true (or null/unknown — treat as connected).

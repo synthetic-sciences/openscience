@@ -14,13 +14,13 @@ Server mode is opt-in. The server binds to localhost (127.0.0.1) only and enforc
 
 ### Out of scope
 
-| Category | Why |
-| --- | --- |
-| Server access when opted in | If you enable server mode, API access is expected behavior. |
-| Sandbox escapes | The permission system is not a sandbox. |
-| LLM provider data handling | Data you send to a provider is governed by that provider's policies. |
-| MCP server behavior | External MCP servers you configure are outside the trust boundary. |
-| Malicious config files | You control your own config; editing it is not an attack. |
+| Category                    | Why                                                                  |
+| --------------------------- | -------------------------------------------------------------------- |
+| Server access when opted in | If you enable server mode, API access is expected behavior.          |
+| Sandbox escapes             | The permission system is not a sandbox.                              |
+| LLM provider data handling  | Data you send to a provider is governed by that provider's policies. |
+| MCP server behavior         | External MCP servers you configure are outside the trust boundary.   |
+| Malicious config files      | You control your own config; editing it is not an attack.            |
 
 ## Reporting a vulnerability
 

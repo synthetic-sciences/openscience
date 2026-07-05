@@ -15,7 +15,9 @@ type Release = {
 export async function getLatestRelease(skip?: string) {
   const headers: Record<string, string> = { Accept: "application/vnd.github.v3+json" }
   if (process.env.GH_TOKEN) headers.Authorization = `token ${process.env.GH_TOKEN}`
-  const data = await fetch("https://api.github.com/repos/synthetic-sciences/OpenScience/releases?per_page=100", { headers }).then((res) => {
+  const data = await fetch("https://api.github.com/repos/synthetic-sciences/OpenScience/releases?per_page=100", {
+    headers,
+  }).then((res) => {
     if (!res.ok) throw new Error(res.statusText)
     return res.json()
   })
@@ -130,7 +132,10 @@ function getSection(areas: Set<string>): string {
   return "Core"
 }
 
-async function summarizeCommit(openscience: Awaited<ReturnType<typeof createOpenScience>>, message: string): Promise<string> {
+async function summarizeCommit(
+  openscience: Awaited<ReturnType<typeof createOpenScience>>,
+  message: string,
+): Promise<string> {
   console.log("summarizing commit:", message)
   const session = await openscience.client.session.create()
   const result = await openscience.client.session

@@ -11,7 +11,13 @@ import { FONT_CODE, FONT_SANS, sectionTitle } from "@/styles/tokens"
 import { StatusDot } from "@/thesis/shared/StatusDot"
 import { settingsApi } from "./api"
 
-type FieldSpec = { name: string; label: string; type: "password" | "text" | "textarea"; optional: boolean; placeholder?: string }
+type FieldSpec = {
+  name: string
+  label: string
+  type: "password" | "text" | "textarea"
+  optional: boolean
+  placeholder?: string
+}
 type Service = {
   id: string
   label: string
@@ -92,10 +98,15 @@ export const Credentials: Component = () => {
     setSaving(true)
     setError(undefined)
     try {
-      const res = await settingsApi<{ services: Service[] }>(base(), fetchFn(), `/settings/credentials/${encodeURIComponent(id)}`, {
-        method: "PUT",
-        body: JSON.stringify({ fields: values(), ...(extra ?? {}) }),
-      })
+      const res = await settingsApi<{ services: Service[] }>(
+        base(),
+        fetchFn(),
+        `/settings/credentials/${encodeURIComponent(id)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ fields: values(), ...(extra ?? {}) }),
+        },
+      )
       setServices(res.services)
       setEditing(undefined)
       setValues({})
@@ -107,12 +118,18 @@ export const Credentials: Component = () => {
   }
 
   const disconnect = async (id: string) => {
-    if (!window.confirm(`Remove stored credentials for ${id}? This deletes the encrypted secrets from this machine.`)) return
+    if (!window.confirm(`Remove stored credentials for ${id}? This deletes the encrypted secrets from this machine.`))
+      return
     setError(undefined)
     try {
-      const res = await settingsApi<{ services: Service[] }>(base(), fetchFn(), `/settings/credentials/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      })
+      const res = await settingsApi<{ services: Service[] }>(
+        base(),
+        fetchFn(),
+        `/settings/credentials/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+        },
+      )
       setServices(res.services)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -136,7 +153,10 @@ export const Credentials: Component = () => {
     const value = customValue().trim()
     const field = customField().trim() || "api_key"
     if (!name || !value) return
-    const id = `custom:${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`
+    const id = `custom:${name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")}`
     setValues({ [field]: value })
     await save(id, { label: name })
     setCustomOpen(false)
@@ -187,8 +207,8 @@ export const Credentials: Component = () => {
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
           <h2 class="text-16-medium text-text-strong">Credentials</h2>
           <p class="text-13-regular text-text-weak">
-            Connect external services and provider keys. Secrets are encrypted on this machine and never shown again after
-            you save them.
+            Connect external services and provider keys. Secrets are encrypted on this machine and never shown again
+            after you save them.
           </p>
         </div>
       </div>
@@ -250,7 +270,11 @@ export const Credentials: Component = () => {
                           remove
                         </Button>
                       </Show>
-                      <Button size="small" variant={svc.connected ? "secondary" : "primary"} onClick={() => openForm(svc)}>
+                      <Button
+                        size="small"
+                        variant={svc.connected ? "secondary" : "primary"}
+                        onClick={() => openForm(svc)}
+                      >
                         {editing() === svc.id ? "cancel" : svc.connected ? "update" : "connect"}
                       </Button>
                     </div>
@@ -279,7 +303,10 @@ export const Credentials: Component = () => {
                                   type={f.type === "password" ? "password" : "text"}
                                   autocomplete="off"
                                   spellcheck={false}
-                                  placeholder={f.placeholder ?? (svc.set_fields.includes(f.name) ? "•••••• (leave blank to keep)" : "")}
+                                  placeholder={
+                                    f.placeholder ??
+                                    (svc.set_fields.includes(f.name) ? "•••••• (leave blank to keep)" : "")
+                                  }
                                   value={values()[f.name] ?? ""}
                                   onInput={(e) => setValues({ ...values(), [f.name]: e.currentTarget.value })}
                                   style={fieldStyle()}
@@ -298,10 +325,22 @@ export const Credentials: Component = () => {
                         )}
                       </For>
                       <div class="flex gap-2">
-                        <Button type="button" size="small" variant="primary" disabled={saving()} onClick={() => void save(svc.id)}>
+                        <Button
+                          type="button"
+                          size="small"
+                          variant="primary"
+                          disabled={saving()}
+                          onClick={() => void save(svc.id)}
+                        >
                           {saving() ? "saving…" : "save"}
                         </Button>
-                        <Button type="button" size="small" variant="secondary" disabled={saving()} onClick={() => setEditing(undefined)}>
+                        <Button
+                          type="button"
+                          size="small"
+                          variant="secondary"
+                          disabled={saving()}
+                          onClick={() => setEditing(undefined)}
+                        >
                           cancel
                         </Button>
                       </div>
@@ -333,19 +372,43 @@ export const Credentials: Component = () => {
               <div class="flex flex-col sm:flex-row gap-2">
                 <label class="flex flex-col gap-1 flex-1">
                   <span style={eyebrow()}>Name</span>
-                  <input value={customName()} onInput={(e) => setCustomName(e.currentTarget.value)} placeholder="My service" style={fieldStyle()} />
+                  <input
+                    value={customName()}
+                    onInput={(e) => setCustomName(e.currentTarget.value)}
+                    placeholder="My service"
+                    style={fieldStyle()}
+                  />
                 </label>
                 <label class="flex flex-col gap-1 sm:w-[160px]">
                   <span style={eyebrow()}>Field</span>
-                  <input value={customField()} onInput={(e) => setCustomField(e.currentTarget.value)} placeholder="api_key" style={fieldStyle()} />
+                  <input
+                    value={customField()}
+                    onInput={(e) => setCustomField(e.currentTarget.value)}
+                    placeholder="api_key"
+                    style={fieldStyle()}
+                  />
                 </label>
               </div>
               <label class="flex flex-col gap-1">
                 <span style={eyebrow()}>Value</span>
-                <input type="password" autocomplete="off" spellcheck={false} value={customValue()} onInput={(e) => setCustomValue(e.currentTarget.value)} placeholder="secret value" style={fieldStyle()} />
+                <input
+                  type="password"
+                  autocomplete="off"
+                  spellcheck={false}
+                  value={customValue()}
+                  onInput={(e) => setCustomValue(e.currentTarget.value)}
+                  placeholder="secret value"
+                  style={fieldStyle()}
+                />
               </label>
               <div class="flex gap-2">
-                <Button type="button" size="small" variant="primary" disabled={saving() || !customName().trim() || !customValue().trim()} onClick={() => void saveCustom()}>
+                <Button
+                  type="button"
+                  size="small"
+                  variant="primary"
+                  disabled={saving() || !customName().trim() || !customValue().trim()}
+                  onClick={() => void saveCustom()}
+                >
                   save
                 </Button>
                 <Button type="button" size="small" variant="secondary" onClick={() => setCustomOpen(false)}>
@@ -361,8 +424,8 @@ export const Credentials: Component = () => {
           <div class="flex flex-col gap-1">
             <h3 class="text-13-medium text-text-weak tracking-wide">Provider keys</h3>
             <p class="text-12-regular text-text-weak">
-              Bring your own model-provider API keys. Stored on this machine, billed directly by each provider — free and
-              unmetered here.
+              Bring your own model-provider API keys. Stored on this machine, billed directly by each provider — free
+              and unmetered here.
             </p>
           </div>
 
@@ -376,15 +439,33 @@ export const Credentials: Component = () => {
           >
             <label class="flex flex-col gap-1 sm:w-[180px]">
               <span style={eyebrow()}>Provider</span>
-              <select value={keyProvider()} onChange={(e) => setKeyProvider(e.currentTarget.value)} style={fieldStyle()}>
+              <select
+                value={keyProvider()}
+                onChange={(e) => setKeyProvider(e.currentTarget.value)}
+                style={fieldStyle()}
+              >
                 <For each={BYOK_PROVIDERS}>{(id) => <option value={id}>{PROVIDER_LABEL[id] ?? id}</option>}</For>
               </select>
             </label>
             <label class="flex flex-col gap-1 flex-1 min-w-0">
               <span style={eyebrow()}>API key</span>
-              <input type="password" autocomplete="off" spellcheck={false} value={keyValue()} onInput={(e) => setKeyValue(e.currentTarget.value)} placeholder="sk-…" style={fieldStyle()} />
+              <input
+                type="password"
+                autocomplete="off"
+                spellcheck={false}
+                value={keyValue()}
+                onInput={(e) => setKeyValue(e.currentTarget.value)}
+                placeholder="sk-…"
+                style={fieldStyle()}
+              />
             </label>
-            <Button type="button" size="small" variant="primary" disabled={savingKey() || !keyValue().trim()} onClick={() => void saveKey()}>
+            <Button
+              type="button"
+              size="small"
+              variant="primary"
+              disabled={savingKey() || !keyValue().trim()}
+              onClick={() => void saveKey()}
+            >
               {savingKey() ? "saving…" : "save key"}
             </Button>
           </form>

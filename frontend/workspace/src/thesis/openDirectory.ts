@@ -75,11 +75,7 @@ async function pickViaFsApi(): Promise<DirectoryEntry | null> {
  * the dev-server's /api/resolve-folder endpoint. Returns null if no
  * match was found.
  */
-export async function resolveAbsolute(
-  name: string,
-  hint?: string,
-  children?: string[],
-): Promise<string | null> {
+export async function resolveAbsolute(name: string, hint?: string, children?: string[]): Promise<string | null> {
   try {
     const res = await fetch("/api/resolve-folder", {
       method: "POST",

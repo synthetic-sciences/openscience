@@ -36,10 +36,7 @@ async function announceFdaIfNeeded() {
   if (!result.blocked) return
   const binary = process.execPath || "openscience"
   UI.empty()
-  UI.println(
-    UI.Style.TEXT_WARNING_BOLD + "  ⚠  Full Disk Access required",
-    UI.Style.TEXT_NORMAL,
-  )
+  UI.println(UI.Style.TEXT_WARNING_BOLD + "  ⚠  Full Disk Access required", UI.Style.TEXT_NORMAL)
   UI.empty()
   UI.println(
     UI.Style.TEXT_NORMAL,
@@ -93,18 +90,9 @@ export const WebCommand = cmd({
     // request sees the freshly-synced whitelist.
     const authed = await OpenScience.isAuthenticated()
     if (!authed) {
-      UI.println(
-        UI.Style.TEXT_WARNING_BOLD + "  ⚠  Not connected to Synthetic Sciences",
-        UI.Style.TEXT_NORMAL,
-      )
-      UI.println(
-        UI.Style.TEXT_NORMAL,
-        "  Run `openscience connect login` to sync provider keys + managed config.",
-      )
-      UI.println(
-        UI.Style.TEXT_DIM,
-        "  Continuing with whatever env vars are already in your shell.",
-      )
+      UI.println(UI.Style.TEXT_WARNING_BOLD + "  ⚠  Not connected to Synthetic Sciences", UI.Style.TEXT_NORMAL)
+      UI.println(UI.Style.TEXT_NORMAL, "  Run `openscience connect login` to sync provider keys + managed config.")
+      UI.println(UI.Style.TEXT_DIM, "  Continuing with whatever env vars are already in your shell.")
       UI.empty()
     } else {
       // Sync managed config before binding so the browser's first request sees
@@ -134,10 +122,7 @@ export const WebCommand = cmd({
         )
         UI.empty()
       } else {
-        UI.println(
-          UI.Style.TEXT_DIM,
-          "  (sync skipped — using cached config from previous run)",
-        )
+        UI.println(UI.Style.TEXT_DIM, "  (sync skipped — using cached config from previous run)")
         UI.empty()
       }
     }

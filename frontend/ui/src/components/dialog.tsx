@@ -26,10 +26,7 @@ export function Dialog(props: DialogProps) {
     <Show when={props.title || props.action}>
       <div data-slot="dialog-header">
         <Show when={props.title}>
-          <Show
-            when={!lite}
-            fallback={<div data-slot="dialog-title">{props.title}</div>}
-          >
+          <Show when={!lite} fallback={<div data-slot="dialog-title">{props.title}</div>}>
             <Kobalte.Title data-slot="dialog-title">{props.title}</Kobalte.Title>
           </Show>
         </Show>

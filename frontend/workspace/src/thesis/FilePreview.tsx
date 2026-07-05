@@ -18,15 +18,7 @@ import { usePlatform } from "@/context/platform"
 import { FONT_MONO, FONT_SANS, FONT_CODE } from "@/styles/tokens"
 import { PdfViewer } from "@/science/renderers/documents/PdfViewer"
 import { toast } from "@/thesis/Toast"
-import {
-  IconFile,
-  IconX,
-  IconCopy,
-  IconDownload,
-  IconBookOpen,
-  IconBraces,
-  IconRefresh,
-} from "@/thesis/shared/Icon"
+import { IconFile, IconX, IconCopy, IconDownload, IconBookOpen, IconBraces, IconRefresh } from "@/thesis/shared/Icon"
 
 /**
  * Slide-in SIDE PREVIEW pane for opening a file from the Files tree.
@@ -126,8 +118,7 @@ export function FileView(props: {
   const sdk = useSDK()
   const sync = useSync()
   const platform = usePlatform()
-  const directory = () =>
-    props.directory || sync.project?.worktree || sync.data.path.directory || sdk.directory
+  const directory = () => props.directory || sync.project?.worktree || sync.data.path.directory || sdk.directory
   const name = () => props.path.split("/").pop() || props.path
   const e = () => ext(name())
 
@@ -163,8 +154,7 @@ export function FileView(props: {
   const kind = createMemo<Kind>(() => {
     const x = e()
     if (isBinary()) {
-      if (mime().startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].includes(x))
-        return "image"
+      if (mime().startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].includes(x)) return "image"
       if (mime() === "application/pdf" || x === "pdf") return "pdf"
       return "binary"
     }
@@ -342,93 +332,113 @@ export function FileView(props: {
 
       {/* body */}
       <Show
-          when={!file.loading}
-          fallback={
-            <div style={{ padding: "20px", "font-family": FONT_MONO, "font-size": "12px", color: "var(--color-text-faint)" }}>
-              loading…
-            </div>
-          }
-        >
+        when={!file.loading}
+        fallback={
           <div
-            class="thesis-scroll"
-            style={{
-              flex: 1,
-              "min-height": 0,
-              overflow: "auto",
-              background: "var(--color-bg-subtle)",
-            }}
+            style={{ padding: "20px", "font-family": FONT_MONO, "font-size": "12px", color: "var(--color-text-faint)" }}
           >
-            <Switch>
-              {/* markdown */}
-              <Match when={kind() === "markdown" && !showSource()}>
-                <div style={{ padding: "22px 26px", "max-width": "820px", margin: "0 auto" }}>
-                  <Markdown class="thesis-md" text={draft()} />
-                </div>
-              </Match>
-
-              {/* pdf */}
-              <Match when={kind() === "pdf"}>
-                <div style={{ padding: "14px" }}>
-                  <PdfViewer kind="pdf" data={{ base64: b64(), maxPages: 40 }} height={100000} />
-                </div>
-              </Match>
-
-              {/* image */}
-              <Match when={kind() === "image"}>
-                <div style={{ display: "grid", "place-items": "center", padding: "22px", "min-height": "100%" }}>
-                  <img
-                    src={dataUrl()}
-                    alt={name()}
-                    style={{ "max-width": "100%", "max-height": "100%", "object-fit": "contain", "border-radius": "4px" }}
-                  />
-                </div>
-              </Match>
-
-              {/* binary */}
-              <Match when={kind() === "binary"}>
-                <div style={{ display: "grid", "place-items": "center", padding: "40px 24px", "min-height": "100%", "text-align": "center" }}>
-                  <div style={{ "font-family": FONT_SANS, "font-size": "13px", color: "var(--color-text-muted)", "line-height": 1.6 }}>
-                    Binary file — no inline preview.
-                    <br />
-                    Use the download button above to open it.
-                  </div>
-                </div>
-              </Match>
-
-              {/* code / text — editable source, or highlighted read view */}
-              <Match when={kind() === "code" && showSource()}>
-                <textarea
-                  value={draft()}
-                  spellcheck={false}
-                  onInput={(ev) => setDraft(ev.currentTarget.value)}
-                  class="thesis-scroll"
-                  style={{
-                    all: "unset",
-                    "box-sizing": "border-box",
-                    display: "block",
-                    width: "100%",
-                    "min-height": "100%",
-                    padding: "16px 18px",
-                    "font-family": FONT_CODE,
-                    "font-size": "12px",
-                    "line-height": 1.65,
-                    color: "var(--color-text)",
-                    "white-space": "pre",
-                    "tab-size": 2,
-                  }}
-                />
-              </Match>
-              <Match when={kind() === "code" || (kind() === "markdown" && showSource())}>
-                <div style={{ padding: "14px 16px" }}>
-                  <Markdown
-                    class="thesis-md"
-                    text={fence(showSource() && kind() !== "code" ? langFor(kind(), e()) : LANG[e()] ?? "text", draft())}
-                  />
-                </div>
-              </Match>
-            </Switch>
+            loading…
           </div>
-        </Show>
+        }
+      >
+        <div
+          class="thesis-scroll"
+          style={{
+            flex: 1,
+            "min-height": 0,
+            overflow: "auto",
+            background: "var(--color-bg-subtle)",
+          }}
+        >
+          <Switch>
+            {/* markdown */}
+            <Match when={kind() === "markdown" && !showSource()}>
+              <div style={{ padding: "22px 26px", "max-width": "820px", margin: "0 auto" }}>
+                <Markdown class="thesis-md" text={draft()} />
+              </div>
+            </Match>
+
+            {/* pdf */}
+            <Match when={kind() === "pdf"}>
+              <div style={{ padding: "14px" }}>
+                <PdfViewer kind="pdf" data={{ base64: b64(), maxPages: 40 }} height={100000} />
+              </div>
+            </Match>
+
+            {/* image */}
+            <Match when={kind() === "image"}>
+              <div style={{ display: "grid", "place-items": "center", padding: "22px", "min-height": "100%" }}>
+                <img
+                  src={dataUrl()}
+                  alt={name()}
+                  style={{ "max-width": "100%", "max-height": "100%", "object-fit": "contain", "border-radius": "4px" }}
+                />
+              </div>
+            </Match>
+
+            {/* binary */}
+            <Match when={kind() === "binary"}>
+              <div
+                style={{
+                  display: "grid",
+                  "place-items": "center",
+                  padding: "40px 24px",
+                  "min-height": "100%",
+                  "text-align": "center",
+                }}
+              >
+                <div
+                  style={{
+                    "font-family": FONT_SANS,
+                    "font-size": "13px",
+                    color: "var(--color-text-muted)",
+                    "line-height": 1.6,
+                  }}
+                >
+                  Binary file — no inline preview.
+                  <br />
+                  Use the download button above to open it.
+                </div>
+              </div>
+            </Match>
+
+            {/* code / text — editable source, or highlighted read view */}
+            <Match when={kind() === "code" && showSource()}>
+              <textarea
+                value={draft()}
+                spellcheck={false}
+                onInput={(ev) => setDraft(ev.currentTarget.value)}
+                class="thesis-scroll"
+                style={{
+                  all: "unset",
+                  "box-sizing": "border-box",
+                  display: "block",
+                  width: "100%",
+                  "min-height": "100%",
+                  padding: "16px 18px",
+                  "font-family": FONT_CODE,
+                  "font-size": "12px",
+                  "line-height": 1.65,
+                  color: "var(--color-text)",
+                  "white-space": "pre",
+                  "tab-size": 2,
+                }}
+              />
+            </Match>
+            <Match when={kind() === "code" || (kind() === "markdown" && showSource())}>
+              <div style={{ padding: "14px 16px" }}>
+                <Markdown
+                  class="thesis-md"
+                  text={fence(
+                    showSource() && kind() !== "code" ? langFor(kind(), e()) : (LANG[e()] ?? "text"),
+                    draft(),
+                  )}
+                />
+              </div>
+            </Match>
+          </Switch>
+        </div>
+      </Show>
     </div>
   )
 }

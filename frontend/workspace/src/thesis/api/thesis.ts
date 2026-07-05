@@ -56,7 +56,9 @@ async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(`/api/thesis${path}`)
   if (!res.ok) {
     let detail = ""
-    try { detail = (await res.json())?.detail ?? "" } catch {}
+    try {
+      detail = (await res.json())?.detail ?? ""
+    } catch {}
     throw new Error(`thesis ${path} failed: ${res.status}${detail ? ` — ${detail}` : ""}`)
   }
   return res.json()
@@ -70,7 +72,9 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   })
   if (!res.ok) {
     let detail = ""
-    try { detail = (await res.json())?.detail ?? "" } catch {}
+    try {
+      detail = (await res.json())?.detail ?? ""
+    } catch {}
     throw new Error(`thesis POST ${path} failed: ${res.status}${detail ? ` — ${detail}` : ""}`)
   }
   return res.json()
@@ -105,8 +109,7 @@ export const thesisAPI = {
       installation_id: input.installationID,
       state: input.state,
     }),
-  listArtifacts: (nodeID: string) =>
-    getJSON<ArtifactsListResponse | ThesisArtifact[]>(`/nodes/${nodeID}/artifacts`),
+  listArtifacts: (nodeID: string) => getJSON<ArtifactsListResponse | ThesisArtifact[]>(`/nodes/${nodeID}/artifacts`),
 }
 
 // Pre-warm the bridge on app boot so the canvas tab is fast on first open.

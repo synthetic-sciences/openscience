@@ -1,12 +1,4 @@
-import {
-  createSignal,
-  createResource,
-  createMemo,
-  onCleanup,
-  type JSX,
-  For,
-  Show,
-} from "solid-js"
+import { createSignal, createResource, createMemo, onCleanup, type JSX, For, Show } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
@@ -133,8 +125,7 @@ export function FileExplorer(): JSX.Element {
   const sdk = useSDK()
   const sync = useSync()
 
-  const projectRoot = () =>
-    sync.project?.worktree || sync.data.path.directory || sdk.directory
+  const projectRoot = () => sync.project?.worktree || sync.data.path.directory || sdk.directory
   const home = () => sync.data.path.home || projectRoot()
 
   const [cwd, setCwd] = createSignal(projectRoot())
@@ -204,9 +195,7 @@ export function FileExplorer(): JSX.Element {
         // message on macOS: "permission denied reading … — grant Full Disk
         // Access"). Detect that so the SPA can prompt for FDA instead of
         // silently showing an empty folder.
-        const msg = String(
-          err?.body?.message ?? err?.message ?? (typeof err === "string" ? err : "") ?? "",
-        )
+        const msg = String(err?.body?.message ?? err?.message ?? (typeof err === "string" ? err : "") ?? "")
         const status = err?.response?.status ?? err?.status ?? err?.statusCode
         if (status === 403 || /permission denied|full disk access/i.test(msg)) {
           setPermissionError(msg || "OpenScience cannot read this directory")
@@ -240,7 +229,16 @@ export function FileExplorer(): JSX.Element {
   }
 
   return (
-    <div style={{ flex: 1, "min-height": 0, "min-width": 0, display: "flex", "flex-direction": "column", overflow: "hidden" }}>
+    <div
+      style={{
+        flex: 1,
+        "min-height": 0,
+        "min-width": 0,
+        display: "flex",
+        "flex-direction": "column",
+        overflow: "hidden",
+      }}
+    >
       {/* toolbar row 1: machine + toggles */}
       <div
         style={{
@@ -253,11 +251,7 @@ export function FileExplorer(): JSX.Element {
         }}
       >
         <div style={{ position: "relative" }}>
-          <button
-            type="button"
-            onClick={() => setMachineMenu((v) => !v)}
-            style={machineBtn()}
-          >
+          <button type="button" onClick={() => setMachineMenu((v) => !v)} style={machineBtn()}>
             <IconCpu size={13} strokeWidth={1.5} />
             <span style={{ display: "flex", "flex-direction": "column", "line-height": 1.15, "text-align": "left" }}>
               <span style={{ "font-size": "11px", color: "var(--color-text)" }}>This computer</span>
@@ -267,11 +261,25 @@ export function FileExplorer(): JSX.Element {
           </button>
           <Show when={machineMenu()}>
             <div onMouseLeave={() => setMachineMenu(false)} style={menuCard()}>
-              <button type="button" style={menuRow()} onClick={() => { navigate(home()); setMachineMenu(false) }}>
+              <button
+                type="button"
+                style={menuRow()}
+                onClick={() => {
+                  navigate(home())
+                  setMachineMenu(false)
+                }}
+              >
                 <IconHome size={12} strokeWidth={1.5} />
                 <span style={{ flex: 1, "text-align": "left" }}>Home</span>
               </button>
-              <button type="button" style={menuRow()} onClick={() => { navigate(projectRoot()); setMachineMenu(false) }}>
+              <button
+                type="button"
+                style={menuRow()}
+                onClick={() => {
+                  navigate(projectRoot())
+                  setMachineMenu(false)
+                }}
+              >
                 <IconFolder size={12} strokeWidth={1.5} />
                 <span style={{ flex: 1, "text-align": "left" }}>Project root</span>
               </button>
@@ -318,7 +326,13 @@ export function FileExplorer(): JSX.Element {
             "flex-shrink": 0,
           }}
         >
-          <button type="button" title="back" disabled={!history().length} style={navBtn(!history().length)} onClick={goBack}>
+          <button
+            type="button"
+            title="back"
+            disabled={!history().length}
+            style={navBtn(!history().length)}
+            onClick={goBack}
+          >
             <IconChevronLeft size={13} strokeWidth={1.6} />
           </button>
           <button type="button" title="up" style={navBtn(false)} onClick={goUp}>
@@ -329,7 +343,10 @@ export function FileExplorer(): JSX.Element {
               value={pathDraft()}
               spellcheck={false}
               onFocus={() => (editing = true)}
-              onBlur={() => { editing = false; setPathDraft(cwd()) }}
+              onBlur={() => {
+                editing = false
+                setPathDraft(cwd())
+              }}
               onInput={(e) => setPathDraft(e.currentTarget.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -389,19 +406,40 @@ export function FileExplorer(): JSX.Element {
 
         {/* body */}
         <div class="thesis-scroll" style={{ flex: 1, "min-height": 0, "overflow-y": "auto", "overflow-x": "hidden" }}>
-          <Show
-            when={!entries.loading || entries.latest}
-            fallback={<div style={emptyMsg()}>loading…</div>}
-          >
+          <Show when={!entries.loading || entries.latest} fallback={<div style={emptyMsg()}>loading…</div>}>
             <Show
               when={!permissionError()}
               fallback={
-                <div style={{ display: "flex", "flex-direction": "column", "align-items": "center", gap: "8px", padding: "40px 22px", "text-align": "center" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    "flex-direction": "column",
+                    "align-items": "center",
+                    gap: "8px",
+                    padding: "40px 22px",
+                    "text-align": "center",
+                  }}
+                >
                   <IconFolder size={20} strokeWidth={1.4} />
-                  <div style={{ "font-family": FONT_SANS, "font-size": "13px", "font-weight": 500, color: "var(--color-text)" }}>
+                  <div
+                    style={{
+                      "font-family": FONT_SANS,
+                      "font-size": "13px",
+                      "font-weight": 500,
+                      color: "var(--color-text)",
+                    }}
+                  >
                     Can't read this folder
                   </div>
-                  <div style={{ "font-family": FONT_SANS, "font-size": "12px", color: "var(--color-text-faint)", "line-height": 1.5, "max-width": "320px" }}>
+                  <div
+                    style={{
+                      "font-family": FONT_SANS,
+                      "font-size": "12px",
+                      color: "var(--color-text-faint)",
+                      "line-height": 1.5,
+                      "max-width": "320px",
+                    }}
+                  >
                     {permissionError()}
                   </div>
                 </div>
@@ -431,9 +469,7 @@ function ListBody(props: { nodes: FileNode[]; onClick: (n: FileNode) => void }):
       <For each={props.nodes}>
         {(node) => {
           const c =
-            node.type === "directory"
-              ? "var(--color-text)"
-              : EXT_COLOR[ext(node.name)] ?? "var(--color-text-muted)"
+            node.type === "directory" ? "var(--color-text)" : (EXT_COLOR[ext(node.name)] ?? "var(--color-text-muted)")
           return (
             <button
               type="button"
@@ -448,7 +484,15 @@ function ListBody(props: { nodes: FileNode[]; onClick: (n: FileNode) => void }):
                   <IconFolder size={13} strokeWidth={1.5} />
                 </Show>
               </span>
-              <span style={{ flex: 1, "min-width": 0, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+              <span
+                style={{
+                  flex: 1,
+                  "min-width": 0,
+                  overflow: "hidden",
+                  "text-overflow": "ellipsis",
+                  "white-space": "nowrap",
+                }}
+              >
                 {node.name}
               </span>
               <span style={cell()}>{formatSize(node.size)}</span>
@@ -474,9 +518,7 @@ function GridBody(props: { nodes: FileNode[]; onClick: (n: FileNode) => void }):
       <For each={props.nodes}>
         {(node) => {
           const c =
-            node.type === "directory"
-              ? "var(--color-text)"
-              : EXT_COLOR[ext(node.name)] ?? "var(--color-text-muted)"
+            node.type === "directory" ? "var(--color-text)" : (EXT_COLOR[ext(node.name)] ?? "var(--color-text-muted)")
           return (
             <button
               type="button"
@@ -491,7 +533,15 @@ function GridBody(props: { nodes: FileNode[]; onClick: (n: FileNode) => void }):
                   <IconFolder size={22} strokeWidth={1.3} />
                 </Show>
               </span>
-              <span style={{ width: "100%", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap", "text-align": "center" }}>
+              <span
+                style={{
+                  width: "100%",
+                  overflow: "hidden",
+                  "text-overflow": "ellipsis",
+                  "white-space": "nowrap",
+                  "text-align": "center",
+                }}
+              >
                 {node.name}
               </span>
             </button>
@@ -531,7 +581,11 @@ function ArtifactsPanel(): JSX.Element {
     <div class="thesis-scroll" style={{ flex: 1, "min-height": 0, "overflow-y": "auto", padding: "8px 4px" }}>
       <Show
         when={(data.latest ?? []).length > 0}
-        fallback={<div style={emptyMsg()}>{data.loading ? "loading artifacts…" : "no artifacts yet · attach a file to seed one"}</div>}
+        fallback={
+          <div style={emptyMsg()}>
+            {data.loading ? "loading artifacts…" : "no artifacts yet · attach a file to seed one"}
+          </div>
+        }
       >
         <div style={colHeader()}>
           <span style={{ width: "60px" }}>Kind</span>
@@ -541,10 +595,26 @@ function ArtifactsPanel(): JSX.Element {
         <For each={data.latest ?? []}>
           {(r) => (
             <div style={{ ...row(false), cursor: "default" }}>
-              <span style={{ width: "60px", "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-text-faint)", "flex-shrink": 0 }}>
+              <span
+                style={{
+                  width: "60px",
+                  "font-family": FONT_MONO,
+                  "font-size": "10px",
+                  color: "var(--color-text-faint)",
+                  "flex-shrink": 0,
+                }}
+              >
                 {r.artifact.kind ?? "—"}
               </span>
-              <span style={{ flex: 1, "min-width": 0, overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+              <span
+                style={{
+                  flex: 1,
+                  "min-width": 0,
+                  overflow: "hidden",
+                  "text-overflow": "ellipsis",
+                  "white-space": "nowrap",
+                }}
+              >
                 {r.artifact.name ?? r.artifact.uri ?? "?"}
               </span>
               <span style={{ ...cell(), width: "120px", color: "var(--color-text-muted)" }}>

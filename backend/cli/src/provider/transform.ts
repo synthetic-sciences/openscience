@@ -549,8 +549,7 @@ export namespace ProviderTransform {
         // `thinking.type.enabled`. They use `thinking.type.adaptive` plus
         // `output_config.effort`. Detect by canonical id.
         const usesAdaptiveThinking =
-          /^claude-(opus|sonnet|haiku)-4-[7-9]\b/.test(id) ||
-          /^claude-(opus|sonnet|haiku)-[5-9]\b/.test(id)
+          /^claude-(opus|sonnet|haiku)-4-[7-9]\b/.test(id) || /^claude-(opus|sonnet|haiku)-[5-9]\b/.test(id)
 
         if (usesAdaptiveThinking) {
           // Opus 4.7+ uses adaptive thinking driven by `output_config.effort`.

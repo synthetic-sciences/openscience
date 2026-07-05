@@ -87,9 +87,8 @@ export const ensembl: Connector = {
 
   async fetch(id, opts) {
     const stable = id.trim()
-    return getJSON<Rec>(
-      `${REST}/lookup/id/${encodeURIComponent(stable)}?expand=1&content-type=application/json`,
-      { signal: opts?.signal },
-    )
+    return getJSON<Rec>(`${REST}/lookup/id/${encodeURIComponent(stable)}?expand=1&content-type=application/json`, {
+      signal: opts?.signal,
+    })
   },
 }

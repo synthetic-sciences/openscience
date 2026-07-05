@@ -5,13 +5,7 @@ import { Icon } from "@synsci/ui/icon"
 import { IconButton } from "@synsci/ui/icon-button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
-import {
-  SETTINGS_PANELS,
-  SETTINGS_SECTIONS,
-  DEFAULT_PANEL,
-  findPanel,
-  type SettingsPanelId,
-} from "./settings/registry"
+import { SETTINGS_PANELS, SETTINGS_SECTIONS, DEFAULT_PANEL, findPanel, type SettingsPanelId } from "./settings/registry"
 import { SettingsNavContext } from "./settings/nav"
 
 // Scoped to the settings dialog only. Reshapes shared primitives (Switch,
@@ -96,12 +90,7 @@ export const DialogSettings: Component = () => {
   const forward = () => canForward() && setCursor(cursor() + 1)
 
   return (
-    <Dialog
-      size="x-large"
-      transition
-      class="settings-dialog"
-      classList={{ "settings-expanded": expanded() }}
-    >
+    <Dialog size="x-large" transition class="settings-dialog" classList={{ "settings-expanded": expanded() }}>
       <style>{SETTINGS_STYLES}</style>
       <div class="flex h-full w-full">
         {/* ── Left rail ── */}
@@ -110,9 +99,7 @@ export const DialogSettings: Component = () => {
             <For each={SETTINGS_SECTIONS}>
               {(section) => (
                 <div class="flex flex-col gap-1">
-                  <span class="px-2.5 pb-1 thesis-section-label">
-                    {section.label}
-                  </span>
+                  <span class="px-2.5 pb-1 thesis-section-label">{section.label}</span>
                   <For each={SETTINGS_PANELS.filter((p) => p.section === section.id)}>
                     {(panel) => (
                       <button
@@ -146,13 +133,7 @@ export const DialogSettings: Component = () => {
           {/* Header */}
           <header class="flex items-center justify-between gap-2 min-h-[52px] px-3 border-b border-border-weak-base flex-shrink-0">
             <div class="flex items-center gap-1 min-w-0">
-              <IconButton
-                icon="arrow-left"
-                variant="ghost"
-                disabled={!canBack()}
-                onClick={back}
-                aria-label="Back"
-              />
+              <IconButton icon="arrow-left" variant="ghost" disabled={!canBack()} onClick={back} aria-label="Back" />
               <IconButton
                 icon="arrow-right"
                 variant="ghost"
@@ -169,12 +150,7 @@ export const DialogSettings: Component = () => {
                 onClick={() => setExpanded((v) => !v)}
                 aria-label={expanded() ? "Collapse" : "Expand"}
               />
-              <IconButton
-                icon="close"
-                variant="ghost"
-                onClick={() => dialog.close()}
-                aria-label="Close"
-              />
+              <IconButton icon="close" variant="ghost" onClick={() => dialog.close()} aria-label="Close" />
             </div>
           </header>
 

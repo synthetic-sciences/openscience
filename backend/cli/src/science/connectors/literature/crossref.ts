@@ -46,9 +46,7 @@ function year(w: Work): number | undefined {
 }
 
 function authors(w: Work): string | undefined {
-  const names = (w.author ?? [])
-    .map((a) => a.name ?? [a.given, a.family].filter(Boolean).join(" "))
-    .filter(Boolean)
+  const names = (w.author ?? []).map((a) => a.name ?? [a.given, a.family].filter(Boolean).join(" ")).filter(Boolean)
   if (names.length === 0) return undefined
   return names.length > 4 ? `${names.slice(0, 4).join(", ")} et al.` : names.join(", ")
 }
@@ -57,7 +55,7 @@ function toHit(w: Work): ConnectorHit {
   const meta = [authors(w), w["container-title"]?.[0], year(w)].filter(Boolean).join(". ")
   return {
     id: w.DOI ?? "",
-    title: snippet([w.title?.[0], w.subtitle?.[0]].filter(Boolean).join(": "), 300) ?? (w.DOI ?? "Untitled"),
+    title: snippet([w.title?.[0], w.subtitle?.[0]].filter(Boolean).join(": "), 300) ?? w.DOI ?? "Untitled",
     summary: snippet(w.abstract) ?? (meta.length ? meta : undefined),
     url: w.URL ?? (w.DOI ? `https://doi.org/${w.DOI}` : undefined),
     score: typeof w.score === "number" ? w.score : undefined,

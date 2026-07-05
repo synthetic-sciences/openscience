@@ -84,9 +84,7 @@ export const gtex: Connector = {
     // Resolve to a versioned gencodeId when the caller passed a symbol/entrez id.
     const isGencode = /^ENSG\d+/i.test(trimmed)
     const genes = await lookupGene(trimmed, 5, opts?.signal)
-    const gene = isGencode
-      ? genes.find((g) => g.gencodeId?.startsWith(trimmed.split(".")[0])) ?? genes[0]
-      : genes[0]
+    const gene = isGencode ? (genes.find((g) => g.gencodeId?.startsWith(trimmed.split(".")[0])) ?? genes[0]) : genes[0]
     const gencodeId = gene?.gencodeId ?? (isGencode ? trimmed : undefined)
     if (!gencodeId) return { id: trimmed, found: false }
     const median = await getJSON<GtexMedianResponse>(

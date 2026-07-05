@@ -80,8 +80,9 @@ export namespace Review {
     return edges
       .filter((e) => e.to === target && (e.relation === "refutes" || e.relation === "supports"))
       .map((e) => ({ finding: byId.get(e.from), relation: e.relation }))
-      .filter((r): r is { finding: Node; relation: Edge["relation"] } =>
-        Boolean(r.finding) && (r.finding!.meta as Record<string, unknown> | undefined)?.review === true,
+      .filter(
+        (r): r is { finding: Node; relation: Edge["relation"] } =>
+          Boolean(r.finding) && (r.finding!.meta as Record<string, unknown> | undefined)?.review === true,
       )
   }
 }

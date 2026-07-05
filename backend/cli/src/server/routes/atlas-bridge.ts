@@ -29,7 +29,11 @@ const EMPTY_GITHUB = { connected: false }
 /** Deterministic local placeholder id for unauthenticated callers — lets
  *  the SPA cache a project/session mapping without minting real Atlas state. */
 function stubNodeId(seed: string): string {
-  return `stub-${crypto.createHash("sha256").update(seed || "stub").digest("hex").slice(0, 24)}`
+  return `stub-${crypto
+    .createHash("sha256")
+    .update(seed || "stub")
+    .digest("hex")
+    .slice(0, 24)}`
 }
 
 function nodeIdOf(data: any): string | null {
@@ -127,7 +131,14 @@ async function repoContext(directory: string) {
       host = new URL(repo).hostname
     } catch {}
   }
-  return { ...empty, repo_url: repo, branch_name: branch || null, head_commit_sha: head || null, origin_host: host, updated_by: user || null }
+  return {
+    ...empty,
+    repo_url: repo,
+    branch_name: branch || null,
+    head_commit_sha: head || null,
+    origin_host: host,
+    updated_by: user || null,
+  }
 }
 
 /** Non-2xx backend answer, carrying enough to classify WHY it failed. */
@@ -185,7 +196,10 @@ export function computeDedupeKey(directory: string, repoUrl: string | null): str
   if (repoUrl) {
     try {
       const u = new URL(repoUrl)
-      const segments = u.pathname.replace(/^\/+/, "").replace(/\.git$/, "").split("/")
+      const segments = u.pathname
+        .replace(/^\/+/, "")
+        .replace(/\.git$/, "")
+        .split("/")
       const owner = segments.shift()
       const name = segments.join("/")
       if (owner && name) return `repo:${u.hostname}/${owner}/${name}`
@@ -528,7 +542,12 @@ export const AtlasBridgeRoutes = lazy(() =>
       return c.json({
         project_id: result.projectId,
         ...(result.failure
-          ? { error: result.failure.kind, status: result.failure.status, message: result.failure.message, host: result.failure.host }
+          ? {
+              error: result.failure.kind,
+              status: result.failure.status,
+              message: result.failure.message,
+              host: result.failure.host,
+            }
           : {}),
       })
     })

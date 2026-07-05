@@ -55,9 +55,7 @@ const create = (input: { name: string; path: string }): Project => {
 }
 
 const open = (id: string) => {
-  setProjects((prev) =>
-    prev.map((p) => (p.id === id ? { ...p, last_opened_at: new Date().toISOString() } : p)),
-  )
+  setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, last_opened_at: new Date().toISOString() } : p)))
   setActiveId(id)
 }
 
@@ -73,9 +71,7 @@ const update = (id: string, patch: Partial<Project>) => {
 }
 
 const incrementSessionCount = (id: string) => {
-  setProjects((prev) =>
-    prev.map((p) => (p.id === id ? { ...p, session_count: p.session_count + 1 } : p)),
-  )
+  setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, session_count: p.session_count + 1 } : p)))
 }
 
 export const projectsStore = {

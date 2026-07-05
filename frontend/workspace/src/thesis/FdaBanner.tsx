@@ -63,7 +63,9 @@ export function FdaChip(): JSX.Element {
   onMount(() => {
     setTimeout(() => {
       if (probe()?.fda && !dismissed()) {
-        try { localStorage.setItem(DISMISS_KEY, "1") } catch {}
+        try {
+          localStorage.setItem(DISMISS_KEY, "1")
+        } catch {}
         setDismissed(true)
       }
     }, 800)
@@ -73,14 +75,18 @@ export function FdaChip(): JSX.Element {
     setRefreshKey((k) => k + 1)
     const r = await refetch()
     if (r?.fda) {
-      try { localStorage.setItem(DISMISS_KEY, "1") } catch {}
+      try {
+        localStorage.setItem(DISMISS_KEY, "1")
+      } catch {}
       setDismissed(true)
       dialog.close()
     }
   }
 
   const dismiss = () => {
-    try { localStorage.setItem(DISMISS_KEY, "1") } catch {}
+    try {
+      localStorage.setItem(DISMISS_KEY, "1")
+    } catch {}
     setDismissed(true)
   }
 

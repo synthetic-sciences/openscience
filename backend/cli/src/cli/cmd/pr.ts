@@ -60,7 +60,6 @@ export const PrCommand = cmd({
               const headRefName = prInfo.headRefName
               await $`git branch --set-upstream-to=${remoteName}/${headRefName} ${localBranchName}`.nothrow()
             }
-
           }
         }
 

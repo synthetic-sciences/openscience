@@ -33,10 +33,14 @@ export const IconCpu = (p: IconProps): JSX.Element => (
   <svg xmlns="http://www.w3.org/2000/svg" {...baseProps(p)}>
     <rect width="16" height="16" x="4" y="4" rx="2" />
     <rect width="6" height="6" x="9" y="9" rx="1" />
-    <path d="M15 2v2" /><path d="M15 20v2" />
-    <path d="M9 2v2" /><path d="M9 20v2" />
-    <path d="M2 15h2" /><path d="M2 9h2" />
-    <path d="M20 15h2" /><path d="M20 9h2" />
+    <path d="M15 2v2" />
+    <path d="M15 20v2" />
+    <path d="M9 2v2" />
+    <path d="M9 20v2" />
+    <path d="M2 15h2" />
+    <path d="M2 9h2" />
+    <path d="M20 15h2" />
+    <path d="M20 9h2" />
   </svg>
 )
 
@@ -51,7 +55,8 @@ export const IconFolderTree = (p: IconProps): JSX.Element => (
   <svg xmlns="http://www.w3.org/2000/svg" {...baseProps(p)}>
     <path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z" />
     <path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z" />
-    <path d="M3 5a2 2 0 0 0 2 2h3" /><path d="M3 3v13a2 2 0 0 0 2 2h3" />
+    <path d="M3 5a2 2 0 0 0 2 2h3" />
+    <path d="M3 3v13a2 2 0 0 0 2 2h3" />
   </svg>
 )
 
@@ -66,7 +71,8 @@ export const IconRefresh = (p: IconProps): JSX.Element => (
 
 export const IconPlus = (p: IconProps): JSX.Element => (
   <svg xmlns="http://www.w3.org/2000/svg" {...baseProps(p)}>
-    <path d="M5 12h14" /><path d="M12 5v14" />
+    <path d="M5 12h14" />
+    <path d="M12 5v14" />
   </svg>
 )
 
@@ -90,19 +96,22 @@ export const IconChevronLeft = (p: IconProps): JSX.Element => (
 
 export const IconX = (p: IconProps): JSX.Element => (
   <svg xmlns="http://www.w3.org/2000/svg" {...baseProps(p)}>
-    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
   </svg>
 )
 
 export const IconArrowUp = (p: IconProps): JSX.Element => (
   <svg xmlns="http://www.w3.org/2000/svg" {...baseProps(p)}>
-    <path d="m5 12 7-7 7 7" /><path d="M12 19V5" />
+    <path d="m5 12 7-7 7 7" />
+    <path d="M12 19V5" />
   </svg>
 )
 
 export const IconArrowRight = (p: IconProps): JSX.Element => (
   <svg xmlns="http://www.w3.org/2000/svg" {...baseProps(p)}>
-    <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+    <path d="M5 12h14" />
+    <path d="m12 5 7 7-7 7" />
   </svg>
 )
 
@@ -128,7 +137,8 @@ export const IconHome = (p: IconProps): JSX.Element => (
 
 export const IconFlask = (p: IconProps): JSX.Element => (
   <svg xmlns="http://www.w3.org/2000/svg" {...baseProps(p)}>
-    <path d="M10 2v7.31" /><path d="M14 9.3V1.99" />
+    <path d="M10 2v7.31" />
+    <path d="M14 9.3V1.99" />
     <path d="M8.5 2h7" />
     <path d="M14 9.3a6.5 6.5 0 1 1-4 0" />
   </svg>
@@ -158,8 +168,10 @@ export const IconUpload = (p: IconProps): JSX.Element => (
 export const IconSparkles = (p: IconProps): JSX.Element => (
   <svg xmlns="http://www.w3.org/2000/svg" {...baseProps(p)}>
     <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
-    <path d="M20 3v4" /><path d="M22 5h-4" />
-    <path d="M4 17v2" /><path d="M5 18H3" />
+    <path d="M20 3v4" />
+    <path d="M22 5h-4" />
+    <path d="M4 17v2" />
+    <path d="M5 18H3" />
   </svg>
 )
 
@@ -258,10 +270,14 @@ export const IconMoon = (p: IconProps): JSX.Element => (
 export const IconSun = (p: IconProps): JSX.Element => (
   <svg xmlns="http://www.w3.org/2000/svg" {...baseProps(p)}>
     <circle cx="12" cy="12" r="4" />
-    <path d="M12 2v2" /><path d="M12 20v2" />
-    <path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" />
-    <path d="M2 12h2" /><path d="M20 12h2" />
-    <path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
+    <path d="M12 2v2" />
+    <path d="M12 20v2" />
+    <path d="m4.93 4.93 1.41 1.41" />
+    <path d="m17.66 17.66 1.41 1.41" />
+    <path d="M2 12h2" />
+    <path d="M20 12h2" />
+    <path d="m6.34 17.66-1.41 1.41" />
+    <path d="m19.07 4.93-1.41 1.41" />
   </svg>
 )
 

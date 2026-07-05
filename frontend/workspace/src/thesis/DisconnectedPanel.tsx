@@ -37,7 +37,9 @@ export function DisconnectedPanel(): JSX.Element {
           }}
         />
         <div style={{ flex: 1, "min-width": 0 }}>
-          <div style={{ "font-family": FONT_SANS, "font-size": "12.5px", "font-weight": 500, color: "var(--color-text)" }}>
+          <div
+            style={{ "font-family": FONT_SANS, "font-size": "12.5px", "font-weight": 500, color: "var(--color-text)" }}
+          >
             Can't reach your local OpenScience server
           </div>
           <div

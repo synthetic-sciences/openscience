@@ -412,7 +412,8 @@ export const RKernelTool = Tool.define("rkernel", {
     // Degrade gracefully when R is not installed.
     const bin = await findRscript()
     if (!bin) {
-      const msg = "Rscript not found. Install R from https://www.r-project.org (or `brew install r`) so `Rscript` is on PATH."
+      const msg =
+        "Rscript not found. Install R from https://www.r-project.org (or `brew install r`) so `Rscript` is on PATH."
       ctx.metadata({ metadata: { output: msg, ok: false } })
       return { title: "R kernel unavailable", output: msg, metadata: { ok: false, available: false, output: msg } }
     }

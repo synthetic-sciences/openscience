@@ -113,9 +113,7 @@ export namespace Provenance {
   /** Link two existing nodes with a typed edge. */
   export async function link(edge: Edge): Promise<Edge> {
     const graph = await load()
-    const exists = graph.edges.some(
-      (e) => e.from === edge.from && e.to === edge.to && e.relation === edge.relation,
-    )
+    const exists = graph.edges.some((e) => e.from === edge.from && e.to === edge.to && e.relation === edge.relation)
     if (!exists) graph.edges.push(edge)
     await save(graph)
     return edge

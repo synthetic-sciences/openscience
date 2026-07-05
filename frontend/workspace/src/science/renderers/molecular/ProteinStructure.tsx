@@ -80,7 +80,11 @@ function narrow(data: unknown, kind: string): Source | undefined {
   if (typeof inline === "string") return { raw: inline, format: explicit ?? fallback }
   if (typeof d.url === "string") {
     const guess = formatFromUrl(d.url)
-    return { url: d.url, format: explicit ?? guess?.format ?? (kind === "chem-3d" ? "sdf" : "mmcif"), binary: guess?.binary }
+    return {
+      url: d.url,
+      format: explicit ?? guess?.format ?? (kind === "chem-3d" ? "sdf" : "mmcif"),
+      binary: guess?.binary,
+    }
   }
   if (typeof d.id === "string") return { url: rcsbUrl(d.id), format: "mmcif" }
   if (typeof d.pdbId === "string") return { url: rcsbUrl(d.pdbId as string), format: "mmcif" }

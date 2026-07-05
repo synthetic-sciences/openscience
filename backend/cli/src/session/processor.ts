@@ -300,23 +300,23 @@ export namespace SessionProcessor {
                   const usageResult = !shouldReportUsage(credentialSource)
                     ? null
                     : await OpenScience.reportUsage({
-                    service: "llm",
-                    event_type: "chat",
-                    model: input.model.id,
-                    tokens_used: (usage.tokens.input + usage.tokens.output + usage.tokens.reasoning),
-                    metadata: {
-                      provider: input.model.providerID,
-                      input_tokens: usage.tokens.input,
-                      output_tokens: usage.tokens.output,
-                      reasoning_tokens: usage.tokens.reasoning,
-                      cache_read: usage.tokens.cache.read,
-                      cache_write: usage.tokens.cache.write,
-                      cost_usd: usage.cost,
-                      session_id: input.sessionID,
-                      message_id: input.assistantMessage.id,
-                      idempotency_key: stepPartID,
-                    },
-                  })
+                        service: "llm",
+                        event_type: "chat",
+                        model: input.model.id,
+                        tokens_used: usage.tokens.input + usage.tokens.output + usage.tokens.reasoning,
+                        metadata: {
+                          provider: input.model.providerID,
+                          input_tokens: usage.tokens.input,
+                          output_tokens: usage.tokens.output,
+                          reasoning_tokens: usage.tokens.reasoning,
+                          cache_read: usage.tokens.cache.read,
+                          cache_write: usage.tokens.cache.write,
+                          cost_usd: usage.cost,
+                          session_id: input.sessionID,
+                          message_id: input.assistantMessage.id,
+                          idempotency_key: stepPartID,
+                        },
+                      })
                   if (usageResult && "modelBlocked" in usageResult) {
                     log.warn("model blocked by server — halting session", { model: input.model.id })
                     // Hard stop. The user is out of credits (managed

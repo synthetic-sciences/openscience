@@ -962,7 +962,12 @@ describe("ProviderTransform.message - unsupported file attachments", () => {
         role: "user",
         content: [
           { type: "text", text: "hey" },
-          { type: "file", mediaType: "application/x-x509-ca-cert", filename: "key.pem", data: `data:application/x-x509-ca-cert;base64,${b64(pem)}` },
+          {
+            type: "file",
+            mediaType: "application/x-x509-ca-cert",
+            filename: "key.pem",
+            data: `data:application/x-x509-ca-cert;base64,${b64(pem)}`,
+          },
         ],
       },
     ] as any[]
@@ -997,7 +1002,14 @@ describe("ProviderTransform.message - unsupported file attachments", () => {
     const msgs = [
       {
         role: "user",
-        content: [{ type: "file", mediaType: "application/pdf", filename: "doc.pdf", data: `data:application/pdf;base64,${b64("%PDF-1.4 fake")}` }],
+        content: [
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            filename: "doc.pdf",
+            data: `data:application/pdf;base64,${b64("%PDF-1.4 fake")}`,
+          },
+        ],
       },
     ] as any[]
 

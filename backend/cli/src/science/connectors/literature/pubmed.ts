@@ -64,10 +64,9 @@ export const pubmed: Connector = {
     const ids = esearch.esearchresult?.idlist ?? []
     if (ids.length === 0) return []
 
-    const esummary = await getJSON<ESummary>(
-      `${BASE}/esummary.fcgi?db=pubmed&retmode=json&id=${ids.join(",")}`,
-      { signal: opts?.signal },
-    )
+    const esummary = await getJSON<ESummary>(`${BASE}/esummary.fcgi?db=pubmed&retmode=json&id=${ids.join(",")}`, {
+      signal: opts?.signal,
+    })
     const result = esummary.result ?? {}
     return ids
       .map((id) => result[id])
@@ -83,17 +82,15 @@ export const pubmed: Connector = {
 
   async fetch(id, opts) {
     const clean = id.replace(/[^0-9]/g, "")
-    const esummary = await getJSON<ESummary>(
-      `${BASE}/esummary.fcgi?db=pubmed&retmode=json&id=${clean}`,
-      { signal: opts?.signal },
-    )
+    const esummary = await getJSON<ESummary>(`${BASE}/esummary.fcgi?db=pubmed&retmode=json&id=${clean}`, {
+      signal: opts?.signal,
+    })
     const record = esummary.result?.[clean]
     const summary = record && !Array.isArray(record) ? record : undefined
 
-    const abstract = await getText(
-      `${BASE}/efetch.fcgi?db=pubmed&rettype=abstract&retmode=text&id=${clean}`,
-      { signal: opts?.signal },
-    ).catch(() => undefined)
+    const abstract = await getText(`${BASE}/efetch.fcgi?db=pubmed&rettype=abstract&retmode=text&id=${clean}`, {
+      signal: opts?.signal,
+    }).catch(() => undefined)
 
     return {
       pmid: clean,

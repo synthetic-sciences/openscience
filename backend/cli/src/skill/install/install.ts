@@ -39,10 +39,7 @@ function installedDir(): string {
 export namespace Install {
   /** Add skill(s) from a git URL. Local-first: writes to disk, then
    *  uploads. Throws on unrecoverable error (URL invalid, no skills, etc.). */
-  export async function add(
-    url: string,
-    options: InstallOptions = {},
-  ): Promise<InstallResult> {
+  export async function add(url: string, options: InstallOptions = {}): Promise<InstallResult> {
     const confirm = options.confirm ?? true
     const progress = options.progress ?? Progress.silent()
     const skipClassifier = options.skipClassifier ?? false
@@ -56,22 +53,18 @@ export namespace Install {
 
       // Layer 1
       const l1 = runtimeRegexPass(manifest)
-      let surviving = manifest.filter(
-        s => !l1.rejected.find(r => r.name === s.name),
-      )
+      let surviving = manifest.filter((s) => !l1.rejected.find((r) => r.name === s.name))
 
       // Layer 2
       const l2 = classifierInjectionRegexPass(surviving)
-      surviving = surviving.filter(
-        s => !l2.rejected.find(r => r.name === s.name),
-      )
+      surviving = surviving.filter((s) => !l2.rejected.find((r) => r.name === s.name))
 
       // Layer 3 (server-side) — skipped when --skip-classifier is set.
       const reasoningByName: Record<string, string> = {}
       const classifierRejected: Rejection[] = []
       if (!skipClassifier && surviving.length > 0) {
         const review = await OpenScience.requestSkillReview(
-          surviving.map(s => ({
+          surviving.map((s) => ({
             namespace: s.namespace,
             name: s.name,
             description: s.description,
@@ -82,7 +75,7 @@ export namespace Install {
         if (!review) {
           throw new Error(
             "Layer-3 classifier unreachable. Aborting install. " +
-            "(Pass --skip-classifier to bypass at your own risk.)",
+              "(Pass --skip-classifier to bypass at your own risk.)",
           )
         }
         for (const r of review.per_skill) {
@@ -94,9 +87,7 @@ export namespace Install {
             })
           }
         }
-        surviving = surviving.filter(
-          s => !classifierRejected.find(r => r.name === s.name),
-        )
+        surviving = surviving.filter((s) => !classifierRejected.find((r) => r.name === s.name))
       }
 
       // Layer 4
@@ -106,10 +97,7 @@ export namespace Install {
 
       const rejected = [...l1.rejected, ...l2.rejected, ...classifierRejected]
 
-      if (
-        confirm &&
-        !(await confirmInteractive(parsed, sha, surviving, l4.warnings, reasoningByName))
-      ) {
+      if (confirm && !(await confirmInteractive(parsed, sha, surviving, l4.warnings, reasoningByName))) {
         return {
           installed: [],
           rejected,
@@ -129,10 +117,7 @@ export namespace Install {
         // Persist the repo's entry manifest (or absence thereof) so the
         // loader can filter user-facing skills from internal helpers.
         if (entries !== null) {
-          await fs.writeFile(
-            path.join(nsDir, "openscience-skills.json"),
-            JSON.stringify({ entries }, null, 2),
-          )
+          await fs.writeFile(path.join(nsDir, "openscience-skills.json"), JSON.stringify({ entries }, null, 2))
         }
         for (const skill of surviving) {
           const skillDir = path.join(skillsDir, skill.name)
@@ -149,7 +134,7 @@ export namespace Install {
             await fs.writeFile(target, f.content)
           }
 
-          const warningsForSkill = l4.warnings.filter(w => w.name === skill.name)
+          const warningsForSkill = l4.warnings.filter((w) => w.name === skill.name)
           const verdict: "pass" | "warn" = warningsForSkill.length ? "warn" : "pass"
           if (!skipClassifier) {
             // Pointer-only upload — the backend stores the install ledger
@@ -167,7 +152,9 @@ export namespace Install {
                 reasoning: reasoningByName[skill.name] ?? "",
                 warnings: warningsForSkill,
               },
-            }).catch(() => { /* swallow — disk is canonical */ })
+            }).catch(() => {
+              /* swallow — disk is canonical */
+            })
           }
           installed.push({ namespace: skill.namespace, name: skill.name, verdict })
         }
@@ -203,7 +190,10 @@ export namespace Install {
     if (name) {
       // Plugin layout: skill dir lives at <ns>/skills/<name>
       const dir = path.join(root, namespace, "skills", name)
-      const existedLocally = await fs.stat(dir).then(() => true).catch(() => false)
+      const existedLocally = await fs
+        .stat(dir)
+        .then(() => true)
+        .catch(() => false)
       await fs.rm(dir, { recursive: true, force: true }).catch(() => {})
       const ok = await OpenScience.deleteInstalledSkill(namespace, name).catch(() => false)
       return { archived: ok || existedLocally ? 1 : 0 }
@@ -214,17 +204,17 @@ export namespace Install {
     try {
       const entries = await fs.readdir(path.join(dir, "skills"))
       localCount = entries.length
-    } catch { /* skills/ subdir absent */ }
+    } catch {
+      /* skills/ subdir absent */
+    }
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {})
     const result = await OpenScience.deleteInstalledNamespace(namespace).catch(() => null)
     return { archived: Math.max(result?.archived ?? 0, localCount) }
   }
 
-  export async function list(): Promise<
-    { namespace: string; name: string; description: string; verdict: string }[]
-  > {
+  export async function list(): Promise<{ namespace: string; name: string; description: string; verdict: string }[]> {
     const rows = await OpenScience.fetchInstalledSkills()
-    return (rows ?? []).map(r => ({
+    return (rows ?? []).map((r) => ({
       namespace: r.namespace,
       name: r.name,
       description: r.description,
@@ -249,7 +239,7 @@ async function confirmInteractive(
   process.stdout.write(header)
   for (const skill of surviving) {
     process.stdout.write(`  ${skill.name.padEnd(22)} ${skill.description}\n`)
-    const ws = warnings.filter(w => w.name === skill.name)
+    const ws = warnings.filter((w) => w.name === skill.name)
     for (const w of ws) {
       process.stdout.write(`    ⚠ ${w.file}:${w.line}  contains \`${w.pattern}\`\n`)
     }
@@ -257,15 +247,13 @@ async function confirmInteractive(
       process.stdout.write(`    Reasoning: ${reasoningByName[skill.name]}\n`)
     }
   }
-  process.stdout.write(
-    `\n${surviving.length} skill(s) will be added. Proceed? [y/N] `,
-  )
+  process.stdout.write(`\n${surviving.length} skill(s) will be added. Proceed? [y/N] `)
   const answer = await readSingleLine()
   return /^y(es)?$/i.test(answer.trim())
 }
 
 async function readSingleLine(): Promise<string> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     let buf = ""
     process.stdin.setEncoding("utf-8")
     const onData = (chunk: string) => {

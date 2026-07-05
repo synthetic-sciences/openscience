@@ -81,13 +81,27 @@ async function status(directory) {
   if (!directory) throw new Error("directory required")
   await git(["rev-parse", "--is-inside-work-tree"], directory)
   const [branch, remote, upstream, porcelain, userName, userEmail, head] = await Promise.all([
-    git(["branch", "--show-current"], directory).then((x) => x.out).catch(() => ""),
-    git(["config", "--get", "remote.origin.url"], directory).then((x) => x.out).catch(() => ""),
-    git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], directory).then((x) => x.out).catch(() => ""),
-    git(["status", "--porcelain=v1", "--branch"], directory).then((x) => x.out).catch(() => ""),
-    git(["config", "user.name"], directory).then((x) => x.out).catch(() => ""),
-    git(["config", "user.email"], directory).then((x) => x.out).catch(() => ""),
-    git(["rev-parse", "--short", "HEAD"], directory).then((x) => x.out).catch(() => ""),
+    git(["branch", "--show-current"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["config", "--get", "remote.origin.url"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["status", "--porcelain=v1", "--branch"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["config", "user.name"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["config", "user.email"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["rev-parse", "--short", "HEAD"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
   ])
   const aheadBehind = upstream
     ? await git(["rev-list", "--left-right", "--count", "HEAD...@{u}"], directory)
@@ -143,7 +157,9 @@ async function remote(directory, url) {
   if (!directory) throw new Error("directory required")
   const value = String(url ?? "").trim()
   if (!value) throw new Error("remote URL required")
-  const hasOrigin = await git(["remote", "get-url", "origin"], directory).then(() => true).catch(() => false)
+  const hasOrigin = await git(["remote", "get-url", "origin"], directory)
+    .then(() => true)
+    .catch(() => false)
   await git(hasOrigin ? ["remote", "set-url", "origin", value] : ["remote", "add", "origin", value], directory)
   return await status(directory)
 }

@@ -15,7 +15,14 @@ export function AgentIcon(props: AgentIconProps): JSX.Element {
   return (
     <span
       class={`thesis-agent-orbit ${props.class ?? ""}`.trim()}
-      style={{ width: `${size()}px`, height: `${size()}px`, display: "inline-flex", "align-items": "center", "justify-content": "center", ...(props.style ?? {}) }}
+      style={{
+        width: `${size()}px`,
+        height: `${size()}px`,
+        display: "inline-flex",
+        "align-items": "center",
+        "justify-content": "center",
+        ...(props.style ?? {}),
+      }}
       aria-hidden="true"
     >
       <svg

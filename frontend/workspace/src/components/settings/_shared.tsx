@@ -171,9 +171,7 @@ export const AddMenu: Component<{ label: string; items: AddItem[] }> = (props) =
   </DropdownMenu>
 )
 
-export const Toolbar: ParentComponent = (props) => (
-  <div class="flex items-center gap-2 flex-wrap">{props.children}</div>
-)
+export const Toolbar: ParentComponent = (props) => <div class="flex items-center gap-2 flex-wrap">{props.children}</div>
 
 // A small labelled text/textarea field used by the inline creation forms.
 export const FormField: Component<{

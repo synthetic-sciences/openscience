@@ -89,9 +89,13 @@ export const ProvenanceQueryTool = Tool.define("provenance_query", {
     const edgeRows = edges.map((e) => `- ${e.from} --${e.relation}--> ${e.to}`)
     return {
       title: `Lineage: ${params.id}`,
-      output: [`**Nodes** (${nodes.length}):`, nodeRows.join("\n"), "", `**Edges** (${edges.length}):`, edgeRows.join("\n")].join(
-        "\n",
-      ),
+      output: [
+        `**Nodes** (${nodes.length}):`,
+        nodeRows.join("\n"),
+        "",
+        `**Edges** (${edges.length}):`,
+        edgeRows.join("\n"),
+      ].join("\n"),
       metadata: { count: nodes.length, edges: edges.length },
     }
   },

@@ -29,7 +29,6 @@ const API_BASE = (
   "https://api.syntheticsciences.ai"
 ).replace(/\/+$/, "")
 
-
 const cache = new Map() // key -> { at: number, body: string, status: number }
 const CACHE_TTL_MS = 60_000
 
@@ -207,15 +206,11 @@ async function handle(req, res) {
       body = JSON.stringify(await atlasFetch("GET", "/api/v1/nodes?root_only=true"))
     } else if (method === "GET" && /^graphs\/[\w-]+\/tree$/.test(path)) {
       const id = path.split("/")[1]
-      body = JSON.stringify(
-        await atlasFetch("GET", `/api/v1/nodes/${encodeURIComponent(id)}/tree?projection=full`),
-      )
+      body = JSON.stringify(await atlasFetch("GET", `/api/v1/nodes/${encodeURIComponent(id)}/tree?projection=full`))
     } else if (method === "GET" && /^nodes\/[\w-]+\/artifacts$/.test(path)) {
       const id = path.split("/")[1]
       try {
-        body = JSON.stringify(
-          await atlasFetch("GET", `/api/v1/nodes/${encodeURIComponent(id)}/artifacts`),
-        )
+        body = JSON.stringify(await atlasFetch("GET", `/api/v1/nodes/${encodeURIComponent(id)}/artifacts`))
       } catch {
         body = JSON.stringify({ artifacts: [], has_more: false })
       }

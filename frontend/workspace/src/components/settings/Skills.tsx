@@ -84,7 +84,9 @@ export default function Skills() {
     }
     return [
       { id: "all", label: "All", count: (skills() ?? []).length },
-      ...[...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([id, count]) => ({ id, label: id, count })),
+      ...[...counts.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([id, count]) => ({ id, label: id, count })),
     ]
   })
 
@@ -229,11 +231,7 @@ export default function Skills() {
                             <p class="text-12-regular text-text-weak truncate mt-0.5">{skill.description}</p>
                           </Show>
                         </div>
-                        <Switch
-                          checked={enabled(skill.name)}
-                          onChange={(v) => void toggle(skill.name, v)}
-                          hideLabel
-                        >
+                        <Switch checked={enabled(skill.name)} onChange={(v) => void toggle(skill.name, v)} hideLabel>
                           {skill.name}
                         </Switch>
                       </Row>
@@ -296,7 +294,11 @@ function ScratchForm(props: {
           placeholder="Step-by-step guidance, code examples, pitfalls…"
         />
         <div class="flex items-center gap-2">
-          <FormButton label={props.busy ? "creating…" : "create skill"} disabled={props.busy || !valid()} onClick={() => props.onCreate(name().trim(), description().trim(), body())} />
+          <FormButton
+            label={props.busy ? "creating…" : "create skill"}
+            disabled={props.busy || !valid()}
+            onClick={() => props.onCreate(name().trim(), description().trim(), body())}
+          />
           <FormButton label="cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
@@ -310,18 +312,17 @@ function GithubForm(props: { busy: boolean; onCancel: () => void; onInstall: (ur
     <div class="flex flex-col gap-4">
       <SectionLabel label="Import from GitHub" />
       <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[4px] bg-surface-base/40">
-        <FormField
-          label="Repository URL"
-          value={url()}
-          onInput={setUrl}
-          placeholder="https://github.com/owner/repo"
-        />
+        <FormField label="Repository URL" value={url()} onInput={setUrl} placeholder="https://github.com/owner/repo" />
         <p class="text-12-regular text-text-weak flex items-start gap-1.5">
           <Icon name="check-small" size="small" class="text-icon-weak-base mt-0.5" />
           Skills are fetched, screened by a multi-layer security review, and only installed if they pass.
         </p>
         <div class="flex items-center gap-2">
-          <FormButton label={props.busy ? "installing…" : "install"} disabled={props.busy || !url().trim()} onClick={() => props.onInstall(url().trim())} />
+          <FormButton
+            label={props.busy ? "installing…" : "install"}
+            disabled={props.busy || !url().trim()}
+            onClick={() => props.onInstall(url().trim())}
+          />
           <FormButton label="cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>

@@ -60,10 +60,7 @@ export function isCodexOAuthProvider(providerID: string): boolean {
  * Only "managed" is billable. Managed detection wins over OAuth/BYOK because a
  * synced proxy token can be attached to any provider id.
  */
-export async function resolveCredentialSource(
-  providerID: string,
-  _modelID: string,
-): Promise<CredentialSource> {
+export async function resolveCredentialSource(providerID: string, _modelID: string): Promise<CredentialSource> {
   // Explicit BYOK toggle: the user opted out of managed billing for LLM calls, so
   // classify as the user's own account (byok / oauth-free) and never fire the wallet
   // gate. The Atlas proxy still meters any managed key server-side, so this cannot

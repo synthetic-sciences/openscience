@@ -88,7 +88,10 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
 
   const parameters = z.object({
     name: z.string().optional().describe(`The skill name to load directly${hint}`),
-    category: z.string().optional().describe("Browse skills in a category (e.g., 'physics', 'chemistry', 'ml-training')"),
+    category: z
+      .string()
+      .optional()
+      .describe("Browse skills in a category (e.g., 'physics', 'chemistry', 'ml-training')"),
   })
 
   return {
@@ -131,13 +134,12 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
 
       if (!skill) {
         const names = await Skill.all().then((x) => x.map((s) => s.name))
-        const scored = names
-          .map((n) => ({ name: n, score: fuzzyScore(name, n) }))
-          .sort((a, b) => b.score - a.score)
+        const scored = names.map((n) => ({ name: n, score: fuzzyScore(name, n) })).sort((a, b) => b.score - a.score)
         const top = scored.slice(0, 5).filter((s) => s.score > 0)
-        const hint = top.length > 0
-          ? `Did you mean: ${top.map((s) => s.name).join(", ")}?`
-          : `Use skill(category="<category>") to browse ${names.length} available skills.`
+        const hint =
+          top.length > 0
+            ? `Did you mean: ${top.map((s) => s.name).join(", ")}?`
+            : `Use skill(category="<category>") to browse ${names.length} available skills.`
         throw new Error(`Skill "${name}" not found. ${hint}`)
       }
 

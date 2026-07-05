@@ -97,14 +97,7 @@ export namespace Network {
       id: "clinical-pharma",
       label: "Clinical & pharma",
       description: "Clinical trials, drug databases, and regulatory agencies.",
-      domains: [
-        "clinicaltrials.gov",
-        "go.drugbank.com",
-        "fda.gov",
-        "api.fda.gov",
-        "who.int",
-        "ema.europa.eu",
-      ],
+      domains: ["clinicaltrials.gov", "go.drugbank.com", "fda.gov", "api.fda.gov", "who.int", "ema.europa.eu"],
     },
   ]
 

@@ -40,7 +40,9 @@ export const DialogSelectModelUnpaid: Component = () => {
         <div class="text-14-medium text-text-base px-2.5">{language.t("dialog.model.unpaid.freeModels.title")}</div>
         <Show
           when={freeModels().length > 0}
-          fallback={<div class="text-12-regular text-text-weaker px-2.5">{language.t("dialog.model.unpaid.empty")}</div>}
+          fallback={
+            <div class="text-12-regular text-text-weaker px-2.5">{language.t("dialog.model.unpaid.empty")}</div>
+          }
         >
           <List
             class="[&_[data-slot=list-scroll]]:overflow-visible"

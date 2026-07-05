@@ -230,11 +230,7 @@ export namespace Project {
     }
   }
 
-  async function moveSessions(
-    fromBucket: string,
-    newProjectID: string,
-    keep: (session: Session.Info) => boolean,
-  ) {
+  async function moveSessions(fromBucket: string, newProjectID: string, keep: (session: Session.Info) => boolean) {
     const sessions = await Storage.list(["session", fromBucket]).catch(() => [])
     if (sessions.length === 0) return
 

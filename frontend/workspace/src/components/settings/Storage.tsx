@@ -107,7 +107,9 @@ export const Storage: Component = () => {
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
           <h2 class="text-16-medium text-text-strong">Storage</h2>
-          <p class="text-13-regular text-text-weak">Where OpenScience keeps data on disk, and how much space it uses.</p>
+          <p class="text-13-regular text-text-weak">
+            Where OpenScience keeps data on disk, and how much space it uses.
+          </p>
         </div>
       </div>
 
@@ -159,7 +161,14 @@ export const Storage: Component = () => {
           <Show
             when={usage() && usage()!.entries.length > 0}
             fallback={
-              <div class="text-12-regular text-text-weak" style={{ border: "1px dashed var(--color-border-strong)", "border-radius": "4px", padding: "14px 16px" }}>
+              <div
+                class="text-12-regular text-text-weak"
+                style={{
+                  border: "1px dashed var(--color-border-strong)",
+                  "border-radius": "4px",
+                  padding: "14px 16px",
+                }}
+              >
                 {usage() ? "Nothing stored yet." : "Loading…"}
               </div>
             }
@@ -175,8 +184,22 @@ export const Storage: Component = () => {
                       </span>
                       <span class="text-12-regular text-text-weak flex-shrink-0">{fmt(entry.bytes)}</span>
                     </div>
-                    <div style={{ height: "4px", "border-radius": "999px", background: "var(--color-border-weak-base, rgba(255,255,255,0.08))", overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${Math.max(2, (entry.bytes / maxBytes()) * 100)}%`, background: "var(--color-text-interactive-base, var(--color-text))", "border-radius": "999px" }} />
+                    <div
+                      style={{
+                        height: "4px",
+                        "border-radius": "999px",
+                        background: "var(--color-border-weak-base, rgba(255,255,255,0.08))",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${Math.max(2, (entry.bytes / maxBytes()) * 100)}%`,
+                          background: "var(--color-text-interactive-base, var(--color-text))",
+                          "border-radius": "999px",
+                        }}
+                      />
                     </div>
                   </div>
                 )}
@@ -189,7 +212,9 @@ export const Storage: Component = () => {
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
             <h3 class="text-13-medium text-text-weak tracking-wide">Cloud storage</h3>
-            <p class="text-12-regular text-text-weak">Object-storage buckets (S3, GCS, Azure) are configured through service credentials.</p>
+            <p class="text-12-regular text-text-weak">
+              Object-storage buckets (S3, GCS, Azure) are configured through service credentials.
+            </p>
           </div>
           <button type="button" onClick={() => navigate("credentials")} style={linkRowStyle()}>
             <span class="text-13-regular text-text-strong">manage cloud credentials</span>

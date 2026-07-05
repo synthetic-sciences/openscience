@@ -96,15 +96,11 @@ const cli = yargs(hideBin(process.argv))
     // Inject decrypted service credentials (settings ▸ Credentials) into the
     // process env so skills/tools/connectors actually use them. Dynamic import
     // keeps the credential route module out of every command's static graph.
-    await import("./server/routes/settings/credentials")
-      .then((m) => m.applyCredentialEnv())
-      .catch(() => {})
+    await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
 
     // Same for BYOK GPU provider keys (settings ▸ Compute) — decrypt and inject
     // under the canonical env var names the compute skills read.
-    await import("./server/routes/settings/compute")
-      .then((m) => m.ComputeSettings.applyComputeEnv())
-      .catch(() => {})
+    await import("./server/routes/settings/compute").then((m) => m.ComputeSettings.applyComputeEnv()).catch(() => {})
 
     // Retry any failed usage reports from previous sessions
     OpenScience.flushPendingUsage().catch(() => {})

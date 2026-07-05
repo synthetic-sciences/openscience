@@ -53,9 +53,7 @@ export const gtopdb: Connector = {
         id,
         title: l.name ?? (id ? `Ligand ${id}` : "(unnamed ligand)"),
         summary: summarize(l),
-        url: id
-          ? `https://www.guidetopharmacology.org/GRAC/LigandDisplayForward?ligandId=${id}`
-          : undefined,
+        url: id ? `https://www.guidetopharmacology.org/GRAC/LigandDisplayForward?ligandId=${id}` : undefined,
         extra: l,
       }
     })

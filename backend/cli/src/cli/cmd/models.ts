@@ -28,8 +28,7 @@ function routingLabel(providerID: string, provider: Provider.Info): string {
   if (providerID === "openai-codex") return "Signed in with Codex"
   const key = (provider.key ?? "").toLowerCase()
   if (key.startsWith("thk_")) return "managed"
-  const baseURL =
-    (provider.options?.baseURL as string | undefined) ?? ""
+  const baseURL = (provider.options?.baseURL as string | undefined) ?? ""
   if (baseURL.includes("/api/llm/proxy/")) return "managed"
   if (provider.key) return "your key"
   return "unconfigured"
@@ -93,9 +92,7 @@ export const ModelsCommand = cmd({
           if (sortedModels.length === 0) return
           const label = routingLabel(providerID, provider)
           const name = prettyProviderName(providerID)
-          process.stdout.write(
-            `${UI.Style.TEXT_HIGHLIGHT_BOLD}${name}${UI.Style.TEXT_NORMAL} (${label})` + EOL,
-          )
+          process.stdout.write(`${UI.Style.TEXT_HIGHLIGHT_BOLD}${name}${UI.Style.TEXT_NORMAL} (${label})` + EOL)
           for (const [modelID, model] of sortedModels) {
             process.stdout.write(`    ${modelID}` + EOL)
             if (verbose) {

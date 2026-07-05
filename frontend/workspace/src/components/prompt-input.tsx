@@ -526,12 +526,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const skills = (sync.data.skill ?? [])
       .filter((s) => (s as { entry?: boolean }).entry !== false)
       .map((s) => ({
-      id: `skill.${s.name}`,
-      trigger: s.name,
-      title: s.name,
-      description: s.description?.slice(0, 120) ?? "",
-      type: "skill" as const,
-    }))
+        id: `skill.${s.name}`,
+        trigger: s.name,
+        title: s.name,
+        description: s.description?.slice(0, 120) ?? "",
+        type: "skill" as const,
+      }))
 
     return [...custom, ...skills, ...builtin]
   })
@@ -1935,14 +1935,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   />
                 </TooltipKeybind>
                 {/* Research mode selector */}
-                <Show
-                  when={local.research.current() && local.research.list().length > 1}
-                >
-                  <TooltipKeybind
-                    placement="top"
-                    title="Research Mode"
-                    keybind={command.keybind("research.cycle")}
-                  >
+                <Show when={local.research.current() && local.research.list().length > 1}>
+                  <TooltipKeybind placement="top" title="Research Mode" keybind={command.keybind("research.cycle")}>
                     <Select
                       options={local.research.list()}
                       current={local.research.current()}
@@ -1970,16 +1964,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         title={language.t("command.model.choose")}
                         keybind={command.keybind("model.choose")}
                       >
-                        <Button
-                          as="div"
-                          variant="ghost"
-                          onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
-                        >
+                        <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
                           <Show when={local.model.current()?.provider?.id}>
-                            <ProviderIcon
-                              id={local.model.current()!.provider.id as IconName}
-                              class="size-4 shrink-0"
-                            />
+                            <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                           </Show>
                           {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                           <Icon name="chevron-down" size="small" />
@@ -1994,10 +1981,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     >
                       <ModelSelectorPopover triggerAs={Button} triggerProps={{ variant: "ghost" }}>
                         <Show when={local.model.current()?.provider?.id}>
-                          <ProviderIcon
-                            id={local.model.current()!.provider.id as IconName}
-                            class="size-4 shrink-0"
-                          />
+                          <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
                         {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                         <Icon name="chevron-down" size="small" />

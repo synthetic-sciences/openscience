@@ -232,10 +232,17 @@ function mapServiceEnv(id: string, f: Record<string, string>): Record<string, st
       return out
     default:
       if (id.startsWith("custom:")) {
-        const prefix = id.slice(7).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "")
+        const prefix = id
+          .slice(7)
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, "_")
+          .replace(/^_+|_+$/g, "")
         if (prefix) {
           for (const [name, value] of Object.entries(f)) {
-            const field = name.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "")
+            const field = name
+              .toUpperCase()
+              .replace(/[^A-Z0-9]+/g, "_")
+              .replace(/^_+|_+$/g, "")
             if (field) put(`${prefix}_${field}`, value)
           }
         }
@@ -415,7 +422,15 @@ export const CredentialsRoutes = lazy(() =>
           },
         },
       }),
-      validator("param", z.object({ id: z.string().min(1).regex(/^[a-z0-9:_-]+$/i) })),
+      validator(
+        "param",
+        z.object({
+          id: z
+            .string()
+            .min(1)
+            .regex(/^[a-z0-9:_-]+$/i),
+        }),
+      ),
       validator(
         "json",
         z.object({

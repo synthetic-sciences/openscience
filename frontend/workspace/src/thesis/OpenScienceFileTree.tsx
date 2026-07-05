@@ -2,14 +2,7 @@ import { createSignal, createResource, createMemo, onCleanup, type JSX, For, Sho
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
-import {
-  IconFolder,
-  IconFile,
-  IconChevronRight,
-  IconChevronDown,
-  IconRefresh,
-  IconSearch,
-} from "@/thesis/shared/Icon"
+import { IconFolder, IconFile, IconChevronRight, IconChevronDown, IconRefresh, IconSearch } from "@/thesis/shared/Icon"
 
 interface FileNode {
   name: string
@@ -104,8 +97,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
         // hits EACCES/EPERM — surface that to the UI so we can prompt for
         // Full Disk Access on macOS instead of showing "0 entries".
         if (status === 403) {
-          const message =
-            err?.body?.message ?? err?.message ?? "OpenScience cannot read this directory"
+          const message = err?.body?.message ?? err?.message ?? "OpenScience cannot read this directory"
           setPermissionError(String(message))
         }
         return [] as FileNode[]
@@ -117,8 +109,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
   // refresh/directory change refetches, so the tree never blanks to "loading…".
   const rootRows = createMemo(() => sortNodes(root.latest ?? []))
   const totalCount = createMemo(() => (root.latest ?? []).length)
-  const isMac = () =>
-    typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent)
+  const isMac = () => typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent)
 
   return (
     <div style={{ flex: 1, display: "flex", "flex-direction": "column", "min-height": 0 }}>
@@ -186,7 +177,14 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
             <Show
               when={!root.loading || root.latest}
               fallback={
-                <div style={{ padding: "18px", "font-family": FONT_MONO, "font-size": "11px", color: "var(--color-text-faint)" }}>
+                <div
+                  style={{
+                    padding: "18px",
+                    "font-family": FONT_MONO,
+                    "font-size": "11px",
+                    color: "var(--color-text-faint)",
+                  }}
+                >
                   loading…
                 </div>
               }
@@ -221,12 +219,28 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
                     "text-align": "center",
                   }}
                 >
-                  <div style={{ "font-family": FONT_SANS, "font-size": "13px", "font-weight": 500, color: "var(--color-text)" }}>
+                  <div
+                    style={{
+                      "font-family": FONT_SANS,
+                      "font-size": "13px",
+                      "font-weight": 500,
+                      color: "var(--color-text)",
+                    }}
+                  >
                     Can't read this folder
                   </div>
-                  <div style={{ "font-family": FONT_SANS, "font-size": "12px", color: "var(--color-text-faint)", "line-height": 1.5, "max-width": "300px" }}>
+                  <div
+                    style={{
+                      "font-family": FONT_SANS,
+                      "font-size": "12px",
+                      color: "var(--color-text-faint)",
+                      "line-height": 1.5,
+                      "max-width": "300px",
+                    }}
+                  >
                     <Show when={isMac()} fallback={<>{permissionError()}</>}>
-                      Grant <strong>Full Disk Access</strong> to OpenScience in System Settings → Privacy &amp; Security, then refresh.
+                      Grant <strong>Full Disk Access</strong> to OpenScience in System Settings → Privacy &amp;
+                      Security, then refresh.
                     </Show>
                   </div>
                   <Show when={isMac()}>
@@ -295,9 +309,7 @@ function Node(props: {
     return props.node.name.toLowerCase().includes(q) || props.node.path.toLowerCase().includes(q)
   }
   const color = () =>
-    props.node.type === "directory"
-      ? "var(--color-text)"
-      : EXT_COLOR[e] ?? "var(--color-text-muted)"
+    props.node.type === "directory" ? "var(--color-text)" : (EXT_COLOR[e] ?? "var(--color-text-muted)")
 
   const [children] = createResource(
     () => (isOpen() && props.node.type === "directory" ? props.node.path : null),
@@ -338,8 +350,7 @@ function Node(props: {
           "border-radius": "4px",
           "font-family": FONT_MONO,
           "font-size": "12px",
-          color:
-            props.node.type === "directory" ? "var(--color-text)" : "var(--color-text-muted)",
+          color: props.node.type === "directory" ? "var(--color-text)" : "var(--color-text-muted)",
           "font-style": props.node.ignored ? "italic" : "normal",
           transition: "background 120ms ease",
           opacity: dimmed() ? 0.45 : 1,
@@ -347,10 +358,7 @@ function Node(props: {
         onMouseEnter={(el) => (el.currentTarget.style.background = "var(--color-accent-subtle)")}
         onMouseLeave={(el) => (el.currentTarget.style.background = "transparent")}
       >
-        <Show
-          when={props.node.type === "directory"}
-          fallback={<span style={{ width: "10px" }} />}
-        >
+        <Show when={props.node.type === "directory"} fallback={<span style={{ width: "10px" }} />}>
           <span style={{ display: "inline-flex", color: "var(--color-text-faint)" }}>
             <Show when={isOpen()} fallback={<IconChevronRight size={9} strokeWidth={1.5} />}>
               <IconChevronDown size={9} strokeWidth={1.5} />
@@ -358,10 +366,7 @@ function Node(props: {
           </span>
         </Show>
         <span style={{ display: "inline-flex", color: color() }}>
-          <Show
-            when={props.node.type === "directory"}
-            fallback={<IconFile size={11} strokeWidth={1.5} />}
-          >
+          <Show when={props.node.type === "directory"} fallback={<IconFile size={11} strokeWidth={1.5} />}>
             <IconFolder size={11} strokeWidth={1.5} />
           </Show>
         </span>

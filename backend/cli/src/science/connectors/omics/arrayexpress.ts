@@ -57,9 +57,7 @@ export const arrayexpress: Connector = {
   async search(query, opts) {
     const size = Math.min(Math.max(opts?.limit ?? 10, 1), 25)
     const url = `${BASE}/arrayexpress/search?query=${encodeURIComponent(query)}&pageSize=${size}`
-    const data = await getJSON<BioStudiesSearch>(url, { signal: opts?.signal }).catch(
-      () => ({}) as BioStudiesSearch,
-    )
+    const data = await getJSON<BioStudiesSearch>(url, { signal: opts?.signal }).catch(() => ({}) as BioStudiesSearch)
     return (data.hits ?? []).map(toHit)
   },
 

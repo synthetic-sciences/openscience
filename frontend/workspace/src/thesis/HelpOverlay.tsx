@@ -29,9 +29,7 @@ const SECTIONS: Array<{ title: string; rows: Array<{ keys: string[]; label: stri
   },
   {
     title: "sessions",
-    rows: [
-      { keys: ["dbl-click"], label: "rename a session" },
-    ],
+    rows: [{ keys: ["dbl-click"], label: "rename a session" }],
   },
 ]
 
@@ -48,11 +46,7 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
     <Show when={props.open}>
       <Portal>
         <div class="thesis-overlay" onClick={props.onClose} />
-        <div
-          class="thesis-modal"
-          style={{ width: "560px", "max-width": "94vw" }}
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div class="thesis-modal" style={{ width: "560px", "max-width": "94vw" }} onClick={(e) => e.stopPropagation()}>
           <div
             style={{
               display: "flex",

@@ -386,7 +386,10 @@ async function resolveConfigPath(baseDir: string, global = false) {
   const candidates = [path.join(baseDir, "openscience.json"), path.join(baseDir, "openscience.jsonc")]
 
   if (!global) {
-    candidates.push(path.join(baseDir, ".openscience", "openscience.json"), path.join(baseDir, ".openscience", "openscience.jsonc"))
+    candidates.push(
+      path.join(baseDir, ".openscience", "openscience.json"),
+      path.join(baseDir, ".openscience", "openscience.jsonc"),
+    )
   }
 
   for (const candidate of candidates) {

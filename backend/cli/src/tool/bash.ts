@@ -196,7 +196,8 @@ export const BashTool = Tool.define("bash", async () => {
         const redacted = redact(output)
         ctx.metadata({
           metadata: {
-            output: redacted.length > MAX_METADATA_LENGTH ? redacted.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : redacted,
+            output:
+              redacted.length > MAX_METADATA_LENGTH ? redacted.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : redacted,
             description: params.description,
           },
         })
@@ -223,12 +224,13 @@ export const BashTool = Tool.define("bash", async () => {
 
       ctx.abort.addEventListener("abort", abortHandler, { once: true })
 
-      const timeoutTimer = timeout > 0
-        ? setTimeout(() => {
-            timedOut = true
-            void kill()
-          }, timeout + 100)
-        : undefined
+      const timeoutTimer =
+        timeout > 0
+          ? setTimeout(() => {
+              timedOut = true
+              void kill()
+            }, timeout + 100)
+          : undefined
 
       await new Promise<void>((resolve, reject) => {
         const cleanup = () => {
@@ -267,7 +269,10 @@ export const BashTool = Tool.define("bash", async () => {
       return {
         title: params.description,
         metadata: {
-          output: redactedOutput.length > MAX_METADATA_LENGTH ? redactedOutput.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : redactedOutput,
+          output:
+            redactedOutput.length > MAX_METADATA_LENGTH
+              ? redactedOutput.slice(0, MAX_METADATA_LENGTH) + "\n\n..."
+              : redactedOutput,
           exit: proc.exitCode,
           description: params.description,
         },

@@ -344,7 +344,8 @@ function parseRecord(text: string, label: string) {
   if (!trimmed) return undefined
   const parsed = JSON.parse(trimmed)
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${label} must be a JSON object`)
-  for (const [k, v] of Object.entries(parsed)) if (typeof v !== "string") throw new Error(`${label}.${k} must be a string`)
+  for (const [k, v] of Object.entries(parsed))
+    if (typeof v !== "string") throw new Error(`${label}.${k} must be a string`)
   return parsed as Record<string, string>
 }
 
@@ -385,12 +386,18 @@ function ConnectorForm(props: {
   onSave: () => void
   onCancel: () => void
 }) {
-  const set = <K extends keyof FormState>(key: K, value: FormState[K]) => props.onChange({ ...props.state, [key]: value })
+  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+    props.onChange({ ...props.state, [key]: value })
   return (
     <div class="flex flex-col gap-4">
       <SectionLabel label={props.editing ? "Edit connector" : `Add ${props.state.type} connector`} />
       <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[4px] bg-surface-base/40">
-        <FormField label="Name" value={props.state.name} onInput={(v) => set("name", v)} placeholder="linear, filesystem…" />
+        <FormField
+          label="Name"
+          value={props.state.name}
+          onInput={(v) => set("name", v)}
+          placeholder="linear, filesystem…"
+        />
         <Show
           when={props.state.type === "remote"}
           fallback={
@@ -442,7 +449,12 @@ function ConnectorForm(props: {
           />
           <Show when={props.state.oauth === "client"}>
             <FormField label="Client ID" value={props.state.clientId} onInput={(v) => set("clientId", v)} mono />
-            <FormField label="Client secret" value={props.state.clientSecret} onInput={(v) => set("clientSecret", v)} mono />
+            <FormField
+              label="Client secret"
+              value={props.state.clientSecret}
+              onInput={(v) => set("clientSecret", v)}
+              mono
+            />
             <FormField label="Scope" value={props.state.scope} onInput={(v) => set("scope", v)} mono />
           </Show>
         </Show>

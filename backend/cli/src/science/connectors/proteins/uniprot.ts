@@ -70,8 +70,7 @@ export const uniprot: Connector = {
     const size = clampLimit(opts?.limit, 10, 25)
     const org = opts?.organism ? ` AND organism_id:${encodeURIComponent(opts.organism)}` : ""
     const url =
-      `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(query)}${org}` +
-      `&format=json&size=${size}`
+      `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(query)}${org}` + `&format=json&size=${size}`
     const data = await getJSON<USearch>(url, { signal: opts?.signal }).catch(() => ({}) as USearch)
     return asArray<UEntry>(data.results).map<ConnectorHit>((e) => {
       const id = e.primaryAccession ?? e.uniProtkbId ?? "unknown"

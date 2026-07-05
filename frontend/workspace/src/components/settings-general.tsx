@@ -153,286 +153,287 @@ export const AppearanceSections: Component = () => {
 
   return (
     <div class="flex flex-col gap-8 w-full max-w-[760px]">
-        {/* Appearance Section */}
-        <div class="flex flex-col gap-3">
-          <h3 class="text-13-medium text-text-weak tracking-wide">
-            {language.t("settings.general.section.appearance")}
-          </h3>
+      {/* Appearance Section */}
+      <div class="flex flex-col gap-3">
+        <h3 class="text-13-medium text-text-weak tracking-wide">{language.t("settings.general.section.appearance")}</h3>
 
-          <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
-            <SettingsRow
-              title={language.t("settings.general.row.language.title")}
-              description={language.t("settings.general.row.language.description")}
-            >
-              <Select
-                options={languageOptions()}
-                current={languageOptions().find((o) => o.value === language.locale())}
-                value={(o) => o.value}
-                label={(o) => o.label}
-                onSelect={(option) => option && language.setLocale(option.value)}
-                variant="secondary"
-                size="small"
-                triggerVariant="settings"
-              />
-            </SettingsRow>
+        <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+          <SettingsRow
+            title={language.t("settings.general.row.language.title")}
+            description={language.t("settings.general.row.language.description")}
+          >
+            <Select
+              options={languageOptions()}
+              current={languageOptions().find((o) => o.value === language.locale())}
+              value={(o) => o.value}
+              label={(o) => o.label}
+              onSelect={(option) => option && language.setLocale(option.value)}
+              variant="secondary"
+              size="small"
+              triggerVariant="settings"
+            />
+          </SettingsRow>
 
-            <SettingsRow
-              title={language.t("settings.general.row.appearance.title")}
-              description={language.t("settings.general.row.appearance.description")}
-            >
-              <div class="inline-flex items-center gap-0.5 p-0.5 rounded-xs border border-border-weak-base bg-surface-base">
-                <For each={colorSchemeOptions()}>
-                  {(option) => (
-                    <button
-                      type="button"
-                      class="h-7 px-3 rounded-xs text-13-medium transition-colors"
-                      classList={{
-                        "bg-surface-raised-base-active text-text-strong shadow-xs":
-                          theme.colorScheme() === option.value,
-                        "text-text-weak hover:text-text-strong": theme.colorScheme() !== option.value,
-                      }}
-                      onClick={() => theme.setColorScheme(option.value)}
-                      onMouseEnter={() => theme.previewColorScheme(option.value)}
-                      onMouseLeave={() => theme.cancelPreview()}
-                    >
-                      {option.label}
-                    </button>
-                  )}
-                </For>
-              </div>
-            </SettingsRow>
-          </div>
-        </div>
-
-        {/* Theme Section */}
-        <div class="flex flex-col gap-3">
-          <div class="flex flex-col gap-0.5">
-            <h3 class="text-13-medium text-text-weak tracking-wide">
-              {language.t("settings.general.row.theme.title")}
-            </h3>
-            <p class="text-12-regular text-text-weak">
-              {language.t("settings.general.row.theme.description")}{" "}
-              <Link href={URLS.docsThemes}>{language.t("common.learnMore")}</Link>
-            </p>
-          </div>
-
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            <For each={themeSwatches()}>
-              {(swatch) => (
-                <button
-                  type="button"
-                  class="group flex flex-col gap-2 p-2 rounded-[4px] text-left transition-all"
-                  style={{
-                    border:
-                      theme.themeId() === swatch.id
-                        ? "2px solid var(--color-text-interactive-base, var(--color-text-strong))"
-                        : "2px solid var(--color-border-weak-base)",
-                    background:
-                      theme.themeId() === swatch.id
-                        ? "var(--color-surface-raised-base-active, transparent)"
-                        : "transparent",
-                  }}
-                  onClick={() => theme.setTheme(swatch.id)}
-                  onMouseEnter={() => theme.previewTheme(swatch.id)}
-                  onMouseLeave={() => theme.cancelPreview()}
-                >
-                  <div
-                    class="h-14 rounded-xs flex items-center gap-1.5 px-3"
-                    style={{
-                      background: swatch.bg,
-                      "box-shadow": "inset 0 0 0 1px rgba(128,128,128,0.18)",
+          <SettingsRow
+            title={language.t("settings.general.row.appearance.title")}
+            description={language.t("settings.general.row.appearance.description")}
+          >
+            <div class="inline-flex items-center gap-0.5 p-0.5 rounded-xs border border-border-weak-base bg-surface-base">
+              <For each={colorSchemeOptions()}>
+                {(option) => (
+                  <button
+                    type="button"
+                    class="h-7 px-3 rounded-xs text-13-medium transition-colors"
+                    classList={{
+                      "bg-surface-raised-base-active text-text-strong shadow-xs": theme.colorScheme() === option.value,
+                      "text-text-weak hover:text-text-strong": theme.colorScheme() !== option.value,
                     }}
+                    onClick={() => theme.setColorScheme(option.value)}
+                    onMouseEnter={() => theme.previewColorScheme(option.value)}
+                    onMouseLeave={() => theme.cancelPreview()}
                   >
-                    <For each={swatch.dots}>
-                      {(dot) => (
-                        <span class="size-3.5 rounded-full" style={{ background: dot, "box-shadow": "0 1px 2px rgba(0,0,0,0.25)" }} />
-                      )}
-                    </For>
-                  </div>
-                  <span class="text-12-medium text-text-strong px-1 truncate">{swatch.name}</span>
-                </button>
-              )}
-            </For>
-          </div>
-        </div>
-
-        {/* Layout Section */}
-        <div class="flex flex-col gap-1">
-          <h3 class="text-13-medium text-text-weak tracking-wide pb-2">{language.t("settings.general.section.layout")}</h3>
-
-          <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
-            <SettingsRow
-              title={language.t("settings.general.layout.showChanges.title")}
-              description={language.t("settings.general.layout.showChanges.description")}
-            >
-              <Switch
-                checked={settings.ui.showChangesView()}
-                onChange={(checked) => settings.ui.setShowChangesView(checked)}
-              />
-            </SettingsRow>
-          </div>
-        </div>
-
-        {/* System notifications Section */}
-        <div class="flex flex-col gap-1">
-          <h3 class="text-13-medium text-text-weak tracking-wide pb-2">{language.t("settings.general.section.notifications")}</h3>
-
-          <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
-            <SettingsRow
-              title={language.t("settings.general.notifications.agent.title")}
-              description={language.t("settings.general.notifications.agent.description")}
-            >
-              <Switch
-                checked={settings.notifications.agent()}
-                onChange={(checked) => settings.notifications.setAgent(checked)}
-              />
-            </SettingsRow>
-
-            <SettingsRow
-              title={language.t("settings.general.notifications.permissions.title")}
-              description={language.t("settings.general.notifications.permissions.description")}
-            >
-              <Switch
-                checked={settings.notifications.permissions()}
-                onChange={(checked) => settings.notifications.setPermissions(checked)}
-              />
-            </SettingsRow>
-
-            <SettingsRow
-              title={language.t("settings.general.notifications.errors.title")}
-              description={language.t("settings.general.notifications.errors.description")}
-            >
-              <Switch
-                checked={settings.notifications.errors()}
-                onChange={(checked) => settings.notifications.setErrors(checked)}
-              />
-            </SettingsRow>
-          </div>
-        </div>
-
-        {/* Sound effects Section */}
-        <div class="flex flex-col gap-1">
-          <h3 class="text-13-medium text-text-weak tracking-wide pb-2">{language.t("settings.general.section.sounds")}</h3>
-
-          <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
-            <SettingsRow
-              title={language.t("settings.general.sounds.agent.title")}
-              description={language.t("settings.general.sounds.agent.description")}
-            >
-              <Select
-                options={soundOptions}
-                current={soundOptions.find((o) => o.id === settings.sounds.agent())}
-                value={(o) => o.id}
-                label={(o) => language.t(o.label)}
-                onHighlight={(option) => {
-                  if (!option) return
-                  playDemoSound(option.src)
-                }}
-                onSelect={(option) => {
-                  if (!option) return
-                  settings.sounds.setAgent(option.id)
-                  playDemoSound(option.src)
-                }}
-                variant="secondary"
-                size="small"
-                triggerVariant="settings"
-              />
-            </SettingsRow>
-
-            <SettingsRow
-              title={language.t("settings.general.sounds.permissions.title")}
-              description={language.t("settings.general.sounds.permissions.description")}
-            >
-              <Select
-                options={soundOptions}
-                current={soundOptions.find((o) => o.id === settings.sounds.permissions())}
-                value={(o) => o.id}
-                label={(o) => language.t(o.label)}
-                onHighlight={(option) => {
-                  if (!option) return
-                  playDemoSound(option.src)
-                }}
-                onSelect={(option) => {
-                  if (!option) return
-                  settings.sounds.setPermissions(option.id)
-                  playDemoSound(option.src)
-                }}
-                variant="secondary"
-                size="small"
-                triggerVariant="settings"
-              />
-            </SettingsRow>
-
-            <SettingsRow
-              title={language.t("settings.general.sounds.errors.title")}
-              description={language.t("settings.general.sounds.errors.description")}
-            >
-              <Select
-                options={soundOptions}
-                current={soundOptions.find((o) => o.id === settings.sounds.errors())}
-                value={(o) => o.id}
-                label={(o) => language.t(o.label)}
-                onHighlight={(option) => {
-                  if (!option) return
-                  playDemoSound(option.src)
-                }}
-                onSelect={(option) => {
-                  if (!option) return
-                  settings.sounds.setErrors(option.id)
-                  playDemoSound(option.src)
-                }}
-                variant="secondary"
-                size="small"
-                triggerVariant="settings"
-              />
-            </SettingsRow>
-          </div>
-        </div>
-
-        {/* Updates Section */}
-        <div class="flex flex-col gap-1">
-          <h3 class="text-13-medium text-text-weak tracking-wide pb-2">{language.t("settings.general.section.updates")}</h3>
-
-          <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
-            <SettingsRow
-              title={language.t("settings.updates.row.startup.title")}
-              description={language.t("settings.updates.row.startup.description")}
-            >
-              <Switch
-                checked={settings.updates.startup()}
-                disabled={!platform.checkUpdate}
-                onChange={(checked) => settings.updates.setStartup(checked)}
-              />
-            </SettingsRow>
-
-            <SettingsRow
-              title={language.t("settings.general.row.releaseNotes.title")}
-              description={language.t("settings.general.row.releaseNotes.description")}
-            >
-              <Switch
-                checked={settings.general.releaseNotes()}
-                onChange={(checked) => settings.general.setReleaseNotes(checked)}
-              />
-            </SettingsRow>
-
-            <SettingsRow
-              title={language.t("settings.updates.row.check.title")}
-              description={language.t("settings.updates.row.check.description")}
-            >
-              <Button
-                size="small"
-                variant="secondary"
-                disabled={store.checking || !platform.checkUpdate}
-                onClick={check}
-              >
-                {store.checking
-                  ? language.t("settings.updates.action.checking")
-                  : language.t("settings.updates.action.checkNow")}
-              </Button>
-            </SettingsRow>
-          </div>
+                    {option.label}
+                  </button>
+                )}
+              </For>
+            </div>
+          </SettingsRow>
         </div>
       </div>
+
+      {/* Theme Section */}
+      <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-0.5">
+          <h3 class="text-13-medium text-text-weak tracking-wide">{language.t("settings.general.row.theme.title")}</h3>
+          <p class="text-12-regular text-text-weak">
+            {language.t("settings.general.row.theme.description")}{" "}
+            <Link href={URLS.docsThemes}>{language.t("common.learnMore")}</Link>
+          </p>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          <For each={themeSwatches()}>
+            {(swatch) => (
+              <button
+                type="button"
+                class="group flex flex-col gap-2 p-2 rounded-[4px] text-left transition-all"
+                style={{
+                  border:
+                    theme.themeId() === swatch.id
+                      ? "2px solid var(--color-text-interactive-base, var(--color-text-strong))"
+                      : "2px solid var(--color-border-weak-base)",
+                  background:
+                    theme.themeId() === swatch.id
+                      ? "var(--color-surface-raised-base-active, transparent)"
+                      : "transparent",
+                }}
+                onClick={() => theme.setTheme(swatch.id)}
+                onMouseEnter={() => theme.previewTheme(swatch.id)}
+                onMouseLeave={() => theme.cancelPreview()}
+              >
+                <div
+                  class="h-14 rounded-xs flex items-center gap-1.5 px-3"
+                  style={{
+                    background: swatch.bg,
+                    "box-shadow": "inset 0 0 0 1px rgba(128,128,128,0.18)",
+                  }}
+                >
+                  <For each={swatch.dots}>
+                    {(dot) => (
+                      <span
+                        class="size-3.5 rounded-full"
+                        style={{ background: dot, "box-shadow": "0 1px 2px rgba(0,0,0,0.25)" }}
+                      />
+                    )}
+                  </For>
+                </div>
+                <span class="text-12-medium text-text-strong px-1 truncate">{swatch.name}</span>
+              </button>
+            )}
+          </For>
+        </div>
+      </div>
+
+      {/* Layout Section */}
+      <div class="flex flex-col gap-1">
+        <h3 class="text-13-medium text-text-weak tracking-wide pb-2">
+          {language.t("settings.general.section.layout")}
+        </h3>
+
+        <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+          <SettingsRow
+            title={language.t("settings.general.layout.showChanges.title")}
+            description={language.t("settings.general.layout.showChanges.description")}
+          >
+            <Switch
+              checked={settings.ui.showChangesView()}
+              onChange={(checked) => settings.ui.setShowChangesView(checked)}
+            />
+          </SettingsRow>
+        </div>
+      </div>
+
+      {/* System notifications Section */}
+      <div class="flex flex-col gap-1">
+        <h3 class="text-13-medium text-text-weak tracking-wide pb-2">
+          {language.t("settings.general.section.notifications")}
+        </h3>
+
+        <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+          <SettingsRow
+            title={language.t("settings.general.notifications.agent.title")}
+            description={language.t("settings.general.notifications.agent.description")}
+          >
+            <Switch
+              checked={settings.notifications.agent()}
+              onChange={(checked) => settings.notifications.setAgent(checked)}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("settings.general.notifications.permissions.title")}
+            description={language.t("settings.general.notifications.permissions.description")}
+          >
+            <Switch
+              checked={settings.notifications.permissions()}
+              onChange={(checked) => settings.notifications.setPermissions(checked)}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("settings.general.notifications.errors.title")}
+            description={language.t("settings.general.notifications.errors.description")}
+          >
+            <Switch
+              checked={settings.notifications.errors()}
+              onChange={(checked) => settings.notifications.setErrors(checked)}
+            />
+          </SettingsRow>
+        </div>
+      </div>
+
+      {/* Sound effects Section */}
+      <div class="flex flex-col gap-1">
+        <h3 class="text-13-medium text-text-weak tracking-wide pb-2">
+          {language.t("settings.general.section.sounds")}
+        </h3>
+
+        <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+          <SettingsRow
+            title={language.t("settings.general.sounds.agent.title")}
+            description={language.t("settings.general.sounds.agent.description")}
+          >
+            <Select
+              options={soundOptions}
+              current={soundOptions.find((o) => o.id === settings.sounds.agent())}
+              value={(o) => o.id}
+              label={(o) => language.t(o.label)}
+              onHighlight={(option) => {
+                if (!option) return
+                playDemoSound(option.src)
+              }}
+              onSelect={(option) => {
+                if (!option) return
+                settings.sounds.setAgent(option.id)
+                playDemoSound(option.src)
+              }}
+              variant="secondary"
+              size="small"
+              triggerVariant="settings"
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("settings.general.sounds.permissions.title")}
+            description={language.t("settings.general.sounds.permissions.description")}
+          >
+            <Select
+              options={soundOptions}
+              current={soundOptions.find((o) => o.id === settings.sounds.permissions())}
+              value={(o) => o.id}
+              label={(o) => language.t(o.label)}
+              onHighlight={(option) => {
+                if (!option) return
+                playDemoSound(option.src)
+              }}
+              onSelect={(option) => {
+                if (!option) return
+                settings.sounds.setPermissions(option.id)
+                playDemoSound(option.src)
+              }}
+              variant="secondary"
+              size="small"
+              triggerVariant="settings"
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("settings.general.sounds.errors.title")}
+            description={language.t("settings.general.sounds.errors.description")}
+          >
+            <Select
+              options={soundOptions}
+              current={soundOptions.find((o) => o.id === settings.sounds.errors())}
+              value={(o) => o.id}
+              label={(o) => language.t(o.label)}
+              onHighlight={(option) => {
+                if (!option) return
+                playDemoSound(option.src)
+              }}
+              onSelect={(option) => {
+                if (!option) return
+                settings.sounds.setErrors(option.id)
+                playDemoSound(option.src)
+              }}
+              variant="secondary"
+              size="small"
+              triggerVariant="settings"
+            />
+          </SettingsRow>
+        </div>
+      </div>
+
+      {/* Updates Section */}
+      <div class="flex flex-col gap-1">
+        <h3 class="text-13-medium text-text-weak tracking-wide pb-2">
+          {language.t("settings.general.section.updates")}
+        </h3>
+
+        <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+          <SettingsRow
+            title={language.t("settings.updates.row.startup.title")}
+            description={language.t("settings.updates.row.startup.description")}
+          >
+            <Switch
+              checked={settings.updates.startup()}
+              disabled={!platform.checkUpdate}
+              onChange={(checked) => settings.updates.setStartup(checked)}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("settings.general.row.releaseNotes.title")}
+            description={language.t("settings.general.row.releaseNotes.description")}
+          >
+            <Switch
+              checked={settings.general.releaseNotes()}
+              onChange={(checked) => settings.general.setReleaseNotes(checked)}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("settings.updates.row.check.title")}
+            description={language.t("settings.updates.row.check.description")}
+          >
+            <Button size="small" variant="secondary" disabled={store.checking || !platform.checkUpdate} onClick={check}>
+              {store.checking
+                ? language.t("settings.updates.action.checking")
+                : language.t("settings.updates.action.checkNow")}
+            </Button>
+          </SettingsRow>
+        </div>
+      </div>
+    </div>
   )
 }
 

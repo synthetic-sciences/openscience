@@ -297,9 +297,9 @@ describe("tool.read truncation", () => {
       directory: FIXTURES_DIR,
       fn: async () => {
         const read = await ReadTool.init()
-        await expect(
-          read.execute({ filePath: path.join(FIXTURES_DIR, "large-image.png") }, ctx),
-        ).rejects.toThrow(/Image too large to attach \(2560x1422\)/)
+        await expect(read.execute({ filePath: path.join(FIXTURES_DIR, "large-image.png") }, ctx)).rejects.toThrow(
+          /Image too large to attach \(2560x1422\)/,
+        )
       },
     })
   })

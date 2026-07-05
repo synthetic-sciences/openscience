@@ -343,7 +343,14 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.openscience/agent/", "/.openscience/agents/", "/.synsc/agent/", "/.synsc/agents/", "/agent/", "/agents/"]
+      const patterns = [
+        "/.openscience/agent/",
+        "/.openscience/agents/",
+        "/.synsc/agent/",
+        "/.synsc/agents/",
+        "/agent/",
+        "/agents/",
+      ]
       const file = rel(item, patterns) ?? path.basename(item)
       const agentName = trim(file)
 

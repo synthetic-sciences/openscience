@@ -24,11 +24,7 @@ export function AppHeader(props: { children: JSX.Element }): JSX.Element {
   )
 }
 
-export function HeaderIconButton(props: {
-  onClick: () => void
-  title: string
-  children: JSX.Element
-}): JSX.Element {
+export function HeaderIconButton(props: { onClick: () => void; title: string; children: JSX.Element }): JSX.Element {
   return (
     <button
       onClick={props.onClick}

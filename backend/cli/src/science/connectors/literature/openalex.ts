@@ -55,22 +55,18 @@ function shortId(id?: string): string {
 }
 
 function authors(w: Work): string | undefined {
-  const names = (w.authorships ?? [])
-    .map((a) => a.author?.display_name)
-    .filter((n): n is string => !!n)
+  const names = (w.authorships ?? []).map((a) => a.author?.display_name).filter((n): n is string => !!n)
   if (names.length === 0) return undefined
   return names.length > 4 ? `${names.slice(0, 4).join(", ")} et al.` : names.join(", ")
 }
 
 function toHit(w: Work): ConnectorHit {
-  const meta = [authors(w), w.primary_location?.source?.display_name, w.publication_year]
-    .filter(Boolean)
-    .join(". ")
+  const meta = [authors(w), w.primary_location?.source?.display_name, w.publication_year].filter(Boolean).join(". ")
   return {
     id: shortId(w.id) || (w.doi ?? ""),
     title: snippet(w.display_name ?? w.title, 300) ?? (shortId(w.id) || "Untitled"),
     summary: snippet(fromInverted(w.abstract_inverted_index)) ?? (meta.length ? meta : undefined),
-    url: w.id ?? w.primary_location?.landing_page_url ?? (w.doi ?? undefined),
+    url: w.id ?? w.primary_location?.landing_page_url ?? w.doi ?? undefined,
     score: typeof w.relevance_score === "number" ? w.relevance_score : w.cited_by_count,
     extra: raw(w),
   }

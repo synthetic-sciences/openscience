@@ -31,9 +31,7 @@ function toHit(g: HpaGene): ConnectorHit {
   const ensembl = g.Ensembl ?? "unknown"
   const synonyms = g["Gene synonym"]?.length ? `aka ${g["Gene synonym"].slice(0, 4).join(", ")}` : undefined
   const uniprot = g.Uniprot?.length ? `UniProt ${g.Uniprot.join(", ")}` : undefined
-  const summaryBits = [g["Gene description"], synonyms, uniprot].filter(
-    (x): x is string => Boolean(x),
-  )
+  const summaryBits = [g["Gene description"], synonyms, uniprot].filter((x): x is string => Boolean(x))
   return {
     id: ensembl,
     title: g.Gene ? `${g.Gene}${g["Gene description"] ? ` — ${g["Gene description"]}` : ""}` : ensembl,
@@ -66,8 +64,9 @@ export const hpa: Connector = {
           .then((hits) => hits[0]?.id)
           .catch(() => undefined)
     if (!ensembl) return { id: trimmed, found: false }
-    return getJSON(`${BASE}/${encodeURIComponent(ensembl)}.json`, { signal: opts?.signal }).catch(
-      () => ({ id: ensembl, found: false }),
-    )
+    return getJSON(`${BASE}/${encodeURIComponent(ensembl)}.json`, { signal: opts?.signal }).catch(() => ({
+      id: ensembl,
+      found: false,
+    }))
   },
 }

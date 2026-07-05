@@ -39,14 +39,9 @@ export async function gitFetchPinned(params: FetchPinnedParams): Promise<void> {
     if (clone.exitCode !== 0) {
       throw new Error(`git clone failed: ${clone.stderr.toString()}`)
     }
-    const checkout = await $`git checkout --quiet ${params.pinned_sha}`
-      .cwd(tmpDir)
-      .quiet()
-      .nothrow()
+    const checkout = await $`git checkout --quiet ${params.pinned_sha}`.cwd(tmpDir).quiet().nothrow()
     if (checkout.exitCode !== 0) {
-      throw new Error(
-        `pinned SHA ${params.pinned_sha} unreachable: ${checkout.stderr.toString()}`,
-      )
+      throw new Error(`pinned SHA ${params.pinned_sha} unreachable: ${checkout.stderr.toString()}`)
     }
 
     const srcSkill = path.join(tmpDir, "skills", params.skillName)
@@ -86,8 +81,7 @@ export async function gitFetchPinned(params: FetchPinnedParams): Promise<void> {
     const nsDir = path.dirname(path.dirname(params.destDir))
     const nsManifest = path.join(nsDir, "openscience-skills.json")
     const upstreamManifest = path.join(tmpDir, "openscience-skills.json")
-    if (await Bun.file(upstreamManifest).exists() &&
-        !(await Bun.file(nsManifest).exists())) {
+    if ((await Bun.file(upstreamManifest).exists()) && !(await Bun.file(nsManifest).exists())) {
       await copyFile(upstreamManifest, nsManifest)
     }
   } finally {

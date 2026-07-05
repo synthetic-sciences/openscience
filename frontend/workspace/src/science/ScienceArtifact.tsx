@@ -26,9 +26,7 @@ export function ScienceArtifact(props: ScienceArtifactProps): JSX.Element {
   return (
     <div data-component="science-artifact" data-kind={props.kind}>
       <Show when={renderer()} fallback={<ScienceArtifactFallback kind={props.kind} data={props.data} />}>
-        {(Renderer) => (
-          <Dynamic component={Renderer()} kind={props.kind} data={props.data} height={props.height} />
-        )}
+        {(Renderer) => <Dynamic component={Renderer()} kind={props.kind} data={props.data} height={props.height} />}
       </Show>
     </div>
   )
@@ -44,9 +42,7 @@ function ScienceArtifactFallback(props: { kind: ArtifactKind; data: unknown }): 
   })
   return (
     <div data-component="science-artifact-fallback">
-      <div data-slot="science-artifact-fallback-title">
-        No renderer registered for artifact kind “{props.kind}”.
-      </div>
+      <div data-slot="science-artifact-fallback-title">No renderer registered for artifact kind “{props.kind}”.</div>
       <details data-slot="science-artifact-fallback-details">
         <summary>Raw artifact data</summary>
         <pre>{preview()}</pre>

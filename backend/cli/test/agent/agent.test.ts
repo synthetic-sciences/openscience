@@ -461,7 +461,9 @@ test("Truncate.DIR is allowed even when user denies external_directory globally"
       const research = await Agent.get("research")
       expect(PermissionNext.evaluate("external_directory", Truncate.DIR, research!.permission).action).toBe("allow")
       expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, research!.permission).action).toBe("allow")
-      expect(PermissionNext.evaluate("external_directory", "/some/other/path", research!.permission).action).toBe("deny")
+      expect(PermissionNext.evaluate("external_directory", "/some/other/path", research!.permission).action).toBe(
+        "deny",
+      )
     },
   })
 })
@@ -485,7 +487,9 @@ test("Truncate.DIR is allowed even when user denies external_directory per-agent
       const research = await Agent.get("research")
       expect(PermissionNext.evaluate("external_directory", Truncate.DIR, research!.permission).action).toBe("allow")
       expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, research!.permission).action).toBe("allow")
-      expect(PermissionNext.evaluate("external_directory", "/some/other/path", research!.permission).action).toBe("deny")
+      expect(PermissionNext.evaluate("external_directory", "/some/other/path", research!.permission).action).toBe(
+        "deny",
+      )
     },
   })
 })

@@ -78,13 +78,13 @@ Bring-your-own-key usage is always free and is never gated. Atlas only meters th
 
 OpenScience runs a local server that hosts the workspace UI, the agent runtime, and the tool layer. The agent plans with a research harness, calls tools (shell, editor, LSP, MCP servers, scientific connectors, and skills), and streams its work back to the browser. Models are routed per request, so you can switch between providers or run local models without changing anything else. Sessions, artifacts, and provenance are stored on disk and can be shared as links.
 
-| Path | Contents |
-| --- | --- |
-| `backend/cli` | The CLI, server, provider integrations, sessions, and skills |
-| `frontend/workspace` | The browser workspace UI, served by the CLI |
-| `frontend/docs` | The documentation and session-share site |
-| `tooling/sdk/js` | The TypeScript SDK |
-| `tooling/plugin` | The plugin runtime |
+| Path                 | Contents                                                     |
+| -------------------- | ------------------------------------------------------------ |
+| `backend/cli`        | The CLI, server, provider integrations, sessions, and skills |
+| `frontend/workspace` | The browser workspace UI, served by the CLI                  |
+| `frontend/docs`      | The documentation and session-share site                     |
+| `tooling/sdk/js`     | The TypeScript SDK                                           |
+| `tooling/plugin`     | The plugin runtime                                           |
 
 ## Configuration
 

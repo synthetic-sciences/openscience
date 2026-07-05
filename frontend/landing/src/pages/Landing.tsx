@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import workspaceShot from "@/assets/workspace.png";
-import modelPickerShot from "@/assets/model-picker.png";
-import heroPlate from "@/assets/hero.webp";
+import { useEffect, useMemo, useRef, useState } from "react"
+import workspaceShot from "@/assets/workspace.png"
+import modelPickerShot from "@/assets/model-picker.png"
+import heroPlate from "@/assets/hero.webp"
 
 /* OpenScience. CMU Concrete, warm dark, coral accents.
    Same design family as the Atlas landing page.
@@ -17,25 +17,23 @@ import heroPlate from "@/assets/hero.webp";
    Every content section: Eyebrow, H_BIG, one P_BIG sub, content at mt-14.
    Left-aligned throughout; only the two dither moments break the grid. */
 
-const H_HUGE = "text-[clamp(40px,5vw,72px)] leading-[1.02] tracking-[-0.024em]";
-const H_BIG = "text-[clamp(30px,3.4vw,48px)] leading-[1.06] tracking-[-0.02em]";
-const H_MED = "text-[22px] sm:text-[26px] leading-[1.14] tracking-[-0.012em]";
-const P = "text-[14px] leading-[1.7] text-foreground/75";
-const P_BIG = "text-[16px] sm:text-[17px] leading-[1.7] text-foreground/75";
-const CAPTION = "text-[13px] leading-[1.6] text-foreground/50";
-const MONO_N = "font-terminal text-[11px] tracking-[0.08em] text-foreground/40";
-const LABEL = "text-[14px] text-muted-foreground";
+const H_HUGE = "text-[clamp(40px,5vw,72px)] leading-[1.02] tracking-[-0.024em]"
+const H_BIG = "text-[clamp(30px,3.4vw,48px)] leading-[1.06] tracking-[-0.02em]"
+const H_MED = "text-[22px] sm:text-[26px] leading-[1.14] tracking-[-0.012em]"
+const P = "text-[14px] leading-[1.7] text-foreground/75"
+const P_BIG = "text-[16px] sm:text-[17px] leading-[1.7] text-foreground/75"
+const CAPTION = "text-[13px] leading-[1.6] text-foreground/50"
+const MONO_N = "font-terminal text-[11px] tracking-[0.08em] text-foreground/40"
+const LABEL = "text-[14px] text-muted-foreground"
 
-const GITHUB = "https://github.com/synthetic-sciences/openscience";
-const DOCS = "https://openscience.sh/docs";
-const NPM_CMD = "npm i -g @synsci/openscience";
-const CURL_CMD = "curl -fsSL https://openscience.sh/install | bash";
+const GITHUB = "https://github.com/synthetic-sciences/openscience"
+const DOCS = "https://openscience.sh/docs"
+const NPM_CMD = "npm i -g @synsci/openscience"
+const CURL_CMD = "curl -fsSL https://openscience.sh/install | bash"
 
 /* Eyebrow, the quiet label above every section heading. */
 function Eyebrow({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`text-[14px] tracking-[0.04em] text-foreground/55 ${className}`}>{children}</div>
-  );
+  return <div className={`text-[14px] tracking-[0.04em] text-foreground/55 ${className}`}>{children}</div>
 }
 
 /* SectionHeader, the one header pattern every content section uses. */
@@ -45,10 +43,10 @@ function SectionHeader({
   sub,
   className = "",
 }: {
-  eyebrow: string;
-  title: string;
-  sub?: string;
-  className?: string;
+  eyebrow: string
+  title: string
+  sub?: string
+  className?: string
 }) {
   return (
     <div className={`max-w-[820px] ${className}`}>
@@ -62,7 +60,7 @@ function SectionHeader({
         </Reveal>
       ) : null}
     </div>
-  );
+  )
 }
 
 /* Cta, the one button system. Sharp corners on purpose; the arrow
@@ -75,19 +73,19 @@ function Cta({
   external = false,
   className = "",
 }: {
-  children: React.ReactNode;
-  href?: string;
-  variant?: "primary" | "ghost";
-  arrow?: boolean;
-  external?: boolean;
-  className?: string;
+  children: React.ReactNode
+  href?: string
+  variant?: "primary" | "ghost"
+  arrow?: boolean
+  external?: boolean
+  className?: string
 }) {
   const base =
-    "group/cta inline-flex items-center justify-center gap-2.5 h-11 px-6 text-[14px] leading-none select-none";
+    "group/cta inline-flex items-center justify-center gap-2.5 h-11 px-6 text-[14px] leading-none select-none"
   const look =
     variant === "primary"
       ? "btn-primary"
-      : "border border-foreground/25 text-foreground/90 hover:border-foreground/55 hover:bg-foreground/[0.04] backdrop-blur-[2px] transition-colors duration-300";
+      : "border border-foreground/25 text-foreground/90 hover:border-foreground/55 hover:bg-foreground/[0.04] backdrop-blur-[2px] transition-colors duration-300"
   return (
     <a
       href={href}
@@ -107,26 +105,29 @@ function Cta({
         </svg>
       ) : null}
     </a>
-  );
+  )
 }
 
 /* CopyChip, a copyable shell command. Click to copy, icon confirms. */
 function CopyChip({ cmd, className = "" }: { cmd: string; className?: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState(false)
   return (
     <button
       type="button"
       onClick={() => {
-        navigator.clipboard?.writeText(cmd).catch(() => {});
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1600);
+        navigator.clipboard?.writeText(cmd).catch(() => {})
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1600)
       }}
       className={`group/chip inline-flex items-center gap-3 border border-border/70 bg-background/45 backdrop-blur-[3px] pl-4 pr-3 h-11 font-terminal text-[13px] text-foreground/80 hover:border-foreground/35 hover:text-foreground transition-colors duration-300 cursor-pointer max-w-full ${className}`}
       aria-label={`Copy command: ${cmd}`}
     >
       <span className="text-foreground/40 shrink-0">$</span>
       <span className="truncate min-w-0">{cmd}</span>
-      <span className="ml-1 text-foreground/40 group-hover/chip:text-foreground/75 transition-colors shrink-0" aria-hidden>
+      <span
+        className="ml-1 text-foreground/40 group-hover/chip:text-foreground/75 transition-colors shrink-0"
+        aria-hidden
+      >
         {copied ? (
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
             <path d="M2.5 7 5 9.5 10.5 3.5" stroke="hsl(86 30% 60%)" strokeWidth="1.4" />
@@ -139,7 +140,7 @@ function CopyChip({ cmd, className = "" }: { cmd: string; className?: string }) 
         )}
       </span>
     </button>
-  );
+  )
 }
 
 /* OsMark, the OpenScience mark. A thin ring with an orbiting coral node. */
@@ -147,50 +148,59 @@ function OsMark({ size = 15 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden className="text-foreground/85">
       <circle cx="8" cy="8" r="6.6" stroke="currentColor" strokeWidth="1" opacity="0.9" />
-      <ellipse cx="8" cy="8" rx="6.6" ry="2.6" stroke="currentColor" strokeWidth="0.8" opacity="0.45" transform="rotate(-24 8 8)" />
+      <ellipse
+        cx="8"
+        cy="8"
+        rx="6.6"
+        ry="2.6"
+        stroke="currentColor"
+        strokeWidth="0.8"
+        opacity="0.45"
+        transform="rotate(-24 8 8)"
+      />
       <circle cx="8" cy="8" r="1.4" fill="currentColor" />
       <circle cx="13.35" cy="4.6" r="1.5" fill="hsl(var(--accent-coral))" />
     </svg>
-  );
+  )
 }
 
 /* ---------------------------- ASCII backdrop ---------------------------- */
 
 function useAsciiContours(cols: number, rows: number, seed = 1) {
   return useMemo(() => {
-    const RAMP = [" ", " ", ".", ".", ",", ":", ";", "-", "~", "+", "=", "o", "0", "#"];
+    const RAMP = [" ", " ", ".", ".", ",", ":", ";", "-", "~", "+", "=", "o", "0", "#"]
     const peaks = [
       { x: cols * 0.28, y: rows * 0.42, s: cols * 0.22, h: 1.0 },
       { x: cols * 0.72, y: rows * 0.38, s: cols * 0.18, h: 0.85 },
       { x: cols * 0.55, y: rows * 0.82, s: cols * 0.3, h: 0.55 },
-    ];
-    let out = "";
+    ]
+    let out = ""
     for (let y = 0; y < rows; y++) {
-      let line = "";
+      let line = ""
       for (let x = 0; x < cols; x++) {
-        let v = 0;
+        let v = 0
         for (const p of peaks) {
-          const dx = (x - p.x) / p.s;
-          const dy = ((y - p.y) * 1.9) / p.s;
-          v += p.h * Math.exp(-(dx * dx + dy * dy));
+          const dx = (x - p.x) / p.s
+          const dy = ((y - p.y) * 1.9) / p.s
+          v += p.h * Math.exp(-(dx * dx + dy * dy))
         }
-        const n = (Math.sin((x * 12.9898 + y * 78.233 + seed) * 0.5) + 1) * 0.04;
-        v = Math.max(0, Math.min(0.999, v + n));
-        line += RAMP[Math.floor(v * RAMP.length)];
+        const n = (Math.sin((x * 12.9898 + y * 78.233 + seed) * 0.5) + 1) * 0.04
+        v = Math.max(0, Math.min(0.999, v + n))
+        line += RAMP[Math.floor(v * RAMP.length)]
       }
-      out += line + "\n";
+      out += line + "\n"
     }
-    return out;
-  }, [cols, rows, seed]);
+    return out
+  }, [cols, rows, seed])
 }
 
 function AsciiBackdrop({ seed = 1, opacity = "text-foreground/[0.06]" }: { seed?: number; opacity?: string }) {
-  const art = useAsciiContours(220, 80, seed);
+  const art = useAsciiContours(220, 80, seed)
   return (
     <pre aria-hidden className={`ascii absolute inset-0 m-0 p-0 text-[10px] leading-[1.05] ${opacity} vignette`}>
       {art}
     </pre>
-  );
+  )
 }
 
 /* ------------------------------- Reveal -------------------------------- */
@@ -200,29 +210,29 @@ function Reveal({
   delay = 0,
   className = "",
 }: {
-  children: React.ReactNode;
-  delay?: number;
-  className?: string;
+  children: React.ReactNode
+  delay?: number
+  className?: string
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(false);
+  const ref = useRef<HTMLDivElement>(null)
+  const [shown, setShown] = useState(false)
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    const el = ref.current
+    if (!el) return
     const obs = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
           if (e.isIntersecting) {
-            setShown(true);
-            obs.disconnect();
+            setShown(true)
+            obs.disconnect()
           }
         }
       },
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
   return (
     <div
       ref={ref}
@@ -233,7 +243,7 @@ function Reveal({
     >
       {children}
     </div>
-  );
+  )
 }
 
 /* ----------------------------- Section frame ---------------------------- */
@@ -244,10 +254,10 @@ function Section({
   seed = 1,
   id,
 }: {
-  children: React.ReactNode;
-  className?: string;
-  seed?: number;
-  id?: string;
+  children: React.ReactNode
+  className?: string
+  seed?: number
+  id?: string
 }) {
   return (
     <section id={id} className="relative w-full overflow-hidden border-t border-border/40">
@@ -257,7 +267,7 @@ function Section({
         {children}
       </div>
     </section>
-  );
+  )
 }
 
 /* ----------------------------- Hero plate ------------------------------- */
@@ -269,7 +279,7 @@ function Section({
    One rule at every width — the crop reads the same on any screen. */
 
 const HERO_NOISE =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")"
 
 /* Veil: a light uniform scrim softens the plate; a soft top-left shield sits
    under the wordmark and a bottom-right shield under the copy, so the beam
@@ -279,39 +289,39 @@ const HERO_VEIL = [
   "radial-gradient(ellipse 55% 45% at 5% 6%, hsl(30 14% 7% / 0.8) 0%, hsl(30 14% 7% / 0.4) 55%, transparent 85%)",
   "radial-gradient(ellipse 85% 75% at 96% 94%, hsl(var(--background)) 0%, hsl(30 14% 7% / 0.84) 38%, hsl(30 14% 7% / 0.28) 66%, transparent 90%)",
   "linear-gradient(180deg, hsl(28 18% 4% / 0.5) 0%, transparent 15%)",
-].join(", ");
+].join(", ")
 
 /* ------------------------------ Hero ----------------------------------- */
 
 function Hero() {
-  const backdrop = useRef<HTMLDivElement>(null);
-  const copy = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null)
+  const copy = useRef<HTMLDivElement>(null)
 
   /* Gentle parallax: the constellation sinks slower than the page, the
      copy eases away. rAF-throttled, passive, respects reduced motion. */
   useEffect(() => {
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) return;
-    let raf = 0;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    if (reduced) return
+    let raf = 0
     const onScroll = () => {
-      if (raf) return;
+      if (raf) return
       raf = window.requestAnimationFrame(() => {
-        raf = 0;
-        const y = window.scrollY;
-        if (backdrop.current) backdrop.current.style.transform = `translateY(${y * 0.22}px)`;
+        raf = 0
+        const y = window.scrollY
+        if (backdrop.current) backdrop.current.style.transform = `translateY(${y * 0.22}px)`
         if (copy.current) {
-          const t = Math.min(y / 640, 1);
-          copy.current.style.opacity = `${1 - t * 0.85}`;
-          copy.current.style.transform = `translateY(${y * 0.06}px)`;
+          const t = Math.min(y / 640, 1)
+          copy.current.style.opacity = `${1 - t * 0.85}`
+          copy.current.style.transform = `translateY(${y * 0.06}px)`
         }
-      });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
+      })
+    }
+    window.addEventListener("scroll", onScroll, { passive: true })
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (raf) window.cancelAnimationFrame(raf);
-    };
-  }, []);
+      window.removeEventListener("scroll", onScroll)
+      if (raf) window.cancelAnimationFrame(raf)
+    }
+  }, [])
 
   return (
     <section className="relative h-screen min-h-[680px] w-full bg-background overflow-hidden grain">
@@ -320,10 +330,7 @@ function Hero() {
           className="absolute inset-0 bg-background bg-no-repeat [background-position:62%_center] [background-size:cover]"
           style={{ backgroundImage: `url(${heroPlate})` }}
         />
-        <div
-          className="absolute inset-0 opacity-[0.32] mix-blend-overlay"
-          style={{ backgroundImage: HERO_NOISE }}
-        />
+        <div className="absolute inset-0 opacity-[0.32] mix-blend-overlay" style={{ backgroundImage: HERO_NOISE }} />
         <div className="absolute inset-0" style={{ background: HERO_VEIL }} />
       </div>
 
@@ -354,7 +361,10 @@ function Hero() {
               The open-source AI workbench for scientists.
             </h1>
           </div>
-          <div className="rise mt-9 flex flex-wrap items-center justify-end gap-3 [text-shadow:none]" style={{ animationDelay: "420ms" }}>
+          <div
+            className="rise mt-9 flex flex-wrap items-center justify-end gap-3 [text-shadow:none]"
+            style={{ animationDelay: "420ms" }}
+          >
             <Cta href="#install">Install OpenScience</Cta>
             <Cta href={GITHUB} variant="ghost" arrow={false} external>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
@@ -367,7 +377,7 @@ function Hero() {
         </div>
       </div>
     </section>
-  );
+  )
 }
 
 /* --------------------------- Product screenshot ------------------------- */
@@ -395,19 +405,54 @@ function ProductShot() {
         </Reveal>
       </div>
     </section>
-  );
+  )
 }
 
 /* ------------------------- Database marquee strip ----------------------- */
 
 const DATABASES = [
-  "arXiv", "bioRxiv", "PubMed", "Europe PMC", "OpenAlex", "Semantic Scholar", "Crossref",
-  "UniProt", "RCSB PDB", "PDBe", "AlphaFold DB", "InterPro", "STRING", "IntAct", "SIFTS",
-  "Ensembl", "UCSC", "NCBI Gene", "MyGene", "ClinVar", "gnomAD", "dbSNP", "MyVariant", "GTEx",
-  "PubChem", "ChEMBL", "ChEBI", "BindingDB", "SureChEMBL", "Guide to Pharmacology",
-  "KEGG", "Reactome", "WikiPathways", "GEO", "ArrayExpress", "Expression Atlas",
-  "Human Protein Atlas", "Single Cell Atlas", "DepMap", "BioGRID", "Open Targets",
-];
+  "arXiv",
+  "bioRxiv",
+  "PubMed",
+  "Europe PMC",
+  "OpenAlex",
+  "Semantic Scholar",
+  "Crossref",
+  "UniProt",
+  "RCSB PDB",
+  "PDBe",
+  "AlphaFold DB",
+  "InterPro",
+  "STRING",
+  "IntAct",
+  "SIFTS",
+  "Ensembl",
+  "UCSC",
+  "NCBI Gene",
+  "MyGene",
+  "ClinVar",
+  "gnomAD",
+  "dbSNP",
+  "MyVariant",
+  "GTEx",
+  "PubChem",
+  "ChEMBL",
+  "ChEBI",
+  "BindingDB",
+  "SureChEMBL",
+  "Guide to Pharmacology",
+  "KEGG",
+  "Reactome",
+  "WikiPathways",
+  "GEO",
+  "ArrayExpress",
+  "Expression Atlas",
+  "Human Protein Atlas",
+  "Single Cell Atlas",
+  "DepMap",
+  "BioGRID",
+  "Open Targets",
+]
 
 function DbMarquee() {
   return (
@@ -432,7 +477,7 @@ function DbMarquee() {
         </div>
       </div>
     </section>
-  );
+  )
 }
 
 /* ------------------------------ How it works ---------------------------- */
@@ -458,7 +503,7 @@ const STEPS: Array<{ n: string; title: string; body: string }> = [
     title: "Read.",
     body: "A write-up with figures and citations, every claim linked to the run that produced it.",
   },
-];
+]
 
 /* ------------------------------ Skills data ----------------------------- */
 
@@ -480,7 +525,7 @@ const SKILL_DOMAINS: Array<{ domain: string; count: number; examples: string }> 
   { domain: "Quantum", count: 4, examples: "Qiskit, PennyLane, Cirq, QuTiP" },
   { domain: "Scholar evaluation", count: 2, examples: "benchmark harnesses" },
   { domain: "Document parsing", count: 1, examples: "PDF extraction" },
-];
+]
 
 /* ---------------------------- Databases wall ---------------------------- */
 
@@ -504,25 +549,24 @@ const DB_GROUPS: Array<{ group: string; items: string[] }> = [
   {
     group: "Pathways & omics",
     items: [
-      "KEGG", "Reactome", "WikiPathways", "GEO", "ArrayExpress", "Expression Atlas",
-      "Human Protein Atlas", "Single Cell Atlas", "DepMap", "BioGRID", "Open Targets",
+      "KEGG",
+      "Reactome",
+      "WikiPathways",
+      "GEO",
+      "ArrayExpress",
+      "Expression Atlas",
+      "Human Protein Atlas",
+      "Single Cell Atlas",
+      "DepMap",
+      "BioGRID",
+      "Open Targets",
     ],
   },
-];
+]
 
 /* -------------------------------- FAQ ----------------------------------- */
 
-function FaqItem({
-  q,
-  a,
-  isOpen,
-  onToggle,
-}: {
-  q: string;
-  a: string;
-  isOpen: boolean;
-  onToggle: () => void;
-}) {
+function FaqItem({ q, a, isOpen, onToggle }: { q: string; a: string; isOpen: boolean; onToggle: () => void }) {
   return (
     <div className="border-t border-border/40 first:border-t-0">
       <button
@@ -561,11 +605,11 @@ function FaqItem({
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function FaqList({ items }: { items: Array<{ q: string; a: string }> }) {
-  const [openIdx, setOpenIdx] = useState<number | null>(0);
+  const [openIdx, setOpenIdx] = useState<number | null>(0)
   return (
     <div>
       {items.map((item, i) => (
@@ -578,7 +622,7 @@ function FaqList({ items }: { items: Array<{ q: string; a: string }> }) {
         />
       ))}
     </div>
-  );
+  )
 }
 
 /* -------------------------------- Page ---------------------------------- */
@@ -625,8 +669,8 @@ export default function Landing() {
             </Reveal>
             <Reveal delay={150}>
               <p className={`mt-5 max-w-[36ch] ${P_BIG}`}>
-                293 skills ship with the workbench. Each one teaches the agent a real tool,
-                with its actual interface, flags, and failure modes.
+                293 skills ship with the workbench. Each one teaches the agent a real tool, with its actual interface,
+                flags, and failure modes.
               </p>
             </Reveal>
           </div>
@@ -701,8 +745,8 @@ export default function Landing() {
             </Reveal>
             <Reveal delay={150}>
               <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
-                Anthropic, OpenAI, Google, and open-weight models through one selector.
-                Requests go straight to the provider, and keys never leave your machine.
+                Anthropic, OpenAI, Google, and open-weight models through one selector. Requests go straight to the
+                provider, and keys never leave your machine.
               </p>
             </Reveal>
             <Reveal delay={260}>
@@ -746,14 +790,15 @@ export default function Landing() {
             </Reveal>
             <Reveal delay={200}>
               <p className={`mt-6 mx-auto max-w-[46ch] ${P_BIG} text-foreground/85`}>
-                Apache 2.0, no strings. Every prompt, agent, and connector is in the repo,
-                and the whole workbench runs on your machine. Read what it does, then
-                change it.
+                Apache 2.0, no strings. Every prompt, agent, and connector is in the repo, and the whole workbench runs
+                on your machine. Read what it does, then change it.
               </p>
             </Reveal>
             <Reveal delay={320}>
               <div className="mt-10 flex flex-col items-center gap-4">
-                <Cta href={GITHUB} external>Star on GitHub</Cta>
+                <Cta href={GITHUB} external>
+                  Star on GitHub
+                </Cta>
                 <span className="font-terminal text-[12.5px] text-foreground/60">
                   github.com/synthetic-sciences/openscience
                 </span>
@@ -773,8 +818,7 @@ export default function Landing() {
             </Reveal>
             <Reveal delay={150}>
               <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
-                Install with npm or the install script. Set a provider key, and the
-                workspace opens in your browser.
+                Install with npm or the install script. Set a provider key, and the workspace opens in your browser.
               </p>
             </Reveal>
           </div>
@@ -889,18 +933,66 @@ export default function Landing() {
             <div className="col-span-6 sm:col-span-4 md:col-span-2">
               <div className="text-[13px] tracking-[0.04em] text-foreground/45 mb-4">Project</div>
               <ul className="space-y-2.5 text-[13.5px]">
-                <li><a href={GITHUB} target="_blank" rel="noreferrer" className="link-underline text-foreground/70 hover:text-foreground">GitHub</a></li>
-                <li><a href="https://www.npmjs.com/package/@synsci/openscience" target="_blank" rel="noreferrer" className="link-underline text-foreground/70 hover:text-foreground">npm</a></li>
-                <li><a href={`${GITHUB}/releases`} target="_blank" rel="noreferrer" className="link-underline text-foreground/70 hover:text-foreground">Releases</a></li>
+                <li>
+                  <a
+                    href={GITHUB}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="link-underline text-foreground/70 hover:text-foreground"
+                  >
+                    GitHub
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://www.npmjs.com/package/@synsci/openscience"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="link-underline text-foreground/70 hover:text-foreground"
+                  >
+                    npm
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={`${GITHUB}/releases`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="link-underline text-foreground/70 hover:text-foreground"
+                  >
+                    Releases
+                  </a>
+                </li>
               </ul>
             </div>
             <div className="col-span-6 sm:col-span-4 md:col-span-2">
               <div className="text-[13px] tracking-[0.04em] text-foreground/45 mb-4">Resources</div>
               <ul className="space-y-2.5 text-[13.5px]">
-                <li><a href={DOCS} target="_blank" rel="noreferrer" className="link-underline text-foreground/70 hover:text-foreground">Docs</a></li>
-                <li><a href="#skills" className="link-underline text-foreground/70 hover:text-foreground">Skills</a></li>
-                <li><a href="#install" className="link-underline text-foreground/70 hover:text-foreground">Install</a></li>
-                <li><a href="#faq" className="link-underline text-foreground/70 hover:text-foreground">FAQ</a></li>
+                <li>
+                  <a
+                    href={DOCS}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="link-underline text-foreground/70 hover:text-foreground"
+                  >
+                    Docs
+                  </a>
+                </li>
+                <li>
+                  <a href="#skills" className="link-underline text-foreground/70 hover:text-foreground">
+                    Skills
+                  </a>
+                </li>
+                <li>
+                  <a href="#install" className="link-underline text-foreground/70 hover:text-foreground">
+                    Install
+                  </a>
+                </li>
+                <li>
+                  <a href="#faq" className="link-underline text-foreground/70 hover:text-foreground">
+                    FAQ
+                  </a>
+                </li>
               </ul>
             </div>
             <div className="col-span-12 sm:col-span-4 md:col-span-3">
@@ -932,7 +1024,16 @@ export default function Landing() {
                     </svg>
                   </a>
                 </li>
-                <li><a href="https://x.com/SynScience" target="_blank" rel="noreferrer" className="link-underline text-foreground/70 hover:text-foreground">X / Twitter</a></li>
+                <li>
+                  <a
+                    href="https://x.com/SynScience"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="link-underline text-foreground/70 hover:text-foreground"
+                  >
+                    X / Twitter
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
@@ -956,5 +1057,5 @@ export default function Landing() {
         </div>
       </footer>
     </div>
-  );
+  )
 }

@@ -69,7 +69,10 @@ interface PdfViewport {
 }
 interface PdfPage {
   getViewport(opts: { scale: number }): PdfViewport
-  render(opts: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }): { promise: Promise<void>; cancel(): void }
+  render(opts: { canvasContext: CanvasRenderingContext2D; viewport: PdfViewport }): {
+    promise: Promise<void>
+    cancel(): void
+  }
 }
 interface PdfDoc {
   numPages: number
@@ -95,7 +98,6 @@ export function PdfViewer(props: ArtifactRenderProps) {
     const tasks: Array<{ cancel(): void }> = []
 
     if (!hasSource) return
-
     ;(async () => {
       try {
         const pdfjs = (await import("pdfjs-dist")) as unknown as PdfLib
@@ -202,7 +204,9 @@ export function PdfViewer(props: ArtifactRenderProps) {
         <Show when={pages()}>
           {(p) => (
             <span>
-              {p().shown < p().total ? `${p().shown} of ${p().total} pages` : `${p().total} page${p().total === 1 ? "" : "s"}`}
+              {p().shown < p().total
+                ? `${p().shown} of ${p().total} pages`
+                : `${p().total} page${p().total === 1 ? "" : "s"}`}
             </span>
           )}
         </Show>

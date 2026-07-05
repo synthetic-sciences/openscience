@@ -60,9 +60,7 @@ function toHit(e: ScExperiment): ConnectorHit {
 }
 
 async function catalogue(signal?: AbortSignal): Promise<ScExperiment[]> {
-  const data = await getJSON<ScExperiments>(`${BASE}/json/experiments`, { signal }).catch(
-    () => ({}) as ScExperiments,
-  )
+  const data = await getJSON<ScExperiments>(`${BASE}/json/experiments`, { signal }).catch(() => ({}) as ScExperiments)
   return data.experiments ?? []
 }
 
@@ -84,8 +82,6 @@ export const singleCellAtlas: Connector = {
   async fetch(id, opts) {
     const accession = id.trim()
     const experiments = await catalogue(opts?.signal)
-    return (
-      experiments.find((e) => e.experimentAccession === accession) ?? { id: accession, found: false }
-    )
+    return experiments.find((e) => e.experimentAccession === accession) ?? { id: accession, found: false }
   },
 }

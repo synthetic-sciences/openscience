@@ -9,7 +9,15 @@ export {
 } from "./database"
 export { NotebookTool } from "./notebook"
 
-import { QueryUniprotTool, QueryEnsemblTool, QueryKeggTool, QueryPubmedTool, QueryNcbiGeneTool, QueryStringTool, QueryPdbTool } from "./database"
+import {
+  QueryUniprotTool,
+  QueryEnsemblTool,
+  QueryKeggTool,
+  QueryPubmedTool,
+  QueryNcbiGeneTool,
+  QueryStringTool,
+  QueryPdbTool,
+} from "./database"
 import { NotebookTool } from "./notebook"
 
 export const BiologyTools = [

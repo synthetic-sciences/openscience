@@ -44,7 +44,7 @@
   --color-focus: var(--border-selected);
   --color-on-accent: var(--background-base);
   --glass-bg: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(0, 0, 0, 0.10);
+  --glass-border: rgba(0, 0, 0, 0.1);
   --glass-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.03);
   --glass-blur: 20px;
 
@@ -70,15 +70,27 @@
   --kind-untyped: #71717a;
   --kind-untyped-bg: rgba(113, 113, 122, 0.08);
 
-  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
-  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
 
-  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
 
-  --text-2xs: 9px; --text-xs: 10px; --text-sm: 11px; --text-base: 12px;
-  --text-md: 13px; --text-lg: 14px; --text-xl: 16px; --text-2xl: 20px;
+  --text-2xs: 9px;
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 12px;
+  --text-md: 13px;
+  --text-lg: 14px;
+  --text-xl: 16px;
+  --text-2xl: 20px;
 
   --font-sans: "Computer Modern", "Latin Modern Roman", Georgia, "Times New Roman", serif;
   --font-serif: "Computer Modern", "Latin Modern Roman", Georgia, "Times New Roman", serif;
@@ -152,9 +164,9 @@ html[data-color-scheme="dark"] {
   --kind-untyped: #a1a1aa;
   --kind-untyped-bg: rgba(161, 161, 170, 0.1);
 
-  --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
 
   --agent-code-bg: #060608;
   --agent-code-bg-soft: #0d0d11;
@@ -236,12 +248,16 @@ html[data-color-scheme="dark"] .g-strip {
   background: var(--color-surface-solid);
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  transition: border-color 120ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 160ms ease;
   box-shadow: var(--shadow-xs);
 }
 .g-composer:focus-within {
   border-color: var(--color-focus);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 15%, transparent), var(--shadow-xs);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--color-focus) 15%, transparent),
+    var(--shadow-xs);
 }
 
 .g-divider {
@@ -270,57 +286,115 @@ html[data-color-scheme="dark"] .g-strip {
    ========================================================== */
 .tab-fig {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "ss01" 1, "ss02" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "ss01" 1,
+    "ss02" 1;
 }
 
 /* ==========================================================
    Animations
    ========================================================== */
 @keyframes thesis-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 @keyframes thesis-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 @keyframes thesis-stagger-fade-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @keyframes thesis-slide-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @keyframes thesis-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes thesis-blink-cursor {
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0; }
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
 }
 @keyframes thesis-scale-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 @keyframes thesis-loading-slide {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(433%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(433%);
+  }
 }
 
-.thesis-spin { animation: thesis-spin 0.9s linear infinite; }
-.thesis-pulse { animation: thesis-pulse 1.6s ease-in-out infinite; }
-.thesis-fade-in { animation: thesis-fade-in 200ms var(--agent-ease); }
-.thesis-slide-up { animation: thesis-slide-up 240ms var(--agent-ease); }
+.thesis-spin {
+  animation: thesis-spin 0.9s linear infinite;
+}
+.thesis-pulse {
+  animation: thesis-pulse 1.6s ease-in-out infinite;
+}
+.thesis-fade-in {
+  animation: thesis-fade-in 200ms var(--agent-ease);
+}
+.thesis-slide-up {
+  animation: thesis-slide-up 240ms var(--agent-ease);
+}
 .thesis-stagger {
   animation: thesis-stagger-fade-in 240ms var(--agent-ease);
   animation-fill-mode: backwards;
 }
-.thesis-blink { animation: thesis-blink-cursor 1.1s steps(1) infinite; }
+.thesis-blink {
+  animation: thesis-blink-cursor 1.1s steps(1) infinite;
+}
 
 @keyframes thesis-pop-up {
-  from { opacity: 0; transform: translateY(6px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 /* Smooth pop for upward-opening menus (model/agent/effort/graph pickers). */
 .thesis-pop-up {
@@ -365,8 +439,13 @@ html[data-color-scheme="dark"] .thesis-agent-orbit {
 }
 
 @keyframes thesis-glow {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 0.95; }
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.95;
+  }
 }
 .thesis-glow {
   animation: thesis-glow 2.6s ease-in-out infinite;
@@ -566,7 +645,9 @@ html[data-color-scheme="dark"] .thesis-agent-orbit {
   border-color: var(--color-border-strong);
 }
 .thesis-rn[data-active="true"] {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 30%, transparent), var(--shadow-sm);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-focus) 30%, transparent),
+    var(--shadow-sm);
   border-color: var(--color-focus);
 }
 .thesis-rn[data-staged="true"] {
@@ -597,8 +678,13 @@ html[data-color-scheme="dark"] .thesis-agent-orbit {
 /* ==========================================================
    Scrollbar
    ========================================================== */
-.thesis-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-.thesis-scroll::-webkit-scrollbar-track { background: transparent; }
+.thesis-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.thesis-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
 .thesis-scroll::-webkit-scrollbar-thumb {
   background: var(--color-border);
   border-radius: 4px;
@@ -642,10 +728,18 @@ html[data-color-scheme="dark"] .thesis-agent-orbit {
   line-height: 1.25;
   color: var(--color-text);
 }
-.thesis-md h1 { font-size: 18px; }
-.thesis-md h2 { font-size: 16px; }
-.thesis-md h3 { font-size: 14px; }
-.thesis-md h4 { font-size: 13px; }
+.thesis-md h1 {
+  font-size: 18px;
+}
+.thesis-md h2 {
+  font-size: 16px;
+}
+.thesis-md h3 {
+  font-size: 14px;
+}
+.thesis-md h4 {
+  font-size: 13px;
+}
 
 .thesis-md p {
   margin: 0 0 10px;
@@ -683,7 +777,8 @@ html[data-color-scheme="dark"] .thesis-agent-orbit {
   text-decoration-color: var(--color-text);
 }
 
-.thesis-md strong, .thesis-md b {
+.thesis-md strong,
+.thesis-md b {
   font-weight: 600;
   color: var(--color-text);
 }
@@ -741,12 +836,26 @@ html[data-color-scheme="dark"] .thesis-agent-orbit {
 }
 
 /* very lightweight token classes — set selectively by future shiki pass */
-.thesis-md .tok-keyword { color: #f2f2f2; font-weight: 600; }
-.thesis-md .tok-string  { color: #cfcfd4; }
-.thesis-md .tok-number  { color: #b8b8bf; }
-.thesis-md .tok-comment { color: #6e6e76; font-style: italic; }
-.thesis-md .tok-fn      { color: #ffffff; }
-.thesis-md .tok-punct   { color: #888892; }
+.thesis-md .tok-keyword {
+  color: #f2f2f2;
+  font-weight: 600;
+}
+.thesis-md .tok-string {
+  color: #cfcfd4;
+}
+.thesis-md .tok-number {
+  color: #b8b8bf;
+}
+.thesis-md .tok-comment {
+  color: #6e6e76;
+  font-style: italic;
+}
+.thesis-md .tok-fn {
+  color: #ffffff;
+}
+.thesis-md .tok-punct {
+  color: #888892;
+}
 
 .thesis-md blockquote {
   margin: 10px 0;
@@ -769,7 +878,8 @@ html[data-color-scheme="dark"] .thesis-agent-orbit {
   margin: 10px 0;
   width: 100%;
 }
-.thesis-md th, .thesis-md td {
+.thesis-md th,
+.thesis-md td {
   border: 1px solid var(--color-border);
   padding: 5px 8px;
   text-align: left;
@@ -868,8 +978,14 @@ html[data-color-scheme="dark"] .thesis-overlay {
 }
 
 @keyframes thesis-slide-in-right {
-  from { transform: translateX(8px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 /* ==========================================================
@@ -923,12 +1039,20 @@ html[data-color-scheme="dark"] .thesis-overlay {
   animation: thesis-orbit-2 16s linear infinite reverse;
 }
 @keyframes thesis-orbit-1 {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 @keyframes thesis-orbit-2 {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ==========================================================
@@ -946,8 +1070,12 @@ html[data-color-scheme="dark"] .thesis-overlay {
   border-radius: var(--radius);
 }
 @keyframes thesis-skeleton-shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 /* ==========================================================

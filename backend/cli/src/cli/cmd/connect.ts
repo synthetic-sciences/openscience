@@ -48,10 +48,7 @@ const ConnectLoginCommand = cmd({
 
     // Non-interactive / CI: a key from --key or env short-circuits the
     // whole interactive flow.
-    const provided =
-      (args.key as string | undefined) ||
-      process.env.SYNSC_CLI_KEY ||
-      process.env.SYNSC_API_KEY
+    const provided = (args.key as string | undefined) || process.env.SYNSC_CLI_KEY || process.env.SYNSC_API_KEY
     if (provided) {
       if (await finishWithKey(provided)) prompts.outro("Done")
       return
@@ -143,8 +140,7 @@ async function tryBrowserLogin(): Promise<boolean> {
 async function manualKeyLogin(): Promise<boolean> {
   prompts.log.info("Finish login from any device with a browser:")
   prompts.log.message(
-    `1. Open ${OpenScience.authPageUrl()} and sign in\n` +
-      `2. Create a CLI API key (starts with thk_) and copy it`,
+    `1. Open ${OpenScience.authPageUrl()} and sign in\n` + `2. Create a CLI API key (starts with thk_) and copy it`,
   )
 
   if (!process.stdin.isTTY) {
@@ -220,7 +216,9 @@ const ConnectStatusCommand = cmd({
     } else if (!(await OpenScience.getSession())) {
       prompts.log.warn(`${API_BASE} rejected your saved key. Run \`openscience connect login\` to re-authenticate.`)
     } else {
-      prompts.log.warn(`Could not reach ${API_BASE} to verify services — the saved session is untested against the backend.`)
+      prompts.log.warn(
+        `Could not reach ${API_BASE} to verify services — the saved session is untested against the backend.`,
+      )
     }
 
     prompts.outro("Done")
@@ -284,14 +282,10 @@ const ConnectDevicesCommand = cmd({
       return
     }
     for (const d of devices) {
-      const lastUsed = d.last_used_at
-        ? new Date(d.last_used_at).toLocaleString()
-        : "never"
+      const lastUsed = d.last_used_at ? new Date(d.last_used_at).toLocaleString() : "never"
       prompts.log.info(`${d.name}  [${d.key_prefix}…]  last used: ${lastUsed}`)
     }
-    prompts.log.info(
-      "Revoke a device from the Devices tab in your CLI page on app.syntheticsciences.ai",
-    )
+    prompts.log.info("Revoke a device from the Devices tab in your CLI page on app.syntheticsciences.ai")
     prompts.outro("Done")
   },
 })

@@ -576,9 +576,7 @@ export function SessionTurn(
                         <Message
                           message={msg()}
                           parts={stickyParts()}
-                          onRevert={
-                            props.onRevertMessage ? () => props.onRevertMessage?.(msg().id) : undefined
-                          }
+                          onRevert={props.onRevertMessage ? () => props.onRevertMessage?.(msg().id) : undefined}
                         />
                       </div>
 
@@ -673,9 +671,7 @@ export function SessionTurn(
                     </Show>
                     <Show when={!props.stepsExpanded && promptParts().length > 0}>
                       <div data-slot="session-turn-permission-parts">
-                        <For each={promptParts()}>
-                          {({ part, message }) => <Part part={part} message={message} />}
-                        </For>
+                        <For each={promptParts()}>{({ part, message }) => <Part part={part} message={message} />}</For>
                       </div>
                     </Show>
                     {/* Response */}

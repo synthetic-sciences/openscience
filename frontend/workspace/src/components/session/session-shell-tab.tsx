@@ -49,7 +49,7 @@ export function SessionShellTab(props: SessionShellTabProps) {
     const s = part.state
     if (s.status === "completed") return stripAnsi(s.output || "")
     if (s.status === "error") return s.error
-    if (s.status === "running") return stripAnsi(s.metadata?.output as string || "")
+    if (s.status === "running") return stripAnsi((s.metadata?.output as string) || "")
     return ""
   }
 
@@ -93,10 +93,7 @@ export function SessionShellTab(props: SessionShellTabProps) {
   )
 
   return (
-    <div
-      ref={container}
-      class="h-full overflow-y-auto no-scrollbar pb-10"
-    >
+    <div ref={container} class="h-full overflow-y-auto no-scrollbar pb-10">
       <Show
         when={bashParts().length > 0}
         fallback={
@@ -129,11 +126,7 @@ export function SessionShellTab(props: SessionShellTabProps) {
               })
 
               return (
-                <div
-                  data-part-id={part().id}
-                  data-status={status()}
-                  class="rounded-md overflow-hidden"
-                >
+                <div data-part-id={part().id} data-status={status()} class="rounded-md overflow-hidden">
                   {/* Command header */}
                   <div class="flex items-center gap-2 px-3 py-2 bg-surface-base">
                     <div class="flex items-center gap-1.5 min-w-0 flex-1">
@@ -151,21 +144,15 @@ export function SessionShellTab(props: SessionShellTabProps) {
                         <div class="size-2 rounded-full bg-text-weaker shrink-0" />
                       </Show>
 
-                      <code class="text-12-medium text-text-strong truncate">
-                        $ {command()}
-                      </code>
+                      <code class="text-12-medium text-text-strong truncate">$ {command()}</code>
                     </div>
 
                     <div class="flex items-center gap-2 shrink-0">
                       <Show when={description()}>
-                        <span class="text-11-regular text-text-weaker truncate max-w-48">
-                          {description()}
-                        </span>
+                        <span class="text-11-regular text-text-weaker truncate max-w-48">{description()}</span>
                       </Show>
                       <Show when={duration()}>
-                        <span class="text-11-regular text-text-weaker tabular-nums">
-                          {duration()}
-                        </span>
+                        <span class="text-11-regular text-text-weaker tabular-nums">{duration()}</span>
                       </Show>
                     </div>
                   </div>

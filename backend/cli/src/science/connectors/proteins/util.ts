@@ -44,11 +44,7 @@ interface UniProtLite {
  * (AlphaFold, SIFTS) are keyed by accession only, so this bridges a name search
  * to the accessions they understand. Never throws — returns [] on any failure.
  */
-export async function resolveUniProtAccessions(
-  query: string,
-  limit: number,
-  signal?: AbortSignal,
-): Promise<string[]> {
+export async function resolveUniProtAccessions(query: string, limit: number, signal?: AbortSignal): Promise<string[]> {
   const url =
     `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(query)}` +
     `&format=json&size=${clampLimit(limit, 5, 25)}&fields=accession`

@@ -7,13 +7,7 @@ import { base64Encode } from "@synsci/util/encode"
 import { useGlobalSync } from "@/context/global-sync"
 import { DialogSettings } from "@/components/dialog-settings"
 import { FolderPicker } from "@/thesis/FolderPicker"
-import {
-  IconFolder,
-  IconSearch,
-  IconPlus,
-  IconHome,
-  IconSettings,
-} from "@/thesis/shared/Icon"
+import { IconFolder, IconSearch, IconPlus, IconHome, IconSettings } from "@/thesis/shared/Icon"
 
 interface CommandPaletteProps {
   open: boolean
@@ -117,9 +111,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
   const filtered = createMemo(() => {
     const q = query().toLowerCase().trim()
     if (!q) return cmds()
-    return cmds().filter(
-      (c) => c.label.toLowerCase().includes(q) || c.hint?.toLowerCase().includes(q),
-    )
+    return cmds().filter((c) => c.label.toLowerCase().includes(q) || c.hint?.toLowerCase().includes(q))
   })
 
   const grouped = createMemo(() => {
@@ -222,10 +214,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
             </span>
           </div>
 
-          <div
-            class="thesis-scroll"
-            style={{ "overflow-y": "auto", "max-height": "52vh", padding: "6px 0" }}
-          >
+          <div class="thesis-scroll" style={{ "overflow-y": "auto", "max-height": "52vh", padding: "6px 0" }}>
             <Show
               when={filtered().length > 0}
               fallback={
@@ -278,10 +267,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
                               width: "100%",
                               "box-sizing": "border-box",
                               padding: "8px 16px",
-                              background:
-                                highlighted() === idx()
-                                  ? "var(--color-accent-subtle)"
-                                  : "transparent",
+                              background: highlighted() === idx() ? "var(--color-accent-subtle)" : "transparent",
                               transition: "background 120ms ease",
                             }}
                           >

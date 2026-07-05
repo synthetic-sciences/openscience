@@ -196,12 +196,14 @@ function run(command, args) {
 
 async function openNativeDialog() {
   if (process.platform === "darwin") {
-    const script = [
-      'set picked to choose folder with prompt "Open project folder"',
-      "POSIX path of picked",
-    ]
-    const out = await run("osascript", script.flatMap((item) => ["-e", item]))
-    const folder = String(out || "").trim().replace(/\/+$/, "")
+    const script = ['set picked to choose folder with prompt "Open project folder"', "POSIX path of picked"]
+    const out = await run(
+      "osascript",
+      script.flatMap((item) => ["-e", item]),
+    )
+    const folder = String(out || "")
+      .trim()
+      .replace(/\/+$/, "")
     return folder ? { paths: [folder] } : { paths: [] }
   }
   return { unsupported: true, message: `native dialog unsupported on ${process.platform}` }
@@ -272,9 +274,7 @@ async function handle(req, res) {
   const hint = body.hint ? String(body.hint).trim() : ""
   // `children` = array of immediate child names the browser walked from
   // the picked handle. Used as a stronger disambiguator than a single hint.
-  const fingerprint = Array.isArray(body.children)
-    ? body.children.map(String).filter(Boolean).slice(0, 16)
-    : []
+  const fingerprint = Array.isArray(body.children) ? body.children.map(String).filter(Boolean).slice(0, 16) : []
   if (!name || /\//.test(name)) {
     return send(res, 400, { error: "name required (no slashes)" })
   }

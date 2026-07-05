@@ -11,9 +11,7 @@ describe("computeDedupeKey", () => {
   })
 
   test("keeps nested group paths (e.g. gitlab subgroups)", () => {
-    expect(computeDedupeKey("/anything", "https://gitlab.com/group/sub/name")).toBe(
-      "repo:gitlab.com/group/sub/name",
-    )
+    expect(computeDedupeKey("/anything", "https://gitlab.com/group/sub/name")).toBe("repo:gitlab.com/group/sub/name")
   })
 
   test("falls back to local-folder:<realpath> with no remote", () => {

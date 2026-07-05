@@ -99,9 +99,7 @@ async function walkHandle(
   }
   const out: FileNode[] = []
   try {
-    for await (const [name, child] of (dir as any).entries() as AsyncIterable<
-      [string, any]
-    >) {
+    for await (const [name, child] of (dir as any).entries() as AsyncIterable<[string, any]>) {
       if (SKIP_DIRS.has(name)) continue
       if (budget.remaining <= 0) {
         budget.truncated = true

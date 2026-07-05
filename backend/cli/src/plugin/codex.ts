@@ -23,7 +23,7 @@ export async function pushTokensToBackend(
     const res = await fetch(`${thesisBaseUrl}/api/keys/openai-codex`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${thkToken}`,
+        Authorization: `Bearer ${thkToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -547,7 +547,10 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
 
             // Fallback to shared key if OAuth quota exceeded
             if (response.status === 429 || response.status === 403) {
-              const body = await response.clone().text().catch(() => "")
+              const body = await response
+                .clone()
+                .text()
+                .catch(() => "")
               const isQuotaExceeded =
                 body.includes("quota") ||
                 body.includes("rate_limit") ||
@@ -555,11 +558,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                 body.includes("capacity")
               if (isQuotaExceeded) {
                 const sharedKey = process.env.OPENAI_API_KEY
-                if (
-                  sharedKey &&
-                  sharedKey !== OAUTH_DUMMY_KEY &&
-                  !sharedKey.startsWith("thk_")
-                ) {
+                if (sharedKey && sharedKey !== OAUTH_DUMMY_KEY && !sharedKey.startsWith("thk_")) {
                   log.warn("codex oauth quota exceeded, falling back to shared key")
                   headers.set("authorization", `Bearer ${sharedKey}`)
                   headers.delete("ChatGPT-Account-Id")
@@ -610,7 +609,9 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                     refresh_token: tokens.refresh_token,
                     expires_in: tokens.expires_in ?? 3600,
                     account_id: accountId,
-                    id_token_claims: tokens.id_token ? parseJwtClaims(tokens.id_token) as Record<string, unknown> | undefined : undefined,
+                    id_token_claims: tokens.id_token
+                      ? (parseJwtClaims(tokens.id_token) as Record<string, unknown> | undefined)
+                      : undefined,
                   })
                   // Re-sync after backend now knows about the new codex
                   // credential, so `openai-codex` shows up in the local
@@ -709,7 +710,9 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                         refresh_token: tokens.refresh_token,
                         expires_in: tokens.expires_in ?? 3600,
                         account_id: accountId,
-                        id_token_claims: tokens.id_token ? parseJwtClaims(tokens.id_token) as Record<string, unknown> | undefined : undefined,
+                        id_token_claims: tokens.id_token
+                          ? (parseJwtClaims(tokens.id_token) as Record<string, unknown> | undefined)
+                          : undefined,
                       })
                       await OpenScience.syncServices?.().catch((e: unknown) => {
                         log.warn("post-codex-login sync failed", { error: String(e) })
@@ -743,7 +746,8 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
     "chat.headers": async (input, output) => {
       if (input.model.providerID !== "openai-codex") return
       output.headers.originator = "synsci"
-      output.headers["User-Agent"] = `openscience/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`
+      output.headers["User-Agent"] =
+        `openscience/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`
       output.headers.session_id = input.sessionID
     },
   }

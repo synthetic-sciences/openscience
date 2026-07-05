@@ -29,8 +29,10 @@ export function detectImageMime(bytes: Uint8Array): string | undefined {
     return "image/webp"
 
   // TIFF: 49 49 2A 00 (little-endian) or 4D 4D 00 2A (big-endian)
-  if ((bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) ||
-      (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a))
+  if (
+    (bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) ||
+    (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a)
+  )
     return "image/tiff"
 
   // BMP: 42 4D
@@ -137,7 +139,10 @@ export function readImageDimensions(bytes: Uint8Array): { width: number; height:
     if (chunk === "VP8L") {
       // Lossless: signature byte 0x2f at 20, then 14-bit width-1, 14-bit height-1 packed LE at 21-24
       if (bytes[20] !== 0x2f) return undefined
-      const b0 = bytes[21], b1 = bytes[22], b2 = bytes[23], b3 = bytes[24]
+      const b0 = bytes[21],
+        b1 = bytes[22],
+        b2 = bytes[23],
+        b3 = bytes[24]
       const width = 1 + (((b1 & 0x3f) << 8) | b0)
       const height = 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6))
       return { width, height }

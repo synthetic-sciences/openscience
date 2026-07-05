@@ -11,10 +11,7 @@ export const DialogManageModels: Component = () => {
   const language = useLanguage()
 
   return (
-    <Dialog
-      title={language.t("dialog.model.manage")}
-      description={language.t("dialog.model.manage.description")}
-    >
+    <Dialog title={language.t("dialog.model.manage")} description={language.t("dialog.model.manage.description")}>
       <List
         search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.model.empty")}

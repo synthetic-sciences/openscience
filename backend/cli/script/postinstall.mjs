@@ -52,10 +52,7 @@ function findBinary() {
   const binaryName = platform === "windows" ? "openscience.exe" : "openscience"
 
   // Try scoped package first (@synsci/openscience-darwin-arm64), then unscoped (openscience-darwin-arm64)
-  const packageNames = [
-    `@synsci/openscience-${platform}-${arch}`,
-    `openscience-${platform}-${arch}`,
-  ]
+  const packageNames = [`@synsci/openscience-${platform}-${arch}`, `openscience-${platform}-${arch}`]
 
   for (const packageName of packageNames) {
     try {

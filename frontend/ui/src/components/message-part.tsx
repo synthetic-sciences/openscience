@@ -1077,9 +1077,7 @@ ToolRegistry.register({
     const i18n = useI18n()
     const openInShellTab = (e: MouseEvent) => {
       e.stopPropagation()
-      document.dispatchEvent(
-        new CustomEvent("open-shell-tab", { detail: { partId: props.partID } }),
-      )
+      document.dispatchEvent(new CustomEvent("open-shell-tab", { detail: { partId: props.partID } }))
     }
     return (
       <BasicTool
@@ -1090,12 +1088,7 @@ ToolRegistry.register({
           subtitle: props.input.description,
           action: (
             <Tooltip value="Open in Shell tab">
-              <IconButton
-                icon="square-arrow-top-right"
-                variant="ghost"
-                class="h-5 w-5"
-                onClick={openInShellTab}
-              />
+              <IconButton icon="square-arrow-top-right" variant="ghost" class="h-5 w-5" onClick={openInShellTab} />
             </Tooltip>
           ),
         }}
@@ -1184,10 +1177,13 @@ ToolRegistry.register({
           source: Array.isArray(cell.source) ? cell.source.join("") : (cell.source ?? ""),
           executionCount: cell.execution_count ?? null,
           outputs: (cell.outputs ?? []).map((o: any) => {
-            if (o.output_type === "stream") return { type: "stream", name: o.name, text: Array.isArray(o.text) ? o.text.join("") : o.text }
-            if (o.output_type === "execute_result") return { type: "execute_result", data: o.data ?? {}, executionCount: o.execution_count }
+            if (o.output_type === "stream")
+              return { type: "stream", name: o.name, text: Array.isArray(o.text) ? o.text.join("") : o.text }
+            if (o.output_type === "execute_result")
+              return { type: "execute_result", data: o.data ?? {}, executionCount: o.execution_count }
             if (o.output_type === "display_data") return { type: "display_data", data: o.data ?? {} }
-            if (o.output_type === "error") return { type: "error", ename: o.ename, evalue: o.evalue, traceback: o.traceback ?? [] }
+            if (o.output_type === "error")
+              return { type: "error", ename: o.ename, evalue: o.evalue, traceback: o.traceback ?? [] }
             return { type: "stream", name: "stdout", text: "" }
           }),
         }))
@@ -1218,24 +1214,24 @@ ToolRegistry.register({
         }
       >
         <Show when={props.input.content}>
-          <Show when={isNotebook() && notebookCells().length > 0} fallback={
+          <Show
+            when={isNotebook() && notebookCells().length > 0}
+            fallback={
+              <div data-component="write-content">
+                <Dynamic
+                  component={codeComponent}
+                  file={{
+                    name: props.input.filePath,
+                    contents: props.input.content,
+                    cacheKey: checksum(props.input.content),
+                  }}
+                  overflow="scroll"
+                />
+              </div>
+            }
+          >
             <div data-component="write-content">
-              <Dynamic
-                component={codeComponent}
-                file={{
-                  name: props.input.filePath,
-                  contents: props.input.content,
-                  cacheKey: checksum(props.input.content),
-                }}
-                overflow="scroll"
-              />
-            </div>
-          }>
-            <div data-component="write-content">
-              <NotebookView
-                cells={notebookCells()}
-                title={filename()}
-              />
+              <NotebookView cells={notebookCells()} title={filename()} />
             </div>
           </Show>
         </Show>
@@ -1476,7 +1472,9 @@ ToolRegistry.register({
           title: connected() ? "Colab Connected" : "Colab Connect",
           subtitle: connected()
             ? `${mode()} · ${gpu() || "GPU ready"}`
-            : mode() === "enterprise" ? "Vertex AI" : "Bridge notebook",
+            : mode() === "enterprise"
+              ? "Vertex AI"
+              : "Bridge notebook",
         }}
       >
         <Show when={props.output}>

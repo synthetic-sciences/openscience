@@ -43,9 +43,7 @@ export function parseSkillUrl(input: string): ParsedSkillUrl {
   }
 
   // Full GitHub URL (with optional /tree/<ref>, optional .git suffix)
-  const ghUrl = raw.match(
-    /^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/tree\/([^/]+))?(?:\/(.+))?$/,
-  )
+  const ghUrl = raw.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/tree\/([^/]+))?(?:\/(.+))?$/)
   if (ghUrl) {
     const [, owner, repo, ref, p] = ghUrl
     return {
@@ -61,9 +59,7 @@ export function parseSkillUrl(input: string): ParsedSkillUrl {
   }
 
   // Generic https or git+ssh — derive owner/repo from the last two segments.
-  const generic = raw.match(
-    /^(https?|git\+ssh|ssh):\/\/[^/]+\/(.+)\/([^/]+?)(?:\.git)?$/,
-  )
+  const generic = raw.match(/^(https?|git\+ssh|ssh):\/\/[^/]+\/(.+)\/([^/]+?)(?:\.git)?$/)
   if (generic) {
     const [, , owner, repo] = generic
     const url = new URL(raw.replace(/^git\+/, ""))

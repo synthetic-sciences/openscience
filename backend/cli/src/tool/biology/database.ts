@@ -276,7 +276,10 @@ export const QueryPubmedTool = Tool.define("query_pubmed", {
       const a = summary.result?.[id]
       if (!a) return `### PMID:${id}\n(no details)`
 
-      const authors = a.authors?.slice(0, 3).map((x: any) => x.name).join(", ")
+      const authors = a.authors
+        ?.slice(0, 3)
+        .map((x: any) => x.name)
+        .join(", ")
       const authorStr = a.authors?.length > 3 ? `${authors} et al.` : authors || "Unknown"
       const lines: string[] = []
       lines.push(`### PMID:${id}`)
@@ -287,9 +290,7 @@ export const QueryPubmedTool = Tool.define("query_pubmed", {
     })
 
     // Fetch plain-text abstracts
-    const abstracts = await fetchText(
-      `${base}/efetch.fcgi?db=pubmed&id=${ids.join(",")}&rettype=abstract&retmode=text`,
-    )
+    const abstracts = await fetchText(`${base}/efetch.fcgi?db=pubmed&id=${ids.join(",")}&rettype=abstract&retmode=text`)
 
     return {
       title: `PubMed: ${params.query}`,
@@ -467,9 +468,7 @@ export const QueryPdbTool = Tool.define("query_pdb", {
         lines.push(`\n**Polymer entities** (${entities.length}):`)
         for (const entityId of entities.slice(0, 5)) {
           try {
-            const entity = await fetchJSON(
-              `https://data.rcsb.org/rest/v1/core/polymer_entity/${id}/${entityId}`,
-            )
+            const entity = await fetchJSON(`https://data.rcsb.org/rest/v1/core/polymer_entity/${id}/${entityId}`)
             if (entity.rcsb_polymer_entity?.pdbx_description) {
               lines.push(`- Entity ${entityId}: ${entity.rcsb_polymer_entity.pdbx_description}`)
             }

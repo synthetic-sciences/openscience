@@ -84,7 +84,13 @@ export namespace ComputeSettings {
     { id: "modal", name: "Modal", verified: true, placeholder: "ak-… : as-…", hint: "Serverless GPU compute." },
     { id: "tensorpool", name: "TensorPool", verified: true, placeholder: "tp-…", hint: "On-demand GPU clusters." },
     { id: "lambda", name: "Lambda Labs", verified: true, placeholder: "secret_…", hint: "Cloud GPU instances." },
-    { id: "prime", name: "Prime Intellect", verified: false, placeholder: "pi-…", hint: "Decentralized GPU marketplace." },
+    {
+      id: "prime",
+      name: "Prime Intellect",
+      verified: false,
+      placeholder: "pi-…",
+      hint: "Decentralized GPU marketplace.",
+    },
     { id: "vast", name: "Vast.ai", verified: false, placeholder: "vast api key", hint: "Spot GPU marketplace." },
     { id: "runpod", name: "RunPod", verified: false, placeholder: "rpa_…", hint: "Community & secure GPU cloud." },
   ]

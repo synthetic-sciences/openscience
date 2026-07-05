@@ -100,10 +100,14 @@ await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access publi
 if (!Script.preview) {
   try {
     // Calculate SHA values
-    const arm64Sha = await $`sha256sum ./dist/openscience-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
+    const arm64Sha = await $`sha256sum ./dist/openscience-linux-arm64.tar.gz | cut -d' ' -f1`
+      .text()
+      .then((x) => x.trim())
     const x64Sha = await $`sha256sum ./dist/openscience-linux-x64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
     const macX64Sha = await $`sha256sum ./dist/openscience-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-    const macArm64Sha = await $`sha256sum ./dist/openscience-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+    const macArm64Sha = await $`sha256sum ./dist/openscience-darwin-arm64.zip | cut -d' ' -f1`
+      .text()
+      .then((x) => x.trim())
 
     const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
 
@@ -164,7 +168,9 @@ if (!Script.preview) {
     // to the tap repo — a dedicated fine-grained PAT is required.
     const token = process.env.HOMEBREW_TAP_TOKEN
     if (!token) {
-      console.warn("::warning title=homebrew skipped::HOMEBREW_TAP_TOKEN not set — brew users stay on the previous version")
+      console.warn(
+        "::warning title=homebrew skipped::HOMEBREW_TAP_TOKEN not set — brew users stay on the previous version",
+      )
     } else {
       const tap = `https://x-access-token:${token}@github.com/synthetic-sciences/homebrew-tap.git`
       await $`rm -rf ./dist/homebrew-tap`
@@ -176,6 +182,8 @@ if (!Script.preview) {
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-    console.warn(`::warning title=homebrew failed::tap update failed — brew users stay on the previous version (${message})`)
+    console.warn(
+      `::warning title=homebrew failed::tap update failed — brew users stay on the previous version (${message})`,
+    )
   }
 }

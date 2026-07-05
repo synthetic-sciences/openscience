@@ -60,14 +60,8 @@ export namespace RSIDistill {
     return `Learned ${domain} workflow: ${trajectory.hypothesis.slice(0, 100)}. Uses: ${toolNames.slice(0, 5).join(", ")}.`
   }
 
-  function generateSkillContent(
-    name: string,
-    description: string,
-    trajectory: RSITrajectory.Trajectory,
-  ): string {
-    const toolSequence = trajectory.steps
-      .map((s, i) => `${i + 1}. **${s.tool}**: ${s.inputSummary}`)
-      .join("\n")
+  function generateSkillContent(name: string, description: string, trajectory: RSITrajectory.Trajectory): string {
+    const toolSequence = trajectory.steps.map((s, i) => `${i + 1}. **${s.tool}**: ${s.inputSummary}`).join("\n")
 
     const uniqueTools = [...new Set(trajectory.steps.map((s) => s.tool))]
 

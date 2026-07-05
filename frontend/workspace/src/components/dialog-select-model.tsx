@@ -135,10 +135,7 @@ const ModelList: Component<{
               </div>
             </div>
             <span class="ml-auto shrink-0 flex items-center pl-2">
-              <Show
-                when={!free}
-                fallback={<Tag>{language.t("model.tag.free")}</Tag>}
-              >
+              <Show when={!free} fallback={<Tag>{language.t("model.tag.free")}</Tag>}>
                 <span class="text-11-regular text-text-weaker tabular-nums">
                   {language.t("model.tag.pricing", {
                     input: price.input!,

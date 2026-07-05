@@ -148,7 +148,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
         .then(([app, ui]) => {
           const merged = {
             ...base,
-            ...i18n.flatten({ ...(app.dict as RawDictionary), ...((ui as { dict: RawDictionary }).dict) }),
+            ...i18n.flatten({ ...(app.dict as RawDictionary), ...(ui as { dict: RawDictionary }).dict }),
           } as Dictionary
           setDicts((prev) => ({ ...prev, [l]: merged }))
         })

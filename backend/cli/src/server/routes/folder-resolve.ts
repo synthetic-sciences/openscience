@@ -166,7 +166,7 @@ export const FolderResolveRoutes = lazy(() =>
       const desktop = path.join(HOME, "Desktop")
       const r = await listDirectory(desktop)
       const fda = r.ok && (r.entries?.length ?? 0) > 0
-      return c.json({ fda, reason: fda ? undefined : r.error ?? "Desktop unreadable (TCC blocking)" })
+      return c.json({ fda, reason: fda ? undefined : (r.error ?? "Desktop unreadable (TCC blocking)") })
     })
     .get("/dialog", async (c) => {
       // Only macOS gets a reliable scriptable native dialog. Linux/Windows
@@ -176,7 +176,10 @@ export const FolderResolveRoutes = lazy(() =>
       }
       try {
         const script = ['set picked to choose folder with prompt "Open project folder"', "POSIX path of picked"]
-        const out = await run("osascript", script.flatMap((s) => ["-e", s]))
+        const out = await run(
+          "osascript",
+          script.flatMap((s) => ["-e", s]),
+        )
         const folder = out.trim().replace(/\/+$/, "")
         return c.json({ paths: folder ? [folder] : [] })
       } catch (e: any) {
@@ -203,7 +206,7 @@ export const FolderResolveRoutes = lazy(() =>
         ok: true,
         absolute: real,
         readable: listed.ok,
-        entries: listed.ok ? listed.entries?.length ?? 0 : 0,
+        entries: listed.ok ? (listed.entries?.length ?? 0) : 0,
         warning: listed.ok ? undefined : listed.error,
       })
     })
@@ -216,9 +219,7 @@ export const FolderResolveRoutes = lazy(() =>
       }
       const name = String(body.name ?? "").trim()
       const hint = body.hint ? String(body.hint).trim() : ""
-      const fingerprint = Array.isArray(body.children)
-        ? body.children.map(String).filter(Boolean).slice(0, 16)
-        : []
+      const fingerprint = Array.isArray(body.children) ? body.children.map(String).filter(Boolean).slice(0, 16) : []
       if (!name || /\//.test(name)) return c.json({ error: "name required (no slashes)" }, 400)
       const candidates = await findByName(name, hint, fingerprint)
       return c.json({

@@ -33,10 +33,7 @@ test("clearSession removes every synced credential artifact", async () => {
 
   await Bun.write(session, JSON.stringify({ api_key: "thk_test.secret", user_id: "user-1" }))
   // The persisted snapshot preload-env.ts replays into process.env at boot.
-  await Bun.write(
-    snapshot,
-    JSON.stringify({ [INJECTED]: "thk_injected_value", [EXPORTED]: "thk_synced_value" }),
-  )
+  await Bun.write(snapshot, JSON.stringify({ [INJECTED]: "thk_injected_value", [EXPORTED]: "thk_synced_value" }))
   await Bun.write(managed, JSON.stringify({ model: "synsci/some-model" }))
   await Bun.write(queue, JSON.stringify({ service: "llm", event_type: "chat", tokens_used: 10 }) + "\n")
 

@@ -1,1 +1,13 @@
 sst-env.d.ts
+.claude/
+# generated output
+tooling/sdk/js/src/gen/
+tooling/sdk/js/src/v2/gen/
+tooling/sdk/openapi.json
+backend/cli/src/provider/models-snapshot.ts
+# build output
+dist/
+# prettier's mdx parser is deprecated and can mangle JSX-in-markdown
+*.mdx
+# curated skill content consumed verbatim by agents
+backend/cli/skills/

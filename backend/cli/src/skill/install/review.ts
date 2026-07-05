@@ -1,6 +1,9 @@
 import type { SkillEntry } from "./fetcher"
 
-export interface Rejection { name: string; reason: string }
+export interface Rejection {
+  name: string
+  reason: string
+}
 export interface Warning {
   name: string
   file: string
@@ -46,7 +49,7 @@ export function runtimeRegexPass(manifest: SkillEntry[]): RegexPassResult {
     if (matched) continue
     const bodies = [
       { file: "SKILL.md", content: skill.content },
-      ...skill.scripts.map(s => ({ file: s.path, content: s.content })),
+      ...skill.scripts.map((s) => ({ file: s.path, content: s.content })),
     ]
     outer: for (const { file, content } of bodies) {
       for (const re of CATASTROPHIC) {
@@ -80,10 +83,7 @@ const CLASSIFIER_INJECTION: { re: RegExp; label: string }[] = [
 export function classifierInjectionRegexPass(manifest: SkillEntry[]): RegexPassResult {
   const rejected: Rejection[] = []
   for (const skill of manifest) {
-    const haystacks = [
-      skill.content,
-      ...skill.scripts.map(s => s.content),
-    ]
+    const haystacks = [skill.content, ...skill.scripts.map((s) => s.content)]
     outer: for (const text of haystacks) {
       for (const { re, label } of CLASSIFIER_INJECTION) {
         if (re.test(text)) {
@@ -115,7 +115,7 @@ export function suspiciousRegexPass(manifest: SkillEntry[]): RegexPassResult {
   for (const skill of manifest) {
     const files: { file: string; content: string }[] = [
       { file: "SKILL.md", content: skill.content },
-      ...skill.scripts.map(s => ({ file: s.path, content: s.content })),
+      ...skill.scripts.map((s) => ({ file: s.path, content: s.content })),
     ]
     for (const { file, content } of files) {
       const lines = content.split("\n")
@@ -141,7 +141,7 @@ export function suspiciousRegexPass(manifest: SkillEntry[]): RegexPassResult {
 function extractDescription(skillMd: string): string {
   const fmMatch = skillMd.match(/^---\n([\s\S]*?)\n---/)
   if (!fmMatch) return ""
-  const line = fmMatch[1].split("\n").find(l => l.trim().startsWith("description:"))
+  const line = fmMatch[1].split("\n").find((l) => l.trim().startsWith("description:"))
   if (!line) return ""
   return line.replace(/^\s*description:\s*/, "").trim()
 }

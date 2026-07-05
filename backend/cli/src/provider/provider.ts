@@ -581,8 +581,7 @@ export namespace Provider {
     // from env so Atlas proxy can redirect non-BYOK Gemini calls without
     // requiring any user config. The proxy URL is written by /api/cli/sync.
     google: async () => {
-      const baseURL =
-        Env.get("GOOGLE_GENERATIVE_AI_BASE_URL") ?? Env.get("GEMINI_BASE_URL")
+      const baseURL = Env.get("GOOGLE_GENERATIVE_AI_BASE_URL") ?? Env.get("GEMINI_BASE_URL")
       return {
         autoload: false,
         options: baseURL ? { baseURL } : {},
@@ -966,14 +965,19 @@ export namespace Provider {
       // OpenAI API expects dots (`gpt-5.5`). We pick up whichever the
       // snapshot ships and route it through the codex provider.
       const codexModelIds = new Set<string>([
-        "gpt-5.5", "gpt-5-5",
-        "gpt-5.4", "gpt-5-4",
-        "gpt-5.4-mini", "gpt-5-4-mini",
-        "gpt-5.3-codex", "gpt-5-3-codex",
-        "gpt-5.2", "gpt-5-2",
+        "gpt-5.5",
+        "gpt-5-5",
+        "gpt-5.4",
+        "gpt-5-4",
+        "gpt-5.4-mini",
+        "gpt-5-4-mini",
+        "gpt-5.3-codex",
+        "gpt-5-3-codex",
+        "gpt-5.2",
+        "gpt-5-2",
       ])
       const baseOpenai = database["openai"]
-      const codexModels: Record<string, typeof baseOpenai.models[string]> = {}
+      const codexModels: Record<string, (typeof baseOpenai.models)[string]> = {}
       for (const [id, model] of Object.entries(baseOpenai.models)) {
         if (codexModelIds.has(id)) {
           codexModels[id] = {
@@ -1417,10 +1421,13 @@ export namespace Provider {
     return sortBy(
       models,
       // Higher score = sorted first. Matched models get (priority.length - index), unmatched get -1.
-      [(model) => {
-        const idx = priority.findIndex((filter) => model.id.includes(filter))
-        return idx >= 0 ? priority.length - idx : -1
-      }, "desc"],
+      [
+        (model) => {
+          const idx = priority.findIndex((filter) => model.id.includes(filter))
+          return idx >= 0 ? priority.length - idx : -1
+        },
+        "desc",
+      ],
       [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
       [(model) => model.id, "desc"],
     )
@@ -1447,9 +1454,7 @@ export namespace Provider {
     // still resolves a default rather than throwing.
     const candidates = providers.filter((p) => configured(p) && (managed || !p.id.startsWith("synsci")))
     const provider =
-      candidates.find((p) => Object.keys(p.models).length > 0) ??
-      candidates[0] ??
-      providers.find(configured)
+      candidates.find((p) => Object.keys(p.models).length > 0) ?? candidates[0] ?? providers.find(configured)
     if (!provider) throw new Error(NO_PROVIDER_HINT)
     const [model] = sort(Object.values(provider.models))
     if (!model) throw new Error(NO_PROVIDER_HINT)

@@ -77,15 +77,14 @@ export namespace Skill {
 
       if (!md) return
 
-      const parsed = Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).safeParse(md.data)
+      const parsed = Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).safeParse(
+        md.data,
+      )
       if (!parsed.success) return
 
       // Block skills with injection-like descriptions
       const desc = (parsed.data.description ?? "").toLowerCase()
-      if (
-        desc.includes("always run this skill") ||
-        desc.includes("must always run")
-      ) {
+      if (desc.includes("always run this skill") || desc.includes("must always run")) {
         log.warn("blocked skill with injection pattern", {
           name: parsed.data.name,
           reason: "description contains injection directive",
@@ -170,10 +169,7 @@ export namespace Skill {
           if (!skills[skill.name]) {
             // Block skills with injection patterns (same check as addSkill)
             const desc = (skill.description ?? "").toLowerCase()
-            if (
-              desc.includes("always run this skill") ||
-              desc.includes("must always run")
-            ) {
+            if (desc.includes("always run this skill") || desc.includes("must always run")) {
               log.warn("blocked API skill with injection pattern", {
                 name: skill.name,
                 reason: "description contains injection directive",
@@ -211,7 +207,7 @@ export namespace Skill {
 
       // Development fallback: only when running from source (not compiled binary)
       const devSkillsPath = path.join(import.meta.dir, "../../skills")
-      if (Installation.VERSION === "local" && await Filesystem.isDir(devSkillsPath)) {
+      if (Installation.VERSION === "local" && (await Filesystem.isDir(devSkillsPath))) {
         let count = 0
         for await (const match of SKILL_GLOB.scan({
           cwd: devSkillsPath,
@@ -314,13 +310,14 @@ export namespace Skill {
             migrated++
           }
           if (migrated > 0) {
-            log.info("migrated installed skills to plugin layout",
-                     { namespace: ns.name, migrated })
+            log.info("migrated installed skills to plugin layout", { namespace: ns.name, migrated })
           } else {
             await fs.rmdir(skillsSubdir).catch(() => {})
           }
         }
-      } catch { /* migration best-effort */ }
+      } catch {
+        /* migration best-effort */
+      }
     }
 
     const cloudInstalled = await OpenScience.fetchInstalledSkills().catch(() => null)
@@ -371,10 +368,7 @@ export namespace Skill {
             const raw = await Bun.file(manifestPath).text()
             const parsed = JSON.parse(raw) as { entries?: unknown }
             if (Array.isArray(parsed.entries)) {
-              entriesByNs.set(
-                ns.name,
-                new Set(parsed.entries.filter((e): e is string => typeof e === "string")),
-              )
+              entriesByNs.set(ns.name, new Set(parsed.entries.filter((e): e is string => typeof e === "string")))
             } else {
               entriesByNs.set(ns.name, null)
             }
@@ -382,7 +376,9 @@ export namespace Skill {
             entriesByNs.set(ns.name, null)
           }
         }
-      } catch { /* installedDir read failed — skip */ }
+      } catch {
+        /* installedDir read failed — skip */
+      }
 
       for await (const match of SKILL_GLOB.scan({
         cwd: installedDir,
@@ -399,9 +395,7 @@ export namespace Skill {
         const skillName = segments[2]
         const entrySet = entriesByNs.get(ns)
         if (entrySet) {
-          const skill = Object.values(skills).find(
-            (s) => s.location === match,
-          )
+          const skill = Object.values(skills).find((s) => s.location === match)
           if (skill) {
             skill.entry = entrySet.has(skillName) || entrySet.has(skill.name)
           }
@@ -450,7 +444,9 @@ export namespace Skill {
     await Bun.write(tmp, input.content, { mode: 0o600 })
     try {
       const md = await ConfigMarkdown.parse(tmp)
-      const parsed = Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).safeParse(md.data)
+      const parsed = Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).safeParse(
+        md.data,
+      )
       if (!parsed.success) {
         throw new InvalidError({
           path: file,

@@ -57,7 +57,7 @@ function toHit(p: Paper, score?: number): ConnectorHit {
   const meta = [p.authors, p.category, p.date].filter(Boolean).join(". ")
   return {
     id: `${(p.server ?? "biorxiv").toLowerCase()}:${p.doi ?? ""}`,
-    title: snippet(p.title, 300) ?? (p.doi ?? "Untitled preprint"),
+    title: snippet(p.title, 300) ?? p.doi ?? "Untitled preprint",
     summary: snippet(p.abstract) ?? (meta.length ? meta : undefined),
     url: link(p),
     score,
@@ -66,16 +66,12 @@ function toHit(p: Paper, score?: number): ConnectorHit {
 }
 
 async function recent(s: Server, count: number, opts?: SearchOptions): Promise<Paper[]> {
-  const data = await getJSON<Details>(`${BASE}/${s}/${count}`, { signal: opts?.signal }).catch(
-    () => ({}) as Details,
-  )
+  const data = await getJSON<Details>(`${BASE}/${s}/${count}`, { signal: opts?.signal }).catch(() => ({}) as Details)
   return (data.collection ?? []).map((p) => ({ ...p, server: p.server ?? s }))
 }
 
 async function byDoi(s: Server, doi: string, opts?: SearchOptions | undefined): Promise<Paper[]> {
-  const data = await getJSON<Details>(`${BASE}/${s}/${doi}`, { signal: opts?.signal }).catch(
-    () => ({}) as Details,
-  )
+  const data = await getJSON<Details>(`${BASE}/${s}/${doi}`, { signal: opts?.signal }).catch(() => ({}) as Details)
   return (data.collection ?? []).map((p) => ({ ...p, server: p.server ?? s }))
 }
 
@@ -93,13 +89,19 @@ export const biorxiv: Connector = {
 
     if (isDoi(query)) {
       const found = await Promise.all(targets.map((s) => byDoi(s, query.trim(), opts)))
-      return found.flat().slice(0, limit).map((p) => toHit(p))
+      return found
+        .flat()
+        .slice(0, limit)
+        .map((p) => toHit(p))
     }
 
     const pool = Math.min(Number(opts?.params?.pool ?? 100) || 100, 200)
     const batches = await Promise.all(targets.map((s) => recent(s, pool, opts)))
     const papers = batches.flat()
-    const terms = query.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 1)
+    const terms = query
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 1)
     if (terms.length === 0) return papers.slice(0, limit).map((p) => toHit(p))
 
     return papers

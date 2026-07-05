@@ -52,9 +52,7 @@ export function pricingLines(cost?: ModelCost | null): PricingLines {
   const read = cost!.cache_read
   const write = cost!.cache_write
   const cache =
-    read !== undefined || write !== undefined
-      ? `${formatRate(read ?? 0)} / ${formatRate(write ?? 0)}`
-      : undefined
+    read !== undefined || write !== undefined ? `${formatRate(read ?? 0)} / ${formatRate(write ?? 0)}` : undefined
   return { free: false, input, output, cache }
 }
 

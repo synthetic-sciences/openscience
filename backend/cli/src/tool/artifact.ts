@@ -17,10 +17,7 @@ export const ArtifactTool = Tool.define("artifact", {
   ].join(" "),
   parameters: z.object({
     action: z.enum(["register", "resolve", "list"]).describe("The action to perform"),
-    type: z
-      .string()
-      .optional()
-      .describe('For register: artifact type (e.g. "dataframe", "analysis", "raw_output")'),
+    type: z.string().optional().describe('For register: artifact type (e.g. "dataframe", "analysis", "raw_output")'),
     content: z.string().optional().describe("For register: the large content to store"),
     summary: z.string().optional().describe("For register: brief summary for context window"),
     artifact_id: z.string().optional().describe("For resolve: the artifact ID to retrieve"),

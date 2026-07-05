@@ -58,10 +58,7 @@ function toHit(uid: string, s: GeoSummary | undefined): ConnectorHit {
 
 async function summaries(ids: string[], signal?: AbortSignal): Promise<ESummaryResult> {
   if (ids.length === 0) return {}
-  return getJSON<ESummaryResult>(
-    `${EUTILS}/esummary.fcgi?db=gds&id=${ids.join(",")}&retmode=json`,
-    { signal },
-  )
+  return getJSON<ESummaryResult>(`${EUTILS}/esummary.fcgi?db=gds&id=${ids.join(",")}&retmode=json`, { signal })
 }
 
 export const geo: Connector = {

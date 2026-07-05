@@ -166,13 +166,9 @@ export default function Page(): JSX.Element {
   const projectPath = () => project()?.worktree ?? sdk.directory
 
   const sessions = createMemo<SyncSession[]>(() =>
-    [...sync.data.session]
-      .filter((s) => !s.parentID)
-      .sort((a, b) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0)),
+    [...sync.data.session].filter((s) => !s.parentID).sort((a, b) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0)),
   )
-  const messages = createMemo(() =>
-    params.id ? (sync.data.message[params.id] ?? []) : [],
-  )
+  const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
   const lastUserMessage = createMemo(() => {
     const ms = messages()
     for (let i = ms.length - 1; i >= 0; i--) if (ms[i].role === "user") return ms[i]
@@ -229,8 +225,7 @@ export default function Page(): JSX.Element {
   }
 
   const [stepsExpanded, setStepsExpanded] = createSignal<Record<string, boolean>>({})
-  const toggleSteps = (id: string) =>
-    setStepsExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+  const toggleSteps = (id: string) => setStepsExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
 
   const isDark = () => theme.mode() === "dark"
   useGlobalKeys({ onNew: () => void newSession() })
@@ -336,10 +331,7 @@ export default function Page(): JSX.Element {
     >
       <ToastContainer />
       <HelpOverlay open={uiStore.helpOpen()} onClose={() => uiStore.setHelpOpen(false)} />
-      <CommandPalette
-        open={uiStore.paletteOpen()}
-        onClose={() => uiStore.setPaletteOpen(false)}
-      />
+      <CommandPalette open={uiStore.paletteOpen()} onClose={() => uiStore.setPaletteOpen(false)} />
 
       <DisconnectedPanel />
       <Header
@@ -385,7 +377,16 @@ export default function Page(): JSX.Element {
         >
           <CenterTabStrip chatTitle={chatTitle()} />
 
-          <div style={{ flex: 1, "min-height": 0, "min-width": 0, position: "relative", display: "flex", "flex-direction": "column" }}>
+          <div
+            style={{
+              flex: 1,
+              "min-height": 0,
+              "min-width": 0,
+              position: "relative",
+              display: "flex",
+              "flex-direction": "column",
+            }}
+          >
             {/* chat — always mounted so streaming + scroll survive tab switches */}
             <div
               style={{
@@ -470,8 +471,8 @@ export default function Page(): JSX.Element {
                     }}
                   >
                     <span style={{ flex: 1, "min-width": 0 }}>
-                      Conversation reverted. {revertedCount()} turn{revertedCount() === 1 ? "" : "s"} hidden and
-                      file changes rolled back. Sending a new message makes this permanent.
+                      Conversation reverted. {revertedCount()} turn{revertedCount() === 1 ? "" : "s"} hidden and file
+                      changes rolled back. Sending a new message makes this permanent.
                     </span>
                     <button
                       type="button"
@@ -555,18 +556,10 @@ function CenterTabStrip(props: { chatTitle: string }): JSX.Element {
         "flex-shrink": 0,
       }}
     >
-      <CenterTab
-        active={active() === "chat"}
-        label={props.chatTitle}
-        onClick={() => centerTabs.setActive("chat")}
-      >
+      <CenterTab active={active() === "chat"} label={props.chatTitle} onClick={() => centerTabs.setActive("chat")}>
         <IconMessageSquare size={12} strokeWidth={1.6} />
       </CenterTab>
-      <CenterTab
-        active={active() === "files"}
-        label="Files"
-        onClick={() => centerTabs.setActive("files")}
-      >
+      <CenterTab active={active() === "files"} label="Files" onClick={() => centerTabs.setActive("files")}>
         <IconFolderTree size={12} strokeWidth={1.6} />
       </CenterTab>
       <For each={centerTabs.docs()}>
@@ -623,12 +616,16 @@ function CenterTab(props: {
         if (!props.active) e.currentTarget.style.background = "transparent"
       }}
     >
-      <span style={{ display: "inline-flex", color: props.active ? "var(--color-text)" : "var(--color-text-faint)", "flex-shrink": 0 }}>
+      <span
+        style={{
+          display: "inline-flex",
+          color: props.active ? "var(--color-text)" : "var(--color-text-faint)",
+          "flex-shrink": 0,
+        }}
+      >
         {props.children}
       </span>
-      <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
-        {props.label}
-      </span>
+      <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{props.label}</span>
       <Show when={props.onClose}>
         <span
           role="button"
@@ -783,8 +780,7 @@ function SessionsSidebar(props: {
             gap: "6px",
             padding: "7px 12px",
             "border-radius": "4px",
-            background:
-              "linear-gradient(180deg, var(--color-surface-solid), var(--color-bg-subtle))",
+            background: "linear-gradient(180deg, var(--color-surface-solid), var(--color-bg-subtle))",
             border: "1px solid var(--color-border-strong)",
             "font-family": FONT_MONO,
             "font-size": "12px",
@@ -836,8 +832,7 @@ function SessionsSidebar(props: {
               "line-height": 1.55,
             }}
           >
-            no sessions yet · click{" "}
-            <span style={{ color: "var(--color-text-muted)" }}>+ new session</span> above
+            no sessions yet · click <span style={{ color: "var(--color-text-muted)" }}>+ new session</span> above
           </div>
         </Show>
       </div>
@@ -877,11 +872,7 @@ function SessionRow(props: {
         padding: "6px 10px",
         "padding-right": hover() ? "32px" : "10px",
         "border-radius": "4px",
-        background: props.active
-          ? "var(--color-bg-elevated)"
-          : hover()
-            ? "var(--color-accent-subtle)"
-            : "transparent",
+        background: props.active ? "var(--color-bg-elevated)" : hover() ? "var(--color-accent-subtle)" : "transparent",
         transition: "background 120ms ease, padding 120ms ease",
         position: "relative",
       }}
@@ -912,9 +903,7 @@ function SessionRow(props: {
           "padding-left": "16px",
         }}
       >
-        {props.session.time?.updated
-          ? DateTime.fromMillis(props.session.time.updated).toRelative()
-          : "—"}
+        {props.session.time?.updated ? DateTime.fromMillis(props.session.time.updated).toRelative() : "—"}
       </div>
       <Show when={hover()}>
         <button
@@ -994,7 +983,9 @@ function ChatWelcome(): JSX.Element {
         }}
       >
         What are we working on?
-        <span class="thesis-blink" style={{ color: "var(--color-text-faint)" }}>_</span>
+        <span class="thesis-blink" style={{ color: "var(--color-text-faint)" }}>
+          _
+        </span>
       </h2>
 
       <div style={{ display: "flex", "flex-wrap": "wrap", gap: "6px" }}>

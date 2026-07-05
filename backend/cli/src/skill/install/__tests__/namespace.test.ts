@@ -16,9 +16,7 @@ describe("parseSkillUrl", () => {
   })
 
   it("parses GitHub URL with /tree/<ref>", () => {
-    expect(parseSkillUrl(
-      "https://github.com/anthropics/superpowers/tree/v5.1.0",
-    )).toMatchObject({
+    expect(parseSkillUrl("https://github.com/anthropics/superpowers/tree/v5.1.0")).toMatchObject({
       ref: "v5.1.0",
       namespace: "superpowers",
     })
@@ -34,9 +32,7 @@ describe("parseSkillUrl", () => {
   })
 
   it("parses gh: shorthand with ref + path", () => {
-    expect(parseSkillUrl(
-      "gh:anthropics/superpowers@v5.1.0/skills/brainstorming",
-    )).toMatchObject({
+    expect(parseSkillUrl("gh:anthropics/superpowers@v5.1.0/skills/brainstorming")).toMatchObject({
       ref: "v5.1.0",
       path: "skills/brainstorming",
       namespace: "superpowers",
@@ -44,8 +40,7 @@ describe("parseSkillUrl", () => {
   })
 
   it("strips trailing slashes", () => {
-    expect(parseSkillUrl("https://github.com/anthropics/superpowers/"))
-      .toMatchObject({ repo: "superpowers" })
+    expect(parseSkillUrl("https://github.com/anthropics/superpowers/")).toMatchObject({ repo: "superpowers" })
   })
 
   it("normalizes namespace (lowercase, hyphens preserved)", () => {

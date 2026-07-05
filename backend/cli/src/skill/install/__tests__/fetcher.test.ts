@@ -37,21 +37,29 @@ body`,
   return dir
 }
 
-beforeAll(async () => { fixtureRepo = await makeFixture() })
-afterAll(async () => { await rm(fixtureRepo, { recursive: true, force: true }) })
+beforeAll(async () => {
+  fixtureRepo = await makeFixture()
+})
+afterAll(async () => {
+  await rm(fixtureRepo, { recursive: true, force: true })
+})
 
 describe("fetchManifest", () => {
   it("enumerates SKILL.md files from a local git repo", async () => {
     const result = await fetchManifest({
-      kind: "git", host: "local", owner: "t", repo: "fixture",
-      ref: null, path: null,
+      kind: "git",
+      host: "local",
+      owner: "t",
+      repo: "fixture",
+      ref: null,
+      path: null,
       namespace: "fixture",
       cloneUrl: fixtureRepo,
     })
     try {
       expect(result.sha).toMatch(/^[0-9a-f]{7,40}$/)
       const sorted = [...result.manifest].sort((a, b) => a.name.localeCompare(b.name))
-      expect(sorted.map(s => s.name)).toEqual(["brainstorming", "debugging"])
+      expect(sorted.map((s) => s.name)).toEqual(["brainstorming", "debugging"])
       expect(sorted[0].content).toContain("name: brainstorming")
       expect(sorted[0].namespace).toBe("fixture")
       // No manifest in this fixture → entries is null (all skills are entries)
@@ -73,18 +81,20 @@ describe("fetchManifest", () => {
       path.join(dir, "skills/helper-skill/SKILL.md"),
       "---\nname: helper-skill\ndescription: internal\n---\n# y",
     )
-    await writeFile(
-      path.join(dir, "openscience-skills.json"),
-      JSON.stringify({ entries: ["public-skill"] }),
-    )
+    await writeFile(path.join(dir, "openscience-skills.json"), JSON.stringify({ entries: ["public-skill"] }))
     await $`git init -q`.cwd(dir).quiet()
     await $`git add -A`.cwd(dir).quiet()
     await $`git -c user.email=t@t -c user.name=t commit -q -m init`.cwd(dir).quiet()
 
     try {
       const result = await fetchManifest({
-        kind: "git", host: "local", owner: "t", repo: "manifest",
-        ref: null, path: null, namespace: "manifest",
+        kind: "git",
+        host: "local",
+        owner: "t",
+        repo: "manifest",
+        ref: null,
+        path: null,
+        namespace: "manifest",
         cloneUrl: dir,
       })
       expect(result.entries).toEqual(["public-skill"])
@@ -101,11 +111,18 @@ describe("fetchManifest", () => {
     await $`git add -A`.cwd(empty).quiet()
     await $`git -c user.email=t@t -c user.name=t commit -q -m x`.cwd(empty).quiet()
     try {
-      await expect(fetchManifest({
-        kind: "git", host: "local", owner: "t", repo: "empty",
-        ref: null, path: null, namespace: "empty",
-        cloneUrl: empty,
-      })).rejects.toThrow(/no skills found/i)
+      await expect(
+        fetchManifest({
+          kind: "git",
+          host: "local",
+          owner: "t",
+          repo: "empty",
+          ref: null,
+          path: null,
+          namespace: "empty",
+          cloneUrl: empty,
+        }),
+      ).rejects.toThrow(/no skills found/i)
     } finally {
       await rm(empty, { recursive: true, force: true })
     }

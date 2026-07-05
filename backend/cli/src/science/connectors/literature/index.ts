@@ -18,14 +18,6 @@ import { arxiv } from "./arxiv"
 export { pubmed, europepmc, biorxiv, crossref, openalex, semanticScholar, arxiv }
 
 /** All literature connectors, ready for the integration stage to register. */
-const connectors: Connector[] = [
-  pubmed,
-  europepmc,
-  biorxiv,
-  crossref,
-  openalex,
-  semanticScholar,
-  arxiv,
-]
+const connectors: Connector[] = [pubmed, europepmc, biorxiv, crossref, openalex, semanticScholar, arxiv]
 
 export default connectors

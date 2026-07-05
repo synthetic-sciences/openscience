@@ -131,12 +131,7 @@ function formatTokens(value: number | undefined): string {
 
 // Agents the openscience CLI exposes to the user. `research` is the default harness;
 // `biology`/`physics`/`ml` are the domain specialists; `plan` is read-only planning.
-type AgentName =
-  | "research"
-  | "biology"
-  | "physics"
-  | "ml"
-  | "plan"
+type AgentName = "research" | "biology" | "physics" | "ml" | "plan"
 
 interface AgentOption {
   name: AgentName
@@ -621,8 +616,7 @@ export function Composer(): JSX.Element {
     if (next.length > 0) setAttachments((prev) => [...prev, ...next])
   }
 
-  const removeAttachment = (id: string) =>
-    setAttachments((prev) => prev.filter((a) => a.id !== id))
+  const removeAttachment = (id: string) => setAttachments((prev) => prev.filter((a) => a.id !== id))
 
   const onPaste = (e: ClipboardEvent) => {
     const data = e.clipboardData
@@ -668,7 +662,10 @@ export function Composer(): JSX.Element {
     const q = (slashQuery() ?? "").toLowerCase()
     const all = ((sync.data.skill ?? []) as SkillRow[]).filter((s) => s.entry !== false)
     if (!q) {
-      return all.slice().sort((a, b) => a.name.localeCompare(b.name)).slice(0, 12)
+      return all
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .slice(0, 12)
     }
     // Single-char queries match the name only (descriptions contain every
     // common letter); 2+ chars also search description + tags.
@@ -725,10 +722,7 @@ export function Composer(): JSX.Element {
     if ((!trimmed && atts.length === 0) || submitting()) return
     const chosen = model()
     if (!chosen) {
-      toast.error(
-        "no model selected",
-        `Connect a provider key at ${BYOK_URL} to enable a model.`,
-      )
+      toast.error("no model selected", `Connect a provider key at ${BYOK_URL} to enable a model.`)
       return
     }
     const payload: QueuedPrompt = {
@@ -793,14 +787,13 @@ export function Composer(): JSX.Element {
         p.attachments.length > 0
           ? `\n\n---\nAttachments: ${p.attachments
               .map((a) => safeFilename(a.filename))
-              .join(", ")}.\nIf they aren't already there, save each attachment to \`.context/\` at the project root (create the directory if missing). For text-like files use the write tool; for binaries decode the data URL with bash. Treat \`.context/\` as the durable scratchpad for files dropped into chat.`
+              .join(
+                ", ",
+              )}.\nIf they aren't already there, save each attachment to \`.context/\` at the project root (create the directory if missing). For text-like files use the write tool; for binaries decode the data URL with bash. Treat \`.context/\` as the durable scratchpad for files dropped into chat.`
           : ""
 
       const textPartID = Identifier.ascending("part")
-      const promptParts = [
-        { id: textPartID, type: "text" as const, text: userText + guidance },
-        ...filePartsBase,
-      ]
+      const promptParts = [{ id: textPartID, type: "text" as const, text: userText + guidance }, ...filePartsBase]
 
       // Optimistically render the user message — text + attachment chips
       // live in the chat the moment Enter is pressed.
@@ -929,9 +922,7 @@ export function Composer(): JSX.Element {
               ? "var(--color-border-strong)"
               : "var(--color-border)",
           "box-shadow":
-            dragOver() || focused()
-              ? "0 0 0 3px var(--color-accent-subtle), var(--shadow-xs)"
-              : "var(--shadow-xs)",
+            dragOver() || focused() ? "0 0 0 3px var(--color-accent-subtle), var(--shadow-xs)" : "var(--shadow-xs)",
           background: dragOver() ? "var(--color-accent-subtle)" : "var(--color-surface-solid)",
           "border-radius": "4px",
           transition: "background 120ms ease, box-shadow 120ms ease, border-color 120ms ease",
@@ -1021,9 +1012,7 @@ export function Composer(): JSX.Element {
               gap: "6px",
             }}
           >
-            <For each={attachments()}>
-              {(a) => <AttachmentChip att={a} onRemove={() => removeAttachment(a.id)} />}
-            </For>
+            <For each={attachments()}>{(a) => <AttachmentChip att={a} onRemove={() => removeAttachment(a.id)} />}</For>
           </div>
         </Show>
         <div style={{ position: "relative", width: "100%" }}>
@@ -1130,10 +1119,7 @@ export function Composer(): JSX.Element {
                         padding: "6px 8px",
                         "border-radius": "4px",
                         cursor: "pointer",
-                        background:
-                          slashIndex() === i()
-                            ? "var(--color-accent-subtle)"
-                            : "transparent",
+                        background: slashIndex() === i() ? "var(--color-accent-subtle)" : "transparent",
                         "font-family": FONT_MONO,
                         "font-size": "11px",
                         color: "var(--color-text)",
@@ -1229,7 +1215,11 @@ export function Composer(): JSX.Element {
                   {selectedLabel()!.name}
                 </span>
               </Show>
-              <IconChevronDown size={9} strokeWidth={1.5} style={{ "margin-left": "5px", "flex-shrink": 0, opacity: 0.7 }} />
+              <IconChevronDown
+                size={9}
+                strokeWidth={1.5}
+                style={{ "margin-left": "5px", "flex-shrink": 0, opacity: 0.7 }}
+              />
             </button>
             <Show when={modelOpen()}>
               <Portal>
@@ -1353,7 +1343,9 @@ export function Composer(): JSX.Element {
                                     color: "var(--color-text-faint)",
                                   }}
                                 >
-                                  <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                                  <span
+                                    style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}
+                                  >
                                     {group.name}
                                   </span>
                                   <span style={{ opacity: 0.6 }}>{group.items.length}</span>
@@ -1391,8 +1383,23 @@ export function Composer(): JSX.Element {
                                           transition: REDUCE_MOTION ? undefined : "background 120ms ease",
                                         }}
                                       >
-                                        <span style={{ flex: 1, "min-width": 0, display: "flex", "flex-direction": "column", gap: "4px" }}>
-                                          <span style={{ display: "flex", "align-items": "center", gap: "7px", "min-width": 0 }}>
+                                        <span
+                                          style={{
+                                            flex: 1,
+                                            "min-width": 0,
+                                            display: "flex",
+                                            "flex-direction": "column",
+                                            gap: "4px",
+                                          }}
+                                        >
+                                          <span
+                                            style={{
+                                              display: "flex",
+                                              "align-items": "center",
+                                              gap: "7px",
+                                              "min-width": 0,
+                                            }}
+                                          >
                                             <Show when={dot.meters}>
                                               <span
                                                 title={dot.title}
@@ -1446,7 +1453,14 @@ export function Composer(): JSX.Element {
                                             </Show>
                                           </span>
                                         </span>
-                                        <span style={{ "flex-shrink": 0, display: "flex", "align-items": "center", gap: "10px" }}>
+                                        <span
+                                          style={{
+                                            "flex-shrink": 0,
+                                            display: "flex",
+                                            "align-items": "center",
+                                            gap: "10px",
+                                          }}
+                                        >
                                           <Show
                                             when={!price().free}
                                             fallback={
@@ -1623,9 +1637,7 @@ export function Composer(): JSX.Element {
                 padding: "0 8px",
                 "border-radius": "4px",
                 border: "1px solid var(--color-border)",
-                background: agentOpen()
-                  ? "var(--color-bg-elevated)"
-                  : "var(--color-surface-solid)",
+                background: agentOpen() ? "var(--color-bg-elevated)" : "var(--color-surface-solid)",
                 "font-family": FONT_MONO,
                 "font-size": "12px",
                 color: "var(--color-text)",
@@ -1638,10 +1650,7 @@ export function Composer(): JSX.Element {
               <IconChevronDown size={9} strokeWidth={1.5} style={{ opacity: 0.7 }} />
             </button>
             <Show when={agentOpen()}>
-              <div
-                onClick={() => setAgentOpen(false)}
-                style={{ position: "fixed", inset: 0, "z-index": 20 }}
-              />
+              <div onClick={() => setAgentOpen(false)} style={{ position: "fixed", inset: 0, "z-index": 20 }} />
               <div
                 class="thesis-pop-up thesis-scroll"
                 style={{
@@ -1678,18 +1687,13 @@ export function Composer(): JSX.Element {
                         "box-sizing": "border-box",
                         padding: "6px 10px",
                         "border-radius": "4px",
-                        background:
-                          agent() === opt.name
-                            ? "var(--color-accent-subtle)"
-                            : "transparent",
+                        background: agent() === opt.name ? "var(--color-accent-subtle)" : "transparent",
                       }}
                       onMouseEnter={(e) => {
-                        if (agent() !== opt.name)
-                          e.currentTarget.style.background = "var(--color-bg-elevated)"
+                        if (agent() !== opt.name) e.currentTarget.style.background = "var(--color-bg-elevated)"
                       }}
                       onMouseLeave={(e) => {
-                        if (agent() !== opt.name)
-                          e.currentTarget.style.background = "transparent"
+                        if (agent() !== opt.name) e.currentTarget.style.background = "transparent"
                       }}
                     >
                       <span
@@ -1811,8 +1815,7 @@ export function Composer(): JSX.Element {
                 "border-radius": "4px",
                 background: isWorking() || inflight() ? "transparent" : "var(--color-accent)",
                 color: isWorking() || inflight() ? "var(--color-text)" : "var(--color-on-accent)",
-                border:
-                  isWorking() || inflight() ? "1px solid var(--color-border)" : "1px solid transparent",
+                border: isWorking() || inflight() ? "1px solid var(--color-border)" : "1px solid transparent",
                 "font-family": FONT_MONO,
                 "font-size": "12px",
                 transition: "all 120ms ease",
@@ -1964,9 +1967,7 @@ function AttachmentChip(props: { att: Attachment; onRemove: () => void }): JSX.E
       >
         {props.att.filename}
       </span>
-      <span style={{ color: "var(--color-text-faint)", "font-size": "10px" }}>
-        {sizeLabel()}
-      </span>
+      <span style={{ color: "var(--color-text-faint)", "font-size": "10px" }}>{sizeLabel()}</span>
       <button
         type="button"
         title="remove"

@@ -197,7 +197,10 @@ function payloadToResult(p: RawPayload): ExecuteResult {
     outputs.push({ type: "result", data })
   }
   if (p.error) {
-    outputs.push({ type: "error", error: { name: p.error.name, message: p.error.message, traceback: p.error.traceback } })
+    outputs.push({
+      type: "error",
+      error: { name: p.error.name, message: p.error.message, traceback: p.error.traceback },
+    })
   }
   return {
     ok: p.ok,

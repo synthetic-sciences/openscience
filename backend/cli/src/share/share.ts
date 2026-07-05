@@ -68,7 +68,9 @@ export namespace Share {
 
   export const URL =
     process.env["OPENSCIENCE_API"] ??
-    (Installation.isPreview() || Installation.isLocal() ? "https://app.dev.syntheticsciences.ai" : "https://app.syntheticsciences.ai")
+    (Installation.isPreview() || Installation.isLocal()
+      ? "https://app.dev.syntheticsciences.ai"
+      : "https://app.syntheticsciences.ai")
 
   const disabled = true
 

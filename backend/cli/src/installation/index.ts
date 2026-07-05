@@ -106,7 +106,9 @@ export namespace Installation {
     for (const check of checks) {
       const output = await check.command()
       const installedName =
-        check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "openscience" : "@synsci/openscience"
+        check.name === "brew" || check.name === "choco" || check.name === "scoop"
+          ? "openscience"
+          : "@synsci/openscience"
       if (output.includes(installedName)) {
         return check.name
       }
@@ -203,7 +205,12 @@ export namespace Installation {
       }
     }
 
-    if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm" || detectedMethod === "unknown") {
+    if (
+      detectedMethod === "npm" ||
+      detectedMethod === "bun" ||
+      detectedMethod === "pnpm" ||
+      detectedMethod === "unknown"
+    ) {
       const registry = await iife(async () => {
         const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
         const reg = r || "https://registry.npmjs.org"

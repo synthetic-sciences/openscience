@@ -219,7 +219,10 @@ export function SequenceViewer(props: ArtifactRenderProps) {
       >
         <For each={rows()}>
           {(row) => (
-            <div data-slot="sequence-row" style={{ display: "flex", "align-items": "flex-end", "margin-bottom": "6px" }}>
+            <div
+              data-slot="sequence-row"
+              style={{ display: "flex", "align-items": "flex-end", "margin-bottom": "6px" }}
+            >
               <div
                 data-slot="sequence-gutter"
                 style={{

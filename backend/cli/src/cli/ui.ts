@@ -26,11 +26,7 @@ function _detectColor(): boolean {
   if (env.TERM === "dumb") {
     return false
   }
-  return Boolean(
-    typeof process !== "undefined" &&
-      process.stdout?.isTTY &&
-      process.stderr?.isTTY,
-  )
+  return Boolean(typeof process !== "undefined" && process.stdout?.isTTY && process.stderr?.isTTY)
 }
 
 const _COLOR = _detectColor()

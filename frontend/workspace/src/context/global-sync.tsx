@@ -489,7 +489,8 @@ function createGlobalSync() {
         // Aborted/cancelled loads happen routinely when the user switches
         // projects quickly; don't flash an error toast for those.
         const name = err?.name ?? ""
-        if (name === "AbortError" || name === "TimeoutError" || /\babort|cancell?ed/i.test(String(err?.message ?? ""))) return
+        if (name === "AbortError" || name === "TimeoutError" || /\babort|cancell?ed/i.test(String(err?.message ?? "")))
+          return
         const project = getFilename(directory)
         showToast({ title: language.t("toast.session.listFailed.title", { project }), description: err.message })
       })
@@ -545,7 +546,10 @@ function createGlobalSync() {
       Promise.all([
         sdk.path.get().then((x) => setStore("path", x.data!)),
         sdk.command.list().then((x) => setStore("command", x.data ?? [])),
-        sdk.app.skills().then((x) => setStore("skill", x.data ?? [])).catch(() => {}),
+        sdk.app
+          .skills()
+          .then((x) => setStore("skill", x.data ?? []))
+          .catch(() => {}),
         sdk.session.status().then((x) => setStore("session_status", x.data!)),
         loadSessions(directory),
         sdk.mcp.status().then((x) => setStore("mcp", x.data!)),

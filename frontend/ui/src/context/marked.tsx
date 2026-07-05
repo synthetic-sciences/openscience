@@ -7,7 +7,7 @@ import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } 
 // extensions) are loaded on FIRST USE, not at module load — so first paint (the
 // launchpad renders no markdown/math/code) never pays for them. Each loader is
 // memoized after its first await.
-type Katex = typeof import("katex")["default"]
+type Katex = (typeof import("katex"))["default"]
 let katexP: Promise<Katex> | undefined
 // Load the KaTeX engine AND its stylesheet together on first math render, so the
 // ~790-rule katex CSS stays out of the entry stylesheet (it's only needed once
@@ -15,7 +15,7 @@ let katexP: Promise<Katex> | undefined
 const loadKatex = () =>
   (katexP ??= Promise.all([import("katex"), import("katex/dist/katex.min.css")]).then(([m]) => m.default))
 
-type BundledLanguages = typeof import("shiki")["bundledLanguages"]
+type BundledLanguages = (typeof import("shiki"))["bundledLanguages"]
 let langsP: Promise<BundledLanguages> | undefined
 const loadLangs = () => (langsP ??= import("shiki").then((m) => m.bundledLanguages))
 

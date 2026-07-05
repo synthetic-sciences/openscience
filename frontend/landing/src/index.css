@@ -1,17 +1,17 @@
 /* CMU Concrete: slab serif from the Computer Modern family (TeX). Self-hosted. Roman + Bold only, no italic. */
 @font-face {
-  font-family: 'CMU Concrete';
+  font-family: "CMU Concrete";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts/cmu-concrete-roman.woff') format('woff');
+  src: url("/fonts/cmu-concrete-roman.woff") format("woff");
 }
 @font-face {
-  font-family: 'CMU Concrete';
+  font-family: "CMU Concrete";
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/fonts/cmu-concrete-bold.woff') format('woff');
+  src: url("/fonts/cmu-concrete-bold.woff") format("woff");
 }
 
 @tailwind base;
@@ -47,12 +47,12 @@
     /* Coral accent for section labels and hot states. */
     --accent-coral: 14 62% 66%;
 
-    --font-display: 'CMU Concrete', 'Computer Modern Concrete', ui-serif, Georgia, serif;
-    --font-body: 'CMU Concrete', 'Computer Modern Concrete', ui-serif, Georgia, serif;
-    --font-mono: 'CMU Concrete', 'Computer Modern Concrete', ui-serif, Georgia, serif;
+    --font-display: "CMU Concrete", "Computer Modern Concrete", ui-serif, Georgia, serif;
+    --font-body: "CMU Concrete", "Computer Modern Concrete", ui-serif, Georgia, serif;
+    --font-mono: "CMU Concrete", "Computer Modern Concrete", ui-serif, Georgia, serif;
 
     /* Real terminal font for terminal mocks and data readouts only. */
-    --font-terminal: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --font-terminal: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 }
 
@@ -97,7 +97,12 @@
     outline-offset: 2px;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: var(--font-display);
     font-style: normal;
     font-weight: 400;
@@ -105,16 +110,29 @@
   }
 
   /* No italic anywhere. */
-  em, i, cite, address, var, dfn {
+  em,
+  i,
+  cite,
+  address,
+  var,
+  dfn {
     font-style: normal;
   }
 }
 
 @layer utilities {
-  .font-mono { font-family: var(--font-mono); }
-  .font-display { font-family: var(--font-display); }
-  .font-body { font-family: var(--font-body); }
-  .font-terminal { font-family: var(--font-terminal); }
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+  .font-display {
+    font-family: var(--font-display);
+  }
+  .font-body {
+    font-family: var(--font-body);
+  }
+  .font-terminal {
+    font-family: var(--font-terminal);
+  }
 
   /* Hero entrance: one orchestrated stagger on load. */
   @keyframes rise-in {
@@ -146,8 +164,10 @@
     background: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
     box-shadow: 0 2px 10px -5px rgba(0, 0, 0, 0.55);
-    transition: transform 300ms cubic-bezier(0.2, 0.7, 0.2, 1),
-      box-shadow 300ms ease, background-color 300ms ease;
+    transition:
+      transform 300ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      box-shadow 300ms ease,
+      background-color 300ms ease;
   }
   .btn-primary:hover {
     background: hsl(44 48% 90%);
@@ -159,7 +179,9 @@
     box-shadow: 0 2px 10px -5px rgba(0, 0, 0, 0.55);
   }
   @media (prefers-reduced-motion: reduce) {
-    .btn-primary:hover { transform: none; }
+    .btn-primary:hover {
+      transform: none;
+    }
   }
 
   /* Giant clipped footer wordmark. */
@@ -194,7 +216,9 @@
     background-position: -1px -1px;
   }
 
-  .text-balance { text-wrap: balance; }
+  .text-balance {
+    text-wrap: balance;
+  }
 
   /* ASCII art canvas: fixed-pitch, non-selectable. */
   .ascii {
@@ -220,8 +244,14 @@
 
   /* Blinking terminal caret. */
   @keyframes term-blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
+    0%,
+    50% {
+      opacity: 1;
+    }
+    51%,
+    100% {
+      opacity: 0;
+    }
   }
   .terminal-cursor {
     display: inline-block;
@@ -235,8 +265,12 @@
 
   /* Full-bleed marquee: edge-to-edge auto-scrolling strip. */
   @keyframes marquee-x {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
   }
   .marquee-mask {
     -webkit-mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%);
@@ -259,7 +293,9 @@
     flex-shrink: 0;
   }
   @media (prefers-reduced-motion: reduce) {
-    .marquee-track { animation: none; }
+    .marquee-track {
+      animation: none;
+    }
   }
 
   /* Graph-paper grids for product visual cards. */
@@ -286,7 +322,7 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0.10;
+    opacity: 0.1;
     mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.7' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.88 0 0 0 0 0.72 0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
     z-index: 1;
@@ -323,8 +359,7 @@
       radial-gradient(70% 130% at 100% 50%, hsl(15 80% 56% / 0.95) 0%, transparent 55%),
       radial-gradient(60% 120% at 85% 60%, hsl(345 70% 55% / 0.85) 0%, transparent 55%),
       radial-gradient(80% 140% at 100% 80%, hsl(280 60% 45% / 0.75) 0%, transparent 60%),
-      radial-gradient(90% 110% at 95% 30%, hsl(35 80% 60% / 0.6) 0%, transparent 50%),
-      hsl(var(--background));
+      radial-gradient(90% 110% at 95% 30%, hsl(35 80% 60% / 0.6) 0%, transparent 50%), hsl(var(--background));
     isolation: isolate;
   }
   .dither-warm::before {
@@ -342,8 +377,7 @@
     background:
       radial-gradient(70% 90% at 50% 60%, hsl(8 80% 50% / 0.85) 0%, transparent 55%),
       radial-gradient(50% 80% at 60% 50%, hsl(345 70% 55% / 0.7) 0%, transparent 50%),
-      radial-gradient(80% 100% at 50% 80%, hsl(20 70% 38% / 0.55) 0%, transparent 60%),
-      hsl(var(--background));
+      radial-gradient(80% 100% at 50% 80%, hsl(20 70% 38% / 0.55) 0%, transparent 60%), hsl(var(--background));
     isolation: isolate;
   }
   .dither-red::before {
@@ -361,8 +395,7 @@
     background:
       radial-gradient(70% 100% at 30% 60%, hsl(280 65% 55% / 0.85) 0%, transparent 55%),
       radial-gradient(60% 80% at 50% 70%, hsl(255 55% 55% / 0.7) 0%, transparent 55%),
-      radial-gradient(80% 100% at 70% 50%, hsl(220 50% 35% / 0.55) 0%, transparent 60%),
-      hsl(var(--background));
+      radial-gradient(80% 100% at 70% 50%, hsl(220 50% 35% / 0.55) 0%, transparent 60%), hsl(var(--background));
     isolation: isolate;
   }
   .dither-purple::before {
@@ -380,8 +413,7 @@
     background:
       radial-gradient(70% 100% at 60% 60%, hsl(225 60% 50% / 0.85) 0%, transparent 55%),
       radial-gradient(60% 80% at 30% 50%, hsl(280 50% 50% / 0.65) 0%, transparent 55%),
-      radial-gradient(80% 110% at 75% 75%, hsl(245 55% 35% / 0.6) 0%, transparent 60%),
-      hsl(var(--background));
+      radial-gradient(80% 110% at 75% 75%, hsl(245 55% 35% / 0.6) 0%, transparent 60%), hsl(var(--background));
     isolation: isolate;
   }
   .dither-blue::before {
@@ -439,7 +471,7 @@
     pointer-events: none;
     z-index: 0;
     background-image:
-      radial-gradient(ellipse 70% 9% at 22% 28%, hsl(40 12% 84% / 0.20) 0%, transparent 70%),
+      radial-gradient(ellipse 70% 9% at 22% 28%, hsl(40 12% 84% / 0.2) 0%, transparent 70%),
       radial-gradient(ellipse 78% 8% at 78% 46%, hsl(40 12% 84% / 0.15) 0%, transparent 70%),
       radial-gradient(ellipse 62% 7% at 32% 74%, hsl(40 12% 84% / 0.11) 0%, transparent 70%),
       radial-gradient(ellipse 82% 6% at 75% 88%, hsl(40 12% 84% / 0.08) 0%, transparent 70%);
@@ -464,20 +496,20 @@
   .atmosphere-stars {
     background-image:
       radial-gradient(circle at 8% 22%, hsl(0 0% 100% / 0.55) 0.5px, transparent 1.2px),
-      radial-gradient(circle at 22% 14%, hsl(0 0% 100% / 0.40) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 22% 14%, hsl(0 0% 100% / 0.4) 0.5px, transparent 1.2px),
       radial-gradient(circle at 38% 34%, hsl(0 0% 100% / 0.32) 0.5px, transparent 1.2px),
-      radial-gradient(circle at 52% 18%, hsl(0 0% 100% / 0.50) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 52% 18%, hsl(0 0% 100% / 0.5) 0.5px, transparent 1.2px),
       radial-gradient(circle at 70% 28%, hsl(0 0% 100% / 0.35) 0.5px, transparent 1.2px),
       radial-gradient(circle at 84% 12%, hsl(0 0% 100% / 0.45) 0.5px, transparent 1.2px),
-      radial-gradient(circle at 92% 36%, hsl(0 0% 100% / 0.30) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 92% 36%, hsl(0 0% 100% / 0.3) 0.5px, transparent 1.2px),
       radial-gradient(circle at 12% 58%, hsl(0 0% 100% / 0.42) 0.5px, transparent 1.2px),
       radial-gradient(circle at 30% 70%, hsl(0 0% 100% / 0.35) 0.5px, transparent 1.2px),
-      radial-gradient(circle at 48% 60%, hsl(0 0% 100% / 0.50) 0.5px, transparent 1.2px),
-      radial-gradient(circle at 64% 76%, hsl(0 0% 100% / 0.40) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 48% 60%, hsl(0 0% 100% / 0.5) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 64% 76%, hsl(0 0% 100% / 0.4) 0.5px, transparent 1.2px),
       radial-gradient(circle at 78% 64%, hsl(0 0% 100% / 0.35) 0.5px, transparent 1.2px),
-      radial-gradient(circle at 90% 84%, hsl(0 0% 100% / 0.50) 0.5px, transparent 1.2px),
-      radial-gradient(circle at 18% 88%, hsl(0 0% 100% / 0.30) 0.5px, transparent 1.2px),
-      radial-gradient(circle at 42% 92%, hsl(0 0% 100% / 0.40) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 90% 84%, hsl(0 0% 100% / 0.5) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 18% 88%, hsl(0 0% 100% / 0.3) 0.5px, transparent 1.2px),
+      radial-gradient(circle at 42% 92%, hsl(0 0% 100% / 0.4) 0.5px, transparent 1.2px),
       radial-gradient(120% 80% at 30% 110%, hsl(28 18% 4% / 0.92) 0%, transparent 60%),
       linear-gradient(180deg, hsl(28 12% 9%) 0%, hsl(28 14% 6%) 100%);
   }
@@ -504,7 +536,7 @@
     gap: 8px;
     padding: 7px 12px;
     border: 1px solid hsl(var(--foreground) / 0.48);
-    background: hsl(var(--background) / 0.70);
+    background: hsl(var(--background) / 0.7);
     backdrop-filter: blur(3px);
     font-family: var(--font-terminal);
     font-size: 10px;
@@ -544,7 +576,9 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .lift {
-      transition: border-color 360ms ease, background-color 360ms ease;
+      transition:
+        border-color 360ms ease,
+        background-color 360ms ease;
     }
     .lift:hover {
       transform: none;
@@ -574,8 +608,12 @@
 
   /* Subtle sweeping highlight for progress bars in mockups. */
   @keyframes bar-shimmer {
-    0% { transform: translateX(-130%); }
-    100% { transform: translateX(230%); }
+    0% {
+      transform: translateX(-130%);
+    }
+    100% {
+      transform: translateX(230%);
+    }
   }
   .bar-shimmer {
     position: relative;
@@ -591,7 +629,9 @@
     pointer-events: none;
   }
   @media (prefers-reduced-motion: reduce) {
-    .bar-shimmer::after { animation: none; }
+    .bar-shimmer::after {
+      animation: none;
+    }
   }
 
   /* Editorial watermark numeral behind cards. */

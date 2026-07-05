@@ -62,9 +62,7 @@ function toHit(e: GxaExperiment): ConnectorHit {
 }
 
 async function catalogue(signal?: AbortSignal): Promise<GxaExperiment[]> {
-  const data = await getJSON<GxaExperiments>(`${BASE}/json/experiments`, { signal }).catch(
-    () => ({}) as GxaExperiments,
-  )
+  const data = await getJSON<GxaExperiments>(`${BASE}/json/experiments`, { signal }).catch(() => ({}) as GxaExperiments)
   return data.experiments ?? []
 }
 

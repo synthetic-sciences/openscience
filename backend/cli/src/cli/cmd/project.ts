@@ -55,7 +55,9 @@ const ProjectInitCommand = cmd({
       process.stdout.write(
         JSON.stringify({
           project_id: result.projectId,
-          ...(failure ? { error: failure.kind, status: failure.status, message: failure.message, host: failure.host } : {}),
+          ...(failure
+            ? { error: failure.kind, status: failure.status, message: failure.message, host: failure.host }
+            : {}),
         }) + "\n",
       )
       return
@@ -84,7 +86,9 @@ function reportInitFailure(failure: InitProjectFailure | undefined) {
       )
       break
     case "unreachable":
-      prompts.log.error(`Could not reach the Atlas backend at ${f.host}${f.status ? ` (HTTP ${f.status})` : ""}${detail}.`)
+      prompts.log.error(
+        `Could not reach the Atlas backend at ${f.host}${f.status ? ` (HTTP ${f.status})` : ""}${detail}.`,
+      )
       prompts.log.info(
         "You are logged in — this is a network/service issue, not an auth issue. Check connectivity (and any OPENSCIENCE_API_BASE/SYNSC_API_BASE override), then retry.",
       )
@@ -94,7 +98,9 @@ function reportInitFailure(failure: InitProjectFailure | undefined) {
       prompts.log.info("Manage your plan at https://app.syntheticsciences.ai/cli (Plan tab).")
       break
     default:
-      prompts.log.error(`Atlas could not initialize the graph${f.status ? ` (HTTP ${f.status} from ${f.host})` : ""}${detail}.`)
+      prompts.log.error(
+        `Atlas could not initialize the graph${f.status ? ` (HTTP ${f.status} from ${f.host})` : ""}${detail}.`,
+      )
   }
   if (Bun.which("atlas")) prompts.log.info("Atlas CLI detected — `atlas doctor --format=json` can help diagnose.")
 }
@@ -178,9 +184,7 @@ const ProjectMergeCommand = cmd({
     // matches the folder name (the "Project: <name>" roots created eagerly).
     const refKey = `atlas-project-dedupe:${key}`
     const lname = name.toLowerCase()
-    const candidates = allRoots.filter(
-      (r) => r.ref === refKey || r.title.toLowerCase().includes(lname),
-    )
+    const candidates = allRoots.filter((r) => r.ref === refKey || r.title.toLowerCase().includes(lname))
     const pool = candidates.length > 0 ? candidates : allRoots
     if (pool.length === 0) {
       prompts.log.warn("No Atlas project roots found for your account.")
@@ -216,11 +220,7 @@ const ProjectMergeCommand = cmd({
       mkdirSync(join(directory, ".openscience"), { recursive: true })
       writeFileSync(
         join(directory, ".openscience", "project.json"),
-        JSON.stringify(
-          { project_id: chosen, dedupe_key: key, resolved_at: new Date().toISOString() },
-          null,
-          2,
-        ) + "\n",
+        JSON.stringify({ project_id: chosen, dedupe_key: key, resolved_at: new Date().toISOString() }, null, 2) + "\n",
       )
     } catch (e) {
       prompts.log.error(`Could not write .openscience/project.json: ${e instanceof Error ? e.message : String(e)}`)

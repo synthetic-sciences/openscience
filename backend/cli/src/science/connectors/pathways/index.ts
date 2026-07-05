@@ -17,15 +17,7 @@ import { wikipathways } from "./wikipathways"
 import { opentargets } from "./opentargets"
 
 /** All pathway/interaction connectors in this batch, in catalog order. */
-export const pathwayConnectors: Connector[] = [
-  reactome,
-  kegg,
-  stringdb,
-  biogrid,
-  intact,
-  wikipathways,
-  opentargets,
-]
+export const pathwayConnectors: Connector[] = [reactome, kegg, stringdb, biogrid, intact, wikipathways, opentargets]
 
 export { reactome, kegg, stringdb, biogrid, intact, wikipathways, opentargets }
 

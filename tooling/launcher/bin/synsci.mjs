@@ -25,7 +25,11 @@ import { createInterface } from "node:readline"
 import { fileURLToPath } from "node:url"
 
 const SELF_PATH = (() => {
-  try { return realpathSync(fileURLToPath(import.meta.url)) } catch { return "" }
+  try {
+    return realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return ""
+  }
 })()
 
 const BOLD = "\x1b[1m"
@@ -54,8 +58,12 @@ const LOGO = [
   "╚══════╝ ╚═════╝╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝╚══════╝",
 ]
 
-function ok(msg) { console.log(`  ${GREEN}✓${RESET} ${msg}`) }
-function warn(msg) { console.log(`  ${YELLOW}⚠${RESET} ${msg}`) }
+function ok(msg) {
+  console.log(`  ${GREEN}✓${RESET} ${msg}`)
+}
+function warn(msg) {
+  console.log(`  ${YELLOW}⚠${RESET} ${msg}`)
+}
 
 function spinner(msg) {
   const frames = ["◒", "◐", "◓", "◑"]
@@ -65,16 +73,33 @@ function spinner(msg) {
     process.stdout.write(`${CLEAR_LINE}  ${CYAN}${frames[i++ % frames.length]}${RESET} ${msg}`)
   }, 80)
   return {
-    ok(result) { clearInterval(id); process.stdout.write(`${CLEAR_LINE}${SHOW_CURSOR}`); ok(result) },
-    warn(result) { clearInterval(id); process.stdout.write(`${CLEAR_LINE}${SHOW_CURSOR}`); warn(result) },
-    fail(result) { clearInterval(id); process.stdout.write(`${CLEAR_LINE}${SHOW_CURSOR}`); console.log(`  ${RED}✗${RESET} ${result}`) },
-    update(m) { msg = m },
+    ok(result) {
+      clearInterval(id)
+      process.stdout.write(`${CLEAR_LINE}${SHOW_CURSOR}`)
+      ok(result)
+    },
+    warn(result) {
+      clearInterval(id)
+      process.stdout.write(`${CLEAR_LINE}${SHOW_CURSOR}`)
+      warn(result)
+    },
+    fail(result) {
+      clearInterval(id)
+      process.stdout.write(`${CLEAR_LINE}${SHOW_CURSOR}`)
+      console.log(`  ${RED}✗${RESET} ${result}`)
+    },
+    update(m) {
+      msg = m
+    },
   }
 }
 
 function runQuiet(cmd) {
-  try { return execSync(cmd, { encoding: "utf-8", stdio: "pipe" }).trim() }
-  catch { return null }
+  try {
+    return execSync(cmd, { encoding: "utf-8", stdio: "pipe" }).trim()
+  } catch {
+    return null
+  }
 }
 
 // Windows global installs expose a .cmd shim, which can't be exec'd
@@ -87,8 +112,11 @@ function execCli(file, args = [], opts = {}) {
 }
 
 function runFileQuiet(file, args = []) {
-  try { return execCli(file, args, { encoding: "utf-8", stdio: "pipe" }).trim() }
-  catch { return null }
+  try {
+    return execCli(file, args, { encoding: "utf-8", stdio: "pipe" }).trim()
+  } catch {
+    return null
+  }
 }
 
 function isLauncherPath(p) {
@@ -97,7 +125,9 @@ function isLauncherPath(p) {
     if (SELF_PATH && real === SELF_PATH) return true
     if (real.includes("/_npx/")) return true
     return false
-  } catch { return false }
+  } catch {
+    return false
+  }
 }
 
 // Returns the absolute path to the real @synsci/openscience binary (`openscience`).
@@ -121,10 +151,14 @@ function resolveCli() {
     if (!existsSync(cand) || isLauncherPath(cand)) continue
     try {
       const ver = execCli(cand, ["--version"], {
-        encoding: "utf-8", stdio: "pipe", timeout: 5000,
+        encoding: "utf-8",
+        stdio: "pipe",
+        timeout: 5000,
       }).trim()
       if (/^\d/.test(ver)) return cand
-    } catch { /* unrunnable candidate, try next */ }
+    } catch {
+      /* unrunnable candidate, try next */
+    }
   }
   return null
 }
@@ -136,10 +170,16 @@ function resolveCli() {
 // still prints JSON, so read stdout either way.
 function hasDeprecatedCli() {
   let out = ""
-  try { out = execSync("npm ls -g @synsci/cli --depth=0 --json", { encoding: "utf-8", stdio: "pipe" }) }
-  catch (e) { out = e && typeof e.stdout === "string" ? e.stdout : "" }
-  try { return Boolean(JSON.parse(out).dependencies["@synsci/cli"]) }
-  catch { return false }
+  try {
+    out = execSync("npm ls -g @synsci/cli --depth=0 --json", { encoding: "utf-8", stdio: "pipe" })
+  } catch (e) {
+    out = e && typeof e.stdout === "string" ? e.stdout : ""
+  }
+  try {
+    return Boolean(JSON.parse(out).dependencies["@synsci/cli"])
+  } catch {
+    return false
+  }
 }
 
 function isConnected() {
@@ -150,7 +190,9 @@ function isConnected() {
     const data = JSON.parse(readFileSync(sessionPath, "utf-8"))
     if (!data.access_token || !data.expires_at) return false
     return new Date(data.expires_at) > new Date()
-  } catch { return false }
+  } catch {
+    return false
+  }
 }
 
 function atlasVersion() {
@@ -194,19 +236,27 @@ async function installOrUpdateAtlas() {
 async function ask(question) {
   const rl = createInterface({ input: process.stdin, output: process.stdout })
   return new Promise((resolve) => {
-    rl.question(question, (answer) => { rl.close(); resolve(answer.trim()) })
+    rl.question(question, (answer) => {
+      rl.close()
+      resolve(answer.trim())
+    })
   })
 }
 
 async function main() {
   process.on("exit", () => process.stdout.write(SHOW_CURSOR))
-  process.on("SIGINT", () => { process.stdout.write(SHOW_CURSOR); process.exit(130) })
+  process.on("SIGINT", () => {
+    process.stdout.write(SHOW_CURSOR)
+    process.exit(130)
+  })
 
   // --- Logo ---
   console.log()
   for (const line of LOGO) console.log(`   ${CYAN}${line}${RESET}`)
   console.log()
-  console.log(`   ${BOLD}Synthetic Sciences${RESET} ${DIM}OpenScience, the open-source AI research workspace · Atlas, the research platform${RESET}`)
+  console.log(
+    `   ${BOLD}Synthetic Sciences${RESET} ${DIM}OpenScience, the open-source AI research workspace · Atlas, the research platform${RESET}`,
+  )
   console.log()
 
   // --- Step 1: Install or upgrade the OpenScience CLI ---
@@ -291,9 +341,15 @@ async function main() {
   console.log()
   console.log(`  ${BOLD}How do you want to run it?${RESET}`)
   console.log()
-  console.log(`    ${BOLD}1${RESET}  ${CYAN}OpenScience${RESET}         ${DIM}free and open source, bring your own API keys, no account${RESET}`)
-  console.log(`    ${BOLD}2${RESET}  ${CYAN}OpenScience + Atlas${RESET} ${DIM}managed models, wallet billing, research graph & compute${RESET}`)
-  console.log(`    ${BOLD}3${RESET}  ${CYAN}Atlas CLI${RESET}           ${DIM}just the Atlas research CLI — maps, runs, and compute from the terminal${RESET}`)
+  console.log(
+    `    ${BOLD}1${RESET}  ${CYAN}OpenScience${RESET}         ${DIM}free and open source, bring your own API keys, no account${RESET}`,
+  )
+  console.log(
+    `    ${BOLD}2${RESET}  ${CYAN}OpenScience + Atlas${RESET} ${DIM}managed models, wallet billing, research graph & compute${RESET}`,
+  )
+  console.log(
+    `    ${BOLD}3${RESET}  ${CYAN}Atlas CLI${RESET}           ${DIM}just the Atlas research CLI — maps, runs, and compute from the terminal${RESET}`,
+  )
   console.log()
 
   const setup = await ask(`  ${DIM}❯${RESET} Choose [1/2/3]: `)
@@ -315,7 +371,9 @@ async function main() {
       ok("Connected to Atlas")
     } else {
       console.log()
-      console.log(`  ${DIM}Connect your Atlas account for managed credentials:${RESET} ${CYAN}openscience connect login${RESET}`)
+      console.log(
+        `  ${DIM}Connect your Atlas account for managed credentials:${RESET} ${CYAN}openscience connect login${RESET}`,
+      )
     }
     console.log()
     console.log(`  ${BOLD}Next steps${RESET}`)

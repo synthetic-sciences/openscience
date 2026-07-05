@@ -125,7 +125,9 @@ export namespace ToolRegistry {
       ApplyPatchTool,
       ...(Flag.OPENSCIENCE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
-      ...(Flag.OPENSCIENCE_EXPERIMENTAL_PLAN_MODE && Flag.OPENSCIENCE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
+      ...(Flag.OPENSCIENCE_EXPERIMENTAL_PLAN_MODE && Flag.OPENSCIENCE_CLIENT === "cli"
+        ? [PlanExitTool, PlanEnterTool]
+        : []),
       ...BiologyTools,
       ...ScienceTools,
       ...ProvenanceTools,

@@ -53,18 +53,66 @@ export interface SettingsPanel {
 export const SETTINGS_PANELS: SettingsPanel[] = [
   // ── Capabilities ──
   { id: "skills", title: "Skills", icon: "brain", section: "capabilities", component: lazy(() => import("./Skills")) },
-  { id: "connectors", title: "Connectors", icon: "mcp", section: "capabilities", component: lazy(() => import("./Connectors")) },
-  { id: "specialists", title: "Specialists", icon: "models", section: "capabilities", component: lazy(() => import("./Specialists")) },
-  { id: "memory", title: "Memory", icon: "archive", section: "capabilities", component: lazy(() => import("./Memory")) },
-  { id: "compute", title: "Compute", icon: "server", section: "capabilities", component: lazy(() => import("./Compute")) },
-  { id: "network", title: "Network", icon: "share", section: "capabilities", component: lazy(() => import("./Network")) },
+  {
+    id: "connectors",
+    title: "Connectors",
+    icon: "mcp",
+    section: "capabilities",
+    component: lazy(() => import("./Connectors")),
+  },
+  {
+    id: "specialists",
+    title: "Specialists",
+    icon: "models",
+    section: "capabilities",
+    component: lazy(() => import("./Specialists")),
+  },
+  {
+    id: "memory",
+    title: "Memory",
+    icon: "archive",
+    section: "capabilities",
+    component: lazy(() => import("./Memory")),
+  },
+  {
+    id: "compute",
+    title: "Compute",
+    icon: "server",
+    section: "capabilities",
+    component: lazy(() => import("./Compute")),
+  },
+  {
+    id: "network",
+    title: "Network",
+    icon: "share",
+    section: "capabilities",
+    component: lazy(() => import("./Network")),
+  },
   // ── Workspace ──
-  { id: "permissions", title: "Permissions", icon: "check", section: "workspace", component: lazy(() => import("./Permissions")) },
-  { id: "credentials", title: "Credentials", icon: "providers", section: "workspace", component: lazy(() => import("./Credentials")) },
+  {
+    id: "permissions",
+    title: "Permissions",
+    icon: "check",
+    section: "workspace",
+    component: lazy(() => import("./Permissions")),
+  },
+  {
+    id: "credentials",
+    title: "Credentials",
+    icon: "providers",
+    section: "workspace",
+    component: lazy(() => import("./Credentials")),
+  },
   { id: "spend", title: "Spend", icon: "sliders", section: "workspace", component: lazy(() => import("./Spend")) },
   { id: "storage", title: "Storage", icon: "folder", section: "workspace", component: lazy(() => import("./Storage")) },
   { id: "usage", title: "Usage", icon: "bullet-list", section: "workspace", component: lazy(() => import("./Usage")) },
-  { id: "general", title: "General", icon: "settings-gear", section: "workspace", component: lazy(() => import("./General")) },
+  {
+    id: "general",
+    title: "General",
+    icon: "settings-gear",
+    section: "workspace",
+    component: lazy(() => import("./General")),
+  },
 ]
 
 export const SETTINGS_SECTIONS: { id: SettingsSection; label: string }[] = [

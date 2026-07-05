@@ -61,9 +61,7 @@ export async function fetchManifest(parsed: ParsedSkillUrl): Promise<FetchResult
 
   const sha = (await $`git rev-parse HEAD`.cwd(tmpDir).text()).trim()
 
-  const rootForScan = parsed.path
-    ? path.join(tmpDir, parsed.path)
-    : path.join(tmpDir, "skills")
+  const rootForScan = parsed.path ? path.join(tmpDir, parsed.path) : path.join(tmpDir, "skills")
 
   const skillDirs: string[] = []
   try {
@@ -75,7 +73,9 @@ export async function fetchManifest(parsed: ParsedSkillUrl): Promise<FetchResult
       try {
         await stat(skillMd)
         skillDirs.push(full)
-      } catch { /* no SKILL.md, skip */ }
+      } catch {
+        /* no SKILL.md, skip */
+      }
     }
   } catch {
     // root dir missing
@@ -83,9 +83,7 @@ export async function fetchManifest(parsed: ParsedSkillUrl): Promise<FetchResult
 
   if (skillDirs.length === 0) {
     await rm(tmpDir, { recursive: true, force: true })
-    throw new Error(
-      "No skills found in repo. Expected `skills/<name>/SKILL.md` files.",
-    )
+    throw new Error("No skills found in repo. Expected `skills/<name>/SKILL.md` files.")
   }
 
   const manifest: SkillEntry[] = []
@@ -114,11 +112,11 @@ export async function fetchManifest(parsed: ParsedSkillUrl): Promise<FetchResult
     const raw = await readFile(manifestPath, "utf-8")
     const parsedManifest = JSON.parse(raw) as { entries?: unknown }
     if (Array.isArray(parsedManifest.entries)) {
-      entries = parsedManifest.entries.filter(
-        (e): e is string => typeof e === "string",
-      )
+      entries = parsedManifest.entries.filter((e): e is string => typeof e === "string")
     }
-  } catch { /* missing or malformed — leave entries null */ }
+  } catch {
+    /* missing or malformed — leave entries null */
+  }
 
   return { repo: parsed.cloneUrl, sha, tmpDir, manifest, entries }
 }
@@ -127,9 +125,12 @@ export async function fetchManifest(parsed: ParsedSkillUrl): Promise<FetchResult
 function extractDescription(skillMd: string): string {
   const fmMatch = skillMd.match(/^---\n([\s\S]*?)\n---/)
   if (!fmMatch) return ""
-  const line = fmMatch[1].split("\n").find(l => l.trim().startsWith("description:"))
+  const line = fmMatch[1].split("\n").find((l) => l.trim().startsWith("description:"))
   if (!line) return ""
-  return line.replace(/^\s*description:\s*/, "").replace(/^["']|["']$/g, "").trim()
+  return line
+    .replace(/^\s*description:\s*/, "")
+    .replace(/^["']|["']$/g, "")
+    .trim()
 }
 
 async function collectCompanion(skillDir: string, sub: string): Promise<ScriptFile[]> {

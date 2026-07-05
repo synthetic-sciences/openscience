@@ -12,7 +12,9 @@ const distDir = path.resolve(repoRoot, "frontend/workspace/dist")
 const outFile = path.resolve(cliDir, "src/web/assets.generated.ts")
 
 if (!fs.existsSync(distDir)) {
-  throw new Error(`frontend/workspace/dist not found at ${distDir} — run \`cd frontend/workspace && bun run build\` first`)
+  throw new Error(
+    `frontend/workspace/dist not found at ${distDir} — run \`cd frontend/workspace && bun run build\` first`,
+  )
 }
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -46,13 +48,13 @@ files.forEach((absPath, i) => {
 })
 
 lines.push("")
-lines.push("// Each value is the runtime path injected by Bun's `with { type: \"file\" }` loader.")
+lines.push('// Each value is the runtime path injected by Bun\'s `with { type: "file" }` loader.')
 lines.push("// Typed loosely because tsgo doesn't model that loader's return type uniformly.")
 lines.push("export const WEB_ASSETS: Record<string, string> = {")
 for (const e of entries) lines.push(e.replace(",", " as unknown as string,"))
 lines.push("}")
 lines.push("")
-lines.push("export const WEB_INDEX: string | undefined = WEB_ASSETS[\"/index.html\"]")
+lines.push('export const WEB_INDEX: string | undefined = WEB_ASSETS["/index.html"]')
 lines.push("")
 
 fs.writeFileSync(outFile, lines.join("\n"))

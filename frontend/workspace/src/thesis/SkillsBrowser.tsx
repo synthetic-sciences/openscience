@@ -26,10 +26,7 @@ function originOf(location: string): string {
   return "core"
 }
 
-export function SkillsBrowser(props: {
-  onPick: (name: string) => void
-  onClose: () => void
-}): JSX.Element {
+export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: () => void }): JSX.Element {
   const sync = useSync()
   const [query, setQuery] = createSignal("")
   let panelRef: HTMLDivElement | undefined
@@ -116,7 +113,10 @@ export function SkillsBrowser(props: {
         >
           skills
         </span>
-        <span class="tab-fig" style={{ "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-text-muted)" }}>
+        <span
+          class="tab-fig"
+          style={{ "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-text-muted)" }}
+        >
           {total()}
         </span>
         <input
@@ -199,9 +199,7 @@ export function SkillsBrowser(props: {
                         width: "100%",
                         "box-sizing": "border-box",
                       }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = "var(--color-accent-subtle)")
-                      }
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-accent-subtle)")}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                     >
                       <span

@@ -209,13 +209,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
           <div style={{ display: "flex", "flex-direction": "column", gap: "1px" }}>
             <SectionLabel>favorites</SectionLabel>
             <For each={sidebarLinks()}>
-              {(l) => (
-                <SidebarRow
-                  label={l.label}
-                  active={cwd() === l.path}
-                  onClick={() => goTo(l.path)}
-                />
-              )}
+              {(l) => <SidebarRow label={l.label} active={cwd() === l.path} onClick={() => goTo(l.path)} />}
             </For>
           </div>
           <Show when={recents().length > 0}>
@@ -284,10 +278,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                       cursor: "pointer",
                       "font-family": FONT_MONO,
                       "font-size": "11px",
-                      color:
-                        i() === crumbs().length - 1
-                          ? "var(--color-text)"
-                          : "var(--color-text-muted)",
+                      color: i() === crumbs().length - 1 ? "var(--color-text)" : "var(--color-text-muted)",
                       "font-weight": i() === crumbs().length - 1 ? 600 : 500,
                       padding: "2px 4px",
                       "border-radius": "4px",
@@ -300,9 +291,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                     onMouseLeave={(el) => {
                       el.currentTarget.style.background = "transparent"
                       el.currentTarget.style.color =
-                        i() === crumbs().length - 1
-                          ? "var(--color-text)"
-                          : "var(--color-text-muted)"
+                        i() === crumbs().length - 1 ? "var(--color-text)" : "var(--color-text-muted)"
                     }}
                   >
                     {c.label}
@@ -406,9 +395,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 cursor: pathInput().trim() ? "pointer" : "not-allowed",
                 padding: "3px 10px",
                 "border-radius": "4px",
-                background: pathInput().trim()
-                  ? "var(--color-surface-solid)"
-                  : "transparent",
+                background: pathInput().trim() ? "var(--color-surface-solid)" : "transparent",
                 border: "1px solid var(--color-border)",
                 "font-family": FONT_MONO,
                 "font-size": "10px",
@@ -464,8 +451,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                   style={{
                     width: "30%",
                     height: "100%",
-                    background:
-                      "linear-gradient(90deg, transparent, var(--color-accent), transparent)",
+                    background: "linear-gradient(90deg, transparent, var(--color-accent), transparent)",
                     animation: "thesis-loading-slide 1.1s ease-in-out infinite",
                   }}
                 />
@@ -488,10 +474,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                       gap: "8px",
                     }}
                   >
-                    <Show
-                      when={(entries() ?? []).length === 0}
-                      fallback={<span>nothing matches the filter</span>}
-                    >
+                    <Show when={(entries() ?? []).length === 0} fallback={<span>nothing matches the filter</span>}>
                       <Show
                         when={
                           /\/Desktop$|\/Documents$|\/Downloads$/.test(cwd()) ||
@@ -499,18 +482,15 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                           cwd().endsWith("/Documents") ||
                           cwd().endsWith("/Downloads")
                         }
-                        fallback={
-                          <span>this folder is empty · pick it with the button below</span>
-                        }
+                        fallback={<span>this folder is empty · pick it with the button below</span>}
                       >
                         <span style={{ color: "var(--color-text)" }}>
                           macOS is blocking the listing of <code>{cwd().split("/").pop()}</code>
                         </span>
                         <span style={{ "max-width": "360px", "line-height": 1.5 }}>
                           To list this folder we'd need Full Disk Access for the
-                          <code>openscience</code> binary. For now, paste the absolute path of the
-                          folder you want into the <em>go to</em> bar above —
-                          OpenScience can still open any path you give it.
+                          <code>openscience</code> binary. For now, paste the absolute path of the folder you want into
+                          the <em>go to</em> bar above — OpenScience can still open any path you give it.
                         </span>
                       </Show>
                     </Show>
@@ -568,11 +548,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
   )
 }
 
-function FolderRow(props: {
-  entry: FolderEntry
-  onDrill: () => void
-  onPick: () => void
-}): JSX.Element {
+function FolderRow(props: { entry: FolderEntry; onDrill: () => void; onPick: () => void }): JSX.Element {
   const [hover, setHover] = createSignal(false)
   return (
     <div
@@ -693,9 +669,7 @@ function SidebarRow(props: {
         padding: "5px 8px",
         "border-radius": "4px",
         background: props.active ? "var(--color-bg-elevated)" : "transparent",
-        border: props.active
-          ? "1px solid var(--color-border-strong)"
-          : "1px solid transparent",
+        border: props.active ? "1px solid var(--color-border-strong)" : "1px solid transparent",
         transition: "background 160ms ease, border-color 160ms ease, transform 160ms ease",
       }}
       onMouseEnter={(el) => {

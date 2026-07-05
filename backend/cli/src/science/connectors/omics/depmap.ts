@@ -67,9 +67,7 @@ function haystack(f: DepmapFile): string {
 
 function toHit(f: DepmapFile): ConnectorHit {
   const name = f.fileName ?? f.downloadUrl ?? "unknown"
-  const summaryBits = [f.releaseName, f.fileType, f.fileDescription].filter(
-    (x): x is string => Boolean(x),
-  )
+  const summaryBits = [f.releaseName, f.fileType, f.fileDescription].filter((x): x is string => Boolean(x))
   return {
     id: name,
     title: f.fileName ? `${f.fileName}${f.releaseName ? ` (${f.releaseName})` : ""}` : name,

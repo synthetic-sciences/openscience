@@ -181,7 +181,10 @@ export function ThesisCanvas(): JSX.Element {
   // Root list — just the graph roots (fast, root_only=true). Powers the dropdown
   // and default-selection logic without loading every node in the account.
   const [graphList, { refetch: refetchGraphs }] = createResource(() =>
-    thesisAPI.listGraphs().then((r) => r.nodes ?? []).catch(() => [] as ThesisNode[]),
+    thesisAPI
+      .listGraphs()
+      .then((r) => r.nodes ?? [])
+      .catch(() => [] as ThesisNode[]),
   )
   const graphs = createMemo<ThesisNode[]>(() =>
     [...(graphList.latest ?? [])].sort((a, b) => (a.title || "").localeCompare(b.title || "")),
@@ -190,7 +193,10 @@ export function ThesisCanvas(): JSX.Element {
   // instead of another project's. `null` = unlinked (offer Initialize); read via
   // `.latest` so it never suspends. `undefined` = still resolving.
   const [folderProject, { refetch: refetchFolderProject }] = createResource(directory, (dir) =>
-    thesisAPI.resolveProject(dir).then((r) => r.project_id).catch(() => null),
+    thesisAPI
+      .resolveProject(dir)
+      .then((r) => r.project_id)
+      .catch(() => null),
   )
   const [graphId, setGraphIdRaw] = createSignal<string | undefined>(
     (() => {
@@ -233,12 +239,19 @@ export function ThesisCanvas(): JSX.Element {
   // Keyed on graphId() so switching graphs triggers a fresh fetch automatically.
   const [graphTree, { refetch: refetchTree }] = createResource(
     () => graphId(),
-    (id) => thesisAPI.getGraphTree(id).then((r) => r.nodes ?? []).catch(() => [] as ThesisNode[]),
+    (id) =>
+      thesisAPI
+        .getGraphTree(id)
+        .then((r) => r.nodes ?? [])
+        .catch(() => [] as ThesisNode[]),
   )
   const nodes = createMemo<ThesisNode[]>(() => graphTree.latest ?? [])
   const byId = createMemo(() => new Map(nodes().map((n) => [n.node_id, n])))
   const loading = createMemo(() => graphList.loading || (graphId() !== undefined && graphTree.loading))
-  const refetchAll = () => { void refetchGraphs(); void refetchTree() }
+  const refetchAll = () => {
+    void refetchGraphs()
+    void refetchTree()
+  }
 
   // Only the selected graph has a known node count; non-selected graphs show no badge.
   const graphSizes = createMemo(() => {
@@ -251,7 +264,10 @@ export function ThesisCanvas(): JSX.Element {
   // A no-op background refetch won't reheat the force-sim or refit the view.
   const nodeSig = createMemo(() =>
     nodes()
-      .map((n) => `${n.node_id}:${n.lifecycle}:${n.outcome}:${n.revision ?? ""}:${(n.parent_ids ?? []).length}:${(n.child_ids ?? []).length}:${n.title}`)
+      .map(
+        (n) =>
+          `${n.node_id}:${n.lifecycle}:${n.outcome}:${n.revision ?? ""}:${(n.parent_ids ?? []).length}:${(n.child_ids ?? []).length}:${n.title}`,
+      )
       .sort()
       .join("|"),
   )
@@ -316,7 +332,7 @@ export function ThesisCanvas(): JSX.Element {
   const [saved, setSaved] = createSignal(readSavedPositions())
   const selected = createMemo<ThesisNode | null>(() => {
     const id = selectedID()
-    return id ? nodes().find((n) => n.node_id === id) ?? null : null
+    return id ? (nodes().find((n) => n.node_id === id) ?? null) : null
   })
 
   const [sims, setSims] = createSignal<Sim[]>([])
@@ -375,8 +391,7 @@ export function ThesisCanvas(): JSX.Element {
     const nextLinks: Link[] = []
     for (const n of list) {
       for (const p of n.parent_ids) {
-        if (present.has(p))
-          nextLinks.push({ source: p, target: n.node_id, staged: n.lifecycle === "staged" })
+        if (present.has(p)) nextLinks.push({ source: p, target: n.node_id, staged: n.lifecycle === "staged" })
       }
     }
     setLinks(nextLinks)
@@ -667,7 +682,7 @@ export function ThesisCanvas(): JSX.Element {
 
   const hovered = createMemo(() => {
     const h = hover()
-    return h ? byId().get(h.id) ?? null : null
+    return h ? (byId().get(h.id) ?? null) : null
   })
 
   // Collision-avoided labels (orbit roots / timeline all) so they never pile up.
@@ -825,8 +840,7 @@ export function ThesisCanvas(): JSX.Element {
               display: "flex",
               "align-items": "center",
               "justify-content": "center",
-              "background-image":
-                "radial-gradient(circle at 1px 1px, var(--color-border) 1px, transparent 0)",
+              "background-image": "radial-gradient(circle at 1px 1px, var(--color-border) 1px, transparent 0)",
               "background-size": "22px 22px",
             }}
           >
@@ -900,11 +914,7 @@ export function ThesisCanvas(): JSX.Element {
                             y1={s()!.y}
                             x2={t()!.x}
                             y2={t()!.y}
-                            stroke={
-                              lit() && hover()
-                                ? "var(--color-text-faint)"
-                                : "var(--color-border-strong)"
-                            }
+                            stroke={lit() && hover() ? "var(--color-text-faint)" : "var(--color-border-strong)"}
                             stroke-opacity={lit() ? (l.staged ? 0.4 : 0.6) : 0.12}
                             stroke-width={1}
                           />
@@ -952,12 +962,7 @@ export function ThesisCanvas(): JSX.Element {
                           fallback={
                             <>
                               <Show when={sel()}>
-                                <circle
-                                  r={rr() + 4}
-                                  fill="none"
-                                  stroke="var(--color-accent)"
-                                  stroke-width={1.5}
-                                />
+                                <circle r={rr() + 4} fill="none" stroke="var(--color-accent)" stroke-width={1.5} />
                               </Show>
                               <Show
                                 when={!s.isRoot}
@@ -1036,7 +1041,9 @@ export function ThesisCanvas(): JSX.Element {
                   padding: "4px",
                 }}
               >
-                <div style={{ ...sectionTitle, padding: "7px 8px 5px", "border-bottom": "1px solid var(--color-border)" }}>
+                <div
+                  style={{ ...sectionTitle, padding: "7px 8px 5px", "border-bottom": "1px solid var(--color-border)" }}
+                >
                   graphs · {(graphs() ?? []).length}
                 </div>
                 <For each={graphs() ?? []}>
@@ -1060,7 +1067,10 @@ export function ThesisCanvas(): JSX.Element {
                         background: g.node_id === graphId() ? "var(--color-bg-elevated)" : "transparent",
                       }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-bg-elevated)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = g.node_id === graphId() ? "var(--color-bg-elevated)" : "transparent")}
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background =
+                          g.node_id === graphId() ? "var(--color-bg-elevated)" : "transparent")
+                      }
                     >
                       <span
                         style={{
@@ -1077,7 +1087,17 @@ export function ThesisCanvas(): JSX.Element {
                       >
                         {g.title || "untitled graph"}
                       </span>
-                      <span style={{ "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-text-faint)", "flex-shrink": 0, padding: "1px 6px", background: g.node_id === graphId() ? "var(--color-accent-subtle)" : "transparent", "border-radius": "4px" }}>
+                      <span
+                        style={{
+                          "font-family": FONT_MONO,
+                          "font-size": "10px",
+                          color: "var(--color-text-faint)",
+                          "flex-shrink": 0,
+                          padding: "1px 6px",
+                          background: g.node_id === graphId() ? "var(--color-accent-subtle)" : "transparent",
+                          "border-radius": "4px",
+                        }}
+                      >
                         {graphSizes().get(g.node_id) ?? ""}
                       </span>
                     </button>
@@ -1117,7 +1137,17 @@ export function ThesisCanvas(): JSX.Element {
               >
                 {selectedGraph()?.title || "select graph"}
               </span>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ color: "var(--color-text-faint)", "flex-shrink": 0 }}>
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style={{ color: "var(--color-text-faint)", "flex-shrink": 0 }}
+              >
                 <path d="m6 9 6 6 6-6" />
               </svg>
             </button>
@@ -1143,9 +1173,7 @@ export function ThesisCanvas(): JSX.Element {
         </div>
       </Show>
 
-      <Show when={selected()}>
-        {(node) => <NodeDetail node={node()} onClose={() => setSelectedID(null)} />}
-      </Show>
+      <Show when={selected()}>{(node) => <NodeDetail node={node()} onClose={() => setSelectedID(null)} />}</Show>
     </div>
   )
 }
@@ -1164,12 +1192,7 @@ function CardNode(props: { node: ThesisNode; selected: boolean; hovered: boolean
         stroke-width={props.selected ? 1.5 : 1}
         style={{ filter: props.hovered ? "brightness(1.04)" : undefined }}
       />
-      <circle
-        cx={-CARD_W / 2 + 12}
-        cy={-CARD_H / 2 + 14}
-        r="3.5"
-        fill={lifecycleColor(props.node)}
-      />
+      <circle cx={-CARD_W / 2 + 12} cy={-CARD_H / 2 + 14} r="3.5" fill={lifecycleColor(props.node)} />
       <text
         x={-CARD_W / 2 + 22}
         y={-CARD_H / 2 + 14}
@@ -1214,12 +1237,7 @@ function CardNode(props: { node: ThesisNode; selected: boolean; hovered: boolean
   )
 }
 
-function OrbitTooltip(props: {
-  node: ThesisNode
-  x: number
-  y: number
-  byId: Map<string, ThesisNode>
-}): JSX.Element {
+function OrbitTooltip(props: { node: ThesisNode; x: number; y: number; byId: Map<string, ThesisNode> }): JSX.Element {
   const segs = () => props.node.child_ids.map((id) => props.byId.get(id)?.outcome ?? null)
   const done = () => segs().filter((s) => s === "completed").length
   return (
@@ -1289,7 +1307,7 @@ function NodeDetail(props: { node: ThesisNode; onClose: () => void }): JSX.Eleme
     async (id) => {
       try {
         const res = await thesisAPI.listArtifacts(id)
-        const list = Array.isArray(res) ? res : (res as any)?.artifacts ?? []
+        const list = Array.isArray(res) ? res : ((res as any)?.artifacts ?? [])
         return list as Array<{ name?: string; kind?: string; uri?: string }>
       } catch {
         return []
@@ -1343,11 +1361,7 @@ function NodeDetail(props: { node: ThesisNode; onClose: () => void }): JSX.Eleme
         <Show when={props.node.repo_url}>
           {(url) => (
             <a
-              href={
-                url().startsWith("http")
-                  ? url()
-                  : `https://${url().replace(/^github\.com\//, "github.com/")}`
-              }
+              href={url().startsWith("http") ? url() : `https://${url().replace(/^github\.com\//, "github.com/")}`}
               target="_blank"
               rel="noopener"
               title="open repo"
@@ -1437,9 +1451,7 @@ function NodeDetail(props: { node: ThesisNode; onClose: () => void }): JSX.Eleme
 function DetailField(props: { label: string; value: string; mono?: boolean }): JSX.Element {
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "2px" }}>
-      <span style={sectionTitle}>
-        {props.label}
-      </span>
+      <span style={sectionTitle}>{props.label}</span>
       <span
         style={{
           "font-family": props.mono ? FONT_MONO : FONT_SANS,
@@ -1486,9 +1498,8 @@ function EmptyHero(props: { onCreate: () => void }): JSX.Element {
           "line-height": 1.55,
         }}
       >
-        Stage a node to begin. Or ask the agent to{" "}
-        <span style={{ color: "var(--color-text)" }}>"propose a claim"</span> and it'll seed one for
-        you.
+        Stage a node to begin. Or ask the agent to <span style={{ color: "var(--color-text)" }}>"propose a claim"</span>{" "}
+        and it'll seed one for you.
       </div>
       <button
         onClick={props.onCreate}
@@ -1547,8 +1558,8 @@ function InitHero(props: { onInit: () => void; onChat: () => void; busy: boolean
           "line-height": 1.55,
         }}
       >
-        This folder isn't linked to an Atlas research graph yet. Initialize one to start tracking
-        hypotheses, experiments, and decisions here.
+        This folder isn't linked to an Atlas research graph yet. Initialize one to start tracking hypotheses,
+        experiments, and decisions here.
       </div>
       <button
         onClick={() => !props.busy && props.onInit()}
@@ -1612,11 +1623,7 @@ function ModeSeg(props: { active: boolean; Icon: ModeIcon; label: string; onClic
         width: "26px",
         height: "22px",
         "border-radius": "4px",
-        color: props.active
-          ? "var(--color-text)"
-          : hover()
-            ? "var(--color-text-muted)"
-            : "var(--color-text-faint)",
+        color: props.active ? "var(--color-text)" : hover() ? "var(--color-text-muted)" : "var(--color-text-faint)",
         background: props.active ? "var(--color-surface-solid, var(--color-bg-elevated))" : "transparent",
         "box-shadow": props.active ? "0 1px 2px rgba(0, 0, 0, 0.22)" : "none",
         transform: props.active ? "translateY(-0.5px)" : "none",
@@ -1660,7 +1667,8 @@ function CanvasAction(props: {
         background: hover() && !props.disabled ? "var(--color-bg-subtle)" : "transparent",
         opacity: props.disabled ? 0.45 : 1,
         "font-family": FONT_MONO,
-        transition: "background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard)",
+        transition:
+          "background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard)",
       }}
     >
       {props.children}

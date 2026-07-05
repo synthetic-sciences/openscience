@@ -84,7 +84,8 @@ export default function Memory() {
   }
 
   function clearAll() {
-    if (!window.confirm(`Clear all ${scope() === "global" ? "global" : "project"} memory? This cannot be undone.`)) return
+    if (!window.confirm(`Clear all ${scope() === "global" ? "global" : "project"} memory? This cannot be undone.`))
+      return
     void persist({ enabled: doc().enabled, categories: [] })
   }
 
@@ -139,7 +140,14 @@ export default function Memory() {
       <div class="flex flex-col gap-5 px-4 pb-10 sm:px-8 max-w-[760px]">
         {/* Scope selector */}
         <div class="inline-flex self-start rounded-xs border border-border-weak-base bg-surface-base/40 p-0.5">
-          <For each={[{ id: "global", label: "Global" }, { id: "project", label: "This project" }] as const}>
+          <For
+            each={
+              [
+                { id: "global", label: "Global" },
+                { id: "project", label: "This project" },
+              ] as const
+            }
+          >
             {(opt) => (
               <button
                 type="button"
@@ -185,10 +193,7 @@ export default function Memory() {
           </div>
         </div>
 
-        <Show
-          when={!loading()}
-          fallback={<div class="text-13-regular text-text-weak py-6 text-center">Loading…</div>}
-        >
+        <Show when={!loading()} fallback={<div class="text-13-regular text-text-weak py-6 text-center">Loading…</div>}>
           {/* Categories */}
           <div class="flex flex-col gap-4">
             <For each={doc().categories}>
@@ -209,9 +214,7 @@ export default function Memory() {
                   <div class="flex flex-col">
                     <For
                       each={category.notes}
-                      fallback={
-                        <span class="px-4 py-3 text-12-regular text-text-weak/70">No notes yet.</span>
-                      }
+                      fallback={<span class="px-4 py-3 text-12-regular text-text-weak/70">No notes yet.</span>}
                     >
                       {(note) => (
                         <div class="group flex items-start gap-2 px-4 py-2.5 border-b border-border-weak-base/60 last:border-b-0">

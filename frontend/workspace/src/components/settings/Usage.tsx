@@ -210,7 +210,9 @@ export default function Usage() {
         <div class="flex flex-col gap-3">
           <div class="flex items-baseline justify-between">
             <h3 class="text-13-medium text-text-weak tracking-wide">This week</h3>
-            <span class="text-12-regular text-text-weak">{money(weekTotal())} · {compact(usage()?.weekly.reduce((a, d) => a + d.tokens, 0) ?? 0)} tokens</span>
+            <span class="text-12-regular text-text-weak">
+              {money(weekTotal())} · {compact(usage()?.weekly.reduce((a, d) => a + d.tokens, 0) ?? 0)} tokens
+            </span>
           </div>
           <div class="border border-border-weak-base rounded-[4px] bg-surface-base/40 px-4 py-4">
             <div class="flex items-end justify-between gap-2 h-[104px]">
@@ -266,7 +268,12 @@ export default function Usage() {
                   style={fieldStyle()}
                 />
               </label>
-              <Button type="submit" size="small" variant="secondary" disabled={String(budget()) === (budgetDraft() || "0")}>
+              <Button
+                type="submit"
+                size="small"
+                variant="secondary"
+                disabled={String(budget()) === (budgetDraft() || "0")}
+              >
                 save
               </Button>
             </form>
@@ -312,7 +319,9 @@ export default function Usage() {
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-0.5">
             <h3 class="text-13-medium text-text-weak tracking-wide">Where tokens go</h3>
-            <p class="text-12-regular text-text-weak">Spend per model across {usage()?.sessions ?? 0} local sessions.</p>
+            <p class="text-12-regular text-text-weak">
+              Spend per model across {usage()?.sessions ?? 0} local sessions.
+            </p>
           </div>
           <Show
             when={(usage()?.by_model.length ?? 0) > 0}

@@ -29,11 +29,7 @@ function actionBtn(primary = false, danger = false): JSX.CSSProperties {
     padding: "7px 14px",
     "border-radius": "4px",
     border: primary ? "1px solid var(--color-accent)" : "1px solid var(--color-border)",
-    background: danger
-      ? "var(--color-error, #ef4444)"
-      : primary
-        ? "var(--color-accent)"
-        : "var(--color-bg-elevated)",
+    background: danger ? "var(--color-error, #ef4444)" : primary ? "var(--color-accent)" : "var(--color-bg-elevated)",
     color: danger || primary ? "var(--color-on-accent)" : "var(--color-text)",
     "font-family": FONT_MONO,
     "font-size": "12px",

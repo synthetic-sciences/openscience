@@ -96,12 +96,7 @@ function init() {
     onCleanup(() => window.removeEventListener("keydown", onKeyDown, true))
   })
 
-  const show = (
-    element: DialogElement,
-    owner: Owner,
-    onClose?: () => void,
-    options?: { lite?: boolean },
-  ) => {
+  const show = (element: DialogElement, owner: Owner, onClose?: () => void, options?: { lite?: boolean }) => {
     // Immediately dispose any existing dialog when showing a new one
     const current = active()
     if (current) {
@@ -148,10 +143,7 @@ function init() {
                     "pointer-events": "none",
                   }}
                 >
-                  <div
-                    data-slot="dialog-lite-content"
-                    style={{ "pointer-events": "auto" }}
-                  >
+                  <div data-slot="dialog-lite-content" style={{ "pointer-events": "auto" }}>
                     {element()}
                   </div>
                 </div>
@@ -221,15 +213,10 @@ export function useDialog() {
      * onClose callback (legacy two-arg form), or an options object to opt
      * into features like `lite` (no backdrop, no scroll lock).
      */
-    show(
-      element: DialogElement,
-      optionsOrOnClose?: (() => void) | ShowOptions,
-    ) {
+    show(element: DialogElement, optionsOrOnClose?: (() => void) | ShowOptions) {
       const base = ctx.active?.owner ?? owner
       const opts: ShowOptions =
-        typeof optionsOrOnClose === "function"
-          ? { onClose: optionsOrOnClose }
-          : optionsOrOnClose ?? {}
+        typeof optionsOrOnClose === "function" ? { onClose: optionsOrOnClose } : (optionsOrOnClose ?? {})
       ctx.show(element, base, opts.onClose, { lite: opts.lite })
     },
     close() {

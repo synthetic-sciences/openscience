@@ -283,7 +283,6 @@ test("handles command configuration", async () => {
   })
 })
 
-
 test("migrates mode field to agent field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

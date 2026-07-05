@@ -200,7 +200,9 @@ const SkillValidateCommand = cmd({
           return info!.location
         })()
 
-        const content = await Bun.file(file).text().catch(() => "")
+        const content = await Bun.file(file)
+          .text()
+          .catch(() => "")
         if (!content) {
           UI.error(`cannot read ${file}`)
           process.exit(1)
@@ -212,9 +214,13 @@ const SkillValidateCommand = cmd({
           return undefined
         })
         if (!md) return
-        const parsed = Skill.Info.pick({ name: true, description: true, category: true, tags: true, entry: true }).safeParse(
-          md.data,
-        )
+        const parsed = Skill.Info.pick({
+          name: true,
+          description: true,
+          category: true,
+          tags: true,
+          entry: true,
+        }).safeParse(md.data)
         if (!parsed.success) {
           UI.error("invalid frontmatter: " + parsed.error.issues.map((i) => i.message).join("; "))
           process.exit(1)
@@ -376,14 +382,7 @@ const SkillShowCommand = cmd({
       UI.println(`${ns}/${name}`)
       UI.println(`  ${match.description}`)
       UI.println(`  verdict: ${match.verdict}`)
-      const skillPath = path.join(
-        Global.Path.data,
-        "installed-skills",
-        ns,
-        "skills",
-        name,
-        "SKILL.md",
-      )
+      const skillPath = path.join(Global.Path.data, "installed-skills", ns, "skills", name, "SKILL.md")
       try {
         const content = await fs.readFile(skillPath, "utf-8")
         UI.println("")
@@ -408,9 +407,7 @@ const SkillShowCommand = cmd({
     const widest = Math.max(...sorted.map((s) => s.name.length), 12)
     for (const s of sorted) {
       const tag = s.verdict === "warn" ? "  ⚠" : ""
-      const desc = s.description.length > 70
-        ? s.description.slice(0, 70) + "…"
-        : s.description
+      const desc = s.description.length > 70 ? s.description.slice(0, 70) + "…" : s.description
       UI.println(`  ${s.name.padEnd(widest)}${tag}  ${desc}`)
     }
   },
@@ -447,12 +444,10 @@ const SkillSetEntriesCommand = cmd({
       UI.error(`namespace '${ns}' not installed`)
       process.exit(1)
     }
-    await fs.writeFile(
-      path.join(nsDir, "openscience-skills.json"),
-      JSON.stringify({ entries }, null, 2),
+    await fs.writeFile(path.join(nsDir, "openscience-skills.json"), JSON.stringify({ entries }, null, 2))
+    UI.println(
+      `Marked ${entries.length} skill(s) as entries for ${ns}. ` + `Others stay loaded but hidden from / picker.`,
     )
-    UI.println(`Marked ${entries.length} skill(s) as entries for ${ns}. ` +
-               `Others stay loaded but hidden from / picker.`)
   },
 })
 

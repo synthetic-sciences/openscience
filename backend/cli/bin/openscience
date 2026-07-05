@@ -10,12 +10,18 @@ function run(target) {
   // Install dir stays as ~/.openscience/ until the path-migration follow-up PR.
   const openscienceDir = path.join(os.homedir(), ".openscience")
   for (const poison of ["package.json", ".gitignore", "bun.lockb", "bunfig.toml"]) {
-    try { fs.unlinkSync(path.join(openscienceDir, poison)) } catch {}
+    try {
+      fs.unlinkSync(path.join(openscienceDir, poison))
+    } catch {}
   }
-  try { fs.rmSync(path.join(openscienceDir, "node_modules"), { recursive: true }) } catch {}
+  try {
+    fs.rmSync(path.join(openscienceDir, "node_modules"), { recursive: true })
+  } catch {}
   // Clear macOS extended attributes that cause Bun binaries to hang
   if (os.platform() === "darwin") {
-    try { childProcess.spawnSync("xattr", ["-rc", openscienceDir], { stdio: "ignore" }) } catch {}
+    try {
+      childProcess.spawnSync("xattr", ["-rc", openscienceDir], { stdio: "ignore" })
+    } catch {}
   }
 
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
@@ -66,7 +72,11 @@ const scopedBase = "openscience-" + platform + "-" + arch
 // variants like -baseline, wrong libc only as a last resort.
 const musl = (() => {
   if (platform !== "linux") return false
-  try { return fs.readdirSync("/lib").some((f) => f.startsWith("ld-musl-")) } catch { return false }
+  try {
+    return fs.readdirSync("/lib").some((f) => f.startsWith("ld-musl-"))
+  } catch {
+    return false
+  }
 })()
 function variantRank(prefix, entry) {
   const entryMusl = entry.includes("-musl")
@@ -74,9 +84,7 @@ function variantRank(prefix, entry) {
   return entry === prefix || entry === prefix + "-musl" ? 2 : 1
 }
 function matchingVariants(prefix, entries) {
-  return entries
-    .filter((e) => e.startsWith(prefix))
-    .sort((a, b) => variantRank(prefix, b) - variantRank(prefix, a))
+  return entries.filter((e) => e.startsWith(prefix)).sort((a, b) => variantRank(prefix, b) - variantRank(prefix, a))
 }
 
 // 2. Search this install's node_modules for the matching platform package.

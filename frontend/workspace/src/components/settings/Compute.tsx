@@ -165,10 +165,7 @@ const Compute: Component = () => {
 
       <div class="flex flex-col gap-8 px-4 pb-12 sm:px-8 max-w-[820px]">
         {/* ── GPU providers (BYOK) ── */}
-        <Section
-          title="GPU providers"
-          subtitle="Bring your own key — connect once and work runs under your account."
-        >
+        <Section title="GPU providers" subtitle="Bring your own key — connect once and work runs under your account.">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <For each={info()?.providers}>
               {(p) => (
@@ -230,7 +227,12 @@ const Compute: Component = () => {
               <div class="flex flex-col gap-3 p-4 border-t border-border-weak-base">
                 <div class="grid grid-cols-2 gap-3">
                   <TextField label="Label" value={hLabel()} onInput={setHLabel} placeholder="lab-gpu-01" />
-                  <TextField label="Host" value={hHost()} onInput={setHHost} placeholder="10.0.0.4 or gpu.lab.internal" />
+                  <TextField
+                    label="Host"
+                    value={hHost()}
+                    onInput={setHHost}
+                    placeholder="10.0.0.4 or gpu.lab.internal"
+                  />
                   <TextField label="User (optional)" value={hUser()} onInput={setHUser} placeholder="ubuntu" />
                   <TextField label="Port (optional)" value={hPort()} onInput={setHPort} placeholder="22" />
                 </div>
@@ -346,9 +348,7 @@ const ProviderCard: Component<{
           <Show when={fmtDate(p().connected_at)}>
             {(d) => <span class="text-11-regular text-text-weak/70">Connected {d()}</span>}
           </Show>
-          <span class="text-11-regular text-text-weak/70">
-            Last used {fmtDate(p().last_used) ?? "never"}
-          </span>
+          <span class="text-11-regular text-text-weak/70">Last used {fmtDate(p().last_used) ?? "never"}</span>
         </div>
       </Show>
 
@@ -361,7 +361,9 @@ const ProviderCard: Component<{
             placeholder={p().placeholder}
             secret
           />
-          <p class="text-11-regular text-text-weak/70">Encrypted at rest under ~/.openscience/ · never returned to the browser.</p>
+          <p class="text-11-regular text-text-weak/70">
+            Encrypted at rest under ~/.openscience/ · never returned to the browser.
+          </p>
         </div>
       </Show>
 
@@ -429,7 +431,9 @@ const Badge: Component<{ connected: boolean; verified: boolean }> = (props) => {
       class="flex-shrink-0 px-2 py-0.5 rounded-full text-11-regular border"
       style={{
         color: props.connected ? "var(--color-success)" : "var(--color-text-faint)",
-        "border-color": props.connected ? "color-mix(in srgb, var(--color-success) 40%, transparent)" : "var(--color-border)",
+        "border-color": props.connected
+          ? "color-mix(in srgb, var(--color-success) 40%, transparent)"
+          : "var(--color-border)",
         background: props.connected ? "color-mix(in srgb, var(--color-success) 12%, transparent)" : "transparent",
       }}
     >
@@ -440,7 +444,9 @@ const Badge: Component<{ connected: boolean; verified: boolean }> = (props) => {
 
 // ── Shared building blocks ──────────────────────────────────────────────────
 
-const Section: Component<{ title: string; subtitle: string; action?: JSX.Element; children: JSX.Element }> = (props) => (
+const Section: Component<{ title: string; subtitle: string; action?: JSX.Element; children: JSX.Element }> = (
+  props,
+) => (
   <div class="flex flex-col gap-3">
     <div class="flex items-end justify-between gap-4">
       <div class="flex flex-col gap-0.5">
@@ -480,9 +486,12 @@ const RemoveButton: Component<{ disabled?: boolean; onClick: () => void }> = (pr
   </button>
 )
 
-const FormActions: Component<{ onCancel: () => void; onSave: () => void; saveLabel?: string; saveDisabled?: boolean }> = (
-  props,
-) => (
+const FormActions: Component<{
+  onCancel: () => void
+  onSave: () => void
+  saveLabel?: string
+  saveDisabled?: boolean
+}> = (props) => (
   <div class="flex items-center justify-end gap-2">
     <Button size="small" variant="ghost" onClick={props.onCancel}>
       cancel

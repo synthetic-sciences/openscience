@@ -39,7 +39,9 @@ function safeCodePoint(code: number): string {
 /** Strip XML/HTML tags (e.g. JATS `<jats:p>` abstracts) and collapse whitespace. */
 export function stripTags(input?: string): string | undefined {
   if (!input) return undefined
-  const text = decodeEntities(input.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim()
+  const text = decodeEntities(input.replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim()
   return text.length ? text : undefined
 }
 
@@ -65,7 +67,10 @@ export function fromInverted(index?: Record<string, number[]> | null): string | 
       if (Number.isInteger(pos) && pos >= 0) words[pos] = word
     }
   }
-  const text = words.filter((w) => w !== undefined).join(" ").trim()
+  const text = words
+    .filter((w) => w !== undefined)
+    .join(" ")
+    .trim()
   return text.length ? text : undefined
 }
 

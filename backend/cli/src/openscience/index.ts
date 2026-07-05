@@ -41,9 +41,7 @@ if (API_BASE !== DEFAULT_API_BASE) {
 // to the unified Atlas frontend's /cli route — Plan tab, key management,
 // and billing all live there. SYNSC_AUTH_URL overrides (e.g. point at a
 // staging frontend or the old auth.syntheticsciences.ai surface).
-const VERIFICATION_PAGE =
-  process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") ||
-  "https://app.syntheticsciences.ai/cli"
+const VERIFICATION_PAGE = process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || "https://app.syntheticsciences.ai/cli"
 
 const syncedSecretValues = new Map<string, string>()
 
@@ -75,19 +73,27 @@ const SHARED_PROVIDER_KEYS = new Set([
 const SAFE_ENV_PREFIXES = ["PATH", "HOME", "USER", "SHELL", "TERM", "LANG", "LC_", "TMPDIR", "XDG_", "EDITOR", "VISUAL"]
 const SAFE_SYNCED_KEYS = new Set([
   // ML services
-  "TINKER_API_KEY", "TINKER_BASE_URL",
-  "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN",
+  "TINKER_API_KEY",
+  "TINKER_BASE_URL",
+  "HF_TOKEN",
+  "HUGGING_FACE_HUB_TOKEN",
   "WANDB_API_KEY",
-  "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET",
-  "LAMBDA_API_KEY", "LAMBDA_LABS_API_KEY",
+  "MODAL_TOKEN_ID",
+  "MODAL_TOKEN_SECRET",
+  "LAMBDA_API_KEY",
+  "LAMBDA_LABS_API_KEY",
   "RUNPOD_API_KEY",
   "PRIME_INTELLECT_API_KEY",
   "TENSORPOOL_API_KEY",
   "VAST_API_KEY",
-  "LANGSMITH_API_KEY", "LANGCHAIN_API_KEY", "LANGSMITH_TRACING",
+  "LANGSMITH_API_KEY",
+  "LANGCHAIN_API_KEY",
+  "LANGSMITH_TRACING",
   "PINECONE_API_KEY",
   // LLM providers (BYOK; safe to pass through to user-owned routes)
-  "TOGETHER_API_KEY", "GROQ_API_KEY", "FIREWORKS_API_KEY",
+  "TOGETHER_API_KEY",
+  "GROQ_API_KEY",
+  "FIREWORKS_API_KEY",
   "OPENROUTER_API_KEY",
   // Misc CLI runtime markers
   "OPENSCIENCE_RUNTIME",
@@ -178,7 +184,9 @@ function describeReason(provider: string, reason: SyncedServiceReason | undefine
  * user as "Insufficient credits — top up at app.syntheticsciences.ai/cli".
  */
 export class InsufficientCreditsError extends Error {
-  constructor(message: string = "Insufficient Atlas credits. Top up at app.syntheticsciences.ai/cli (Plan tab) or switch back to your own keys.") {
+  constructor(
+    message: string = "Insufficient Atlas credits. Top up at app.syntheticsciences.ai/cli (Plan tab) or switch back to your own keys.",
+  ) {
     super(message)
     this.name = "InsufficientCreditsError"
   }
@@ -284,7 +292,11 @@ export namespace OpenScience {
    *  belongs to. */
   export function deviceName(): string {
     const host = (() => {
-      try { return os.hostname().split(".")[0] } catch { return "device" }
+      try {
+        return os.hostname().split(".")[0]
+      } catch {
+        return "device"
+      }
     })()
     return `openscience · ${process.platform} · ${host}`
   }
@@ -319,11 +331,7 @@ export namespace OpenScience {
   }
 
   export async function saveSession(session: OpenScienceSession) {
-    await Bun.write(
-      Bun.file(filepath),
-      JSON.stringify(session, null, 2),
-      { mode: 0o600 },
-    )
+    await Bun.write(Bun.file(filepath), JSON.stringify(session, null, 2), { mode: 0o600 })
     await ensureAtlasCliConfig(session)
   }
 
@@ -345,8 +353,7 @@ export namespace OpenScience {
       try {
         existing = JSON.parse(await fs.readFile(configPath, "utf8"))
       } catch {}
-      const profiles =
-        existing.profiles && typeof existing.profiles === "object" ? { ...existing.profiles } : {}
+      const profiles = existing.profiles && typeof existing.profiles === "object" ? { ...existing.profiles } : {}
       profiles.default = {
         ...(profiles.default ?? {}),
         api_key: active.api_key,
@@ -461,9 +468,7 @@ export namespace OpenScience {
       if (!profile || typeof profile !== "object") return
       const record = profile as Record<string, unknown>
       if (typeof record.api_key !== "string" || !record.api_key) return
-      const seeded = session?.api_key
-        ? record.api_key === session.api_key
-        : record.base_url === `${API_BASE}/api/v1`
+      const seeded = session?.api_key ? record.api_key === session.api_key : record.base_url === `${API_BASE}/api/v1`
       if (!seeded) return
       delete record.api_key
       await fs.writeFile(configPath, JSON.stringify(existing, null, 2) + "\n", { mode: 0o600 })
@@ -643,10 +648,7 @@ export namespace OpenScience {
       const result = await Promise.race([
         callback.done,
         new Promise<never>((_, rej) => {
-          timer = setTimeout(
-            () => rej(new Error("Timed out waiting for browser authorization.")),
-            timeoutMs,
-          )
+          timer = setTimeout(() => rej(new Error("Timed out waiting for browser authorization.")), timeoutMs)
         }),
       ])
 
@@ -780,7 +782,11 @@ export namespace OpenScience {
       }
       syncedSecretValues.clear()
       for (const [key, value] of fresh.entries()) {
-        try { Env.set(key, value) } catch { /* Instance not initialized */ }
+        try {
+          Env.set(key, value)
+        } catch {
+          /* Instance not initialized */
+        }
         process.env[key] = value
         syncedSecretValues.set(key, value)
       }
@@ -792,11 +798,7 @@ export namespace OpenScience {
           await fs.mkdir(managedDir, { recursive: true })
           await Bun.write(
             path.join(managedDir, "openscience-synced.json"),
-            JSON.stringify(
-              { $schema: "https://syntheticsciences.ai/config.json", ...data.config },
-              null,
-              2,
-            ),
+            JSON.stringify({ $schema: "https://syntheticsciences.ai/config.json", ...data.config }, null, 2),
             { mode: 0o600 },
           )
           log.info("wrote managed config", { dir: managedDir })
@@ -817,11 +819,7 @@ export namespace OpenScience {
         for (const [k, v] of fresh.entries()) {
           envSnapshot[k] = v
         }
-        await Bun.write(
-          path.join(managedDir, "synced-env.json"),
-          JSON.stringify(envSnapshot, null, 2),
-          { mode: 0o600 },
-        )
+        await Bun.write(path.join(managedDir, "synced-env.json"), JSON.stringify(envSnapshot, null, 2), { mode: 0o600 })
       } catch (e) {
         log.warn("failed to persist synced env", { error: e instanceof Error ? e.message : String(e) })
       }
@@ -953,7 +951,11 @@ export namespace OpenScience {
    *  read. These are keys the user explicitly added with `openscience login` —
    *  unlike the shared managed keys, which stay stripped. */
   const BYOK_SUBPROCESS_PROVIDERS: Record<string, { key: string; baseUrl?: string; publicBaseUrl?: string }> = {
-    openrouter: { key: "OPENROUTER_API_KEY", baseUrl: "OPENROUTER_BASE_URL", publicBaseUrl: "https://openrouter.ai/api/v1" },
+    openrouter: {
+      key: "OPENROUTER_API_KEY",
+      baseUrl: "OPENROUTER_BASE_URL",
+      publicBaseUrl: "https://openrouter.ai/api/v1",
+    },
     together: { key: "TOGETHER_API_KEY" },
     groq: { key: "GROQ_API_KEY" },
     fireworks: { key: "FIREWORKS_API_KEY" },
@@ -965,10 +967,7 @@ export namespace OpenScience {
    *  When a BYOK key is injected for a provider with a base-url var, the base
    *  url is pinned to the public endpoint so the key authenticates against the
    *  right host rather than a managed proxy. */
-  export function mergeByokEnv(
-    base: Record<string, string>,
-    auth: Record<string, Auth.Info>,
-  ): Record<string, string> {
+  export function mergeByokEnv(base: Record<string, string>, auth: Record<string, Auth.Info>): Record<string, string> {
     const result = { ...base }
     for (const [providerID, info] of Object.entries(auth)) {
       if (info.type !== "api") continue
@@ -1200,14 +1199,18 @@ export namespace OpenScience {
       // so the processor throws InsufficientCreditsError.
       if (res.status === 402) {
         let body: any = {}
-        try { body = await res.json() } catch { /* keep {} */ }
+        try {
+          body = await res.json()
+        } catch {
+          /* keep {} */
+        }
         if (body?.error === "insufficient_balance") {
           const need = ((body.required_cents ?? 0) as number) / 100
           const have = ((body.available_cents ?? 0) as number) / 100
           log.warn(
             `Insufficient balance for this call — need $${need.toFixed(2)}, ` +
-            `have $${have.toFixed(2)} available. Top up at ` +
-            `https://app.syntheticsciences.ai/cli or switch to BYOK.`,
+              `have $${have.toFixed(2)} available. Top up at ` +
+              `https://app.syntheticsciences.ai/cli or switch to BYOK.`,
           )
         } else {
           log.warn("usage report 402 — subscription required or balance empty")
@@ -1225,7 +1228,9 @@ export namespace OpenScience {
 
   /** Report service usage for billing (called after training jobs complete).
    *  On transient failure, persists to a local queue for retry on next startup. */
-  export async function reportUsage(params: UsageParams): Promise<{ recorded: boolean; event_id?: string; estimated_cost_usd?: number; modelBlocked?: boolean } | null> {
+  export async function reportUsage(
+    params: UsageParams,
+  ): Promise<{ recorded: boolean; event_id?: string; estimated_cost_usd?: number; modelBlocked?: boolean } | null> {
     const session = await getSession()
     if (!session) {
       log.warn("cannot report usage: not authenticated")
@@ -1562,10 +1567,7 @@ export namespace OpenScience {
   }
 
   /** Fetch one installed skill's content (full SKILL.md). */
-  export async function fetchInstalledSkillContent(
-    namespace: string,
-    name: string,
-  ): Promise<string | null> {
+  export async function fetchInstalledSkillContent(namespace: string, name: string): Promise<string | null> {
     const session = await getSession()
     if (!session) return null
     try {
@@ -1647,10 +1649,7 @@ export namespace OpenScience {
     }
   }
 
-  export async function deleteInstalledSkill(
-    namespace: string,
-    name: string,
-  ): Promise<boolean> {
+  export async function deleteInstalledSkill(namespace: string, name: string): Promise<boolean> {
     const session = await getSession()
     if (!session) return false
     const res = await fetch(
@@ -1660,15 +1659,13 @@ export namespace OpenScience {
     return res.ok
   }
 
-  export async function deleteInstalledNamespace(
-    namespace: string,
-  ): Promise<{ archived: number } | null> {
+  export async function deleteInstalledNamespace(namespace: string): Promise<{ archived: number } | null> {
     const session = await getSession()
     if (!session) return null
-    const res = await fetch(
-      `${API_BASE}/api/cli/installed-skills/${encodeURIComponent(namespace)}`,
-      { method: "DELETE", headers: { Authorization: `Bearer ${session.api_key}` } },
-    )
+    const res = await fetch(`${API_BASE}/api/cli/installed-skills/${encodeURIComponent(namespace)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.api_key}` },
+    })
     if (!res.ok) return null
     return await res.json()
   }

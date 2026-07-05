@@ -24,11 +24,7 @@ import { useGlobalKeys } from "@/thesis/useGlobalKeys"
 import { CommandPalette } from "@/thesis/CommandPalette"
 import { HelpOverlay } from "@/thesis/HelpOverlay"
 import { projectPrefs } from "@/thesis/store/projectPrefs"
-import {
-  IconStar,
-  IconStarFilled,
-  IconTrash,
-} from "@/thesis/shared/Icon"
+import { IconStar, IconStarFilled, IconTrash } from "@/thesis/shared/Icon"
 import {
   IconArrowRight,
   IconClock,
@@ -111,17 +107,15 @@ export default function Home(): JSX.Element {
         byWorktree.set(p.worktree, p)
         continue
       }
-      const cur = (p.time.updated ?? p.time.created) ?? 0
-      const old = (existing.time.updated ?? existing.time.created) ?? 0
+      const cur = p.time.updated ?? p.time.created ?? 0
+      const old = existing.time.updated ?? existing.time.created ?? 0
       if (cur > old) byWorktree.set(p.worktree, p)
     }
     return Array.from(byWorktree.values()).sort((a, b) => {
       const af = fav.has(a.worktree) ? 1 : 0
       const bf = fav.has(b.worktree) ? 1 : 0
       if (af !== bf) return bf - af
-      return (
-        (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created)
-      )
+      return (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created)
     })
   })
 
@@ -179,10 +173,7 @@ export default function Home(): JSX.Element {
     // (showDirectoryPicker / osascript dialog) is intentionally bypassed.
     // `lite` mode skips the modal backdrop and body scroll lock so the
     // picker glides in over the page instead of triggering a reflow.
-    dialog.show(
-      () => <FolderPicker onSelect={resolveResult} />,
-      { onClose: () => resolveResult(null), lite: true },
-    )
+    dialog.show(() => <FolderPicker onSelect={resolveResult} />, { onClose: () => resolveResult(null), lite: true })
   }
 
   const isDark = () => theme.mode() === "dark"
@@ -318,10 +309,7 @@ export default function Home(): JSX.Element {
           "box-sizing": "border-box",
         }}
       >
-        <Show
-          when={projects().length > 0}
-          fallback={<EmptyHero onChoose={chooseProject} />}
-        >
+        <Show when={projects().length > 0} fallback={<EmptyHero onChoose={chooseProject} />}>
           <div
             style={{
               display: "flex",
@@ -358,14 +346,20 @@ export default function Home(): JSX.Element {
           </div>
           <Show
             when={filtered().length > 0}
-            fallback={
-              <NoProjectMatches query={filter()} onClear={() => setFilter("")} onChoose={chooseProject} />
-            }
+            fallback={<NoProjectMatches query={filter()} onClear={() => setFilter("")} onChoose={chooseProject} />}
           >
             <Show
               when={view() === "grid"}
               fallback={
-                <div style={{ display: "flex", "flex-direction": "column", border: "1px solid var(--color-border)", "border-radius": "4px", overflow: "hidden" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    "flex-direction": "column",
+                    border: "1px solid var(--color-border)",
+                    "border-radius": "4px",
+                    overflow: "hidden",
+                  }}
+                >
                   <For each={filtered()}>
                     {(p, i) => (
                       <ProjectRow
@@ -490,8 +484,7 @@ function ProjectCard(props: {
   onHide: () => void
 }): JSX.Element {
   const [hover, setHover] = createSignal(false)
-  const display = () =>
-    props.homedir ? props.worktree.replace(props.homedir, "~") : props.worktree
+  const display = () => (props.homedir ? props.worktree.replace(props.homedir, "~") : props.worktree)
   const name = () => {
     const segs = props.worktree.split("/").filter(Boolean)
     return segs[segs.length - 1] ?? props.worktree
@@ -698,7 +691,16 @@ function ViewToggle(props: { view: "grid" | "list"; onChange: (v: "grid" | "list
       }}
     >
       <button type="button" title="grid view" style={btn(props.view === "grid")} onClick={() => props.onChange("grid")}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <rect x="3" y="3" width="7" height="7" rx="1.2" />
           <rect x="14" y="3" width="7" height="7" rx="1.2" />
           <rect x="3" y="14" width="7" height="7" rx="1.2" />
@@ -706,7 +708,16 @@ function ViewToggle(props: { view: "grid" | "list"; onChange: (v: "grid" | "list
         </svg>
       </button>
       <button type="button" title="list view" style={btn(props.view === "list")} onClick={() => props.onChange("list")}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
         </svg>
       </button>
@@ -785,10 +796,21 @@ function ProjectRow(props: {
       >
         {display()}
       </span>
-      <span style={{ "font-family": FONT_MONO, "font-size": "11px", color: "var(--color-text-faint)", "flex-shrink": 0 }}>
+      <span
+        style={{ "font-family": FONT_MONO, "font-size": "11px", color: "var(--color-text-faint)", "flex-shrink": 0 }}
+      >
         {DateTime.fromMillis(props.updatedAt).toRelative() ?? "—"}
       </span>
-      <div style={{ display: "flex", gap: "4px", "flex-shrink": 0, opacity: hover() || props.isFavorite ? 1 : 0, "pointer-events": hover() || props.isFavorite ? "auto" : "none", transition: "opacity 140ms ease" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: "4px",
+          "flex-shrink": 0,
+          opacity: hover() || props.isFavorite ? 1 : 0,
+          "pointer-events": hover() || props.isFavorite ? "auto" : "none",
+          transition: "opacity 140ms ease",
+        }}
+      >
         <button
           type="button"
           title={props.isFavorite ? "unfavorite" : "favorite"}
@@ -855,18 +877,14 @@ function NewProjectCard(props: { onClick: () => void }): JSX.Element {
         gap: "6px",
         padding: "13px 15px",
         background: "transparent",
-        border: hover()
-          ? "1px dashed var(--color-text-faint)"
-          : "1px dashed var(--color-border-strong)",
+        border: hover() ? "1px dashed var(--color-text-faint)" : "1px dashed var(--color-border-strong)",
         "border-radius": "4px",
         color: hover() ? "var(--color-text)" : "var(--color-text-faint)",
         transition: "border-color 160ms ease, color 160ms ease",
       }}
     >
       <IconPlus size={15} strokeWidth={2} />
-      <span style={{ "font-family": FONT_SANS, "font-size": "13px", "font-weight": 400 }}>
-        new project
-      </span>
+      <span style={{ "font-family": FONT_SANS, "font-size": "13px", "font-weight": 400 }}>new project</span>
     </button>
   )
 }

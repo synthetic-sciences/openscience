@@ -55,10 +55,9 @@ export const myvariant: Connector = {
     const term = query.trim()
     if (term.length === 0) return []
     const size = Math.min(opts?.limit ?? 10, 25)
-    const data = await getJSON<QueryEnvelope>(
-      `${BASE}/query?q=${encodeURIComponent(term)}&size=${size}`,
-      { signal: opts?.signal },
-    )
+    const data = await getJSON<QueryEnvelope>(`${BASE}/query?q=${encodeURIComponent(term)}&size=${size}`, {
+      signal: opts?.signal,
+    })
     return arr(data.hits)
       .map((hit) => variantHit(hit as Rec))
       .filter((hit) => hit.id.length > 0)

@@ -81,7 +81,11 @@ export default function Network() {
   }
 
   function addCustom() {
-    const raw = customDomain().trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+    const raw = customDomain()
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/\/.*$/, "")
     if (!raw) return
     setCustomDomain("")
     if (state().custom.includes(raw)) return
@@ -137,10 +141,7 @@ export default function Network() {
           <Switch checked={state().allowlistEnabled} onChange={toggleAllowlist} />
         </div>
 
-        <Show
-          when={!loading()}
-          fallback={<div class="text-13-regular text-text-weak py-6 text-center">Loading…</div>}
-        >
+        <Show when={!loading()} fallback={<div class="text-13-regular text-text-weak py-6 text-center">Loading…</div>}>
           {/* Domain groups */}
           <div class="flex flex-col gap-2">
             <span class="thesis-section-label px-1">Domain sets</span>

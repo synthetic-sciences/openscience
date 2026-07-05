@@ -51,16 +51,12 @@ export const bindingdb: Connector = {
     const affinities = affinitiesOf(body)
     return affinities.slice(0, limit).map<ConnectorHit>((a) => {
       const mid = a.monomerid != null ? String(a.monomerid) : ""
-      const measure = [a.affinity_type, a.affinity != null ? `${a.affinity} nM` : undefined]
-        .filter(Boolean)
-        .join(" ")
+      const measure = [a.affinity_type, a.affinity != null ? `${a.affinity} nM` : undefined].filter(Boolean).join(" ")
       return {
         id: mid,
-        title: measure ? `${measure}${a.query ? ` — ${a.query}` : ""}` : a.query ?? `Monomer ${mid}`,
+        title: measure ? `${measure}${a.query ? ` — ${a.query}` : ""}` : (a.query ?? `Monomer ${mid}`),
         summary: a.smile,
-        url: mid
-          ? `https://www.bindingdb.org/rwd/bind/chemsearch/marvin/MolStructure.jsp?monomerid=${mid}`
-          : undefined,
+        url: mid ? `https://www.bindingdb.org/rwd/bind/chemsearch/marvin/MolStructure.jsp?monomerid=${mid}` : undefined,
         extra: a,
       }
     })

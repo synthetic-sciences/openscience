@@ -29,7 +29,11 @@ export function ImageView(props: ArtifactRenderProps): JSX.Element {
             <img
               src={src}
               alt="artifact"
-              style={{ "max-width": "100%", height: props.height ? `${props.height}px` : "auto", "border-radius": "4px" }}
+              style={{
+                "max-width": "100%",
+                height: props.height ? `${props.height}px` : "auto",
+                "border-radius": "4px",
+              }}
             />
           )}
         </For>

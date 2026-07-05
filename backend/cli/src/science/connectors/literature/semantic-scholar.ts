@@ -53,7 +53,7 @@ function toHit(p: Paper): ConnectorHit {
   const meta = [authors(p), p.venue, p.year].filter(Boolean).join(". ")
   return {
     id: p.paperId ?? "",
-    title: snippet(p.title, 300) ?? (p.paperId ?? "Untitled"),
+    title: snippet(p.title, 300) ?? p.paperId ?? "Untitled",
     summary: snippet(p.abstract) ?? (meta.length ? meta : undefined),
     url: p.url ?? (p.paperId ? `https://www.semanticscholar.org/paper/${p.paperId}` : undefined),
     score: typeof p.citationCount === "number" ? p.citationCount : undefined,

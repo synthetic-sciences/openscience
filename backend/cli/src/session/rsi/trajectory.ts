@@ -143,7 +143,10 @@ export namespace RSITrajectory {
 
       return trajectory
     } catch (e) {
-      log.error("trajectory capture failed", { sessionId: sessionID, error: e instanceof Error ? e.message : String(e) })
+      log.error("trajectory capture failed", {
+        sessionId: sessionID,
+        error: e instanceof Error ? e.message : String(e),
+      })
       return null
     }
   }

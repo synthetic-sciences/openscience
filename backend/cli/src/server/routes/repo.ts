@@ -85,13 +85,27 @@ async function status(directory: string) {
   if (!directory) throw new Error("directory required")
   await git(["rev-parse", "--is-inside-work-tree"], directory)
   const [branch, remote, upstream, porcelain, userName, userEmail, head] = await Promise.all([
-    git(["branch", "--show-current"], directory).then((x) => x.out).catch(() => ""),
-    git(["config", "--get", "remote.origin.url"], directory).then((x) => x.out).catch(() => ""),
-    git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], directory).then((x) => x.out).catch(() => ""),
-    git(["status", "--porcelain=v1", "--branch"], directory).then((x) => x.out).catch(() => ""),
-    git(["config", "user.name"], directory).then((x) => x.out).catch(() => ""),
-    git(["config", "user.email"], directory).then((x) => x.out).catch(() => ""),
-    git(["rev-parse", "--short", "HEAD"], directory).then((x) => x.out).catch(() => ""),
+    git(["branch", "--show-current"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["config", "--get", "remote.origin.url"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["status", "--porcelain=v1", "--branch"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["config", "user.name"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["config", "user.email"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
+    git(["rev-parse", "--short", "HEAD"], directory)
+      .then((x) => x.out)
+      .catch(() => ""),
   ])
   const aheadBehind = upstream
     ? await git(["rev-list", "--left-right", "--count", "HEAD...@{u}"], directory)
@@ -177,19 +191,25 @@ export const RepoRoutes = lazy(() =>
     })
     .post("/commit", async (c) => {
       let body: { directory?: string; message?: unknown } = {}
-      try { body = await c.req.json() } catch {}
+      try {
+        body = await c.req.json()
+      } catch {}
       const r = await wrap(() => commit(String(body.directory ?? ""), body.message))
       return c.json(r.body, r.ok ? 200 : 400)
     })
     .post("/push", async (c) => {
       let body: { directory?: string; branch?: unknown } = {}
-      try { body = await c.req.json() } catch {}
+      try {
+        body = await c.req.json()
+      } catch {}
       const r = await wrap(() => push(String(body.directory ?? ""), body.branch))
       return c.json(r.body, r.ok ? 200 : 400)
     })
     .post("/remote", async (c) => {
       let body: { directory?: string; url?: unknown } = {}
-      try { body = await c.req.json() } catch {}
+      try {
+        body = await c.req.json()
+      } catch {}
       const r = await wrap(() => setRemote(String(body.directory ?? ""), body.url))
       return c.json(r.body, r.ok ? 200 : 400)
     }),
