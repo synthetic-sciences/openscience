@@ -61,6 +61,24 @@ const arch = archMap[os.arch()] || os.arch()
 const base = "openscience-" + platform + "-" + arch
 const scopedBase = "openscience-" + platform + "-" + arch
 
+// Rank matching platform packages instead of trusting readdir order (which
+// is filesystem-dependent): right libc first, exact name before suffixed
+// variants like -baseline, wrong libc only as a last resort.
+const musl = (() => {
+  if (platform !== "linux") return false
+  try { return fs.readdirSync("/lib").some((f) => f.startsWith("ld-musl-")) } catch { return false }
+})()
+function variantRank(prefix, entry) {
+  const entryMusl = entry.includes("-musl")
+  if (entryMusl !== musl) return 0
+  return entry === prefix || entry === prefix + "-musl" ? 2 : 1
+}
+function matchingVariants(prefix, entries) {
+  return entries
+    .filter((e) => e.startsWith(prefix))
+    .sort((a, b) => variantRank(prefix, b) - variantRank(prefix, a))
+}
+
 // 2. Search this install's node_modules for the matching platform package.
 // This must come before ~/.openscience or Homebrew fallbacks; otherwise an npm
 // install can accidentally launch an older globally-installed binary.
@@ -70,21 +88,17 @@ while (true) {
   if (fs.existsSync(modules)) {
     try {
       const entries = fs.readdirSync(modules)
-      for (const entry of entries) {
-        if (entry.startsWith(base)) {
-          const candidate = path.join(modules, entry, "bin", binary)
-          if (isBinary(candidate)) run(candidate)
-        }
+      for (const entry of matchingVariants(base, entries)) {
+        const candidate = path.join(modules, entry, "bin", binary)
+        if (isBinary(candidate)) run(candidate)
       }
       // Check scoped packages (@synsci/openscience-darwin-arm64)
       const scoped = path.join(modules, "@synsci")
       if (fs.existsSync(scoped)) {
         const scopedEntries = fs.readdirSync(scoped)
-        for (const entry of scopedEntries) {
-          if (entry.startsWith(scopedBase)) {
-            const candidate = path.join(scoped, entry, "bin", binary)
-            if (isBinary(candidate)) run(candidate)
-          }
+        for (const entry of matchingVariants(scopedBase, scopedEntries)) {
+          const candidate = path.join(scoped, entry, "bin", binary)
+          if (isBinary(candidate)) run(candidate)
         }
       }
     } catch {}

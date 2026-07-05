@@ -77,8 +77,17 @@ function runQuiet(cmd) {
   catch { return null }
 }
 
+// Windows global installs expose a .cmd shim, which can't be exec'd
+// directly — it needs a shell (and the path quoted for it).
+const isCmdShim = (p) => process.platform === "win32" && p.toLowerCase().endsWith(".cmd")
+
+function execCli(file, args = [], opts = {}) {
+  if (isCmdShim(file)) return execSync(['"' + file + '"', ...args].join(" "), opts)
+  return execFileSync(file, args, opts)
+}
+
 function runFileQuiet(file, args = []) {
-  try { return execFileSync(file, args, { encoding: "utf-8", stdio: "pipe" }).trim() }
+  try { return execCli(file, args, { encoding: "utf-8", stdio: "pipe" }).trim() }
   catch { return null }
 }
 
@@ -97,16 +106,21 @@ function isLauncherPath(p) {
 // `--version` so half-broken installs are skipped instead of accepted.
 function resolveCli() {
   const candidates = []
-  // 1. Global npm prefix (where `npm i -g @synsci/openscience` puts it)
+  // 1. Global npm prefix (where `npm i -g @synsci/openscience` puts it).
+  // On Windows the global bin dir is the prefix itself and the entry is an
+  // openscience.cmd shim; on POSIX it's <prefix>/bin/openscience.
   const prefix = runQuiet("npm prefix -g")
-  if (prefix) candidates.push(join(prefix, "bin", "openscience"))
-  // 2. ~/.openscience/bin/openscience (curl-installer location)
-  candidates.push(join(homedir(), ".openscience", "bin", "openscience"))
+  if (prefix) {
+    if (process.platform === "win32") candidates.push(join(prefix, "openscience.cmd"))
+    else candidates.push(join(prefix, "bin", "openscience"))
+  }
+  // 2. ~/.openscience/bin/openscience (curl-installer location, POSIX only)
+  if (process.platform !== "win32") candidates.push(join(homedir(), ".openscience", "bin", "openscience"))
 
   for (const cand of candidates) {
     if (!existsSync(cand) || isLauncherPath(cand)) continue
     try {
-      const ver = execFileSync(cand, ["--version"], {
+      const ver = execCli(cand, ["--version"], {
         encoding: "utf-8", stdio: "pipe", timeout: 5000,
       }).trim()
       if (/^\d/.test(ver)) return cand
@@ -140,6 +154,11 @@ function isConnected() {
 }
 
 function atlasVersion() {
+  // `atlas` on PATH may be Ariga Atlas or the MongoDB Atlas CLI, whose
+  // --version output also survives the digit filter. Only trust the command
+  // when the global @synsci/atlas package is present to own it.
+  const owned = runQuiet("npm ls -g @synsci/atlas --depth=0")
+  if (!owned || !owned.includes("@synsci/atlas")) return null
   const raw = runQuiet("atlas --version")
   return raw ? raw.replace(/[^0-9.]/g, "") : null
 }
@@ -215,7 +234,7 @@ async function main() {
       } else {
         s.update(`Upgrading ${current} → ${latest}...`)
         try {
-          execFileSync(cliPath, ["upgrade"], { stdio: "pipe" })
+          execCli(cliPath, ["upgrade"], { stdio: "pipe" })
           s.ok(`Upgraded to ${latest}`)
         } catch {
           s.warn(`Upgrade failed, continuing with ${current}`)
@@ -243,6 +262,13 @@ async function main() {
       if (!cliPath) throw new Error("openscience not on PATH after install")
       s.ok("Installed OpenScience")
     } catch {
+      // The standalone installer is a bash script; on native Windows there's
+      // no bash to pipe it into, so don't suggest a fallback that can't run.
+      if (process.platform === "win32") {
+        s.fail("Install failed")
+        console.log(`\n  Try manually: ${CYAN}npm i -g @synsci/openscience${RESET}\n`)
+        process.exit(1)
+      }
       // Global npm installs commonly fail on permissions. Fall back to the
       // standalone installer, which lands in ~/.openscience/bin without sudo
       // (resolveCli already checks that location).
@@ -306,7 +332,7 @@ async function main() {
     } else {
       console.log()
       try {
-        execFileSync(cliPath, ["connect", "login"], { stdio: "inherit" })
+        execCli(cliPath, ["connect", "login"], { stdio: "inherit" })
       } catch {}
     }
   } else {
@@ -319,7 +345,10 @@ async function main() {
   console.log(`  ${DIM}Opening the workspace in your browser…${RESET}`)
   console.log()
 
-  const child = spawn(cliPath, ["web", ...process.argv.slice(2)], { stdio: "inherit" })
+  const webArgs = ["web", ...process.argv.slice(2)]
+  const child = isCmdShim(cliPath)
+    ? spawn(['"' + cliPath + '"', ...webArgs].join(" "), { stdio: "inherit", shell: true })
+    : spawn(cliPath, webArgs, { stdio: "inherit" })
   child.on("close", (code) => process.exit(code ?? 0))
 }
 

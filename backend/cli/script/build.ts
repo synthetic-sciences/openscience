@@ -189,6 +189,9 @@ for (const item of targets) {
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],
+        // Without libc, linux-x64 hosts install all four x64 variants
+        // (~750 MB) and glibc/musl selection falls to the bin wrapper.
+        ...(item.os === "linux" ? { libc: [item.abi === "musl" ? "musl" : "glibc"] } : {}),
         // npm provenance refuses packages whose repository.url doesn't match
         // the repo the workflow ran from (case-sensitive)
         repository: {

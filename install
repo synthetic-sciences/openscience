@@ -168,9 +168,11 @@ else
 
     if [ -z "$requested_version" ]; then
         url="https://github.com/synthetic-sciences/OpenScience/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/synthetic-sciences/OpenScience/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        # The || fallback keeps set -e from killing the script inside the
+        # assignment when curl fails, so the message below can print.
+        specific_version=$(curl -fsS https://api.github.com/repos/synthetic-sciences/OpenScience/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p') || specific_version=""
 
-        if [[ $? -ne 0 || -z "$specific_version" ]]; then
+        if [[ -z "$specific_version" ]]; then
             echo -e "${RED}Failed to fetch version information${NC}"
             exit 1
         fi
@@ -273,7 +275,7 @@ download_with_progress() {
     trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
 
     (
-        curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
+        curl --trace-ascii "$tracefile" -f -s -L -o "$output" "$url"
     ) &
     local curl_pid=$!
 
@@ -317,7 +319,16 @@ download_and_install() {
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
-        curl -# -L -o "$tmp_dir/$filename" "$url"
+        curl -f -# -L -o "$tmp_dir/$filename" "$url"
+    fi
+
+    # Without -f curl saves the error body ("Not Found") and exits 0, and the
+    # user gets a cryptic unzip/tar failure. Catch a missing/empty download
+    # here with a real message instead.
+    if [ ! -s "$tmp_dir/$filename" ]; then
+        echo -e "${RED}Download failed: $url${NC}"
+        rm -rf "$tmp_dir"
+        exit 1
     fi
 
     if [ "$os" = "linux" ]; then
@@ -326,8 +337,14 @@ download_and_install() {
         unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
     fi
 
-    mv "$tmp_dir/openscience" "$INSTALL_DIR"
-    chmod 755 "${INSTALL_DIR}/openscience"
+    # Bun --compile appends .exe for win32 targets, so the archive entry is
+    # openscience.exe there. Git Bash resolves `openscience` to the .exe.
+    local bin_name="openscience"
+    if [ "$os" = "windows" ]; then
+        bin_name="openscience.exe"
+    fi
+    mv "$tmp_dir/$bin_name" "$INSTALL_DIR"
+    chmod 755 "${INSTALL_DIR}/${bin_name}"
     rm -rf "$tmp_dir"
 }
 
@@ -424,8 +441,8 @@ if [[ "$no_modify_path" != "true" ]]; then
     fi
 fi
 
-if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
-    echo "$INSTALL_DIR" >> $GITHUB_PATH
+if [ "${GITHUB_ACTIONS-}" == "true" ] && [ -n "${GITHUB_PATH-}" ]; then
+    echo "$INSTALL_DIR" >> "$GITHUB_PATH"
     print_message info "Added $INSTALL_DIR to \$GITHUB_PATH"
 fi
 
