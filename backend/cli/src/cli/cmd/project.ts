@@ -44,7 +44,7 @@ const ProjectInitCommand = cmd({
         return
       }
       UI.empty()
-      prompts.log.error("Not connected to Atlas. Run `openscience connect login` first.")
+      prompts.log.error("Not connected to Atlas. Run `openscience login` first.")
       return
     }
     const opened = (args.dir as string | undefined) || process.cwd()
@@ -81,8 +81,8 @@ function reportInitFailure(failure: InitProjectFailure | undefined) {
     case "unauthenticated":
       prompts.log.error(
         f.status
-          ? `${f.host} rejected your saved session (HTTP ${f.status})${detail}. Run \`openscience connect login\` to re-authenticate.`
-          : "Not connected to Atlas. Run `openscience connect login` first.",
+          ? `${f.host} rejected your saved session (HTTP ${f.status})${detail}. Run \`openscience login\` to re-authenticate.`
+          : "Not connected to Atlas. Run `openscience login` first.",
       )
       break
     case "unreachable":
@@ -150,7 +150,7 @@ const ProjectMergeCommand = cmd({
 
     const session = await OpenScience.getSession()
     if (!session) {
-      prompts.log.error("Not authenticated. Run `openscience connect login` first.")
+      prompts.log.error("Not authenticated. Run `openscience login` first.")
       prompts.outro("Aborted")
       return
     }

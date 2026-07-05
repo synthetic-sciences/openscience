@@ -453,9 +453,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                   }
                   if (!tokens) {
                     log.warn("codex token refresh failed", { error: String(e) })
-                    throw new Error(
-                      "Codex sign-in expired. Reconnect it with `openscience auth login` and choose Codex — Sign in with ChatGPT.",
-                    )
+                    throw new Error("Codex sign-in expired. Reconnect it with `openscience keys signin`.")
                   }
                 }
               }

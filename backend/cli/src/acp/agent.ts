@@ -415,7 +415,7 @@ export namespace ACP {
       log.info("initialize", { protocolVersion: params.protocolVersion })
 
       const authMethod: AuthMethod = {
-        description: "Run `openscience connect login` in the terminal",
+        description: "Run `openscience login` in the terminal",
         name: "Login with OpenScience",
         id: "openscience-login",
       }

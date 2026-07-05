@@ -1414,7 +1414,7 @@ export namespace Provider {
   }
 
   export const NO_PROVIDER_HINT =
-    "No model providers are available. Add an API key for a provider (`openscience auth login`) or connect a managed account (`openscience connect login`), then choose a model."
+    "No model providers are available. Add your own API key (`openscience keys add`) or connect a managed account (`openscience login`), then choose a model."
 
   const priority = ["claude-sonnet-4", "claude-opus-4", "gpt-5", "gemini-3-pro"]
   export function sort(models: Model[]) {

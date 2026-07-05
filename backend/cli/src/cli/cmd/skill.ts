@@ -300,7 +300,7 @@ const SkillListCommand = cmd({
 
         if (totalBundled === 0) {
           UI.println(
-            "Bundled OpenScience skills did not load. Run `openscience connect login` and `openscience connect sync`, then try again.",
+            "Bundled OpenScience skills did not load. Run `openscience login` and `openscience sync`, then try again.",
           )
           UI.println("Offline fallback only shows skills already cached on this machine.")
           UI.println("")

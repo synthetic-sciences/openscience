@@ -350,7 +350,7 @@ export namespace SessionPrompt {
       // removed) — surface a session error instead of crashing the loop.
       if (!model) {
         const error = new NamedError.Unknown({
-          message: `Model ${lastUser.model.providerID}/${lastUser.model.modelID} is not available. Add an API key for a provider (\`openscience auth login\`) or connect a managed account (\`openscience connect login\`), then choose a model.`,
+          message: `Model ${lastUser.model.providerID}/${lastUser.model.modelID} is not available. Add your own API key (\`openscience keys add\`) or connect a managed account (\`openscience login\`), then choose a model.`,
         }).toObject()
         Bus.publish(Session.Event.Error, { sessionID, error })
         await Session.updateMessage({
