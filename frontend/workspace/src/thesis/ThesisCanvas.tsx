@@ -1361,7 +1361,7 @@ function NodeDetail(props: { node: ThesisNode; onClose: () => void }): JSX.Eleme
         <Show when={props.node.repo_url}>
           {(url) => (
             <a
-              href={url().startsWith("http") ? url() : `https://${url().replace(/^github\.com\//, "github.com/")}`}
+              href={url().startsWith("http") ? url() : `https://${url()}`}
               target="_blank"
               rel="noopener"
               title="open repo"

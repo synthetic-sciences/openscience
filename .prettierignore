@@ -11,3 +11,4 @@ dist/
 *.mdx
 # curated skill content consumed verbatim by agents
 backend/cli/skills/
+.astro/
