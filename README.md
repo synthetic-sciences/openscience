@@ -41,7 +41,7 @@ npm install -g @synsci/openscience
 openscience
 ```
 
-The command is `openscience`, and it opens the workspace in your browser. If you would rather not install it globally, `npx synsci` does the same thing in a single step:
+The command is `openscience`, and it opens the workspace in your browser. The first time you run it, a short setup walks you through how to power the models — Atlas managed models, your own provider keys, or skip and start on the free demo models. If you would rather not install it globally, `npx synsci` does the same thing in a single step:
 
 ```bash
 npx synsci
@@ -58,7 +58,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 openscience
 ```
 
-`openscience` opens the workspace in your browser. Your keys stay on your machine and requests go straight to the provider. You can also add keys from the Credentials panel and pick a model from the model selector. To open the workspace in a specific project:
+`openscience` opens the workspace in your browser. Your keys stay on your machine and requests go straight to the provider. You can also run `openscience keys add` to store a key from the terminal, add keys from the Credentials panel, and pick a model from the model selector. To open the workspace in a specific project:
 
 ```bash
 openscience ~/code/my-project
@@ -69,10 +69,11 @@ openscience ~/code/my-project
 [Atlas](https://app.syntheticsciences.ai) is Synthetic Sciences' managed platform. It gives you a curated set of frontier models billed from a prepaid wallet, so you do not need per-provider keys, plus a persistent research graph and cloud compute. OpenScience works with Atlas but never requires it.
 
 ```bash
-openscience connect login
+openscience login          # connect your Atlas account
+openscience wallet         # check your balance and top up
 ```
 
-Bring-your-own-key usage is always free and is never gated. Atlas only meters the models it serves.
+Bring-your-own-key usage is always free and is never gated — Atlas only meters the models it serves. Use `openscience status` to see what you are connected to, and `openscience logout` to disconnect.
 
 ## How it works
 

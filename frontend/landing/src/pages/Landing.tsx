@@ -637,6 +637,39 @@ export default function Landing() {
 
       <ProductShot />
 
+      {/* ----------------------------- INSTALL ----------------------------- */}
+      <Section seed={8} id="install">
+        <div className="grid grid-cols-12 gap-10 lg:gap-16 items-start">
+          <div className="col-span-12 lg:col-span-5">
+            <Reveal>
+              <Eyebrow className="mb-5">Install</Eyebrow>
+              <h2 className={`text-balance ${H_BIG}`}>Up and running in a minute.</h2>
+            </Reveal>
+            <Reveal delay={150}>
+              <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
+                Install with npm or the script, then run <span className="text-foreground">openscience</span>. A short
+                setup asks how you want to power the models — Atlas managed models, your own provider keys, or the free
+                demo models — and the workspace opens in your browser.
+              </p>
+            </Reveal>
+          </div>
+          <Reveal delay={200} className="col-span-12 lg:col-span-7">
+            <div className="flex flex-col items-start gap-3 lg:pt-2">
+              <CopyChip cmd={NPM_CMD} />
+              <CopyChip cmd={CURL_CMD} />
+              <a
+                href={`${GITHUB}/releases`}
+                target="_blank"
+                rel="noreferrer"
+                className="link-underline mt-3 text-[13.5px] text-foreground/60 hover:text-foreground"
+              >
+                Binaries on GitHub Releases
+              </a>
+            </div>
+          </Reveal>
+        </div>
+      </Section>
+
       <DbMarquee />
 
       {/* --------------------------- HOW IT WORKS ------------------------- */}
@@ -807,37 +840,6 @@ export default function Landing() {
           </div>
         </div>
       </section>
-
-      {/* ----------------------------- INSTALL ----------------------------- */}
-      <Section seed={8} id="install">
-        <div className="grid grid-cols-12 gap-10 lg:gap-16 items-start">
-          <div className="col-span-12 lg:col-span-5">
-            <Reveal>
-              <Eyebrow className="mb-5">Install</Eyebrow>
-              <h2 className={`text-balance ${H_BIG}`}>Up and running in a minute.</h2>
-            </Reveal>
-            <Reveal delay={150}>
-              <p className={`mt-5 max-w-[44ch] ${P_BIG}`}>
-                Install with npm or the install script. Set a provider key, and the workspace opens in your browser.
-              </p>
-            </Reveal>
-          </div>
-          <Reveal delay={200} className="col-span-12 lg:col-span-7">
-            <div className="flex flex-col items-start gap-3 lg:pt-2">
-              <CopyChip cmd={NPM_CMD} />
-              <CopyChip cmd={CURL_CMD} />
-              <a
-                href={`${GITHUB}/releases`}
-                target="_blank"
-                rel="noreferrer"
-                className="link-underline mt-3 text-[13.5px] text-foreground/60 hover:text-foreground"
-              >
-                Binaries on GitHub Releases
-              </a>
-            </div>
-          </Reveal>
-        </div>
-      </Section>
 
       {/* ------------------------------- FAQ ------------------------------- */}
       <Section seed={7} id="faq">
