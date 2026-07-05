@@ -52,11 +52,25 @@ await import(`../sdk/js/script/build.ts`)
 if (Script.release) {
   await $`git commit -am "release: v${Script.version}"`.nothrow()
   await $`git tag v${Script.version}`.nothrow()
-  await $`git fetch origin`.nothrow()
-  await $`git cherry-pick HEAD..origin/dev`.nothrow()
-  await $`git push origin HEAD --tags --no-verify --force-with-lease`.nothrow()
-  await new Promise((resolve) => setTimeout(resolve, 5_000))
-  await $`gh release edit v${Script.version} --draft=false`.nothrow()
+  // Tags are exempt from branch protection; push the tag on its own so the
+  // release assets and npm publishes can proceed regardless of what happens
+  // to the branch push below.
+  const tagPush = await $`git push origin refs/tags/v${Script.version} --no-verify`.nothrow()
+  if (tagPush.exitCode !== 0) {
+    console.warn(`::warning::tag push failed for v${Script.version} (already pushed?)`)
+  }
+  // Branch protection rejects direct pushes to main, and the old .nothrow()
+  // swallowed that — every release left its version-bump commit orphaned and
+  // main's package versions permanently stale. Try the direct push (works if
+  // the workflow identity is a bypass actor), otherwise open a release PR so
+  // the bumps land through the normal checks.
+  const push = await $`git push origin HEAD:main --no-verify`.nothrow()
+  if (push.exitCode !== 0) {
+    const branch = `release/v${Script.version}`
+    console.warn(`main push rejected by branch protection — opening a release PR from ${branch}`)
+    await $`git push origin HEAD:refs/heads/${branch} --force --no-verify`
+    await $`gh pr create --base main --head ${branch} --title "release: v${Script.version}" --body "Version bumps from the v${Script.version} release."`.nothrow()
+  }
 }
 
 // Sections keep publishing past an earlier failure so a broken CLI publish
@@ -122,14 +136,18 @@ try {
     // chase (`npm owner add <token-user> synsci`), not a broken release —
     // every other package shipped, so warn loudly instead of failing.
     if (stderr.includes("E403") || stderr.includes("do not have permission")) {
+      // A GitHub Actions annotation, so this shows on the run summary
+      // instead of being a log line nobody reads on a green run.
       console.warn(
-        "launcher NOT published: the npm token's account is not an owner of the 'synsci' package.\n" +
-          "Fix: an owner runs `npm owner add <token-user> synsci`, then re-release.",
+        "::warning title=launcher not published::npm token's account is not an owner of the 'synsci' package — users keep getting the previous launcher. Fix: an owner runs `npm owner add <token-user> synsci`, then re-release.",
       )
     } else if (stderr.includes("cannot publish over") || stderr.includes("previously published")) {
-      // The launcher sometimes ships out-of-band between releases; finding
-      // this version already on the registry is success, not failure.
-      console.warn(`launcher ${Script.version} already on the registry, skipping`)
+      // The launcher sometimes ships out-of-band between releases. That
+      // means the release-built launcher for this version will never ship,
+      // so surface it on the run summary rather than silently skipping.
+      console.warn(
+        `::warning title=launcher skipped::synsci@${Script.version} already exists on the registry (published out-of-band) — the release-built launcher was NOT published.`,
+      )
     } else {
       throw new Error(`npm publish exited with ${result.exitCode}`)
     }
@@ -144,5 +162,13 @@ process.chdir(dir)
 
 if (failures.length > 0) {
   console.error(`\npublish failed for: ${failures.join(", ")}`)
+  if (Script.release) console.error("release left as draft so releases/latest doesn't move")
   process.exit(1)
+}
+
+if (Script.release) {
+  // Undraft last. The install script resolves releases/latest, so going
+  // public before npm has the packages would leave curl installs ahead of
+  // npm installs whenever a publish fails.
+  await $`gh release edit v${Script.version} --draft=false`
 }

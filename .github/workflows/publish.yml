@@ -17,7 +17,9 @@ on:
         required: false
         type: string
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
+# One release at a time. Keying the group on the inputs let a `patch` and a
+# `minor` dispatch run concurrently and race on tags and the GitHub release.
+concurrency: ${{ github.workflow }}
 
 permissions:
   id-token: write
@@ -28,6 +30,12 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'synthetic-sciences/OpenScience'
     steps:
+      - name: Require a bump or version input
+        if: ${{ !inputs.bump && !inputs.version }}
+        run: |
+          echo "::error::Provide 'bump' or 'version'. An empty dispatch would publish a 0.0.0-main preview to npm as if it were a release."
+          exit 1
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -107,6 +115,9 @@ jobs:
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
           GITHUB_TOKEN: ${{ github.token }}
+          # Fine-grained PAT with push access to synthetic-sciences/homebrew-tap;
+          # github.token is repo-scoped and can't update the tap.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
 
@@ -116,6 +127,8 @@ jobs:
     needs:
       - version
       - publish
+    # Previews (no release output) shouldn't create a production deployment.
+    if: needs.version.outputs.release != ''
     runs-on: ubuntu-latest
     permissions:
       deployments: write
@@ -123,12 +136,15 @@ jobs:
       - uses: actions/github-script@v8
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
         with:
           script: |
             const version = process.env.VERSION
             const deployment = await github.rest.repos.createDeployment({
               ...context.repo,
-              ref: context.sha,
+              // The tag points at the release commit (the tree that was
+              // actually published); context.sha is the pre-release commit.
+              ref: process.env.TAG || context.sha,
               environment: "npm",
               auto_merge: false,
               required_contexts: [],

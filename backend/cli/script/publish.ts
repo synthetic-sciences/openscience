@@ -160,11 +160,13 @@ if (!Script.preview) {
       "",
     ].join("\n")
 
-    const token = process.env.GITHUB_TOKEN
+    // The workflow's github.token is scoped to this repo and can never push
+    // to the tap repo — a dedicated fine-grained PAT is required.
+    const token = process.env.HOMEBREW_TAP_TOKEN
     if (!token) {
-      console.warn("GITHUB_TOKEN not set, skipping homebrew tap update")
+      console.warn("::warning title=homebrew skipped::HOMEBREW_TAP_TOKEN not set — brew users stay on the previous version")
     } else {
-      const tap = `https://x-access-token:${token}@github.com/syntheticsciences/homebrew-tap.git`
+      const tap = `https://x-access-token:${token}@github.com/synthetic-sciences/homebrew-tap.git`
       await $`rm -rf ./dist/homebrew-tap`
       await $`git clone ${tap} ./dist/homebrew-tap`
       await Bun.file("./dist/homebrew-tap/openscience.rb").write(homebrewFormula)
@@ -173,6 +175,7 @@ if (!Script.preview) {
       await $`cd ./dist/homebrew-tap && git push`
     }
   } catch (e) {
-    console.warn("Registry update (Homebrew/AUR) failed, skipping:", e)
+    const message = e instanceof Error ? e.message : String(e)
+    console.warn(`::warning title=homebrew failed::tap update failed — brew users stay on the previous version (${message})`)
   }
 }
