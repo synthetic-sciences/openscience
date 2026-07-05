@@ -39,21 +39,27 @@ Connecting an Atlas account is optional — see [Atlas](/openscience/atlas). Ope
 
 | Command | Use |
 | --- | --- |
-| `openscience connect login` | Connect your Atlas account (browser flow, or `--key thk_…`). |
-| `openscience connect status` | Show the active account, default model, synced services, and credit. |
-| `openscience connect sync` | Re-pull synced credentials. |
-| `openscience connect devices` | List authorized devices. |
-| `openscience connect logout` | Disconnect this device from Atlas. |
+| `openscience init` | First-run setup wizard — choose managed models, your own keys, or skip. Rerun anytime (alias `onboard`). |
+| `openscience login` | Connect your Atlas account (browser flow, or `--key thk_…`). |
+| `openscience status` | Show the active account, synced services, subscription, and wallet (alias `whoami`). |
+| `openscience sync` | Re-pull synced credentials. |
+| `openscience devices` | List authorized devices. |
+| `openscience logout` | Disconnect this device from Atlas. |
+| `openscience doctor` | Report what's configured: account, provider keys, wallet, default model. |
+
+`openscience connect …` still works as an alias for `login` / `logout` / `status` / `sync` / `devices`.
 
 ## Providers and routing
 
 | Command | Use |
 | --- | --- |
-| `openscience auth` | Interactive provider sign-in (BYOK keys; OAuth where supported). |
-| `openscience logout [provider]` | Log out of a connected provider. |
+| `openscience keys add` | Add a provider API key (BYOK; OAuth sign-in where supported). Alias: `auth`. |
+| `openscience keys signin` | Sign in with ChatGPT / Codex (subscription). |
+| `openscience keys list` | List saved provider keys and active env vars. |
+| `openscience keys rm` | Remove a saved provider key. |
 | `openscience models` | List configured providers and their models. |
-| `openscience billing show` | Credit and recent managed-route usage (Atlas-connected mode). |
-| `openscience billing topup` | Open the app to add credit. |
+| `openscience wallet` | Wallet balance and key routing (alias `billing`). |
+| `openscience wallet topup` | Open the app to add credit. |
 
 ## Agent profiles
 

@@ -15,8 +15,8 @@ The permission system prompts you before the agent runs a command or writes a fi
 | Surface | Where | Notes |
 | --- | --- | --- |
 | BYOK provider keys | Environment variables or the local credential store | Never leave your machine; requests go straight to the provider. No account required. |
-| Atlas session | `~/.config/openscience/config.json` | `thk_*` key created by `openscience connect login`; revocable from the dashboard. |
-| Synced service credentials | `~/.config/openscience/credentials.json` | Present only when [connected to Atlas](/openscience/atlas); refresh with `openscience connect sync`. |
+| Atlas session | `~/.config/openscience/config.json` | `thk_*` key created by `openscience login`; revocable from the dashboard. |
+| Synced service credentials | `~/.config/openscience/credentials.json` | Present only when [connected to Atlas](/openscience/atlas); refresh with `openscience sync`. |
 | Native binary (curl install) | `~/.openscience/bin/openscience` | Added to PATH through your shell rc. |
 
 Override the config parent directory with `XDG_CONFIG_HOME`.

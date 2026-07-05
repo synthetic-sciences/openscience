@@ -40,7 +40,7 @@ openscience run --model anthropic/claude-sonnet-5 "Clean up the plotting code"
 [Atlas](/openscience/atlas) is the managed platform. Connecting adds a curated set of frontier models billed from a prepaid wallet, so you can skip per-provider keys entirely:
 
 ```bash
-openscience connect login   # defaults to app.syntheticsciences.ai
+openscience login   # defaults to app.syntheticsciences.ai
 ```
 
 Once connected, launching the workspace syncs your provider config and credentials, and Settings → Billing has independent managed/BYOK spend toggles for LLM calls and compute — mix routes freely, per concern. BYOK usage is always free and never gated; Atlas only meters the models it serves.

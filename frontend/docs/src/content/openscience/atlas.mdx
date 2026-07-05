@@ -18,19 +18,19 @@ OpenScience never requires an account: bring-your-own-key usage is free and neve
 <Steps>
   <Step title="Log in">
     ```bash
-    openscience connect login
+    openscience login
     ```
-    Opens your browser to approve the device. On headless or CI machines, pass `--no-browser` and paste a key, or run `openscience connect login --key thk_...` with a key created at `app.syntheticsciences.ai/cli`.
+    Opens your browser to approve the device. On headless or CI machines, pass `--no-browser` and paste a key, or run `openscience login --key thk_...` with a key created at `app.syntheticsciences.ai/cli`.
   </Step>
   <Step title="Verify">
     ```bash
-    openscience connect status
+    openscience status
     ```
     Shows the connected user, this device, and how many service credentials synced.
   </Step>
   <Step title="Sync credentials">
     ```bash
-    openscience connect sync
+    openscience sync
     ```
     Refreshes synced service credentials after you change them on the dashboard.
   </Step>
@@ -41,25 +41,25 @@ OpenScience never requires an account: bring-your-own-key usage is free and neve
 Key routing is per-provider and automatic: if you set a BYOK key for a provider, OpenScience uses it; otherwise the request goes through the Atlas managed route and debits your wallet.
 
 ```bash
-openscience billing         # wallet balance and current key routing
-openscience billing topup   # opens the Plan tab — $50 or $200, one-time or recurring monthly
+openscience wallet         # wallet balance and current key routing
+openscience wallet topup   # opens the Plan tab — $50 or $200, one-time or recurring monthly
 ```
 
 Flip managed versus BYOK per surface (LLM and compute) in **Settings → Billing**. BYOK works on every plan.
 
 ## Where credentials live
 
-Connected, your account holds the canonical copy of every synced credential; the local `~/.config/openscience/credentials.json` is a mirror you can delete and re-pull with `openscience connect sync`. In BYOK mode, keys exist only on your machine — see [Security](/openscience/security) for the storage and subprocess rules.
+Connected, your account holds the canonical copy of every synced credential; the local `~/.config/openscience/credentials.json` is a mirror you can delete and re-pull with `openscience sync`. In BYOK mode, keys exist only on your machine — see [Security](/openscience/security) for the storage and subprocess rules.
 
-## `connect` commands
+## Account commands
 
 | Command | Use |
 | --- | --- |
-| `openscience connect login` | Authenticate via browser; `--key thk_...` or `--no-browser` for headless machines. |
-| `openscience connect status` | Connection, user, device, and synced credential count. |
-| `openscience connect sync` | Re-pull synced service credentials from the dashboard. |
-| `openscience connect devices` | List authenticated devices; revoke from the Devices tab on the dashboard. |
-| `openscience connect logout` | Disconnect this machine. BYOK keeps working. |
+| `openscience login` | Authenticate via browser; `--key thk_...` or `--no-browser` for headless machines. |
+| `openscience status` | Connection, user, device, and synced credential count. |
+| `openscience sync` | Re-pull synced service credentials from the dashboard. |
+| `openscience devices` | List authenticated devices; revoke from the Devices tab on the dashboard. |
+| `openscience logout` | Disconnect this machine. BYOK keeps working. |
 
 ## What's next
 
