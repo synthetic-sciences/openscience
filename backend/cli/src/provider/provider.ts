@@ -88,10 +88,15 @@ export namespace Provider {
   }
 
   function requireAtlasProxyForManagedKey(provider: Info, options: Record<string, any>) {
-    const hasManagedKey =
-      isAtlasApiKey(options["apiKey"]) ||
-      provider.env.some((key) => isAtlasApiKey(Env.get(key)))
-    if (!hasManagedKey) return
+    // Key off the EFFECTIVE credential, not raw env. A managed thk_ value can
+    // sit unused in env while an auth.json key wins resolution; demanding
+    // proxy routing for it hard-failed every call with advice (`connect
+    // sync`) that re-delivers the same env and can never fix it.
+    const effective =
+      (typeof options["apiKey"] === "string" ? (options["apiKey"] as string) : undefined) ??
+      provider.key ??
+      provider.env.map((key) => Env.get(key)).find((value): value is string => !!value)
+    if (!isAtlasApiKey(effective)) return
     if (isAtlasProxyBaseURL(options["baseURL"])) return
     throw new Error(
       `${provider.id} is using a managed Atlas key without an Atlas proxy URL. ` +

@@ -188,6 +188,9 @@ export namespace Server {
             const providerID = c.req.valid("param").providerID
             const info = c.req.valid("json")
             await Auth.set(providerID, info)
+            // Don't depend on the client remembering to call global.sync —
+            // stale provider state would keep serving the old credential.
+            Provider.invalidate()
             return c.json(true)
           },
         )
@@ -218,6 +221,7 @@ export namespace Server {
           async (c) => {
             const providerID = c.req.valid("param").providerID
             await Auth.remove(providerID)
+            Provider.invalidate()
             return c.json(true)
           },
         )

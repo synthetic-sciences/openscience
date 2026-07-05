@@ -74,22 +74,20 @@ export async function resolveCredentialSource(
 
   const provider = await Provider.getProvider(providerID).catch(() => undefined)
 
-  // 1) Managed: a thk_* proxy token or a dashboard-synced secret. Check the
-  //    resolved key, any explicit apiKey option, and the provider's env vars.
+  // 1) Managed: a thk_* proxy token. Classified by VALUE, not by how the
+  //    credential arrived: the dashboard sync also delivers the user's own
+  //    keys (OPENROUTER_API_KEY etc.), and treating "arrived via sync" as
+  //    "managed" wallet-gated and billed BYOK keys — exactly what this
+  //    module's contract forbids. It was also boot-order dependent (the
+  //    synced-secret set is empty until an in-process sync runs).
   const optionKey = provider?.options?.["apiKey"]
   const resolvedKey = typeof provider?.key === "string" ? provider.key : undefined
   const explicitKey = typeof optionKey === "string" ? optionKey : undefined
-  if (
-    OpenScience.isManagedKeyValue(resolvedKey) ||
-    OpenScience.isManagedKeyValue(explicitKey) ||
-    OpenScience.isSyncedSecretValue(resolvedKey) ||
-    OpenScience.isSyncedSecretValue(explicitKey)
-  ) {
+  if (OpenScience.isManagedKeyValue(resolvedKey) || OpenScience.isManagedKeyValue(explicitKey)) {
     return "managed"
   }
   const envKeys = provider?.env ?? []
   for (const key of envKeys) {
-    if (OpenScience.isSyncedSecretKey(key)) return "managed"
     if (OpenScience.isManagedKeyValue(Env.get(key))) return "managed"
   }
 

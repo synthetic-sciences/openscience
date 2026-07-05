@@ -52,8 +52,16 @@ export const ProviderRoutes = lazy(() =>
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
           connected,
         )
+        // Never hand raw credentials to the browser. The UI only needs to
+        // know that a provider is connected and where its key came from
+        // (`source`), not the key itself.
+        const redacted = Object.values(providers).map((item) => {
+          const options = { ...item.options }
+          if (typeof options["apiKey"] === "string" && options["apiKey"].length > 0) options["apiKey"] = ""
+          return { ...item, key: undefined, options }
+        })
         return c.json({
-          all: Object.values(providers),
+          all: redacted,
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
           connected: Object.keys(connected),
         })
