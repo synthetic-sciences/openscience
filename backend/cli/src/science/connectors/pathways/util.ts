@@ -8,11 +8,15 @@
 /** Strip simple HTML tags (e.g. Reactome `<span class="highlighting">` markup). */
 export function stripTags(input: string | undefined | null): string {
   if (!input) return ""
-  // Re-strip until stable: a single pass leaves fragments like
+  // Loop until stable: a single pass leaves fragments like
   // "<scr<script>ipt>" reassembling into a tag.
-  const stripped = input.replace(/<[^>]*>/g, "")
-  if (stripped !== input) return stripTags(stripped)
-  return stripped.replace(/\s+/g, " ").trim()
+  let out = input
+  let prev = ""
+  while (out !== prev) {
+    prev = out
+    out = out.replace(/<[^>]*>/g, "")
+  }
+  return out.replace(/\s+/g, " ").trim()
 }
 
 /** Clamp a caller-supplied limit into a sane `[1, ceiling]` range. */
