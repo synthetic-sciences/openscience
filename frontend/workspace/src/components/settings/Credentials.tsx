@@ -3,6 +3,7 @@
 // secret is write-only: values are never returned after saving.
 import { type Component, type JSX, For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Button } from "@synsci/ui/button"
+import type { Provider } from "@synsci/sdk/v2/client"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { useProviders } from "@/hooks/use-providers"
@@ -33,6 +34,27 @@ const PROVIDER_LABEL: Record<string, string> = {
   deepseek: "DeepSeek",
 }
 const BYOK_PROVIDERS = ["anthropic", "openai", "google", "openrouter", "groq", "mistral", "xai", "deepseek"] as const
+
+// Where a connected provider's credential actually lives. Only "api" keys sit in
+// the local auth store — the others reappear after a remove, so remove is gated.
+const SOURCE_INFO: Record<Provider["source"], { label: string; removable: boolean; title: string }> = {
+  api: { label: "local", removable: true, title: "API key stored in the local auth store on this machine" },
+  env: {
+    label: "env",
+    removable: false,
+    title: "API key from an environment variable or dashboard sync — unset it where it is defined to remove it",
+  },
+  config: {
+    label: "config",
+    removable: false,
+    title: "API key set in openscience.json — edit the config file to remove it",
+  },
+  custom: {
+    label: "custom",
+    removable: false,
+    title: "Custom provider defined in openscience.json — edit the config file to remove it",
+  },
+}
 
 export const Credentials: Component = () => {
   const sdk = useGlobalSDK()
@@ -129,6 +151,9 @@ export const Credentials: Component = () => {
   const [keyValue, setKeyValue] = createSignal("")
   const [savingKey, setSavingKey] = createSignal(false)
   const connectedProviders = createMemo(() => providers.connected().filter((p) => p.id !== "synsci"))
+  // The list endpoint's generated type omits `source`, but the payload carries it
+  // for every connected provider (see Provider in @synsci/sdk/v2/client).
+  const sourceInfo = (p: { id: string }) => SOURCE_INFO[(p as { source?: Provider["source"] }).source ?? "api"]
   const saveKey = async () => {
     if (savingKey()) return
     const key = keyValue().trim()
@@ -372,10 +397,32 @@ export const Credentials: Component = () => {
                     <div class="flex items-center gap-2.5 min-w-0">
                       <StatusDot status="active" />
                       <span class="text-13-regular text-text-strong truncate">{PROVIDER_LABEL[p.id] ?? p.id}</span>
+                      <span
+                        class="flex-shrink-0 px-2 py-0.5 rounded-full text-11-regular border"
+                        style={{
+                          color: "var(--color-text-faint)",
+                          "border-color": "var(--color-border)",
+                          background: "transparent",
+                        }}
+                        title={sourceInfo(p).title}
+                      >
+                        {sourceInfo(p).label}
+                      </span>
                     </div>
-                    <Button size="small" variant="secondary" onClick={() => void removeKey(p.id)}>
-                      remove
-                    </Button>
+                    <Show
+                      when={sourceInfo(p).removable}
+                      fallback={
+                        <span title={sourceInfo(p).title}>
+                          <Button size="small" variant="secondary" disabled>
+                            remove
+                          </Button>
+                        </span>
+                      }
+                    >
+                      <Button size="small" variant="secondary" onClick={() => void removeKey(p.id)}>
+                        remove
+                      </Button>
+                    </Show>
                   </div>
                 )}
               </For>

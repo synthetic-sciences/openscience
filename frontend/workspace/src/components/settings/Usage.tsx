@@ -6,7 +6,7 @@
 //     the actual cost + tokens recorded on assistant messages across sessions.
 //   • Extra usage budget → /settings/preferences (real JSON store).
 //   • Buy credits → opens the Atlas top-up / checkout (URLS.dashboardCli).
-import { Component, For, Show, createMemo, createSignal, onMount, type JSX } from "solid-js"
+import { Component, For, Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { Button } from "@synsci/ui/button"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -78,7 +78,14 @@ export default function Usage() {
       setBudgetDraft(prefs.extra_budget_usd ? String(prefs.extra_budget_usd) : "")
     } catch {}
   }
-  onMount(() => void load())
+  // Refetch when the window regains focus so a dashboard top-up (buy credits
+  // opens a new tab) shows up as soon as the user comes back.
+  const focus = () => void load()
+  onMount(() => {
+    void load()
+    window.addEventListener("focus", focus)
+  })
+  onCleanup(() => window.removeEventListener("focus", focus))
 
   const saveBudget = async () => {
     const value = Math.max(0, Number(budgetDraft()) || 0)
@@ -94,6 +101,10 @@ export default function Usage() {
     }
   }
 
+  // Distinguish "no data yet" and "signed out" from real account values — the
+  // panel must not present "Free"/"byok" defaults as if they came from Atlas.
+  const loading = () => account() === undefined
+  const signedOut = () => account()?.session === false
   const plan = () => (account()?.user?.subscription_plan as string | undefined) ?? "Free"
   const balance = () => account()?.balance_usd
   const managed = () => account()?.billing_mode?.mode === "managed"
@@ -138,19 +149,32 @@ export default function Usage() {
             <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-4 border-b border-border-weak-base">
               <div class="flex flex-col gap-0.5">
                 <span class="text-12-regular text-text-weak">Plan</span>
-                <span class="text-16-medium text-text-strong capitalize">{plan()}</span>
+                <Show
+                  when={!loading() && !signedOut()}
+                  fallback={<span class="text-16-medium text-text-weak">{loading() ? "…" : "—"}</span>}
+                >
+                  <span class="text-16-medium text-text-strong capitalize">{plan()}</span>
+                </Show>
               </div>
               <div class="flex flex-col gap-0.5">
                 <span class="text-12-regular text-text-weak">Wallet balance</span>
-                <span class="text-16-medium text-text-strong">
-                  {typeof balance() === "number" && balance()! >= 0 ? money(balance()!) : "—"}
-                </span>
+                <Show
+                  when={!loading() && !signedOut() && typeof balance() === "number" && balance()! >= 0}
+                  fallback={<span class="text-16-medium text-text-weak">{loading() ? "…" : "—"}</span>}
+                >
+                  <span class="text-16-medium text-text-strong">{money(balance()!)}</span>
+                </Show>
               </div>
               <div class="flex flex-col gap-0.5">
                 <span class="text-12-regular text-text-weak">Billing</span>
-                <span class="text-13-medium text-text-strong capitalize">
-                  {account()?.billing_mode?.mode ?? "byok"}
-                </span>
+                <Show
+                  when={!loading() && !signedOut()}
+                  fallback={<span class="text-13-medium text-text-weak">{loading() ? "…" : "—"}</span>}
+                >
+                  <span class="text-13-medium text-text-strong capitalize">
+                    {account()?.billing_mode?.mode ?? "byok"}
+                  </span>
+                </Show>
               </div>
               <Button size="small" variant="primary" onClick={() => platform.openLink(URLS.dashboardCli)}>
                 buy credits
@@ -158,11 +182,24 @@ export default function Usage() {
             </div>
             <div class="px-4 py-3">
               <p class="text-12-regular text-text-weak">
-                <Show
-                  when={managed()}
-                  fallback="You're on BYOK — provider calls are billed directly by each provider. Switch to managed mode (Credentials) to bill from this wallet."
-                >
-                  Managed calls debit this wallet. Top up any time — credits never expire.
+                <Show when={!loading()} fallback="Checking your Atlas account…">
+                  <Show
+                    when={!signedOut()}
+                    fallback={
+                      <>
+                        Not connected — run{" "}
+                        <code style={{ "font-family": FONT_CODE, "font-size": "11px" }}>openscience connect login</code>{" "}
+                        in a terminal to see your plan and wallet.
+                      </>
+                    }
+                  >
+                    <Show
+                      when={managed()}
+                      fallback="You're on BYOK — provider calls are billed directly by each provider. Switch to managed mode (Credentials) to bill from this wallet."
+                    >
+                      Managed calls debit this wallet. Top up any time — credits never expire.
+                    </Show>
+                  </Show>
                 </Show>
               </p>
             </div>

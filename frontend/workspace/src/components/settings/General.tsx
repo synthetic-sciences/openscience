@@ -8,13 +8,14 @@
 import { Component, Show, createMemo, createSignal, onMount, type JSX } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Select } from "@synsci/ui/select"
+import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useModels } from "@/context/models"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { URLS } from "@/config/urls"
-import { FONT_SANS } from "@/styles/tokens"
+import { FONT_CODE, FONT_SANS } from "@/styles/tokens"
 import { AppearanceSections } from "../settings-general"
 import { settingsApi } from "./api"
 
@@ -85,8 +86,12 @@ export default function General() {
     if (!window.confirm("Disconnect this local server from OpenScience?")) return
     setBusy(true)
     try {
-      await sdk.client.account.logout()
+      const res = await sdk.client.account.logout()
+      if (res.error)
+        throw new Error(typeof res.error === "string" ? res.error : "The server could not clear the session")
       setAccount({ session: false })
+    } catch (err) {
+      showToast({ variant: "error", title: "Sign out failed", description: message(err) })
     } finally {
       setBusy(false)
     }
@@ -166,6 +171,15 @@ export default function General() {
                 sign out
               </Button>
             </Row>
+            <Show when={account()?.session === false}>
+              <div class="px-4 py-3">
+                <p class="text-12-regular text-text-weak">
+                  Signed out — run{" "}
+                  <code style={{ "font-family": FONT_CODE, "font-size": "11px" }}>openscience connect login</code> in a
+                  terminal to reconnect this machine.
+                </p>
+              </div>
+            </Show>
           </div>
         </Section>
 
@@ -236,6 +250,10 @@ export default function General() {
       </div>
     </div>
   )
+}
+
+function message(err: unknown) {
+  return err instanceof Error ? err.message : String(err)
 }
 
 const Section: Component<{ title: string; description?: string; children: JSX.Element }> = (props) => (
