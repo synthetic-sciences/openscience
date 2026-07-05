@@ -87,7 +87,13 @@ export namespace UI {
 
     for (const line of glyphs.lines) {
       if (pad) result.push(pad)
-      for (const ch of line) {
+      // yargs' help formatter trims leading whitespace per line, which
+      // destroys the glyph indentation (the O's top row shifts left and the
+      // letters shear). Braille blank (U+2800) renders as a blank cell but
+      // isn't whitespace, so the margin survives formatting.
+      const lead = line.length - line.trimStart().length
+      result.push("⠀".repeat(lead))
+      for (const ch of line.slice(lead)) {
         if (structural.has(ch)) {
           result.push(dim, ch, reset)
         } else if (ch === " ") {
