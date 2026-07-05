@@ -1,0 +1,85 @@
+---
+title: "Skills"
+description: "250+ bundled research skills, direct access to around 30 scientific databases, and commands for installing, writing, and pinning skills."
+icon: "book-open"
+---
+
+A **skill** is a portable instruction bundle the agent loads into a session to prime it for a domain. OpenScience ships more than 250 of them, spanning the surface a working scientist actually hits.
+
+## Built-in categories
+
+| Category | Covers |
+| --- | --- |
+| Training | DeepSpeed, PEFT, TRL, distributed and parameter-efficient fine-tuning. |
+| Evaluation | Harnesses, benchmarks, regression suites. |
+| Datasets | Acquisition, cleaning, splits, augmentation. |
+| Molecular & clinical biology | Sequence analysis, structures, omics, clinical data workflows. |
+| Cheminformatics | Molecule handling, descriptors, property prediction. |
+| Papers & LaTeX | Manuscript drafting, citations, submission-ready LaTeX. |
+| Figures | Publication-quality plots and layouts. |
+| Cloud compute | Modal, Tinker, and other GPU backends. |
+
+Run `openscience skill list --all` to print the full bundled set, grouped by category.
+
+## Scientific databases
+
+The major scientific databases are wired in as tools, not skills: UniProt, PDB, Ensembl, ChEMBL, PubChem, arXiv, OpenAlex, Semantic Scholar, and around 30 in total. The agent queries them directly during a session — no API keys, no manual downloads — and the specialist agents lean on them heavily (see [Agents](/openscience/agents)).
+
+## Skill commands
+
+| Command | Use |
+| --- | --- |
+| `openscience skill list` | Show learned and installed skills; `--all` includes the bundled set. |
+| `openscience skill show <ns>[/<name>]` | Namespace summary, or a single skill's full `SKILL.md`. |
+| `openscience skill add <url>` | Install every skill from a public git repo; `gh:owner/repo` shorthand works. Runs a safety review. |
+| `openscience skill new <name>` | Scaffold a local user skill. |
+| `openscience skill edit <name>` | Open a user skill in `$EDITOR`. |
+| `openscience skill validate <target>` | Check a skill's frontmatter and safety (`--strict` fails on warnings). |
+| `openscience skill set-entries <ns> <entries>` | Choose which skills in a namespace surface in the `/` picker. |
+| `openscience skill remove <target>` | Uninstall a skill or a whole namespace. |
+
+## Install third-party skills
+
+```bash
+openscience skill add gh:anthropics/superpowers
+openscience skill list
+```
+
+Each skill in the repo passes a static safety check and an LLM safety review before it installs; rejected skills are skipped and reported. Installed skills are namespaced by repo, so `remove <namespace>` uninstalls the whole set.
+
+## Write your own
+
+```bash
+openscience skill new leakage-checks --description "Checklists for spotting data leakage" --editor
+```
+
+A skill is a `SKILL.md` file with `name`, `description`, and `category` frontmatter and an instruction body. Iterate with `openscience skill edit` and check it with `openscience skill validate`.
+
+## Pin skills to a project
+
+Point the project config at extra skill folders with `skills.paths` in `openscience.json` at the project root:
+
+```json
+{
+  "skills": { "paths": ["./skills", "../shared-skills"] }
+}
+```
+
+Sessions started in that directory load those skills, so teammates and CI get the same primed agent. Existing `.claude/skills/` directories are picked up unchanged.
+
+## What's next
+
+<Columns cols={2}>
+  <Card title="Agents" icon="bot" href="/openscience/agents">
+    Pair skills with custom agent profiles to build specialists.
+  </Card>
+  <Card title="Commands" icon="terminal" href="/openscience/commands">
+    Full `skill` subcommand reference.
+  </Card>
+  <Card title="Security" icon="shield-check" href="/openscience/security">
+    How the safety review and the subprocess allow-list protect you.
+  </Card>
+  <Card title="Connect to Atlas" icon="link" href="/openscience/atlas">
+    Sync the cloud and ML credentials a skill needs.
+  </Card>
+</Columns>

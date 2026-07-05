@@ -1,0 +1,71 @@
+---
+title: "Quickstart"
+description: "Install OpenScience, set a provider key, and run your first research session."
+icon: "rocket"
+---
+
+Five minutes from zero to a running research session. No account required.
+
+<Steps>
+  <Step title="Install">
+    ```bash
+    npm install -g @synsci/openscience
+    ```
+
+    Or without a global install, `npx synsci` runs the same workbench in one step. The install script (`curl -fsSL https://syntheticsciences.ai/install | bash`) drops a standalone `openscience` binary into `~/.openscience/bin`, and platform binaries are attached to every [GitHub release](https://github.com/synthetic-sciences/openscience/releases).
+  </Step>
+  <Step title="Set a provider key">
+    ```bash
+    export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ...
+    ```
+
+    Any provider works — bring your own key and it stays on your machine. `openscience auth` gives you an interactive sign-in for providers that support it. See [Models](/openscience/models) for routing and reasoning-effort tiers.
+  </Step>
+  <Step title="Open the workspace">
+    ```bash
+    openscience
+    ```
+
+    The command starts a local server and opens the browser workspace: file tree, editor, terminal, and session history, with inline rendering for molecules, structures, genomes, and plots. See [Workspace](/openscience/workspace).
+  </Step>
+  <Step title="Give it a goal">
+    Ask for the outcome, not the steps. The default `research` agent plans, reads, codes, runs, and reports:
+
+    ```text
+    Reproduce the headline result of arXiv:2305.13245 on a small model
+    and tell me whether it holds at 125M parameters.
+    ```
+
+    Prefer the terminal? One-shot runs work without the browser:
+
+    ```bash
+    openscience run "Profile train.py and find the input-pipeline bottleneck"
+    ```
+  </Step>
+  <Step title="Optional: connect Atlas">
+    ```bash
+    openscience connect login
+    ```
+
+    Connecting an [Atlas](/openscience/atlas) account records your research into durable graphs and unlocks a managed model route with spend controls. OpenScience never requires it. See [Connect to Atlas](/openscience/atlas).
+  </Step>
+</Steps>
+
+## Verify the install
+
+```bash
+openscience --version
+openscience models        # configured providers and models
+openscience skill list    # installed skills
+```
+
+## Where next
+
+<Columns cols={2}>
+  <Card title="Agents" icon="bot" href="/openscience/agents">
+    The research agent, the biology / physics / ml specialists, and plan mode.
+  </Card>
+  <Card title="Command reference" icon="terminal" href="/openscience/commands">
+    Every subcommand: runs, sessions, skills, server, lifecycle.
+  </Card>
+</Columns>

@@ -1,0 +1,72 @@
+---
+title: "Models & providers"
+description: "Bring your own keys for any provider, switch models per run, and optionally route through Atlas managed."
+icon: "package-check"
+---
+
+OpenScience is model-agnostic. A **model** is one inference endpoint the agent routes through; a **provider** is a vendor that exposes models. Routing happens on your machine: with your own keys (the default), each call goes straight from your machine to the provider — no gateway in the middle, no account required.
+
+## Bring your own keys
+
+Set a key from any provider and start working:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ...
+openscience
+```
+
+Keys stay on your machine. Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, DeepSeek, and dozens more work the same way — the catalogue is models.dev-backed, so any `provider/model` id a provider currently exposes is addressable. You can also paste keys into the Credentials panel in the [workspace](/openscience/workspace) instead of exporting them, and OpenAI Codex signs in via OAuth.
+
+## List what is configured
+
+```bash
+openscience models             # grouped by provider, with a routing label per provider
+openscience models anthropic   # one provider
+```
+
+Each provider is labeled `your key`, `managed`, `Signed in with Codex`, or `unconfigured`, so you always know which route a model takes. `--verbose` adds per-model metadata like costs, `--refresh` refetches the catalogue, and `--flat` prints one `provider/model` id per line for scripting.
+
+## Pick a model per run
+
+```bash
+openscience run --model anthropic/claude-opus-4-8 --variant xhigh "Design the ablation study"
+openscience run --model anthropic/claude-sonnet-5 "Clean up the plotting code"
+```
+
+`--model <provider>/<model>` overrides the default for one run; in the workspace, use the model selector per session. `--variant` picks a reasoning-effort tier — `minimal`, `high`, `max`, and so on. Available tiers depend on the model: Claude Opus 4.8 exposes the full range up to `xhigh` and `max`; other adaptive Claude models cap at `max`.
+
+## Atlas managed (optional)
+
+[Atlas](/openscience/atlas) is the managed platform. Connecting adds a curated set of frontier models billed from a prepaid wallet, so you can skip per-provider keys entirely:
+
+```bash
+openscience connect login   # defaults to app.syntheticsciences.ai
+```
+
+Once connected, launching the workspace syncs your provider config and credentials, and Settings → Billing has independent managed/BYOK spend toggles for LLM calls and compute — mix routes freely, per concern. BYOK usage is always free and never gated; Atlas only meters the models it serves.
+
+| Path | What runs where | Billing |
+| --- | --- | --- |
+| BYOK (default) | Your machine calls the provider directly. | Your provider account. |
+| Atlas managed | Your machine calls Atlas, which calls the provider. | Prepaid wallet. See [Connect to Atlas](/openscience/atlas). |
+
+## Key hygiene
+
+Provider keys and synced credentials are filtered out of the environment of every subprocess the agent spawns and redacted from output. The agent talks to providers itself; the code it runs never needs your keys. Credentials are stored per user in your home directory, never in the project's `.openscience/` directory, so they cannot end up in a commit. See [Security](/openscience/security).
+
+## What's next
+
+<Columns cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/openscience/quickstart">
+    First key to first result.
+  </Card>
+  <Card title="Sessions" icon="layers" href="/openscience/sessions">
+    Per-run model and variant flags in context.
+  </Card>
+  <Card title="Atlas" icon="globe" href="/openscience/atlas">
+    What connecting to Atlas adds.
+  </Card>
+  <Card title="Security" icon="shield-check" href="/openscience/security">
+    The env allow-list and trust boundary.
+  </Card>
+</Columns>

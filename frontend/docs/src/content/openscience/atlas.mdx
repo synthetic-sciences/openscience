@@ -1,0 +1,79 @@
+---
+title: "Connect to Atlas"
+description: "Optionally link OpenScience to the Atlas managed platform for wallet-billed frontier models, synced credentials, and research recorded into Atlas Graphs."
+icon: "link"
+---
+
+OpenScience never requires an account: bring-your-own-key usage is free and never gated. Atlas is the managed platform, and connecting to it is optional. Atlas only meters the models it serves.
+
+## What connecting adds
+
+- **A managed model route.** Curated frontier models billed from a prepaid wallet, so you do not need per-provider keys. The default endpoint is `app.syntheticsciences.ai` (override with `OPENSCIENCE_API_BASE`).
+- **Spend controls.** Managed/BYOK toggles for LLM and compute spend, per surface, in **Settings → Billing** on the dashboard.
+- **Synced service credentials.** Store cloud and ML keys (Hugging Face, W&B, Modal, and others) once on your account and pull them to any machine.
+- **Research graphs.** Record sessions and findings into Atlas Graphs, the durable research map.
+
+## Link your account
+
+<Steps>
+  <Step title="Log in">
+    ```bash
+    openscience connect login
+    ```
+    Opens your browser to approve the device. On headless or CI machines, pass `--no-browser` and paste a key, or run `openscience connect login --key thk_...` with a key created at `app.syntheticsciences.ai/cli`.
+  </Step>
+  <Step title="Verify">
+    ```bash
+    openscience connect status
+    ```
+    Shows the connected user, this device, and how many service credentials synced.
+  </Step>
+  <Step title="Sync credentials">
+    ```bash
+    openscience connect sync
+    ```
+    Refreshes synced service credentials after you change them on the dashboard.
+  </Step>
+</Steps>
+
+## Model routing and billing
+
+Key routing is per-provider and automatic: if you set a BYOK key for a provider, OpenScience uses it; otherwise the request goes through the Atlas managed route and debits your wallet.
+
+```bash
+openscience billing         # wallet balance and current key routing
+openscience billing topup   # opens the Plan tab — $50 or $200, one-time or recurring monthly
+```
+
+Flip managed versus BYOK per surface (LLM and compute) in **Settings → Billing**. BYOK works on every plan.
+
+## Where credentials live
+
+Connected, your account holds the canonical copy of every synced credential; the local `~/.config/openscience/credentials.json` is a mirror you can delete and re-pull with `openscience connect sync`. In BYOK mode, keys exist only on your machine — see [Security](/openscience/security) for the storage and subprocess rules.
+
+## `connect` commands
+
+| Command | Use |
+| --- | --- |
+| `openscience connect login` | Authenticate via browser; `--key thk_...` or `--no-browser` for headless machines. |
+| `openscience connect status` | Connection, user, device, and synced credential count. |
+| `openscience connect sync` | Re-pull synced service credentials from the dashboard. |
+| `openscience connect devices` | List authenticated devices; revoke from the Devices tab on the dashboard. |
+| `openscience connect logout` | Disconnect this machine. BYOK keeps working. |
+
+## What's next
+
+<Columns cols={2}>
+  <Card title="Sessions" icon="layers" href="/openscience/sessions">
+    Run one continuous research session end to end.
+  </Card>
+  <Card title="Command reference" icon="terminal" href="/openscience/commands">
+    Every subcommand, including connect and billing.
+  </Card>
+  <Card title="Models" icon="package-check" href="/openscience/models">
+    BYOK provider setup and model selection.
+  </Card>
+  <Card title="Security" icon="shield-check" href="/openscience/security">
+    What leaves your machine in each mode.
+  </Card>
+</Columns>

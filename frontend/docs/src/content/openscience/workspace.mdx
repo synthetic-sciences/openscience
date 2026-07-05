@@ -1,0 +1,71 @@
+---
+title: "Workspace"
+description: "The bare openscience command opens the browser workspace: files, editor, terminal, sessions, and inline scientific rendering."
+icon: "app-window"
+---
+
+The workspace is how you use OpenScience. Run the bare command and it starts a local server, opens your browser, and gives you the full research surface: a file tree, an editor, a terminal, session history, and inline rendering for molecules, structures, genomes, and plots.
+
+```bash
+openscience                    # open the workspace in the current directory
+openscience ~/code/my-project  # open it in a specific project
+```
+
+The server is local by design: it binds `127.0.0.1`, holds the agent in its own process, and serves the UI from the same port (`http://localhost:4096` by default; if 4096 is taken it falls back to a free port and prints the URL). Closing the browser tab does not kill the agent — reopen the URL to pick up where you left off.
+
+| Flag | Use |
+| --- | --- |
+| `--port <n>` | Bind a specific local port instead of the default 4096. |
+| `--cors <origin>` | Allow an extra CORS origin (repeatable). |
+
+The server always binds localhost — the deprecated `server.hostname` / `server.mdns` config keys are parsed but ignored. Persistent settings live in `~/.config/openscience/openscience.json` under `server.port` and `server.cors`.
+
+## What the workspace gives you
+
+- **File tree and editor.** Browse and edit the project the agent is working in; edits and diffs render inline.
+- **Terminal.** A real shell in the project directory, alongside the agent's own tool calls.
+- **Session history.** Every conversation is a session; switch between them without losing context.
+- **Inline scientific rendering.** Molecules, protein structures, genomes, and plots render directly in the transcript instead of as file paths.
+- **Prompt queueing.** Type your next prompt while the agent is still streaming; queued prompts run in order.
+- **Undo from here.** Roll the session back to any message and take a different path from that point.
+- **Model selector and credentials panel.** Pick any configured model per session and add provider keys without leaving the browser. See [Models](/openscience/models).
+
+## Headless server
+
+`openscience serve` starts the same server without opening a browser — useful for keeping a long-lived agent running that other terminals attach to. It takes the same `--port` and `--cors` flags and is loopback-only (`127.0.0.1`).
+
+```bash
+openscience serve --port 4096
+openscience run --attach http://localhost:4096 "Continue the ablation sweep"
+```
+
+There is no separate attach subcommand: `openscience run --attach <url>` sends a one-shot prompt to the running server. See [Sessions](/openscience/sessions).
+
+<Warning>
+The workspace is intended for local use on a machine you control. The server binds `127.0.0.1` only and has no remote-access mode; do not reverse-proxy it to the public internet.
+</Warning>
+
+## macOS Full Disk Access
+
+On macOS, launching the workspace probes whether the binary can read `~/Desktop`. Without Full Disk Access, macOS silently returns empty listings for `~/Desktop`, `~/Documents`, and `~/Downloads`, so the folder picker and file tree look empty. If the probe fails, OpenScience opens System Settings on the Privacy & Security pane and prints the binary path to add:
+
+1. In **Full Disk Access**, click **+**, press ⌘⇧G, and paste the printed path.
+2. Toggle the `openscience` entry on.
+3. Quit (Ctrl+C) and relaunch `openscience`.
+
+## What's next
+
+<Columns cols={2}>
+  <Card title="Sessions" icon="layers" href="/openscience/sessions">
+    Resume, attach, export, and one-shot runs.
+  </Card>
+  <Card title="Models" icon="package-check" href="/openscience/models">
+    BYOK providers and per-session model switching.
+  </Card>
+  <Card title="Agents" icon="bot" href="/openscience/agents">
+    The research agent and its specialists.
+  </Card>
+  <Card title="Security" icon="shield-check" href="/openscience/security">
+    The trust boundary and credential handling.
+  </Card>
+</Columns>

@@ -1,0 +1,129 @@
+---
+title: "Command reference"
+description: "Every openscience subcommand: workspace, run, sessions, models, agents, skills, and lifecycle."
+icon: "terminal"
+---
+
+The OpenScience command surface. For live help, run `openscience --help` and `openscience <command> --help`.
+
+The bare `openscience` (no arguments) starts the local server and opens the **browser workspace** in your working directory. Everything else is grouped below.
+
+## Global flags
+
+| Flag | Use |
+| --- | --- |
+| `-v, --version` | Print the installed version. |
+| `-h, --help` | Print help for a command. |
+| `--print-logs` | Stream agent diagnostics to stderr. |
+| `--log-level <DEBUG\|INFO\|WARN\|ERROR>` | Override the log threshold. |
+
+## Workspace and runs
+
+| Command | Use |
+| --- | --- |
+| `openscience` | Start the server and open the browser workspace. |
+| `openscience run [message..]` | One-shot prompt in the terminal; streams, then exits. |
+| `openscience session list` | List recent sessions (`-n`, `--format`). |
+
+`run` flags: `-c/--continue`, `-s/--session <id>`, `-m/--model <provider/model>`, `--variant <high|max|minimal>` (provider-specific reasoning effort), `--agent <name>`, `--format <default|json>`, `-f/--file <path>`, `--attach <url>` (attach to a running server, e.g. `http://localhost:4096`), `--port`, `--title <text>`.
+
+```bash
+openscience run "Plot the attention entropy across layers for this checkpoint"
+openscience run -c "Now sweep the temperature and re-plot"
+openscience run --format json "Summarize the experiment in results/" > summary.json
+```
+
+## Account
+
+Connecting an Atlas account is optional — see [Atlas](/openscience/atlas). OpenScience runs fully standalone with your own provider keys.
+
+| Command | Use |
+| --- | --- |
+| `openscience connect login` | Connect your Atlas account (browser flow, or `--key thk_…`). |
+| `openscience connect status` | Show the active account, default model, synced services, and credit. |
+| `openscience connect sync` | Re-pull synced credentials. |
+| `openscience connect devices` | List authorized devices. |
+| `openscience connect logout` | Disconnect this device from Atlas. |
+
+## Providers and routing
+
+| Command | Use |
+| --- | --- |
+| `openscience auth` | Interactive provider sign-in (BYOK keys; OAuth where supported). |
+| `openscience logout [provider]` | Log out of a connected provider. |
+| `openscience models` | List configured providers and their models. |
+| `openscience billing show` | Credit and recent managed-route usage (Atlas-connected mode). |
+| `openscience billing topup` | Open the app to add credit. |
+
+## Agent profiles
+
+| Command | Use |
+| --- | --- |
+| `openscience agent list` | Print the agent roster on this install. |
+| `openscience agent create` | Scaffold a custom agent (system prompt + tool set + routing policy). |
+
+Flags: `--path`, `--description`, `--mode <all\|primary\|subagent>`, `--tools`, `--model`. See [Agents](/openscience/agents).
+
+## Skills
+
+| Command | Use |
+| --- | --- |
+| `openscience skill list` | Show installed skills (`--all` for the bundled set). |
+| `openscience skill show <name>` | Print a skill's metadata and entrypoints. |
+| `openscience skill add <url-or-name>` | Install a skill (URL or `gh:owner/repo`). |
+| `openscience skill new` / `edit` / `validate` | Author, edit, and check user skills. |
+| `openscience skill remove <name>` | Uninstall a skill. |
+| `openscience skill set-entries <name>` | Update which skills surface in the `/` picker. |
+
+## Local server and protocols
+
+| Command | Use |
+| --- | --- |
+| `openscience web` | Start the server and open the browser workspace (prints the URL, e.g. `http://localhost:4096`). |
+| `openscience serve` | Headless local server — loopback-only (`127.0.0.1`), no browser. |
+| `openscience acp` | Start an Agent Client Protocol server for editors like Zed. |
+| `openscience mcp` | Manage MCP servers (`list`, `add`, `remove`, `auth`). |
+
+`web` and `serve` take `--port` and `--cors`. See [Workspace](/openscience/workspace).
+
+## GitHub and PRs
+
+| Command | Use |
+| --- | --- |
+| `openscience github` | GitHub agent for CI/Actions (`install`, `run`). |
+| `openscience pr <number>` | Check out a PR branch, then launch the agent on it. |
+
+## Project and lifecycle
+
+| Command | Use |
+| --- | --- |
+| `openscience project` | Pin the Atlas project root for this folder (`merge`). |
+| `openscience export` / `openscience import` | Export or import a session as JSON. |
+| `openscience generate` | Emit the OpenAPI spec for the local server to stdout. |
+| `openscience stats` | Local token-usage and cost stats. |
+| `openscience debug` | Structured diagnostics for support (`debug paths` shows data/config dirs). |
+| `openscience upgrade` | Update to the latest version. |
+| `openscience uninstall` | Remove the binary and local config. |
+| `openscience completion` | Shell completion for bash, zsh, or fish. |
+
+```bash
+openscience upgrade
+openscience completion zsh > ~/.zsh/completions/_openscience
+```
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Workspace" icon="layers" href="/openscience/workspace">
+    The browser workspace: files, editor, terminal, inline scientific rendering.
+  </Card>
+  <Card title="Security" icon="shield-check" href="/openscience/security">
+    Credential boundary, env hygiene, the trust boundary.
+  </Card>
+  <Card title="Skills" icon="book-open" href="/openscience/skills">
+    250+ research skills and the scientific databases.
+  </Card>
+  <Card title="Agents" icon="bot" href="/openscience/agents">
+    The research agent, the specialists, and custom profiles.
+  </Card>
+</CardGroup>

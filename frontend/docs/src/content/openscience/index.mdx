@@ -1,0 +1,78 @@
+---
+title: "OpenScience"
+description: "The open-source AI workbench for scientific research. Give it a goal — it reads the literature, writes and runs code, runs the experiments, and writes up what it found."
+icon: "flask-conical"
+---
+
+<GitHubStars />
+
+OpenScience is an AI workbench for scientific research. You give it a goal, and it works through the research loop the way a capable collaborator would: it reads the papers that matter, forms a hypothesis, writes and runs code, runs experiments on real compute, queries the major scientific databases, and writes up the result.
+
+It runs as a workspace in your browser, works with any frontier or open-weight model using your own API keys, and requires no account. It is model-agnostic, Apache-2.0 licensed, and built to do real work in machine learning, biology, physics, and chemistry.
+
+```bash
+npm install -g @synsci/openscience
+openscience
+```
+
+That's the whole install. The command is `openscience`, and it opens the workspace in your browser. Prefer not to install globally? `npx synsci` does the same thing in one step.
+
+## What we built
+
+Everything below ships in the open-source CLI — no gated tiers, no server-side magic you can't read.
+
+<Columns cols={2}>
+  <Card title="The whole research loop" icon="workflow" href="/openscience/sessions">
+    Literature review, hypothesis, code, experiment, analysis, and write-up in one continuous session. Queue follow-up prompts while it streams; rewind with undo-from-here.
+  </Card>
+  <Card title="Research agents" icon="bot" href="/openscience/agents">
+    A `research` agent by default, plus `biology`, `physics`, and `ml` specialists — with critique and literature-review sub-agents and a read-only plan mode.
+  </Card>
+  <Card title="250+ skills" icon="book-open" href="/openscience/skills">
+    Training (DeepSpeed, PEFT, TRL), evaluation, dataset work, molecular and clinical biology, cheminformatics, papers and LaTeX, figures, and cloud compute.
+  </Card>
+  <Card title="Scientific databases as tools" icon="search" href="/openscience/skills">
+    UniProt, PDB, Ensembl, ChEMBL, PubChem, arXiv, OpenAlex, Semantic Scholar, and around 30 more, queryable directly by the agent.
+  </Card>
+  <Card title="A real workspace" icon="layers" href="/openscience/workspace">
+    A browser UI with a file tree, an editor, a terminal, session history, and inline rendering for molecules, structures, genomes, and plots.
+  </Card>
+  <Card title="Extensible everywhere" icon="package-check" href="/openscience/commands">
+    LSP integration, MCP servers, plugins, custom agents and commands, and a TypeScript SDK.
+  </Card>
+</Columns>
+
+## Any model, your keys
+
+Set an API key from any provider and start working. Keys stay on your machine.
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ...
+openscience
+```
+
+OpenScience routes to frontier and open-weight models from Anthropic, OpenAI, Google, and dozens of other providers. Reasoning-effort tiers are first-class: `--variant high|max|minimal` on any run. See [Models](/openscience/models).
+
+## Open source, all the way down
+
+The workbench is [Apache-2.0 on GitHub](https://github.com/synthetic-sciences/openscience). No account, no telemetry wall, no closed core: the agent loop, the skills, the database tools, and the workspace are all in the repo. Read it, fork it, extend it — and if it does real work for you, [star it](https://github.com/synthetic-sciences/openscience) so other researchers find it.
+
+- **Site** — [openscience.sh](https://openscience.sh)
+- **Issues and ideas** — [github.com/synthetic-sciences/openscience/issues](https://github.com/synthetic-sciences/openscience/issues)
+- **Releases and platform binaries** — [GitHub Releases](https://github.com/synthetic-sciences/openscience/releases)
+- **Package** — [`@synsci/openscience` on npm](https://www.npmjs.com/package/@synsci/openscience)
+
+## Works with Atlas, never requires it
+
+Connect an Atlas account and OpenScience records its research into [Atlas graphs](/openscience/atlas) — durable hypotheses, runs, and decisions your whole team can audit — plus an optional managed model route with spend controls. Standalone mode keeps everything local. See [Connect to Atlas](/openscience/atlas).
+
+## Start here
+
+<Columns cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/openscience/quickstart">
+    Install, set a key, and run your first research session in five minutes.
+  </Card>
+  <Card title="The workspace" icon="layers" href="/openscience/workspace">
+    A tour of the browser workspace and the local server behind it.
+  </Card>
+</Columns>

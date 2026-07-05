@@ -1,0 +1,51 @@
+---
+title: "Security"
+description: "The trust boundary, credential storage, and subprocess environment hygiene — in an open-source agent you can audit end to end."
+icon: "shield-check"
+---
+
+OpenScience is open source under Apache-2.0, so the whole security model below is auditable in the [repository](https://github.com/synthetic-sciences/openscience). The agent runs locally with the same filesystem and shell access you have. Two principles anchor the design: keep credentials out of subprocesses that do not need them, and make the trust boundary explicit instead of pretending the agent is a sandbox.
+
+## The agent is not a sandbox
+
+The permission system prompts you before the agent runs a command or writes a file. That keeps you aware of what it is doing — it is not an isolation boundary. The agent can read, write, and execute anywhere your user can. For real isolation, run OpenScience inside a container or a VM.
+
+## Credential storage
+
+| Surface | Where | Notes |
+| --- | --- | --- |
+| BYOK provider keys | Environment variables or the local credential store | Never leave your machine; requests go straight to the provider. No account required. |
+| Atlas session | `~/.config/openscience/config.json` | `thk_*` key created by `openscience connect login`; revocable from the dashboard. |
+| Synced service credentials | `~/.config/openscience/credentials.json` | Present only when [connected to Atlas](/openscience/atlas); refresh with `openscience connect sync`. |
+| Native binary (curl install) | `~/.openscience/bin/openscience` | Added to PATH through your shell rc. |
+
+Override the config parent directory with `XDG_CONFIG_HOME`.
+
+## Subprocess environment allow-list
+
+When the agent shells out, it rebuilds the subprocess environment from a curated allow-list rather than inheriting your full shell. Provider keys stay out of commands that have no business seeing them.
+
+**Always passed through:** `PATH`, `HOME`, `USER`, `SHELL`, `TERM`, `LANG`, `LC_*`, `TMPDIR`, `XDG_*`, `EDITOR`, `VISUAL`.
+
+**Passed through only when a subprocess needs them:** `HF_TOKEN`, `WANDB_API_KEY`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, `LAMBDA_API_KEY`, `RUNPOD_API_KEY`, `PRIME_INTELLECT_API_KEY`, `TENSORPOOL_API_KEY`, `VAST_API_KEY`, `TINKER_API_KEY`, `LANGSMITH_API_KEY`, `PINECONE_API_KEY`, `TOGETHER_API_KEY`, `GROQ_API_KEY`, `FIREWORKS_API_KEY`, `OPENROUTER_API_KEY`.
+
+**Explicitly filtered out, even if set in your shell:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_API_KEY`. The agent talks to model providers itself; subprocesses do not need these keys.
+
+## Output redaction
+
+Known credential patterns are redacted from agent output before it lands in a transcript. If you spot an unredacted secret, report it (see below).
+
+## Server mode
+
+Server mode is opt-in. The server binds to localhost (127.0.0.1) only and enforces a Host and Origin allowlist to block DNS-rebinding and cross-origin requests. It is not built for remote exposure — if you tunnel or reverse-proxy it, securing that exposure is on you.
+
+## What leaves your machine
+
+- Prompts and responses sent to your model provider, governed by that provider's policy.
+- Nothing else, in BYOK mode. If you [connect to Atlas](/openscience/atlas), synced credentials and usage metering are held against your account.
+
+Source files stay local unless the agent explicitly uploads them through a tool you approve, and local environment variables outside the allow-list above are never forwarded.
+
+## Reporting a vulnerability
+
+Report security issues through the GitHub Security Advisory ["Report a Vulnerability"](https://github.com/synthetic-sciences/openscience/security/advisories/new) form — not on public issue trackers. If you do not hear back within six business days, email security@syntheticsciences.ai.

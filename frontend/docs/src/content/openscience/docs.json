@@ -1,0 +1,45 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "OpenScience",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Start",
+            "pages": ["index", "quickstart", "workspace"]
+          },
+          {
+            "group": "Use the agent",
+            "pages": ["agents", "models", "skills", "sessions", "atlas"]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "CLI",
+            "pages": ["commands", "security"]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        { "anchor": "openscience.sh", "href": "https://openscience.sh" },
+        { "anchor": "GitHub", "href": "https://github.com/synthetic-sciences/openscience" },
+        { "anchor": "npm", "href": "https://www.npmjs.com/package/@synsci/openscience" },
+        { "anchor": "Releases", "href": "https://github.com/synthetic-sciences/openscience/releases" }
+      ]
+    }
+  },
+  "navbar": {
+    "primary": {
+      "type": "button",
+      "label": "Star on GitHub",
+      "href": "https://github.com/synthetic-sciences/openscience"
+    }
+  }
+}

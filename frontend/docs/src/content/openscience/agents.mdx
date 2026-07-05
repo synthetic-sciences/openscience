@@ -1,0 +1,89 @@
+---
+title: "Agents"
+description: "The research agent roster — a default research agent, three domain specialists, critique sub-agents, and a read-only plan mode — plus how to build your own."
+icon: "bot"
+---
+
+The default agent is `research`, a scientific research agent that runs the whole loop: literature review, hypothesis, code, experiments on real compute, analysis, and write-up. Three domain specialists ship alongside it, backed by read-only critique sub-agents and a `plan` mode that cannot edit files.
+
+## Built-in roster
+
+| Agent | Role | What it does |
+| --- | --- | --- |
+| `research` | Default | Scientific research across the full skill library — literature, data analysis, GPU compute, and synthesis. |
+| `biology` | Specialist | Computational biology: bioinformatics workflows and 30+ biological database integrations. |
+| `physics` | Specialist | Computational physics: simulation, PDE solving, dynamical systems, symbolic regression. |
+| `ml` | Specialist | Trains, evaluates, and analyzes models end to end — deep learning, LLMs, classical ML, RL. |
+| `plan` | Mode | Read-only planning. Edit tools are disabled except for plan files. |
+
+Two sub-agents back the roster. The main agent delegates to them like tools:
+
+| Sub-agent | What it does |
+| --- | --- |
+| `critique` | Read-only scientific critique. Finds blocking errors — data leakage, wrong statistics, unsupported claims — before expensive or irreversible actions. |
+| `literature-review` | Full PRISMA literature review: systematic search, screening, eligibility, synthesis, verification. |
+
+Run `openscience agent list` to print the complete set on your install, including utility sub-agents like `explore` and `reviewer`.
+
+## Pick an agent
+
+```bash
+# one-shot run with a specific agent
+openscience run --agent physics "Fit the dispersion relation in data/spectra.csv"
+```
+
+In the workspace, switch agents from the session picker. To change the default, set `default_agent` in `openscience.json`. Only agents with mode `primary` or `all` can lead a session; `subagent` profiles are reachable only by delegation.
+
+## Create a custom agent
+
+`openscience agent create` walks you through it interactively. The non-interactive form:
+
+```bash
+openscience agent create \
+  --path .openscience \
+  --description "Reviews analysis notebooks for data leakage and unsound statistics" \
+  --mode subagent \
+  --tools "read,grep,glob" \
+  --model anthropic/claude-sonnet-5
+```
+
+| Flag | Use |
+| --- | --- |
+| `--path <dir>` | Where to write the definition; an `agent/` folder is created inside it. Omit to choose project or global interactively. |
+| `--description <text>` | What the agent is for. A model expands this into the name, system prompt, and delegation description. |
+| `--mode <all\|primary\|subagent>` | `primary`: leads a session. `subagent`: only reachable by delegation. `all`: both. |
+| `--tools <tool[,tool...]>` | Allow-list of tools. Anything left off the list is disabled. |
+| `--model <provider/model>` | Default model for this agent. |
+
+The result is a Markdown file: YAML frontmatter (description, mode, tools) plus a body that is the system prompt. Edit it like any prose file.
+
+## Tool restrictions
+
+`--tools "read,grep,glob"` produces a read-only agent that cannot be tricked into editing files. The available tools are `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `webfetch`, `task`, `todowrite`, and `todoread` — run `openscience agent create --help` for the list on your version.
+
+## Where agents live
+
+```text
+.openscience/agent/             # project-scoped
+~/.config/openscience/agent/    # user-global
+<bundled>                       # ships with OpenScience
+```
+
+Resolution is project-local, then user-global, then built-in.
+
+## What's next
+
+<Columns cols={2}>
+  <Card title="Skills" icon="book-open" href="/openscience/skills">
+    The 250+ skill library the agents draw on.
+  </Card>
+  <Card title="Sessions" icon="terminal" href="/openscience/sessions">
+    Start, resume, and share sessions with any agent.
+  </Card>
+  <Card title="Models" icon="package-check" href="/openscience/models">
+    Per-agent default models and provider routing.
+  </Card>
+  <Card title="Commands" icon="terminal" href="/openscience/commands">
+    Full `agent create` and `agent list` reference.
+  </Card>
+</Columns>
