@@ -1607,9 +1607,9 @@ export type Config = {
    */
   billing?: {
     /**
-     * How LLM inference is paid for. 'managed' routes through the Atlas wallet (metered credits); 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset = auto-detect from the resolved credential.
+     * How LLM inference is paid for. 'managed' routes through the Atlas wallet (metered credits); 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset or null = auto-detect from the resolved credential.
      */
-    llm?: "managed" | "byok"
+    llm?: "managed" | "byok" | null
     /**
      * How GPU/compute is paid for. 'managed' runs on Atlas-provisioned compute billed to your wallet (via the bundled atlas CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.
      */
@@ -3120,7 +3120,7 @@ export type SettingsBillingGetResponse = SettingsBillingGetResponses[keyof Setti
 
 export type SettingsBillingUpdateData = {
   body?: {
-    llm?: "managed" | "byok"
+    llm?: "managed" | "byok" | null
     compute?: "managed" | "byok"
   }
   path?: never

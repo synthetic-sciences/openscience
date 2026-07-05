@@ -22,8 +22,10 @@ export const BillingState = z.object({
 })
 export type BillingState = z.infer<typeof BillingState>
 
+// `llm: null` sets the toggle back to auto (auto-detect from the resolved
+// credential); omitting a field leaves it untouched.
 const BillingPatch = z.object({
-  llm: z.enum(["managed", "byok"]).optional(),
+  llm: z.enum(["managed", "byok"]).nullable().optional(),
   compute: z.enum(["managed", "byok"]).optional(),
 })
 
@@ -78,6 +80,8 @@ export const BillingSettingsRoutes = lazy(() =>
         // Mirror the LLM toggle to the account-scoped server billing mode, then force
         // a fresh sync so the right provider credentials (managed proxy token vs the
         // user's BYOK keys) are re-injected into the environment for the next call.
+        // Auto (null) has no server-side counterpart — the account mode stays put and
+        // the gate auto-detects from the resolved credential per call.
         if (patch.llm) {
           await OpenScience.setBillingMode(patch.llm).catch((e) =>
             log.warn("setBillingMode failed", { error: e instanceof Error ? e.message : String(e) }),

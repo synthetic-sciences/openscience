@@ -965,9 +965,10 @@ export namespace Config {
         .object({
           llm: z
             .enum(["managed", "byok"])
+            .nullable()
             .optional()
             .describe(
-              "How LLM inference is paid for. 'managed' routes through the Atlas wallet (metered credits); 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset = auto-detect from the resolved credential.",
+              "How LLM inference is paid for. 'managed' routes through the Atlas wallet (metered credits); 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset or null = auto-detect from the resolved credential.",
             ),
           compute: z
             .enum(["managed", "byok"])

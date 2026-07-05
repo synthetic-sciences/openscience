@@ -100,6 +100,12 @@ const cli = yargs(hideBin(process.argv))
       .then((m) => m.applyCredentialEnv())
       .catch(() => {})
 
+    // Same for BYOK GPU provider keys (settings ▸ Compute) — decrypt and inject
+    // under the canonical env var names the compute skills read.
+    await import("./server/routes/settings/compute")
+      .then((m) => m.ComputeSettings.applyComputeEnv())
+      .catch(() => {})
+
     // Retry any failed usage reports from previous sessions
     OpenScience.flushPendingUsage().catch(() => {})
   })

@@ -195,7 +195,7 @@ export default function Usage() {
                   >
                     <Show
                       when={managed()}
-                      fallback="You're on BYOK — provider calls are billed directly by each provider. Switch to managed mode (Credentials) to bill from this wallet."
+                      fallback="You're on BYOK — provider calls are billed directly by each provider. Switch LLM spend to managed in Settings → Spend to bill from this wallet."
                     >
                       Managed calls debit this wallet. Top up any time — credits never expire.
                     </Show>
