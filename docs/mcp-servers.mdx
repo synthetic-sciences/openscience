@@ -1,0 +1,408 @@
+---
+title: "MCP servers"
+description: "Add local and remote MCP tools."
+icon: "server"
+keywords: ["mcp", "model context protocol", "oauth", "remote servers", "local servers"]
+---
+
+You can add external tools to OpenScience using the Model Context Protocol (MCP). OpenScience supports both local and remote servers. Once added, MCP tools are automatically available to the LLM alongside built-in tools.
+
+<Warning>
+Every MCP server adds to the context. Certain servers, like the GitHub MCP server, add a lot of tokens and can easily exceed the context limit. Be selective about which servers you enable.
+</Warning>
+
+## Enable
+
+Define MCP servers in your [OpenScience config](/config) under `mcp`. Add each server with a unique name; you can refer to that name when prompting the LLM:
+
+```jsonc openscience.jsonc
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "name-of-mcp-server": {
+      // ...
+      "enabled": true,
+    },
+    "name-of-other-mcp-server": {
+      // ...
+    },
+  },
+}
+```
+
+Set `enabled` to `false` to temporarily disable a server without removing it from your config.
+
+You can also add servers interactively with `openscience mcp add`, and list them with `openscience mcp list`. See the [CLI reference](/cli#mcp).
+
+### Overriding remote defaults
+
+Organizations can provide default MCP servers via their `.well-known/openscience` endpoint. These servers may be disabled by default, letting users opt in to the ones they need. To enable a server from your organization's remote config, add it to your local config with `enabled: true`:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+Your local config values override the remote defaults. See [config precedence](/config#locations).
+
+## Local
+
+Add local MCP servers by setting `type` to `"local"`:
+
+```jsonc openscience.jsonc
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "my-local-mcp-server": {
+      "type": "local",
+      // Or ["bun", "x", "my-mcp-command"]
+      "command": ["npx", "-y", "my-mcp-command"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
+}
+```
+
+The command is how the local MCP server is started, and `environment` passes environment variables to it.
+
+For example, here is the test [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) server:
+
+```jsonc openscience.jsonc
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "mcp_everything": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+    },
+  },
+}
+```
+
+To use it, mention it in your prompt:
+
+```text
+use the mcp_everything tool to add the number 3 and 4
+```
+
+### Options
+
+| Option        | Type    | Required | Description                                                                          |
+| ------------- | ------- | -------- | ------------------------------------------------------------------------------------ |
+| `type`        | String  | Yes      | Type of MCP server connection, must be `"local"`.                                    |
+| `command`     | Array   | Yes      | Command and arguments to run the MCP server.                                         |
+| `environment` | Object  |          | Environment variables to set when running the server.                                |
+| `enabled`     | Boolean |          | Enable or disable the MCP server on startup.                                         |
+| `timeout`     | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).  |
+
+## Remote
+
+Add remote MCP servers by setting `type` to `"remote"`:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "my-remote-mcp": {
+      "type": "remote",
+      "url": "https://my-mcp-server.com",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
+    }
+  }
+}
+```
+
+### Options
+
+| Option    | Type            | Required | Description                                                                          |
+| --------- | --------------- | -------- | ------------------------------------------------------------------------------------ |
+| `type`    | String          | Yes      | Type of MCP server connection, must be `"remote"`.                                   |
+| `url`     | String          | Yes      | URL of the remote MCP server.                                                        |
+| `enabled` | Boolean         |          | Enable or disable the MCP server on startup.                                         |
+| `headers` | Object          |          | Headers to send with the request.                                                    |
+| `oauth`   | Object \| false |          | OAuth authentication configuration. See [OAuth](#oauth).                             |
+| `timeout` | Number          |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).  |
+
+## OAuth
+
+OpenScience automatically handles OAuth authentication for remote MCP servers. When a server requires authentication, OpenScience:
+
+1. Detects the 401 response and initiates the OAuth flow
+2. Uses Dynamic Client Registration (RFC 7591) if the server supports it
+3. Stores tokens securely for future requests
+
+### Automatic
+
+For most OAuth-enabled MCP servers, no special configuration is needed. Just configure the remote server:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp"
+    }
+  }
+}
+```
+
+If the server requires authentication, OpenScience prompts you when you first try to use it. You can also [trigger the flow manually](#authenticating) with `openscience mcp auth <server-name>`.
+
+### Pre-registered
+
+If you have client credentials from the MCP server provider, configure them:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
+        "scope": "tools:read tools:execute"
+      }
+    }
+  }
+}
+```
+
+### Authenticating
+
+Authenticate with a specific MCP server:
+
+```bash
+openscience mcp auth my-oauth-server
+```
+
+List all MCP servers and their auth status:
+
+```bash
+openscience mcp list
+```
+
+Remove stored credentials:
+
+```bash
+openscience mcp logout my-oauth-server
+```
+
+The `mcp auth` command opens your browser for authorization. After you authorize, OpenScience stores the tokens in `~/.local/share/openscience/mcp-auth.json`.
+
+### Disabling OAuth
+
+To disable automatic OAuth for a server (for example, servers that use API keys instead), set `oauth` to `false`:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "my-api-key-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+### OAuth options
+
+| Option         | Type            | Description                                                                        |
+| -------------- | --------------- | ---------------------------------------------------------------------------------- |
+| `oauth`        | Object \| false | OAuth config object, or `false` to disable OAuth auto-detection.                   |
+| `clientId`     | String          | OAuth client ID. If not provided, dynamic client registration is attempted.        |
+| `clientSecret` | String          | OAuth client secret, if required by the authorization server.                      |
+| `scope`        | String          | OAuth scopes to request during authorization.                                      |
+
+### Debugging
+
+If a remote MCP server fails to authenticate:
+
+```bash
+# View auth status for all OAuth-capable servers
+openscience mcp auth list
+
+# Debug connection and OAuth flow for a specific server
+openscience mcp debug my-oauth-server
+```
+
+The `mcp debug` command shows the current auth status, tests HTTP connectivity, and attempts the OAuth discovery flow.
+
+## Manage
+
+MCP tools are available alongside built-in tools, so you manage them through the config like any other tool.
+
+### Global
+
+Enable or disable them globally:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  }
+}
+```
+
+Here the glob pattern `my-mcp*` disables all matching MCP tools.
+
+### Per agent
+
+If you have a large number of MCP servers, you can disable them globally and enable them only for specific agents:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "my-mcp": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  },
+  "agent": {
+    "my-agent": {
+      "tools": {
+        "my-mcp*": true
+      }
+    }
+  }
+}
+```
+
+### Glob patterns
+
+- `*` matches zero or more of any character (for example, `"my-mcp*"` matches `my-mcp_search`, `my-mcp_list`, and so on)
+- `?` matches exactly one character
+- All other characters match literally
+
+<Note>
+MCP server tools are registered with the server name as a prefix, so to disable all tools for a server use `"mymcpservername_*": false`.
+</Note>
+
+## Examples
+
+### Sentry
+
+Add the [Sentry MCP server](https://mcp.sentry.dev) to interact with your Sentry projects and issues:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "sentry": {
+      "type": "remote",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+Then authenticate with Sentry:
+
+```bash
+openscience mcp auth sentry
+```
+
+This opens a browser window to complete the OAuth flow. Once authenticated, you can query issues, projects, and error data:
+
+```text
+Show me the latest unresolved issues in my project. use sentry
+```
+
+### Context7
+
+Add the [Context7 MCP server](https://github.com/upstash/context7) to search through docs:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+With a free account you can use an API key for higher rate limits:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Add `use context7` to your prompts, or add a rule to your [AGENTS.md](/rules):
+
+```markdown AGENTS.md
+When you need to search docs, use `context7` tools.
+```
+
+### Grep by Vercel
+
+Add the [Grep by Vercel](https://grep.app) MCP server to search code on GitHub:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "mcp": {
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
+  }
+}
+```
+
+Since the server is named `gh_grep`, add `use the gh_grep tool` to your prompts, or add a rule to your [AGENTS.md](/rules):
+
+```markdown AGENTS.md
+If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
+```

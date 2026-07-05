@@ -1,0 +1,406 @@
+---
+title: "Providers"
+description: "Use any LLM provider with OpenScience."
+icon: "plug"
+keywords: ["providers", "anthropic", "openai", "google", "bedrock", "ollama", "byok", "api keys"]
+---
+
+OpenScience uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support 75+ LLM providers, plus local models.
+
+To add a provider:
+
+1. Add the provider's API key with the `/connect` command in the workspace, or `openscience auth login` in your terminal.
+2. Optionally customize the provider in your [OpenScience config](/config).
+
+### Credentials
+
+When you add a provider's API key, it is stored locally in `~/.local/share/openscience/auth.json`. Keys never leave your machine; requests go straight to the provider. OpenScience also picks up keys from your environment and from a `.env` file in your project.
+
+### Base URL
+
+You can customize the base URL for any provider with the `baseURL` option. This is useful for proxy services or custom endpoints:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "baseURL": "https://api.anthropic.com/v1"
+      }
+    }
+  }
+}
+```
+
+## Atlas
+
+[Atlas](/atlas) is Synthetic Sciences' managed platform. It includes a curated set of models that have been tested and verified to work well with OpenScience, served through the managed `synsci` provider and billed from a prepaid wallet.
+
+1. Sign in from the CLI and approve the sign-in from your browser:
+
+   ```bash
+   openscience connect login
+   ```
+
+2. On headless or CI machines, create an API key at [app.syntheticsciences.ai](https://app.syntheticsciences.ai/cli) and pass it directly:
+
+   ```bash
+   openscience connect login --key thk_...
+   ```
+
+3. Run the `/models` command to select one of the curated `synsci/...` models.
+
+Atlas works like any other provider and is completely optional. Bring-your-own-key usage is free and needs no account.
+
+## Directory
+
+Setup guides for common providers. For providers not listed here, the flow is usually the same: create an API key in the provider's console, run `/connect`, search for the provider, paste the key, then pick a model with `/models`. Any OpenAI-compatible API can also be added as a [custom provider](#custom-provider).
+
+### Anthropic
+
+1. Run the `/connect` command and select Anthropic.
+
+2. Select the **Claude Pro/Max** option to authenticate in your browser, or:
+   - **Create an API Key**: opens your browser, logs you in to Anthropic, and gives you a code to paste into the workspace.
+   - **Manually enter API Key**: paste an existing key.
+
+3. All Anthropic models are now available through the `/models` command.
+
+<Info>
+Using a Claude Pro/Max subscription in OpenScience is not officially supported by Anthropic.
+</Info>
+
+### OpenAI
+
+1. Run the `/connect` command and select OpenAI.
+
+2. Select the **ChatGPT Plus/Pro** option to authenticate in your browser, or select **Manually enter API Key** and paste an API key.
+
+3. All OpenAI models are now available through the `/models` command.
+
+### Google Vertex AI
+
+1. Check the models available in your region in the Model Garden in the Google Cloud Console. You need a Google Cloud project with the Vertex AI API enabled.
+
+2. Set the required environment variables:
+
+   ```bash ~/.bash_profile
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
+   ```
+
+   - `GOOGLE_CLOUD_PROJECT`: your Google Cloud project ID.
+   - `VERTEX_LOCATION` (optional): the region for Vertex AI (defaults to `global`).
+   - Authentication: set `GOOGLE_APPLICATION_CREDENTIALS` to a service account JSON key file, or authenticate with `gcloud auth application-default login`.
+
+3. Run the `/models` command to select a model.
+
+<Tip>
+The `global` region improves availability and reduces errors at no extra cost. Use regional endpoints (for example `us-central1`) for data residency requirements.
+</Tip>
+
+### Amazon Bedrock
+
+1. Request access to the models you want in the Model catalog in the Amazon Bedrock console.
+
+2. Configure authentication using environment variables:
+
+   ```bash
+   # Option 1: AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY openscience
+
+   # Option 2: named AWS profile
+   AWS_PROFILE=my-profile openscience
+
+   # Option 3: Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX openscience
+   ```
+
+   Or use the config file (config options take precedence over environment variables):
+
+   ```json openscience.json
+   {
+     "$schema": "https://openscience.sh/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "my-aws-profile"
+         }
+       }
+     }
+   }
+   ```
+
+   - `region`: AWS region (defaults to `AWS_REGION` or `us-east-1`).
+   - `profile`: AWS named profile from `~/.aws/credentials`.
+   - `endpoint`: custom endpoint URL for VPC endpoints. This is an alias for the generic `baseURL` option; if both are specified, `endpoint` takes precedence.
+
+3. Run the `/models` command to select a model.
+
+Authentication precedence for Bedrock:
+
+1. Bearer token: `AWS_BEARER_TOKEN_BEDROCK` or a token from `/connect`.
+2. AWS credential chain: profile, access keys, shared credentials, IAM roles, Web Identity Tokens (EKS IRSA), instance metadata.
+
+<Note>
+For custom inference profiles, use the model and provider name in the key and set the `id` property to the ARN so caching works correctly:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "models": {
+        "anthropic-claude-sonnet-4.5": {
+          "id": "arn:aws:bedrock:us-east-1:xxx:application-inference-profile/yyy"
+        }
+      }
+    }
+  }
+}
+```
+</Note>
+
+### Azure OpenAI
+
+1. Create an **Azure OpenAI** resource in the [Azure portal](https://portal.azure.com/). You need the resource name (part of your endpoint, `https://RESOURCE_NAME.openai.azure.com/`) and an API key (`KEY 1` or `KEY 2`).
+
+2. Deploy a model in [Azure AI Foundry](https://ai.azure.com/). The deployment name must match the model name.
+
+3. Run the `/connect` command, search for **Azure**, and enter your API key.
+
+4. Set your resource name as an environment variable:
+
+   ```bash ~/.bash_profile
+   export AZURE_RESOURCE_NAME=XXX
+   ```
+
+5. Run the `/models` command to select your deployed model.
+
+<Note>
+If you encounter "I'm sorry, but I cannot assist with that request" errors, try changing the content filter from **DefaultV2** to **Default** in your Azure resource.
+</Note>
+
+### GitHub Copilot
+
+1. Run the `/connect` command and search for GitHub Copilot.
+
+2. Navigate to [github.com/login/device](https://github.com/login/device) and enter the code shown in the workspace.
+
+3. Run the `/models` command to select a model.
+
+<Note>
+Some models require a Pro+ subscription, and some need to be manually enabled in your GitHub Copilot settings.
+</Note>
+
+### OpenRouter
+
+1. Create an API key in the [OpenRouter dashboard](https://openrouter.ai/settings/keys).
+
+2. Run the `/connect` command, search for OpenRouter, and enter the key.
+
+3. Many OpenRouter models are preloaded by default; run `/models` to select one. You can add additional models and customize routing through your config:
+
+   ```json openscience.json
+   {
+     "$schema": "https://openscience.sh/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "moonshotai/kimi-k2": {
+             "options": {
+               "provider": {
+                 "order": ["baseten"],
+                 "allow_fallbacks": false
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+### Other API-key providers
+
+The same create-key, `/connect`, `/models` flow works for 302.AI, Baseten, Cerebras, Cortecs, DeepSeek, Deep Infra, Fireworks AI, Groq, Hugging Face, IO.NET, MiniMax, Moonshot AI, Nebius Token Factory, Ollama Cloud, OVHcloud AI Endpoints, Scaleway, Together AI, Venice AI, Vercel AI Gateway, xAI, Z.AI, ZenMux, and more. Run `/connect` and search for the provider by name.
+
+## Local models
+
+Run local models through any OpenAI-compatible server by defining a custom provider in your config.
+
+<CodeGroup>
+
+```json Ollama
+{
+  "$schema": "https://openscience.sh/config.json",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "llama2": {
+          "name": "Llama 2"
+        }
+      }
+    }
+  }
+}
+```
+
+```json LM Studio
+{
+  "$schema": "https://openscience.sh/config.json",
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1234/v1"
+      },
+      "models": {
+        "google/gemma-3n-e4b": {
+          "name": "Gemma 3n-e4b (local)"
+        }
+      }
+    }
+  }
+}
+```
+
+```json llama.cpp
+{
+  "$schema": "https://openscience.sh/config.json",
+  "provider": {
+    "llama.cpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama-server (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1"
+      },
+      "models": {
+        "qwen3-coder:a3b": {
+          "name": "Qwen3-Coder: a3b-30b (local)",
+          "limit": {
+            "context": 128000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+In these examples:
+
+- The provider key (`ollama`, `lmstudio`, `llama.cpp`) is a custom provider ID. It can be any string.
+- `npm` specifies the package for the provider. `@ai-sdk/openai-compatible` works for any OpenAI-compatible API.
+- `name` is the display name in the UI.
+- `options.baseURL` is the endpoint for the local server.
+- `models` maps model IDs to their configurations.
+
+<Tip>
+If tool calls are not working with Ollama, try increasing `num_ctx`. Start around 16k to 32k.
+</Tip>
+
+## Custom provider
+
+To add any OpenAI-compatible provider that is not listed in the `/connect` command:
+
+1. Run the `/connect` command and scroll down to **Other**.
+
+2. Enter a unique ID for the provider. Choose a memorable ID; you will use it in your config file.
+
+3. Enter your API key for the provider.
+
+4. Create or update `openscience.json` in your project directory:
+
+   ```json openscience.json
+   {
+     "$schema": "https://openscience.sh/config.json",
+     "provider": {
+       "myprovider": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "My Provider Display Name",
+         "options": {
+           "baseURL": "https://api.myprovider.com/v1"
+         },
+         "models": {
+           "my-model-name": {
+             "name": "My Model Display Name"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+5. Run the `/models` command; your custom provider and models appear in the selection list.
+
+Configuration options:
+
+- `npm`: AI SDK package to use. `@ai-sdk/openai-compatible` for OpenAI-compatible providers.
+- `name`: display name in the UI.
+- `models`: available models.
+- `options.baseURL`: API endpoint URL.
+- `options.apiKey`: optionally set the API key, if not using `/connect`.
+- `options.headers`: optionally set custom headers.
+
+Here is an example setting the `apiKey`, `headers`, and model `limit` options:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My Provider Display Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1",
+        "apiKey": "{env:MYPROVIDER_API_KEY}",
+        "headers": {
+          "Authorization": "Bearer custom-token"
+        }
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+- `apiKey`: set using the [`{env:...}` variable syntax](/config#env-vars).
+- `headers`: custom headers sent with each request.
+- `limit.context`: maximum input tokens the model accepts.
+- `limit.output`: maximum tokens the model can generate.
+
+The `limit` fields let OpenScience track how much context you have left. Standard providers pull these from Models.dev automatically.
+
+## Troubleshooting
+
+If a provider is not working:
+
+1. **Check the auth setup.** Run `openscience auth list` to see if credentials for the provider are stored. This does not apply to providers like Amazon Bedrock that rely on environment variables.
+
+2. **For custom providers**, check that:
+   - The provider ID used in the `/connect` command matches the ID in your config.
+   - The right npm package is used. For example, `@ai-sdk/cerebras` for Cerebras, and `@ai-sdk/openai-compatible` for other OpenAI-compatible providers.
+   - The correct API endpoint is set in `options.baseURL`.
+
+See [Troubleshooting](/troubleshooting) for more.

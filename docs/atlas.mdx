@@ -1,0 +1,110 @@
+---
+title: "Atlas"
+description: "Synthetic Sciences' managed platform for OpenScience: curated models, wallet billing, and cloud compute."
+icon: "cloud"
+keywords: ["atlas", "connect login", "wallet", "billing", "managed", "byok", "synsci"]
+---
+
+Atlas is Synthetic Sciences' managed platform for OpenScience. It gives you:
+
+- **Curated models**: a tested set of frontier models, served through the managed `synsci` provider and billed from a prepaid wallet.
+- **Research graph**: your sessions, runs, and findings organized into a durable research map.
+- **Cloud compute**: managed GPU compute for training jobs and experiment runs.
+
+<Note>
+Atlas is completely optional. Bring-your-own-key (BYOK) is free, first-class, and needs no account. Configure your own provider API keys and OpenScience works fully without Atlas.
+</Note>
+
+## Sign in
+
+Authenticate the CLI with:
+
+```bash
+openscience connect login
+```
+
+This opens your browser to approve the device; the CLI then stores a long-lived `thk_` API key locally. On headless or CI machines, create a key in the dashboard and pass it directly:
+
+```bash
+openscience connect login --key thk_...
+```
+
+You can also set the key in the `SYNSC_CLI_KEY` environment variable for non-interactive use. Manage your devices, API keys, and billing at [app.syntheticsciences.ai](https://app.syntheticsciences.ai/cli).
+
+Check the connection at any time:
+
+```bash
+openscience connect status
+```
+
+List authenticated devices with `openscience connect devices`, and disconnect with `openscience connect logout`.
+
+## The two credential stores
+
+OpenScience keeps two kinds of credentials, and it is worth understanding the difference:
+
+1. **Local provider keys (BYOK).** Keys you add with `openscience auth login` or the `/connect` command are stored locally in `~/.local/share/openscience/auth.json`. They stay on your machine and are never uploaded anywhere. Requests made with them go straight to the provider.
+
+2. **The Atlas session.** `openscience connect login` stores a `thk_` session key locally and syncs *down*: it pulls the credentials for services you have connected in the dashboard onto your machine, so a new machine is ready to work after a single login. Re-run the sync at any time:
+
+   ```bash
+   openscience connect sync
+   ```
+
+When both stores have a credential for the same provider, **your local key wins**. Synced managed credentials never override a key you set yourself, whether it came from `auth.json` or a shell export. Requests on your own keys are direct to the provider and never metered by Atlas.
+
+## Models
+
+Managed models are served through the `synsci` provider. The [model ID](/models) in your config uses the format `synsci/<model-id>`:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "model": "synsci/gpt-5-nano"
+}
+```
+
+Run `/models` in the workspace to see the curated list.
+
+## Billing
+
+Atlas is billed from a prepaid wallet. Only **managed** calls, meaning requests running on Atlas-issued `thk_` credentials, draw from the wallet. Calls made with your own API keys (BYOK) or a first-party OAuth subscription (Claude Pro/Max, ChatGPT, GitHub Copilot) cost the wallet nothing and are never blocked by it.
+
+If your balance cannot cover a managed call, the session halts with an insufficient-credits message. Top up in the dashboard's Plan tab, or switch back to your own keys.
+
+Check your wallet balance and key routing from the CLI:
+
+```bash
+openscience billing
+```
+
+And open the Plan tab to top up:
+
+```bash
+openscience billing topup
+```
+
+Wallet top-ups are $50 or $200, one-time or recurring monthly. BYOK works on every plan.
+
+## Spend modes
+
+Key routing is per provider and automatic: your own key is used if one is set, otherwise the Atlas managed credential is used (and debits the wallet). You can pin the spend mode explicitly in your config:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "billing": {
+    "llm": "byok",
+    "compute": "byok"
+  }
+}
+```
+
+- `llm`: `"managed"` bills LLM calls to your wallet; `"byok"` runs them on your own keys or subscriptions and is never billed. Unset means auto-detect from the resolved credential.
+- `compute`: the same toggle for cloud compute. `"managed"` runs on Atlas-provisioned compute billed to your wallet; `"byok"` uses your own connected GPU providers. Defaults to `"byok"`.
+
+The spend toggle governs wallet gating, not which key is used. Key resolution (local key first, managed fallback) happens per provider; the `billing` setting controls whether managed usage is allowed to draw from the wallet.
+
+## BYOK
+
+You do not need an Atlas account to use OpenScience. Configure any [provider](/providers) with your own API key and all usage is billed by that provider directly, never by Synthetic Sciences.

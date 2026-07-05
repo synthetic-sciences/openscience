@@ -1,0 +1,137 @@
+---
+title: "Introduction"
+description: "Get started with OpenScience, the open-source AI workbench for scientific research."
+sidebarTitle: "Introduction"
+icon: "rocket"
+keywords: ["openscience", "quickstart", "getting started", "ai research agent"]
+---
+
+OpenScience is an open-source, model-agnostic AI research agent. You give it a goal, and it reads the relevant literature, forms a hypothesis, writes and runs code, runs the experiments, and writes up the result. Running `openscience` opens a workspace in your browser. It also has a [CLI](/cli) for scripting.
+
+It works with any frontier or open-weight model from Anthropic, OpenAI, Google, and dozens of other providers, using your own API keys. No account is required.
+
+## Install
+
+The quickest way to install OpenScience is the install script:
+
+```bash
+curl -fsSL https://openscience.sh/install | bash
+```
+
+Or install it with npm:
+
+```bash
+npm install -g @synsci/openscience
+```
+
+Both install the `openscience` command. To install and open the workspace in a single step, run the launcher instead:
+
+```bash
+npx synsci
+```
+
+See [Installation](/installation) for other package managers, Windows, and platform binaries.
+
+## Quickstart
+
+<Steps>
+  <Step title="Set an API key">
+    Set an API key from any provider (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, and so on) in your shell:
+
+    ```bash
+    export ANTHROPIC_API_KEY=sk-ant-...
+    ```
+
+    You can also add keys from the Credentials panel in the workspace, or with the `/connect` command. Keys stay on your machine and requests go straight to the provider. See [Providers](/providers) for the full list.
+  </Step>
+  <Step title="Start the workspace">
+    Navigate to a project and run OpenScience:
+
+    ```bash
+    cd /path/to/project
+    openscience
+    ```
+
+    This opens the workspace in your browser. Pick a model with the `/models` command.
+  </Step>
+  <Step title="Initialize the project">
+    Run the `/init` command in the workspace:
+
+    ```text
+    /init
+    ```
+
+    This analyzes your project and creates an `AGENTS.md` file in the project root. It helps OpenScience understand the project structure and the patterns used. Commit it to Git so your team shares the same context. See [Rules](/rules).
+  </Step>
+  <Step title="Give it a goal">
+    Ask it anything. Use the `@` key to fuzzy-search for files in the project:
+
+    ```text
+    How is authentication handled in @packages/functions/src/api/index.ts
+    ```
+  </Step>
+</Steps>
+
+<Note>
+If you are new to LLM providers, [Atlas](/atlas) is Synthetic Sciences' optional managed platform with a curated set of tested models billed from a prepaid wallet. Bring-your-own-key usage is free, first-class, and needs no account.
+</Note>
+
+## Working with OpenScience
+
+### Plan first
+
+OpenScience has a plan mode that turns off its ability to make changes and instead suggests how it will approach the work. Switch to it with the mode selector in the workspace, describe what you want, then iterate on the plan:
+
+```text
+When a user deletes a note, flag it as deleted in the database.
+Then create a screen that shows all the recently deleted notes.
+```
+
+Once you are comfortable with the plan, switch back to the research agent and ask it to make the changes. You can drag and drop images into the workspace to add them to a prompt.
+
+### Make changes directly
+
+For straightforward changes, skip the plan and describe the change with enough context:
+
+```text
+We need to add authentication to the /settings route. Take a look at how this is
+handled in the /notes route in @packages/functions/src/notes.ts and implement
+the same logic in @packages/functions/src/settings.ts
+```
+
+### Undo and redo
+
+If a change is not what you wanted, revert it with the `/undo` command:
+
+```text
+/undo
+```
+
+You can run `/undo` multiple times to step back through changes, and `/redo` to reapply them.
+
+### Share a session
+
+Conversations can be [shared with your team](/share):
+
+```text
+/share
+```
+
+This creates a link to the current conversation and copies it to your clipboard. Conversations are not shared by default.
+
+## Next steps
+
+<Columns cols={2}>
+  <Card title="Configuration" icon="settings" href="/config">
+    Configure OpenScience with the openscience.json config file.
+  </Card>
+  <Card title="Models" icon="cpu" href="/models">
+    Pick a model and set a default.
+  </Card>
+  <Card title="Agents" icon="bot" href="/agents">
+    Use the built-in research agents or create your own.
+  </Card>
+  <Card title="CLI reference" icon="terminal" href="/cli">
+    Commands, flags, and environment variables.
+  </Card>
+</Columns>

@@ -1,0 +1,97 @@
+---
+title: "Share"
+description: "Share your OpenScience conversations."
+icon: "share-2"
+keywords: ["share", "unshare", "session links", "privacy"]
+---
+
+The share feature creates public links to your OpenScience conversations, so you can collaborate with teammates or get help from others.
+
+<Warning>
+Shared conversations are publicly accessible to anyone with the link.
+</Warning>
+
+## How it works
+
+When you share a conversation, OpenScience:
+
+1. Creates a unique public URL for your session
+2. Syncs your conversation history to the share servers
+3. Makes the conversation accessible at a shareable link: `syntheticsciences.ai/s/<share-id>`
+
+## Sharing modes
+
+OpenScience supports three sharing modes that control how conversations are shared.
+
+### Manual (default)
+
+Sessions are not shared automatically, but you can share them with the `/share` command:
+
+```text
+/share
+```
+
+This generates a unique URL and copies it to your clipboard.
+
+To explicitly set manual mode in your [config](/config):
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "share": "manual"
+}
+```
+
+### Auto-share
+
+Enable automatic sharing for all new conversations:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "share": "auto"
+}
+```
+
+With auto-share enabled, every new conversation is shared and a link is generated.
+
+### Disabled
+
+Disable sharing entirely:
+
+```json openscience.json
+{
+  "$schema": "https://openscience.sh/config.json",
+  "share": "disabled"
+}
+```
+
+To enforce this across your team for a given project, add it to the `openscience.json` in your project and check it into Git.
+
+## Un-sharing
+
+To stop sharing a conversation and remove it from public access:
+
+```text
+/unshare
+```
+
+This removes the share link and deletes the data related to the conversation.
+
+## Privacy
+
+### Data retention
+
+Shared conversations remain accessible until you explicitly unshare them. This includes:
+
+- Full conversation history
+- All messages and responses
+- Session metadata
+
+### Recommendations
+
+- Only share conversations that do not contain sensitive information.
+- Review conversation content before sharing.
+- Unshare conversations when collaboration is complete.
+- Avoid sharing conversations with proprietary code or confidential data.
+- For sensitive projects, disable sharing entirely.

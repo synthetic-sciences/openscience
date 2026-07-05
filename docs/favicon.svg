@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <style>
+    .bg   { fill: #f4efe2; }
+    .edge { stroke: #e2dac6; }
+    .chev { stroke: #c0341d; }
+    .cur  { fill: #1c1813; }
+    @media (prefers-color-scheme: dark) {
+      .bg   { fill: #14110c; }
+      .edge { stroke: #2c2417; }
+      .chev { stroke: #e46a4d; }
+      .cur  { fill: #ece4d4; }
+    }
+  </style>
+  <rect class="bg edge" x="0.75" y="0.75" width="30.5" height="30.5" rx="7.5" stroke-width="1.5"/>
+  <path class="chev" d="M10 9.5 L16.5 16 L10 22.5" fill="none" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect class="cur" x="18.5" y="19.7" width="7.5" height="2.8" rx="1.4"/>
+</svg>

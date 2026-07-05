@@ -1,0 +1,72 @@
+---
+title: "Contributing"
+description: "How to contribute to OpenScience."
+icon: "git-pull-request"
+keywords: ["contributing", "development", "bun", "build", "pull requests"]
+---
+
+OpenScience is open source under the Apache 2.0 license. Contributions are welcome. The full guide lives in [CONTRIBUTING.md](https://github.com/synthetic-sciences/openscience/blob/main/CONTRIBUTING.md) in the repository.
+
+## What to contribute
+
+These changes are the most likely to be merged:
+
+- Bug fixes
+- New LSPs and formatters
+- Better model performance
+- Support for new providers
+- Fixes for environment-specific quirks
+- Missing standard behavior
+- Documentation improvements
+
+Any UI or core product feature should go through a design discussion with the maintainers before you build it. If you are not sure whether a change would be accepted, ask in an issue or look for issues labeled [`help wanted`](https://github.com/synthetic-sciences/openscience/issues?q=is%3Aissue+state%3Aopen+label%3A%22help+wanted%22) or [`good first issue`](https://github.com/synthetic-sciences/openscience/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22).
+
+## Repository layout
+
+The repo is a single Git repository, organized by runtime boundary, with `main` as the default branch:
+
+| Path        | Contents                                                              |
+| ----------- | --------------------------------------------------------------------- |
+| `frontend/` | Workspace (browser UI), docs/share site, and shared UI                |
+| `backend/`  | CLI/server, skills, sessions, and provider integrations               |
+| `tooling/`  | SDK, plugin runtime, repo automation, launcher, utilities, and patches |
+
+## Development
+
+You need [Bun](https://bun.sh) 1.3 or newer. Install dependencies and run the CLI from source:
+
+```bash
+bun install
+bun dev
+```
+
+`bun dev` is the local equivalent of the built `openscience` command. It runs against the `backend/cli` directory by default. To run it elsewhere:
+
+```bash
+bun dev <directory>     # run in a specific directory
+bun dev .               # run in the repo root
+```
+
+Common commands work the same in dev and in the built binary:
+
+```bash
+bun dev --help          # list commands
+bun dev serve           # headless API server (port 4096 by default)
+bun dev web             # start the server and open the workspace
+```
+
+Typecheck and test:
+
+```bash
+bun run typecheck
+bun run --cwd backend/cli test
+```
+
+## Building a standalone binary
+
+```bash
+./backend/cli/script/build.ts --single
+./backend/cli/dist/@synsci/openscience-<platform>/bin/openscience
+```
+
+Replace `<platform>` with your platform, for example `darwin-arm64` or `linux-x64`.
