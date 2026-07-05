@@ -2,6 +2,10 @@ name: E2E
 
 on:
   workflow_dispatch:
+  # Nightly rather than per-PR: the suite is long and browser-heavy. Promote
+  # to a PR trigger once it has a green track record.
+  schedule:
+    - cron: "17 3 * * *"
 
 permissions:
   contents: read
@@ -27,12 +31,13 @@ jobs:
           # PR with full audit context (see commits b47b779/d7ad855/
           # 21aae5d/6a9dcd0/0f1d7c1 for the diagnosis chain).
     runs-on: ${{ matrix.settings.host }}
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -155,7 +160,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
           if-no-files-found: ignore

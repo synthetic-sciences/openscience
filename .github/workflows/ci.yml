@@ -17,16 +17,18 @@ jobs:
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: ./.github/actions/setup-bun
       - run: bun run typecheck
 
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: ./.github/actions/setup-bun
       - name: Configure git for tests
         run: |
@@ -38,17 +40,60 @@ jobs:
   build:
     name: Build (web)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: ./.github/actions/setup-bun
       - name: Build workspace UI
         run: bun run --cwd frontend/workspace build
       - name: Build docs site
         run: bun run --cwd frontend/docs build
 
+  # frontend/landing is standalone (own lockfile, not a workspace member),
+  # so the root typecheck/build jobs never touch it.
+  landing:
+    name: Build (landing)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: ./.github/actions/setup-bun
+      - name: Install
+        working-directory: frontend/landing
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        working-directory: frontend/landing
+        run: bunx tsc -b
+      - name: Build
+        working-directory: frontend/landing
+        run: bun run build
+
+  # Packages with no typecheck task and scripts that otherwise only ever
+  # execute during a release — catch syntax errors before release day.
+  smoke:
+    name: Smoke (launcher + scripts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: ./.github/actions/setup-bun
+      - name: Launcher parses
+        run: node --check tooling/launcher/bin/synsci.mjs
+      - name: npm bin wrapper parses
+        run: node --check backend/cli/bin/openscience
+      - name: Install script parses
+        run: bash -n install && bash -n frontend/landing/public/install
+      - name: Install script copies are in sync
+        run: diff -q install frontend/landing/public/install
+      - name: Release scripts bundle
+        run: |
+          bun build tooling/repo/publish.ts --target bun --outdir /tmp/relcheck > /dev/null
+          bun build tooling/repo/version.ts --target bun --outdir /tmp/relcheck > /dev/null
+
   actionlint:
     name: Lint workflows
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: raven-actions/actionlint@v2
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2

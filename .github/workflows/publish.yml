@@ -28,6 +28,7 @@ permissions:
 jobs:
   version:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: github.repository == 'synthetic-sciences/OpenScience'
     steps:
       - name: Require a bump or version input
@@ -36,7 +37,7 @@ jobs:
           echo "::error::Provide 'bump' or 'version'. An empty dispatch would publish a 0.0.0-main preview to npm as if it were a release."
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
@@ -56,8 +57,9 @@ jobs:
   build-cli:
     needs: version
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-tags: true
 
@@ -71,7 +73,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Cache CLI build
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: backend/cli/dist
           key: cli-build-${{ github.run_id }}
@@ -84,14 +86,15 @@ jobs:
       - version
       - build-cli
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -102,7 +105,7 @@ jobs:
           git config user.name "openscience"
 
       - name: Restore CLI build
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: backend/cli/dist
           key: cli-build-${{ github.run_id }}
@@ -130,10 +133,11 @@ jobs:
     # Previews (no release output) shouldn't create a production deployment.
     if: needs.version.outputs.release != ''
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       deployments: write
     steps:
-      - uses: actions/github-script@v8
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           VERSION: ${{ needs.version.outputs.version }}
           TAG: ${{ needs.version.outputs.tag }}
