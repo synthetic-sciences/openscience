@@ -331,6 +331,32 @@ download_and_install() {
         exit 1
     fi
 
+    # Verify against the release's checksums.txt when a sha256 tool exists.
+    # Releases published before checksums.txt simply skip verification.
+    local shatool=""
+    if command -v sha256sum >/dev/null 2>&1; then
+        shatool="sha256sum"
+    elif command -v shasum >/dev/null 2>&1; then
+        shatool="shasum -a 256"
+    fi
+    if [ -n "$shatool" ]; then
+        local checksums_url="${url%/*}/checksums.txt"
+        local expected
+        expected=$(curl -fsSL "$checksums_url" 2>/dev/null | awk -v f="$filename" '$2 == f {print $1}') || expected=""
+        if [ -n "$expected" ]; then
+            local actual
+            actual=$($shatool "$tmp_dir/$filename" | awk '{print $1}')
+            if [ "$actual" != "$expected" ]; then
+                echo -e "${RED}Checksum mismatch for ${filename}${NC}"
+                echo -e "${MUTED}expected: ${expected}${NC}"
+                echo -e "${MUTED}actual:   ${actual}${NC}"
+                rm -rf "$tmp_dir"
+                exit 1
+            fi
+            print_message info "${MUTED}Checksum verified${NC}"
+        fi
+    fi
+
     if [ "$os" = "linux" ]; then
         tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
     else

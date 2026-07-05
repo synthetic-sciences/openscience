@@ -207,15 +207,21 @@ for (const item of targets) {
 }
 
 if (Script.release) {
+  const checksums: string[] = []
   for (const key of Object.keys(binaries)) {
-    const archiveName = key.replace(`${pkg.name}-`, "openscience-")
+    const archiveName = key.replace(`${pkg.name}-`, "openscience-") + (key.includes("linux") ? ".tar.gz" : ".zip")
     if (key.includes("linux")) {
-      await $`tar -czf ${path.resolve(dir, `dist/${archiveName}.tar.gz`)} *`.cwd(`dist/${key}/bin`)
+      await $`tar -czf ${path.resolve(dir, `dist/${archiveName}`)} *`.cwd(`dist/${key}/bin`)
     } else {
-      await $`zip -r ${path.resolve(dir, `dist/${archiveName}.zip`)} *`.cwd(`dist/${key}/bin`)
+      await $`zip -r ${path.resolve(dir, `dist/${archiveName}`)} *`.cwd(`dist/${key}/bin`)
     }
+    const bytes = await Bun.file(path.resolve(dir, `dist/${archiveName}`)).arrayBuffer()
+    const hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
+    checksums.push(`${hash}  ${archiveName}`)
   }
-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber`
+  // sha256sum-compatible manifest; the install script verifies against it
+  await Bun.write(path.resolve(dir, "dist/checksums.txt"), checksums.join("\n") + "\n")
+  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz ./dist/checksums.txt --clobber`
 }
 
 export { binaries }
