@@ -607,9 +607,17 @@ export namespace OpenScience {
       })
 
       if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
+        if (res.status === 401) {
           log.info("session invalid, clearing")
           await clearSession()
+          return null
+        }
+        if (res.status === 403) {
+          // 403s also come from WAFs and rate limiters, not just key
+          // revocation. Destroying the session on one silently signed the
+          // user out; keep it and let the next sync retry. A genuinely
+          // revoked key comes back as 401.
+          log.warn("sync got 403, keeping session")
           return null
         }
         if (res.status === 402) {
@@ -964,27 +972,40 @@ export namespace OpenScience {
   let cachedBalance: { value: number; at: number } | null = null
   const BALANCE_CACHE_TTL = 30 * 1000
 
+  /** Drop the cached balance so the next getBalance() refetches. Called when
+   *  the wallet gate blocks, so a top-up is visible on the next attempt
+   *  instead of after the cache TTL. */
+  export function invalidateBalance() {
+    cachedBalance = null
+  }
+
   /** Get current credit balance (cached for 30s).
-   *  Returns the balance in USD, or -1 on API failure (fail-closed). */
-  export async function getBalance(): Promise<number> {
+   *  Returns the balance in USD, or null when it can't be determined (no
+   *  session, API failure). null is distinct from a real negative balance —
+   *  the old -1 sentinel collided with an overdraft of exactly -$1. */
+  export async function getBalance(): Promise<number | null> {
     if (cachedBalance && Date.now() - cachedBalance.at < BALANCE_CACHE_TTL) {
       return cachedBalance.value
     }
     const session = await getSession()
-    if (!session) return -1
+    if (!session) return null
     try {
       const res = await fetch(`${API_BASE}/api/cli/balance`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
-      if (!res.ok) return -1
+      if (!res.ok) return null
       const data = await res.json()
-      const usd = typeof data.balance_usd === "number"
-        ? data.balance_usd
-        : (typeof data.balance_cents === "number" ? data.balance_cents / 100 : -1)
+      const usd =
+        typeof data.balance_usd === "number"
+          ? data.balance_usd
+          : typeof data.balance_cents === "number"
+            ? data.balance_cents / 100
+            : null
+      if (usd === null) return null
       cachedBalance = { value: usd, at: Date.now() }
       return usd
     } catch {
-      return -1
+      return null
     }
   }
 

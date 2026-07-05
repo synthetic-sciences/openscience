@@ -30,7 +30,7 @@ const BillingPatch = z.object({
 async function readState(): Promise<BillingState> {
   const cfg = await Config.getGlobal()
   const session = await OpenScience.getSession().catch(() => null)
-  const balanceUsd = session ? await OpenScience.getBalance().catch(() => -1) : -1
+  const balanceUsd = (session ? await OpenScience.getBalance().catch(() => null) : null) ?? -1
   return {
     llm: cfg.billing?.llm ?? null,
     compute: cfg.billing?.compute ?? "byok",

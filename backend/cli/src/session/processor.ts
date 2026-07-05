@@ -70,13 +70,16 @@ export namespace SessionProcessor {
             }
 
             // Pre-flight wallet check for managed-proxy calls only. Block ONLY on a
-            // VERIFIED empty wallet (balance === 0). If the balance can't be verified
-            // (-1: no/expired Atlas session or a transient error), do NOT hard-block —
+            // VERIFIED empty or overdrafted wallet. If the balance can't be verified
+            // (null: no/expired Atlas session or a transient error), do NOT hard-block —
             // the managed proxy is the billing authority and returns 402 if actually
             // out of credits. Hard-blocking here strands a user whose session lapsed.
             if (requiresWalletBalance(credentialSource)) {
               const balance = await OpenScience.getBalance()
-              if (balance === 0) {
+              if (balance !== null && balance <= 0) {
+                // Drop the 30s cache so a top-up is visible on the next
+                // attempt instead of blocking until the TTL expires.
+                OpenScience.invalidateBalance()
                 throw new Error(
                   "Your Atlas wallet is empty. Top up at app.syntheticsciences.ai/cli, or switch LLM spend to BYOK in Settings → Spend — BYOK uses your own key and is never billed.",
                 )

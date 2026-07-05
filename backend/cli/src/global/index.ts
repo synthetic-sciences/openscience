@@ -22,6 +22,12 @@ function migrateDir(base: string): string {
       return old
     }
   }
+  // Both dirs existing means the legacy one was restored (backup, dotfiles)
+  // after the new dir was created. It will never be read or migrated — say
+  // so instead of silently stranding whatever auth/config lives in it.
+  if (existsSync(next) && existsSync(old)) {
+    console.error(`openscience: ignoring legacy config at ${old} (${next} already exists) — merge or remove it`)
+  }
   return next
 }
 
