@@ -1,6 +1,7 @@
 import path from "path"
 import z from "zod"
 import { Global } from "../global"
+import { JsonStore } from "../util/jsonstore"
 
 export namespace McpAuth {
   export const Tokens = z.object({
@@ -53,57 +54,70 @@ export namespace McpAuth {
   }
 
   export async function all(): Promise<Record<string, Entry>> {
-    const file = Bun.file(filepath)
-    return file.json().catch(() => ({}))
+    return (await JsonStore.read(filepath)) as Record<string, Entry>
+  }
+
+  /** Atomic read-modify-write of one server's entry. Serialized behind the
+   *  store lock so concurrent updates can't drop each other's writes. */
+  async function update(mcpName: string, fn: (entry: Entry) => void, serverUrl?: string): Promise<void> {
+    await JsonStore.update(filepath, (data) => {
+      const entry = (data[mcpName] ?? {}) as Entry
+      fn(entry)
+      // Always update serverUrl if provided
+      if (serverUrl) entry.serverUrl = serverUrl
+      data[mcpName] = entry
+    })
   }
 
   export async function set(mcpName: string, entry: Entry, serverUrl?: string): Promise<void> {
-    const file = Bun.file(filepath)
-    const data = await all()
     // Always update serverUrl if provided
-    if (serverUrl) {
-      entry.serverUrl = serverUrl
-    }
-    await Bun.write(file, JSON.stringify({ ...data, [mcpName]: entry }, null, 2), { mode: 0o600 })
+    if (serverUrl) entry.serverUrl = serverUrl
+    await JsonStore.update(filepath, (data) => ({ ...data, [mcpName]: entry }))
   }
 
   export async function remove(mcpName: string): Promise<void> {
-    const file = Bun.file(filepath)
-    const data = await all()
-    delete data[mcpName]
-    await Bun.write(file, JSON.stringify(data, null, 2), { mode: 0o600 })
+    await JsonStore.update(filepath, (data) => {
+      delete data[mcpName]
+    })
   }
 
   export async function updateTokens(mcpName: string, tokens: Tokens, serverUrl?: string): Promise<void> {
-    const entry = (await get(mcpName)) ?? {}
-    entry.tokens = tokens
-    await set(mcpName, entry, serverUrl)
+    await update(
+      mcpName,
+      (entry) => {
+        entry.tokens = tokens
+      },
+      serverUrl,
+    )
   }
 
   export async function updateClientInfo(mcpName: string, clientInfo: ClientInfo, serverUrl?: string): Promise<void> {
-    const entry = (await get(mcpName)) ?? {}
-    entry.clientInfo = clientInfo
-    await set(mcpName, entry, serverUrl)
+    await update(
+      mcpName,
+      (entry) => {
+        entry.clientInfo = clientInfo
+      },
+      serverUrl,
+    )
   }
 
   export async function updateCodeVerifier(mcpName: string, codeVerifier: string): Promise<void> {
-    const entry = (await get(mcpName)) ?? {}
-    entry.codeVerifier = codeVerifier
-    await set(mcpName, entry)
+    await update(mcpName, (entry) => {
+      entry.codeVerifier = codeVerifier
+    })
   }
 
   export async function clearCodeVerifier(mcpName: string): Promise<void> {
-    const entry = await get(mcpName)
-    if (entry) {
-      delete entry.codeVerifier
-      await set(mcpName, entry)
-    }
+    await JsonStore.update(filepath, (data) => {
+      const entry = data[mcpName] as Entry | undefined
+      if (entry) delete entry.codeVerifier
+    })
   }
 
   export async function updateOAuthState(mcpName: string, oauthState: string): Promise<void> {
-    const entry = (await get(mcpName)) ?? {}
-    entry.oauthState = oauthState
-    await set(mcpName, entry)
+    await update(mcpName, (entry) => {
+      entry.oauthState = oauthState
+    })
   }
 
   export async function getOAuthState(mcpName: string): Promise<string | undefined> {
@@ -112,11 +126,10 @@ export namespace McpAuth {
   }
 
   export async function clearOAuthState(mcpName: string): Promise<void> {
-    const entry = await get(mcpName)
-    if (entry) {
-      delete entry.oauthState
-      await set(mcpName, entry)
-    }
+    await JsonStore.update(filepath, (data) => {
+      const entry = data[mcpName] as Entry | undefined
+      if (entry) delete entry.oauthState
+    })
   }
 
   /**

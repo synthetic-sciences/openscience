@@ -7,6 +7,7 @@ import { fileURLToPath } from "url"
 import { randomUUID } from "crypto"
 import { Global } from "../global"
 import { Log } from "../util/log"
+import { Lock } from "../util/lock"
 import { Env } from "../env"
 import { Auth } from "../auth"
 import { DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
@@ -1158,6 +1159,9 @@ export namespace OpenScience {
 
   async function persistToQueue(params: UsageParams) {
     try {
+      // Serialize against flushPendingUsage so an append can't land between
+      // the flusher's read and its final rewrite (which would delete it).
+      using _ = await Lock.write(pendingQueuePath)
       await fs.appendFile(pendingQueuePath, JSON.stringify(params) + "\n")
       log.info("usage queued for retry", { service: params.service })
     } catch (e) {
@@ -1247,40 +1251,59 @@ export namespace OpenScience {
     return null
   }
 
-  /** Retry any queued usage reports from previous failures (called at startup) */
+  /** Retry any queued usage reports from previous failures (called at startup).
+   *  Holds the queue lock across the whole read → send → rewrite cycle so a
+   *  concurrent flush in this process can't double-send, and the rewrite
+   *  drops only the lines actually read so an append landing mid-flush
+   *  survives. Best-effort: never throws. */
   export async function flushPendingUsage(): Promise<void> {
-    let lines: string[]
     try {
-      const raw = await fs.readFile(pendingQueuePath, "utf-8")
-      lines = raw.split("\n").filter(Boolean)
-    } catch {
-      return
-    }
-    if (!lines.length) return
+      using _ = await Lock.write(pendingQueuePath)
+      const raw = await fs.readFile(pendingQueuePath, "utf-8").catch(() => "")
+      const lines = raw.split("\n").filter(Boolean)
+      if (!lines.length) return
 
-    const session = await getSession()
-    if (!session) return
+      const session = await getSession()
+      if (!session) return
 
-    const remaining: string[] = []
-    for (const line of lines) {
-      try {
-        const params: UsageParams = JSON.parse(line)
-        const result = await sendReport(params, session)
-        if (!result.ok && !result.permanent) {
-          remaining.push(line)
+      const retry: string[] = []
+      for (const line of lines) {
+        try {
+          const params: UsageParams = JSON.parse(line)
+          const result = await sendReport(params, session)
+          if (!result.ok && !result.permanent) {
+            retry.push(line)
+          }
+        } catch {
+          // malformed line, drop it
         }
-      } catch {
-        // malformed line, drop it
       }
-    }
 
-    try {
+      // Re-read before rewriting: another process may have appended while
+      // reports were sending. Remove only the lines read above (counted, so
+      // a report queued twice is removed exactly twice) and keep the rest.
+      const consumed = new Map<string, number>()
+      for (const line of lines) consumed.set(line, (consumed.get(line) ?? 0) + 1)
+      const current = await fs.readFile(pendingQueuePath, "utf-8").catch(() => "")
+      const appended = current
+        .split("\n")
+        .filter(Boolean)
+        .filter((line) => {
+          const count = consumed.get(line) ?? 0
+          if (!count) return true
+          consumed.set(line, count - 1)
+          return false
+        })
+
+      const remaining = [...retry, ...appended]
       if (remaining.length) {
         await fs.writeFile(pendingQueuePath, remaining.join("\n") + "\n")
-      } else {
-        await fs.unlink(pendingQueuePath)
+        return
       }
-    } catch {}
+      await fs.unlink(pendingQueuePath).catch(() => {})
+    } catch (e) {
+      log.warn("usage queue flush failed", { error: e instanceof Error ? e.message : String(e) })
+    }
   }
 
   // === Learned Skills (RSI) ===
