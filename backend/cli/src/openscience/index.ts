@@ -305,6 +305,12 @@ export namespace OpenScience {
         api_key: data.api_key,
         user_id: data.user_id || "",
         device_name: data.device_name,
+        // Sync bookkeeping. Dropping these made refreshIfStale's TTL and
+        // version dedupe dead code: every message fired a version probe
+        // plus a full background sync, and updateSession (getSession +
+        // spread + save) erased whichever field it wasn't patching.
+        cached_v: data.cached_v,
+        last_check_ts: data.last_check_ts,
       }
     } catch {
       return null
