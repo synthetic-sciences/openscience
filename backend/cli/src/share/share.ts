@@ -1,5 +1,5 @@
 import { Bus } from "../bus"
-import { Installation } from "../installation"
+import { MANAGED_API_BASE } from "../endpoints"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
@@ -66,11 +66,10 @@ export namespace Share {
     })
   }
 
-  export const URL =
-    process.env["OPENSCIENCE_API"] ??
-    (Installation.isPreview() || Installation.isLocal()
-      ? "https://app.dev.syntheticsciences.ai"
-      : "https://app.syntheticsciences.ai")
+  // Default to the managed base — a neutral public host resolved (and
+  // overridable) through src/endpoints.ts. Never ship a hardcoded *.dev.*
+  // host in the public build; OPENSCIENCE_API still wins for explicit overrides.
+  export const URL = process.env["OPENSCIENCE_API"] ?? MANAGED_API_BASE
 
   const disabled = true
 

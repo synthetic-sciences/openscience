@@ -72,7 +72,7 @@ Global config lives in `~/.config/openscience/openscience.json`; project config 
 
 ## Atlas integration
 
-Atlas is a separate, closed platform. Only its client lives here. The CLI talks to it over a documented wire contract: the `synsci` model provider id, `thk_` wallet keys, and the `/api/cli/*` endpoints, with `api.syntheticsciences.ai` as the default managed base URL (`src/endpoints.ts`). Billing classification (`byok`, `managed`, `oauth-free`) is decided client-side in `src/session/billing-gate.ts`; the server is the billing authority. None of the Atlas server, its secrets, or its internal endpoints are part of this repository.
+Atlas is a separate, closed platform. Only its client lives here. The CLI talks to it over a documented wire contract: the `synsci` model provider id, `thk_` wallet keys, and the `/api/cli/*` endpoints, with `app.syntheticsciences.ai` as the default managed base URL (`src/endpoints.ts`). Billing classification (`byok`, `managed`, `oauth-free`) is decided client-side in `src/session/billing-gate.ts`; the server is the billing authority. None of the Atlas server, its secrets, or its internal endpoints are part of this repository.
 
 ## Build and release
 
