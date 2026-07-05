@@ -85,10 +85,14 @@ jobs:
         run: bash -n install && bash -n frontend/landing/public/install
       - name: Install script copies are in sync
         run: diff -q install frontend/landing/public/install
-      - name: Release scripts bundle
+      - name: Release scripts parse
+        # transpile-only: bundling would follow imports into third-party
+        # packages with exports quirks (giget via node-fetch-native)
         run: |
-          bun build tooling/repo/publish.ts --target bun --outdir /tmp/relcheck > /dev/null
-          bun build tooling/repo/version.ts --target bun --outdir /tmp/relcheck > /dev/null
+          for f in tooling/repo/*.ts; do
+            bun -e "new Bun.Transpiler({ loader: 'ts' }).transformSync(await Bun.file('$f').text())"
+            echo "OK $f"
+          done
 
   actionlint:
     name: Lint workflows
