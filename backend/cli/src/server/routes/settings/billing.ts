@@ -69,9 +69,10 @@ export const BillingSettingsRoutes = lazy(() =>
       validator("json", BillingPatch),
       async (c) => {
         const patch = c.req.valid("json")
-        const cfg = await Config.getGlobal()
-        const next = { ...cfg, billing: { ...(cfg.billing ?? {}), ...patch } }
-        await Config.updateGlobal(next)
+        // Persist only the delta. updateGlobal deep-merges into the raw file;
+        // writing back Config.getGlobal() would bake resolved {env:}/{file:}
+        // secrets into openscience.json in plaintext.
+        await Config.updateGlobal({ billing: patch })
         log.info("update", { keys: Object.keys(patch) })
 
         // Mirror the LLM toggle to the account-scoped server billing mode, then force
