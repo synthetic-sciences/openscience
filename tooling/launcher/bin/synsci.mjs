@@ -40,18 +40,18 @@ const SHOW_CURSOR = "\x1b[?25h"
 const CLEAR_LINE = "\x1b[2K\r"
 
 const LOGO = [
-  " ██████╗ ██████╗ ███████╗███╗   ██╗",
-  "██╔═══██╗██╔══██╗██╔════╝████╗  ██║",
-  "██║   ██║██████╔╝█████╗  ██╔██╗ ██║",
-  "██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║",
-  "╚██████╔╝██║     ███████╗██║ ╚████║",
-  " ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝",
-  "███████╗ ██████╗██╗███████╗███╗   ██╗ ██████╗███████╗",
-  "██╔════╝██╔════╝██║██╔════╝████╗  ██║██╔════╝██╔════╝",
-  "███████╗██║     ██║█████╗  ██╔██╗ ██║██║     █████╗  ",
-  "╚════██║██║     ██║██╔══╝  ██║╚██╗██║██║     ██╔══╝  ",
-  "███████║╚██████╗██║███████╗██║ ╚████║╚██████╗███████╗",
-  "╚══════╝ ╚═════╝╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝",
+  "███████╗██╗   ██╗███╗   ██╗████████╗██╗  ██╗███████╗████████╗██╗ ██████╗",
+  "██╔════╝╚██╗ ██╔╝████╗  ██║╚══██╔══╝██║  ██║██╔════╝╚══██╔══╝██║██╔════╝",
+  "███████╗ ╚████╔╝ ██╔██╗ ██║   ██║   ███████║█████╗     ██║   ██║██║     ",
+  "╚════██║  ╚██╔╝  ██║╚██╗██║   ██║   ██╔══██║██╔══╝     ██║   ██║██║     ",
+  "███████║   ██║   ██║ ╚████║   ██║   ██║  ██║███████╗   ██║   ██║╚██████╗",
+  "╚══════╝   ╚═╝   ╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝ ╚═════╝",
+  "███████╗ ██████╗██╗███████╗███╗   ██╗ ██████╗███████╗███████╗",
+  "██╔════╝██╔════╝██║██╔════╝████╗  ██║██╔════╝██╔════╝██╔════╝",
+  "███████╗██║     ██║█████╗  ██╔██╗ ██║██║     █████╗  ███████╗",
+  "╚════██║██║     ██║██╔══╝  ██║╚██╗██║██║     ██╔══╝  ╚════██║",
+  "███████║╚██████╗██║███████╗██║ ╚████║╚██████╗███████╗███████║",
+  "╚══════╝ ╚═════╝╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝╚══════╝",
 ]
 
 function ok(msg) { console.log(`  ${GREEN}✓${RESET} ${msg}`) }
@@ -139,8 +139,37 @@ function isConnected() {
   } catch { return false }
 }
 
-function hasAtlas() {
-  return runQuiet("atlas --version") !== null
+function atlasVersion() {
+  const raw = runQuiet("atlas --version")
+  return raw ? raw.replace(/[^0-9.]/g, "") : null
+}
+
+// Install the Atlas CLI, or bring an existing install up to date. Returns
+// true when a working `atlas` binary is on PATH afterwards.
+async function installOrUpdateAtlas() {
+  const current = atlasVersion()
+  if (current) {
+    const s = spinner("Checking Atlas CLI for updates...")
+    const latest = runQuiet("npm view @synsci/atlas version")
+    if (!latest || current === latest) {
+      s.ok(`atlas ${current} ${DIM}(up to date)${RESET}`)
+      return true
+    }
+    s.update(`Upgrading Atlas CLI ${current} → ${latest}...`)
+    if (runQuiet("npm i -g @synsci/atlas@latest") !== null) {
+      s.ok(`Upgraded Atlas CLI to ${latest}`)
+    } else {
+      s.warn(`Atlas CLI upgrade failed, continuing with ${current}`)
+    }
+    return true
+  }
+  const s = spinner("Installing Atlas CLI...")
+  if (runQuiet("npm i -g @synsci/atlas@latest") !== null && atlasVersion()) {
+    s.ok("Installed Atlas CLI")
+    return true
+  }
+  s.warn(`Atlas CLI install failed, you can retry later: ${CYAN}npm i -g @synsci/atlas${RESET}`)
+  return false
 }
 
 async function ask(question) {
@@ -158,7 +187,7 @@ async function main() {
   console.log()
   for (const line of LOGO) console.log(`   ${CYAN}${line}${RESET}`)
   console.log()
-  console.log(`   ${BOLD}OpenScience${RESET} ${DIM}the open-source AI research workspace${RESET}`)
+  console.log(`   ${BOLD}Synthetic Sciences${RESET} ${DIM}OpenScience, the open-source AI research workspace · Atlas, the research platform${RESET}`)
   console.log()
 
   // --- Step 1: Install or upgrade the OpenScience CLI ---
@@ -238,23 +267,40 @@ async function main() {
   console.log()
   console.log(`    ${BOLD}1${RESET}  ${CYAN}OpenScience${RESET}         ${DIM}free and open source, bring your own API keys, no account${RESET}`)
   console.log(`    ${BOLD}2${RESET}  ${CYAN}OpenScience + Atlas${RESET} ${DIM}managed models, wallet billing, research graph & compute${RESET}`)
+  console.log(`    ${BOLD}3${RESET}  ${CYAN}Atlas CLI${RESET}           ${DIM}just the Atlas research CLI — maps, runs, and compute from the terminal${RESET}`)
   console.log()
 
-  const setup = await ask(`  ${DIM}❯${RESET} Choose [1/2]: `)
+  const setup = await ask(`  ${DIM}❯${RESET} Choose [1/2/3]: `)
   console.log()
+
+  if (setup === "3") {
+    // Atlas-CLI-only path: install/upgrade, verify, hand off to `atlas`.
+    // No workspace launch — this option exists for people who want the
+    // research CLI on a box without opening the browser app.
+    const installed = await installOrUpdateAtlas()
+    if (!installed) process.exit(1)
+    const s = spinner("Running atlas doctor...")
+    if (runQuiet("atlas doctor") !== null) {
+      s.ok("atlas doctor passed")
+    } else {
+      s.warn(`atlas doctor reported issues — run ${CYAN}atlas doctor${RESET} for details`)
+    }
+    if (isConnected()) {
+      ok("Connected to Atlas")
+    } else {
+      console.log()
+      console.log(`  ${DIM}Connect your Atlas account for managed credentials:${RESET} ${CYAN}openscience connect login${RESET}`)
+    }
+    console.log()
+    console.log(`  ${BOLD}Next steps${RESET}`)
+    console.log(`    ${CYAN}atlas --help${RESET}   ${DIM}see everything the CLI can do${RESET}`)
+    console.log(`    ${CYAN}atlas doctor${RESET}   ${DIM}check credentials and environment${RESET}`)
+    console.log()
+    process.exit(0)
+  }
 
   if (setup === "2") {
-    if (!hasAtlas()) {
-      const s = spinner("Installing Atlas CLI...")
-      try {
-        execSync("npm i -g @synsci/atlas@latest", { stdio: "pipe" })
-        s.ok("Installed Atlas CLI")
-      } catch {
-        s.warn(`Atlas CLI install failed, you can retry later: ${CYAN}npm i -g @synsci/atlas${RESET}`)
-      }
-    } else {
-      ok("Atlas CLI already installed")
-    }
+    await installOrUpdateAtlas()
     if (isConnected()) {
       ok("Connected to Atlas")
     } else {

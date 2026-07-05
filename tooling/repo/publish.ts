@@ -126,6 +126,10 @@ try {
         "launcher NOT published: the npm token's account is not an owner of the 'synsci' package.\n" +
           "Fix: an owner runs `npm owner add <token-user> synsci`, then re-release.",
       )
+    } else if (stderr.includes("cannot publish over") || stderr.includes("previously published")) {
+      // The launcher sometimes ships out-of-band between releases; finding
+      // this version already on the registry is success, not failure.
+      console.warn(`launcher ${Script.version} already on the registry, skipping`)
     } else {
       throw new Error(`npm publish exited with ${result.exitCode}`)
     }
