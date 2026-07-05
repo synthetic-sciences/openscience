@@ -27,7 +27,7 @@ const MONO_N = "font-terminal text-[11px] tracking-[0.08em] text-foreground/40";
 const LABEL = "text-[14px] text-muted-foreground";
 
 const GITHUB = "https://github.com/synthetic-sciences/openscience";
-const DOCS = "https://syntheticsciences.ai/docs";
+const DOCS = "https://openscience.sh/docs";
 const NPM_CMD = "npm i -g @synsci/openscience";
 const CURL_CMD = "curl -fsSL https://openscience.sh/install | bash";
 

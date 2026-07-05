@@ -23,7 +23,7 @@ const discord = config.social.filter(s => s.icon === 'discord')[0];
 
 const command = "curl -fsSL"
 const protocol = "https://"
-const url = "syntheticsciences.ai/install"
+const url = "openscience.sh/install"
 const bash = "| bash"
 
 let darkImage: ImageMetadata | undefined;
@@ -121,9 +121,9 @@ if (image) {
       </div>
       <div class="col4">
         <h3>Installer</h3>
-        <button class="command" data-command="curl -fsSL https://syntheticsciences.ai/install | bash">
+        <button class="command" data-command="curl -fsSL https://openscience.sh/install | bash">
           <code>
-            <span>curl -fsSL</span> <span class="highlight">syntheticsciences.ai/install</span> <span>| bash</span>
+            <span>curl -fsSL</span> <span class="highlight">openscience.sh/install</span> <span>| bash</span>
           </code>
           <span class="copy">
             <CopyIcon />

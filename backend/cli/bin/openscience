@@ -111,6 +111,6 @@ if (isBinary("/usr/local/bin/openscience")) {
 }
 
 console.error("openscience binary not found.")
-console.error("Install with: curl -fsSL https://syntheticsciences.ai/install | bash")
+console.error("Install with: curl -fsSL https://openscience.sh/install | bash")
 console.error("Or set OPENSCIENCE_BIN_PATH environment variable.")
 process.exit(1)

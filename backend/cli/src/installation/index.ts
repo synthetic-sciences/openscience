@@ -134,10 +134,10 @@ export namespace Installation {
     let cmd
     switch (method) {
       case "curl":
-        // The bash installer moved to app.syntheticsciences.ai with the
-        // openscience-dashboard retirement. Override via OPENSCIENCE_INSTALL_URL if
-        // hosting the script elsewhere.
-        cmd = $`curl -fsSL ${process.env.OPENSCIENCE_INSTALL_URL || "https://app.syntheticsciences.ai/install"} | bash`.env({
+        // openscience.sh/install serves the repo install script. The app
+        // subdomain serves the dashboard SPA, so piping it into bash fails.
+        // Override via OPENSCIENCE_INSTALL_URL if hosting the script elsewhere.
+        cmd = $`curl -fsSL ${process.env.OPENSCIENCE_INSTALL_URL || "https://openscience.sh/install"} | bash`.env({
           ...process.env,
           VERSION: target,
         })

@@ -11,9 +11,9 @@ Give it a goal. It reads the literature, writes and runs code, runs the experime
 [![CI](https://github.com/synthetic-sciences/OpenScience/actions/workflows/ci.yml/badge.svg)](https://github.com/synthetic-sciences/OpenScience/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/%40synsci%2Fopenscience?label=%40synsci%2Fopenscience&color=0d9488)](https://www.npmjs.com/package/@synsci/openscience)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![docs](https://img.shields.io/badge/docs-syntheticsciences.ai-0d9488.svg)](https://syntheticsciences.ai/docs)
+[![docs](https://img.shields.io/badge/docs-openscience.sh-0d9488.svg)](https://openscience.sh/docs)
 
-[Install](#install) · [Quickstart](#quickstart) · [Docs](https://syntheticsciences.ai/docs) · [Atlas](#atlas)
+[Install](#install) · [Quickstart](#quickstart) · [Docs](https://openscience.sh/docs) · [Atlas](#atlas)
 
 </div>
 
@@ -88,7 +88,7 @@ OpenScience runs a local server that hosts the workspace UI, the agent runtime, 
 
 ## Configuration
 
-Global config lives in `~/.config/openscience/openscience.json`. Project config lives in `openscience.json` or a `.openscience/` directory at the repo root ([schema](https://syntheticsciences.ai/config.json)). Custom agents, commands, tools, plugins, and themes load from those directories.
+Global config lives in `~/.config/openscience/openscience.json`. Project config lives in `openscience.json` or a `.openscience/` directory at the repo root ([schema](https://openscience.sh/config.json)). Custom agents, commands, tools, plugins, and themes load from those directories.
 
 ## Development
 

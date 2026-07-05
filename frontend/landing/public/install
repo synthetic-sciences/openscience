@@ -20,8 +20,8 @@ Options:
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
-    curl -fsSL https://syntheticsciences.ai/install | bash
-    curl -fsSL https://syntheticsciences.ai/install | bash -s -- --version 1.0.180
+    curl -fsSL https://openscience.sh/install | bash
+    curl -fsSL https://openscience.sh/install | bash -s -- --version 1.0.180
     ./install --binary /path/to/openscience
 EOF
 }
@@ -449,6 +449,6 @@ echo -e ""
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
 echo -e "openscience         ${MUTED}# Run command${NC}"
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://syntheticsciences.ai/docs"
+echo -e "${MUTED}For more information visit ${NC}https://openscience.sh/docs"
 echo -e ""
 echo -e ""
