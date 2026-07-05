@@ -10,7 +10,7 @@ Thanks for your interest in contributing. These changes are the most likely to b
 - Missing standard behavior
 - Documentation improvements
 
-Any UI or core product feature should go through a design discussion with the maintainers before you build it. If you are not sure whether a change would be accepted, ask in an issue or look for issues labeled [`help wanted`](https://github.com/synthetic-sciences/OpenScience/issues?q=is%3Aissue+state%3Aopen+label%3Ahelp-wanted), [`good first issue`](https://github.com/synthetic-sciences/OpenScience/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22), or [`bug`](https://github.com/synthetic-sciences/OpenScience/issues?q=is%3Aissue+state%3Aopen+label%3Abug).
+Any UI or core product feature should go through a design discussion with the maintainers before you build it. If you are not sure whether a change would be accepted, ask in an issue or look for issues labeled [`help wanted`](https://github.com/synthetic-sciences/OpenScience/issues?q=is%3Aissue+state%3Aopen+label%3A%22help+wanted%22), [`good first issue`](https://github.com/synthetic-sciences/OpenScience/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22), or [`bug`](https://github.com/synthetic-sciences/OpenScience/issues?q=is%3Aissue+state%3Aopen+label%3Abug).
 
 ## Development
 
@@ -40,7 +40,7 @@ bun dev web             # start the server and open the workspace
 
 ```bash
 ./backend/cli/script/build.ts --single
-./backend/cli/dist/openscience-<platform>/bin/openscience
+./backend/cli/dist/@synsci/openscience-<platform>/bin/openscience
 ```
 
 Replace `<platform>` with your platform, for example `darwin-arm64` or `linux-x64`.
@@ -51,8 +51,10 @@ Replace `<platform>` with your platform, for example `darwin-arm64` or `linux-x6
 - `frontend/workspace`: the workspace UI, written in SolidJS.
 - `frontend/ui`: shared UI components and themes.
 - `frontend/docs`: the documentation and share site.
+- `frontend/landing`: the marketing site at openscience.sh.
 - `tooling/plugin`: the source for `@synsci/plugin`.
 - `tooling/sdk/js`: the TypeScript SDK.
+- `tooling/launcher`: the `npx synsci` installer.
 
 ### Working on the workspace UI
 
@@ -99,6 +101,7 @@ Follow conventional commits, with an optional scope:
 - `chore:` maintenance and dependency updates
 - `refactor:` refactoring with no behavior change
 - `test:` tests
+- `ci:` CI and release workflow changes
 
 Examples: `docs: update contributing guide`, `fix: resolve crash on startup`, `feat(app): add dark mode`.
 

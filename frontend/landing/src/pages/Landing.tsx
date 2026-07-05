@@ -938,7 +938,7 @@ export default function Landing() {
           </div>
 
           <div className="mt-14 pt-6 border-t border-border/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[12.5px] text-foreground/45">
-            <div>&copy; {new Date().getFullYear()} InkVell Inc. OpenScience is a Synthetic Sciences project. Apache 2.0.</div>
+            <div>&copy; {new Date().getFullYear()} Synthetic Sciences. Apache 2.0.</div>
             <a href="#top" className="link-underline hover:text-foreground inline-flex items-center gap-2">
               Back to top
               <svg width="9" height="11" viewBox="0 0 9 11" aria-hidden>

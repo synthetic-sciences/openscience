@@ -1,5 +1,5 @@
 OpenScience
-Copyright 2025 Synthetic Sciences
+Copyright 2026 Synthetic Sciences
 
 This product includes software developed at Synthetic Sciences.
 Licensed under the Apache License, Version 2.0.
@@ -27,6 +27,3 @@ of any data source they query.
 
 Client-side rendering libraries (Mol*, igv.js, RDKit.js, KaTeX, pdf.js, 3Dmol.js)
 are dependencies declared in package.json and retain their own licenses.
-
-A full third-party dependency license listing can be generated from the package
-manifests; see THIRD_PARTY_LICENSES.md (generated) where present.

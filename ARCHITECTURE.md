@@ -26,14 +26,17 @@ The server binds to `127.0.0.1` and enforces a Host and Origin allowlist. There 
 
 ```
 backend/cli          The CLI, server, agent runtime, tools, and skills
-frontend/workspace         The workspace UI (SolidJS), served by the CLI
+frontend/workspace   The workspace UI (SolidJS), served by the CLI
 frontend/ui          Shared UI components, themes, and fonts
-frontend/docs         The documentation and session-share site (Astro)
+frontend/docs        The documentation and session-share site (Astro)
+frontend/landing     The marketing site (openscience.sh)
 tooling/sdk/js       The TypeScript SDK, generated from the server contract
 tooling/plugin       The plugin runtime (@synsci/plugin)
 tooling/launcher     The `npx synsci` installer
 tooling/repo         Release automation
 tooling/script       Build helper used across packages
+tooling/util         Shared TypeScript utilities (@synsci/util)
+tooling/patches      Dependency patches applied at install time
 ```
 
 ## Backend (`backend/cli`)

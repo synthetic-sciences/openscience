@@ -1,6 +1,6 @@
-- To regenerate the JavaScript SDK, run `./tooling/sdk/js/script/build.ts`.
+- To regenerate the JavaScript SDK, run `./tooling/repo/generate.ts` from the repo root.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
-- The default branch in this repo is `dev`.
+- The default branch in this repo is `main`.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 
 ## Style Guide
