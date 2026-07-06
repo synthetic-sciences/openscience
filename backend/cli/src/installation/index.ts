@@ -190,6 +190,17 @@ export namespace Installation {
   export const CHANNEL = typeof OPENSCIENCE_CHANNEL === "string" ? OPENSCIENCE_CHANNEL : "local"
   export const USER_AGENT = `openscience/${CHANNEL}/${VERSION}/${Flag.OPENSCIENCE_CLIENT}`
 
+  /** OData query for the latest published version of a Chocolatey package.
+   *  The id must match what the CLI actually publishes to Chocolatey
+   *  (`openscience`) — everywhere else in this file already uses it (`choco
+   *  list --limit-output openscience`, `choco upgrade openscience`). A leftover
+   *  pre-rename `synsc` id here queried a non-existent package, so choco users
+   *  could never resolve an upgrade target (`data.d.results[0]` was undefined). */
+  export function chocoLatestVersionUrl(pkg: string = "openscience"): string {
+    const filter = encodeURIComponent(`Id eq '${pkg}' and IsLatestVersion`)
+    return `https://community.chocolatey.org/api/v2/Packages?$filter=${filter}&$select=Version`
+  }
+
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
 
@@ -227,10 +238,7 @@ export namespace Installation {
     }
 
     if (detectedMethod === "choco") {
-      return fetch(
-        "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27synsc%27%20and%20IsLatestVersion&$select=Version",
-        { headers: { Accept: "application/json;odata=verbose" } },
-      )
+      return fetch(chocoLatestVersionUrl(), { headers: { Accept: "application/json;odata=verbose" } })
         .then((res) => {
           if (!res.ok) throw new Error(res.statusText)
           return res.json()
