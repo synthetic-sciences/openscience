@@ -55,6 +55,22 @@ const OAUTH_HTTP_TIMEOUT_MS = 20_000
  *  transient 5xx/network failure, which we retry and never surface as "expired". */
 export class CodexRefreshInvalidError extends Error {}
 
+/**
+ * How the device-code poll loop should treat a non-OK poll response:
+ *   - "pending"   : the user hasn't approved yet (403/404) — keep polling.
+ *   - "transient" : a rate-limit (429) or upstream blip (5xx) — keep polling
+ *                   (the caller backs off on 429).
+ *   - "fail"      : a genuine terminal failure (denied, expired, bad request)
+ *                   — stop polling and surface a clean failure.
+ * Previously the loop failed on ANY status other than 403/404, so a single
+ * transient 429/5xx aborted the whole sign-in.
+ */
+export function classifyDevicePollStatus(status: number): "pending" | "transient" | "fail" {
+  if (status === 403 || status === 404) return "pending"
+  if (status === 429 || status >= 500) return "transient"
+  return "fail"
+}
+
 interface PkceCodes {
   verifier: string
   challenge: string
@@ -637,38 +653,45 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               instructions: "Complete authorization in your browser. This window will close automatically.",
               method: "auto" as const,
               callback: async () => {
-                const tokens = await callbackPromise
-                stopOAuthServer()
-                const accountId = extractAccountId(tokens)
+                // Stop the loopback listener on EVERY terminal outcome (success,
+                // CSRF/denied, or timeout), not just success — otherwise a failed
+                // attempt leaks port 1455 for the life of the process and the next
+                // browser sign-in can't bind it.
+                try {
+                  const tokens = await callbackPromise
+                  const accountId = extractAccountId(tokens)
 
-                // Fire-and-forget: push tokens to thesis backend so the
-                // dashboard + managed-mode proxy can use them. Local login
-                // succeeds regardless of whether this call succeeds.
-                const thesisBase = managedApiBase()
-                if (thkToken) {
-                  await pushTokensToBackend(thesisBase, thkToken, {
-                    access_token: tokens.access_token,
-                    refresh_token: tokens.refresh_token,
-                    expires_in: tokens.expires_in ?? 3600,
-                    account_id: accountId,
-                    id_token_claims: tokens.id_token
-                      ? (parseJwtClaims(tokens.id_token) as Record<string, unknown> | undefined)
-                      : undefined,
-                  })
-                  // Re-sync after backend now knows about the new codex
-                  // credential, so `openai-codex` shows up in the local
-                  // provider list without a separate `openscience connect sync`.
-                  await OpenScience.syncServices?.().catch((e: unknown) => {
-                    log.warn("post-codex-login sync failed", { error: String(e) })
-                  })
-                }
+                  // Fire-and-forget: push tokens to thesis backend so the
+                  // dashboard + managed-mode proxy can use them. Local login
+                  // succeeds regardless of whether this call succeeds.
+                  const thesisBase = managedApiBase()
+                  if (thkToken) {
+                    await pushTokensToBackend(thesisBase, thkToken, {
+                      access_token: tokens.access_token,
+                      refresh_token: tokens.refresh_token,
+                      expires_in: tokens.expires_in ?? 3600,
+                      account_id: accountId,
+                      id_token_claims: tokens.id_token
+                        ? (parseJwtClaims(tokens.id_token) as Record<string, unknown> | undefined)
+                        : undefined,
+                    })
+                    // Re-sync after backend now knows about the new codex
+                    // credential, so `openai-codex` shows up in the local
+                    // provider list without a separate `openscience connect sync`.
+                    await OpenScience.syncServices?.().catch((e: unknown) => {
+                      log.warn("post-codex-login sync failed", { error: String(e) })
+                    })
+                  }
 
-                return {
-                  type: "success" as const,
-                  refresh: tokens.refresh_token,
-                  access: tokens.access_token,
-                  expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                  accountId,
+                  return {
+                    type: "success" as const,
+                    refresh: tokens.refresh_token,
+                    access: tokens.access_token,
+                    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                    accountId,
+                  }
+                } finally {
+                  stopOAuthServer()
                 }
               },
             }
@@ -685,6 +708,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                 "User-Agent": `openscience/${Installation.VERSION}`,
               },
               body: JSON.stringify({ client_id: CLIENT_ID }),
+              signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
             })
 
             if (!deviceResponse.ok) throw new Error("Failed to initiate device authorization")
@@ -707,18 +731,30 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               method: "auto" as const,
               async callback() {
                 const deadline = Date.now() + DEVICE_TIMEOUT_MS
+                // Mutable so a rate-limit (429) can back the poll cadence off.
+                let pollInterval = interval
                 while (Date.now() < deadline) {
-                  const response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      "User-Agent": `openscience/${Installation.VERSION}`,
-                    },
-                    body: JSON.stringify({
-                      device_auth_id: deviceData.device_auth_id,
-                      user_code: deviceData.user_code,
-                    }),
-                  })
+                  let response: Response
+                  try {
+                    response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "User-Agent": `openscience/${Installation.VERSION}`,
+                      },
+                      body: JSON.stringify({
+                        device_auth_id: deviceData.device_auth_id,
+                        user_code: deviceData.user_code,
+                      }),
+                      signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
+                    })
+                  } catch {
+                    // A network blip or a single hung poll timing out is transient —
+                    // keep polling until the overall DEVICE_TIMEOUT_MS deadline
+                    // instead of aborting the whole login on one bad socket.
+                    await Bun.sleep(pollInterval + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                    continue
+                  }
 
                   if (response.ok) {
                     const data = (await response.json()) as {
@@ -736,6 +772,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                         client_id: CLIENT_ID,
                         code_verifier: data.code_verifier,
                       }).toString(),
+                      signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
                     })
 
                     if (!tokenResponse.ok) {
@@ -771,11 +808,17 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                     }
                   }
 
-                  if (response.status !== 403 && response.status !== 404) {
+                  // Keep polling while the authorization is pending or a
+                  // transient rate-limit/upstream blip is in flight; only a
+                  // genuine terminal status ends the login.
+                  if (classifyDevicePollStatus(response.status) === "fail") {
                     return { type: "failed" as const }
                   }
+                  if (response.status === 429) {
+                    pollInterval = Math.min(pollInterval * 2, 30_000)
+                  }
 
-                  await Bun.sleep(interval + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                  await Bun.sleep(pollInterval + OAUTH_POLLING_SAFETY_MARGIN_MS)
                 }
                 // Deadline hit without approval — surface a clean failure rather
                 // than polling forever.
