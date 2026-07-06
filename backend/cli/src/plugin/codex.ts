@@ -43,6 +43,17 @@ const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+// Refresh a bit BEFORE expiry so a request never races the token going stale.
+const REFRESH_MARGIN_MS = 60_000
+// Cap the device-code poll loop so a never-approved authorization can't hang forever.
+const DEVICE_TIMEOUT_MS = 10 * 60 * 1000
+// Bound the OAuth token HTTP calls so a hung auth.openai.com never wedges login.
+const OAUTH_HTTP_TIMEOUT_MS = 20_000
+
+/** Thrown when a refresh is rejected with a 4xx — the refresh token itself is
+ *  invalid (revoked or rotated away), so the user must reconnect. Distinct from a
+ *  transient 5xx/network failure, which we retry and never surface as "expired". */
+class CodexRefreshInvalidError extends Error {}
 
 interface PkceCodes {
   verifier: string
@@ -150,27 +161,46 @@ async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: Pk
       client_id: CLIENT_ID,
       code_verifier: pkce.verifier,
     }).toString(),
+    signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
   })
   if (!response.ok) {
-    throw new Error(`Token exchange failed: ${response.status}`)
+    const detail = await response.text().catch(() => "")
+    throw new Error(`Token exchange failed (HTTP ${response.status})${detail ? `: ${detail.slice(0, 200)}` : ""}`)
   }
   return response.json()
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
-  const response = await fetch(`${ISSUER}/oauth/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: CLIENT_ID,
-    }).toString(),
-  })
-  if (!response.ok) {
-    throw new Error(`Token refresh failed: ${response.status}`)
+  let lastError: Error | undefined
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let response: Response
+    try {
+      response = await fetch(`${ISSUER}/oauth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+          client_id: CLIENT_ID,
+        }).toString(),
+        signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
+      })
+    } catch (e) {
+      // Network/timeout — transient. Back off and retry.
+      lastError = e instanceof Error ? e : new Error(String(e))
+      await Bun.sleep(500 * (attempt + 1))
+      continue
+    }
+    if (response.ok) return response.json()
+    // 4xx = the refresh token is bad (revoked/rotated) — retrying won't help and
+    // the user must reconnect. 5xx = transient — retry with backoff.
+    if (response.status >= 400 && response.status < 500) {
+      throw new CodexRefreshInvalidError(`Token refresh rejected (HTTP ${response.status})`)
+    }
+    lastError = new Error(`Token refresh failed: HTTP ${response.status}`)
+    await Bun.sleep(500 * (attempt + 1))
   }
-  return response.json()
+  throw lastError ?? new Error("Token refresh failed")
 }
 
 const HTML_SUCCESS = `<!doctype html>
@@ -428,8 +458,9 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             // Cast to include accountId field
             const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
 
-            // Check if token needs refresh
-            if (!currentAuth.access || currentAuth.expires < Date.now()) {
+            // Check if token needs refresh (proactively, before it actually
+            // expires, so an in-flight request never races the token going stale).
+            if (!currentAuth.access || currentAuth.expires < Date.now() + REFRESH_MARGIN_MS) {
               log.info("refreshing codex access token")
               let tokens: TokenResponse | undefined
               try {
@@ -453,7 +484,11 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                   }
                   if (!tokens) {
                     log.warn("codex token refresh failed", { error: String(e) })
-                    throw new Error("Codex sign-in expired. Reconnect it with `openscience keys signin`.")
+                    if (e instanceof CodexRefreshInvalidError)
+                      throw new Error("Codex sign-in expired. Reconnect it with `openscience keys signin`.")
+                    throw new Error(
+                      "Codex is temporarily unavailable (couldn't refresh the access token). Please retry in a moment.",
+                    )
                   }
                 }
               }
@@ -576,7 +611,16 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           label: "Codex — Sign in with ChatGPT (browser)",
           type: "oauth",
           authorize: async () => {
-            const { redirectUri } = await startOAuthServer()
+            let redirectUri: string
+            try {
+              ;({ redirectUri } = await startOAuthServer())
+            } catch (e) {
+              throw new Error(
+                `Couldn't start the browser sign-in listener on port ${OAUTH_PORT} ` +
+                  `(${e instanceof Error ? e.message : String(e)}). Free the port, or run ` +
+                  "`openscience keys signin` and choose the device-code method.",
+              )
+            }
             const pkce = await generatePKCE()
             const state = generateState()
             const authUrl = buildAuthorizeUrl(redirectUri, pkce, state)
@@ -662,7 +706,8 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               instructions: `Enter code: ${deviceData.user_code}`,
               method: "auto" as const,
               async callback() {
-                while (true) {
+                const deadline = Date.now() + DEVICE_TIMEOUT_MS
+                while (Date.now() < deadline) {
                   const response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
                     method: "POST",
                     headers: {
@@ -732,6 +777,9 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
 
                   await Bun.sleep(interval + OAUTH_POLLING_SAFETY_MARGIN_MS)
                 }
+                // Deadline hit without approval — surface a clean failure rather
+                // than polling forever.
+                return { type: "failed" as const }
               },
             }
           },
