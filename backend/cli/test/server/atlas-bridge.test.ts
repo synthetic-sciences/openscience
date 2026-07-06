@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { classifyInitFailure, computeDedupeKey, initProjectDetailed } from "../../src/server/routes/atlas-bridge"
+import {
+  classifyInitFailure,
+  computeDedupeKey,
+  initProjectDetailed,
+  pinMatchesKey,
+} from "../../src/server/routes/atlas-bridge"
 
 describe("computeDedupeKey", () => {
   test("derives repo:<host>/<owner>/<name> from a GitHub https remote", () => {
@@ -69,6 +74,27 @@ describe("classifyInitFailure", () => {
   test("non-JSON bodies fall back to trimmed raw text", () => {
     expect(classifyInitFailure(500, "  Bad Gateway  ").message).toBe("Bad Gateway")
     expect(classifyInitFailure(500, "").message).toBeUndefined()
+  })
+})
+
+describe("pinMatchesKey", () => {
+  test("honours a legacy pin with no dedupe key (back-compat)", () => {
+    expect(pinMatchesKey({ project_id: "p1" }, "repo:github.com/o/n")).toBe(true)
+  })
+
+  test("trusts a pin whose key matches the repo's computed key", () => {
+    const key = "repo:github.com/o/n"
+    expect(pinMatchesKey({ project_id: "p1", dedupe_key: key }, key)).toBe(true)
+  })
+
+  test("rejects a pin whose key belongs to a different repo identity", () => {
+    const pin = { project_id: "p1", dedupe_key: "repo:github.com/o/OLD" }
+    expect(pinMatchesKey(pin, "repo:github.com/o/NEW")).toBe(false)
+  })
+
+  test("rejects a local-folder pin that no longer matches the resolved key", () => {
+    const pin = { project_id: "p1", dedupe_key: "local-folder:/old/path" }
+    expect(pinMatchesKey(pin, "local-folder:/new/path")).toBe(false)
   })
 })
 
