@@ -28,6 +28,8 @@ import { FONT_MONO, FONT_SANS, FONT_SERIF, sectionTitle } from "@/styles/tokens"
 import { uiStore } from "@/thesis/store/ui"
 import { useGlobalKeys } from "@/thesis/useGlobalKeys"
 import { useDialog } from "@synsci/ui/context/dialog"
+import { useModels } from "@/context/models"
+import { openSetupDialog } from "@/thesis/SetupDialog"
 import { confirmDialog } from "@/thesis/dialogs"
 import { DialogSettings } from "@/components/dialog-settings"
 import { DisconnectedPanel } from "@/thesis/DisconnectedPanel"
@@ -956,6 +958,11 @@ function SessionRow(props: {
 }
 
 function ChatWelcome(): JSX.Element {
+  const models = useModels()
+  const dialog = useDialog()
+  // No connected provider yields any model → the composer's model() stays
+  // undefined. Surface a real setup CTA instead of leading into that dead-end.
+  const noModel = () => models.list().length === 0
   return (
     <div
       class="thesis-fade-in"
@@ -987,6 +994,43 @@ function ChatWelcome(): JSX.Element {
           _
         </span>
       </h2>
+
+      <Show when={noModel()}>
+        <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+          <p
+            style={{
+              margin: 0,
+              "font-family": FONT_SANS,
+              "font-size": "13px",
+              color: "var(--color-text-faint)",
+              "line-height": 1.5,
+            }}
+          >
+            No model is connected yet — set one up to start, with managed credits or your own key.
+          </p>
+          <button
+            type="button"
+            onClick={() => openSetupDialog(dialog)}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              "align-self": "flex-start",
+              display: "inline-flex",
+              "align-items": "center",
+              gap: "6px",
+              height: "34px",
+              padding: "0 16px",
+              "border-radius": "4px",
+              background: "var(--color-accent)",
+              color: "var(--color-on-accent)",
+              "font-family": FONT_MONO,
+              "font-size": "12px",
+            }}
+          >
+            Set up models →
+          </button>
+        </div>
+      </Show>
 
       <div style={{ display: "flex", "flex-wrap": "wrap", gap: "6px" }}>
         <For each={WELCOME_MODES}>

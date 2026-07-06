@@ -341,103 +341,154 @@ export function FileView(props: {
           </div>
         }
       >
-        <div
-          class="thesis-scroll"
-          style={{
-            flex: 1,
-            "min-height": 0,
-            overflow: "auto",
-            background: "var(--color-bg-subtle)",
-          }}
-        >
-          <Switch>
-            {/* markdown */}
-            <Match when={kind() === "markdown" && !showSource()}>
-              <div style={{ padding: "22px 26px", "max-width": "820px", margin: "0 auto" }}>
-                <Markdown class="thesis-md" text={draft()} />
-              </div>
-            </Match>
-
-            {/* pdf */}
-            <Match when={kind() === "pdf"}>
-              <div style={{ padding: "14px" }}>
-                <PdfViewer kind="pdf" data={{ base64: b64(), maxPages: 40 }} height={100000} />
-              </div>
-            </Match>
-
-            {/* image */}
-            <Match when={kind() === "image"}>
-              <div style={{ display: "grid", "place-items": "center", padding: "22px", "min-height": "100%" }}>
-                <img
-                  src={dataUrl()}
-                  alt={name()}
-                  style={{ "max-width": "100%", "max-height": "100%", "object-fit": "contain", "border-radius": "4px" }}
-                />
-              </div>
-            </Match>
-
-            {/* binary */}
-            <Match when={kind() === "binary"}>
+        <Show
+          when={!file.error}
+          fallback={
+            <div
+              style={{
+                flex: 1,
+                "min-height": 0,
+                display: "flex",
+                "flex-direction": "column",
+                "align-items": "center",
+                "justify-content": "center",
+                gap: "10px",
+                padding: "40px 24px",
+                "text-align": "center",
+                background: "var(--color-bg-subtle)",
+              }}
+            >
+              <IconFile size={20} strokeWidth={1.4} />
               <div
                 style={{
-                  display: "grid",
-                  "place-items": "center",
-                  padding: "40px 24px",
-                  "min-height": "100%",
-                  "text-align": "center",
+                  "font-family": FONT_SANS,
+                  "font-size": "13px",
+                  "font-weight": 500,
+                  color: "var(--color-text)",
                 }}
               >
+                couldn't open this file
+              </div>
+              <div
+                style={{
+                  "font-family": FONT_SANS,
+                  "font-size": "12px",
+                  color: "var(--color-text-faint)",
+                  "line-height": 1.5,
+                  "max-width": "340px",
+                }}
+              >
+                {file.error instanceof Error ? file.error.message : String(file.error)}
+              </div>
+              <button type="button" onClick={() => setRefreshKey((k) => k + 1)} style={retryBtn()}>
+                retry
+              </button>
+            </div>
+          }
+        >
+          <div
+            class="thesis-scroll"
+            style={{
+              flex: 1,
+              "min-height": 0,
+              overflow: "auto",
+              background: "var(--color-bg-subtle)",
+            }}
+          >
+            <Switch>
+              {/* markdown */}
+              <Match when={kind() === "markdown" && !showSource()}>
+                <div style={{ padding: "22px 26px", "max-width": "820px", margin: "0 auto" }}>
+                  <Markdown class="thesis-md" text={draft()} />
+                </div>
+              </Match>
+
+              {/* pdf */}
+              <Match when={kind() === "pdf"}>
+                <div style={{ padding: "14px" }}>
+                  <PdfViewer kind="pdf" data={{ base64: b64(), maxPages: 40 }} height={100000} />
+                </div>
+              </Match>
+
+              {/* image */}
+              <Match when={kind() === "image"}>
+                <div style={{ display: "grid", "place-items": "center", padding: "22px", "min-height": "100%" }}>
+                  <img
+                    src={dataUrl()}
+                    alt={name()}
+                    style={{
+                      "max-width": "100%",
+                      "max-height": "100%",
+                      "object-fit": "contain",
+                      "border-radius": "4px",
+                    }}
+                  />
+                </div>
+              </Match>
+
+              {/* binary */}
+              <Match when={kind() === "binary"}>
                 <div
                   style={{
-                    "font-family": FONT_SANS,
-                    "font-size": "13px",
-                    color: "var(--color-text-muted)",
-                    "line-height": 1.6,
+                    display: "grid",
+                    "place-items": "center",
+                    padding: "40px 24px",
+                    "min-height": "100%",
+                    "text-align": "center",
                   }}
                 >
-                  Binary file — no inline preview.
-                  <br />
-                  Use the download button above to open it.
+                  <div
+                    style={{
+                      "font-family": FONT_SANS,
+                      "font-size": "13px",
+                      color: "var(--color-text-muted)",
+                      "line-height": 1.6,
+                    }}
+                  >
+                    Binary file — no inline preview.
+                    <br />
+                    Use the download button above to open it.
+                  </div>
                 </div>
-              </div>
-            </Match>
+              </Match>
 
-            {/* code / text — editable source, or highlighted read view */}
-            <Match when={kind() === "code" && showSource()}>
-              <textarea
-                value={draft()}
-                spellcheck={false}
-                onInput={(ev) => setDraft(ev.currentTarget.value)}
-                class="thesis-scroll"
-                style={{
-                  all: "unset",
-                  "box-sizing": "border-box",
-                  display: "block",
-                  width: "100%",
-                  "min-height": "100%",
-                  padding: "16px 18px",
-                  "font-family": FONT_CODE,
-                  "font-size": "12px",
-                  "line-height": 1.65,
-                  color: "var(--color-text)",
-                  "white-space": "pre",
-                  "tab-size": 2,
-                }}
-              />
-            </Match>
-            <Match when={kind() === "code" || (kind() === "markdown" && showSource())}>
-              <div style={{ padding: "14px 16px" }}>
-                <Markdown
-                  class="thesis-md"
-                  text={fence(
-                    showSource() && kind() !== "code" ? langFor(kind(), e()) : (LANG[e()] ?? "text"),
-                    draft(),
-                  )}
+              {/* code / text — editable source, or highlighted read view */}
+              <Match when={kind() === "code" && showSource()}>
+                <textarea
+                  value={draft()}
+                  spellcheck={false}
+                  onInput={(ev) => setDraft(ev.currentTarget.value)}
+                  class="thesis-scroll"
+                  style={{
+                    all: "unset",
+                    "box-sizing": "border-box",
+                    display: "block",
+                    width: "100%",
+                    "min-height": "100%",
+                    padding: "16px 18px",
+                    "font-family": FONT_CODE,
+                    "font-size": "12px",
+                    "line-height": 1.65,
+                    color: "var(--color-text)",
+                    "white-space": "pre",
+                    "tab-size": 2,
+                  }}
                 />
-              </div>
-            </Match>
-          </Switch>
-        </div>
+              </Match>
+              <Match when={kind() === "code" || (kind() === "markdown" && showSource())}>
+                <div style={{ padding: "14px 16px" }}>
+                  <Markdown
+                    class="thesis-md"
+                    text={fence(
+                      showSource() && kind() !== "code" ? langFor(kind(), e()) : (LANG[e()] ?? "text"),
+                      draft(),
+                    )}
+                  />
+                </div>
+              </Match>
+            </Switch>
+          </div>
+        </Show>
       </Show>
     </div>
   )
@@ -528,6 +579,20 @@ function iconBtn(active = false): JSX.CSSProperties {
     background: active ? "var(--color-accent-subtle)" : "transparent",
     "flex-shrink": 0,
     transition: "background 120ms ease, color 120ms ease",
+  } as JSX.CSSProperties
+}
+
+function retryBtn(): JSX.CSSProperties {
+  return {
+    all: "unset",
+    cursor: "pointer",
+    "margin-top": "2px",
+    padding: "5px 12px",
+    "border-radius": "4px",
+    border: "1px solid var(--color-border)",
+    "font-family": FONT_MONO,
+    "font-size": "11px",
+    color: "var(--color-text)",
   } as JSX.CSSProperties
 }
 

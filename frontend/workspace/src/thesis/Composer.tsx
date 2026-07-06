@@ -22,6 +22,8 @@ import { URLS } from "@/config/urls"
 import { Identifier } from "@/utils/id"
 import { useProviders, popularProviders } from "@/hooks/use-providers"
 import { useGlobalSync } from "@/context/global-sync"
+import { useDialog } from "@synsci/ui/context/dialog"
+import { openSetupDialog } from "@/thesis/SetupDialog"
 import { resolveModelSource, type ModelSource } from "@/utils/model-cost"
 
 const BYOK_URL = URLS.dashboard
@@ -183,6 +185,7 @@ export function Composer(): JSX.Element {
   const models = useModels()
   const providers = useProviders()
   const globalSync = useGlobalSync()
+  const dialog = useDialog()
 
   const [text, setText] = createSignal("")
   const [model, setModel] = createSignal<ModelKey | undefined>(undefined)
@@ -722,7 +725,9 @@ export function Composer(): JSX.Element {
     if ((!trimmed && atts.length === 0) || submitting()) return
     const chosen = model()
     if (!chosen) {
-      toast.error("no model selected", `Connect a provider key at ${BYOK_URL} to enable a model.`)
+      // No usable model yet — open the in-app setup flow instead of a transient
+      // toast pointing at an external URL.
+      openSetupDialog(dialog)
       return
     }
     const payload: QueuedPrompt = {
@@ -1156,14 +1161,22 @@ export function Composer(): JSX.Element {
           <div style={{ position: "relative" }}>
             <button
               ref={modelBtnRef}
-              onClick={() => setModelOpen((v) => !v)}
+              onClick={() => {
+                // With no usable model, the picker would be empty — send the
+                // user to setup instead of opening a dead dropdown.
+                if (!model()) {
+                  openSetupDialog(dialog)
+                  return
+                }
+                setModelOpen((v) => !v)
+              }}
               type="button"
               title={
                 selectedLabel()
                   ? `${providerLabel(selectedLabel()!.providerID)} · ${selectedLabel()!.name}${
                       selectedSource() ? ` — ${selectedSource()!.title}` : ""
                     }`
-                  : "pick a model"
+                  : "set up models"
               }
               style={{
                 all: "unset",
@@ -1187,7 +1200,7 @@ export function Composer(): JSX.Element {
             >
               <Show
                 when={selectedLabel()}
-                fallback={<span style={{ color: "var(--color-text-faint)" }}>connect a model</span>}
+                fallback={<span style={{ color: "var(--color-text-faint)" }}>set up models</span>}
               >
                 <Show when={selectedSource()}>
                   {(dot) => (

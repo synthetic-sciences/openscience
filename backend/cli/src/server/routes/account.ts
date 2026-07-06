@@ -147,6 +147,38 @@ export const AccountRoutes = lazy(() =>
       async (c) => c.json(await OpenScience.setBillingMode(c.req.valid("json").mode)),
     )
     .post(
+      "/login-key",
+      describeRoute({
+        summary: "Sign in with an Atlas API key",
+        operationId: "account.loginKey",
+        responses: {
+          200: {
+            description: "Login result",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ ok: z.boolean(), error: z.string().optional() })),
+              },
+            },
+          },
+        },
+      }),
+      validator("json", z.object({ key: z.string() })),
+      async (c) => {
+        // Browser-side Atlas sign-in: validate + persist the pasted `thk_` key,
+        // then resync managed services and rebuild the provider cache so managed
+        // models light up without a terminal. A rejected key is a 200
+        // { ok:false } (an expected user error, not a server fault).
+        try {
+          await OpenScience.loginWithKey(c.req.valid("json").key.trim())
+          await OpenScience.syncServices().catch(() => {})
+          Provider.invalidate()
+          return c.json({ ok: true })
+        } catch (err) {
+          return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) })
+        }
+      },
+    )
+    .post(
       "/logout",
       describeRoute({
         summary: "Logout account",

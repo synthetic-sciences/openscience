@@ -442,6 +442,23 @@ export function FileExplorer(): JSX.Element {
                   >
                     {permissionError()}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setRefreshKey((k) => k + 1)}
+                    style={{
+                      all: "unset",
+                      cursor: "pointer",
+                      "margin-top": "2px",
+                      padding: "5px 12px",
+                      "border-radius": "4px",
+                      border: "1px solid var(--color-border)",
+                      "font-family": FONT_MONO,
+                      "font-size": "11px",
+                      color: "var(--color-text)",
+                    }}
+                  >
+                    retry
+                  </button>
                 </div>
               }
             >

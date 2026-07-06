@@ -65,10 +65,12 @@ export function FolderPicker(props: PickerProps): JSX.Element {
   const [cwd, setCwd] = createSignal(home())
   const [filter, setFilter] = createSignal("")
   const [pathInput, setPathInput] = createSignal("")
+  const [error, setError] = createSignal<string>()
 
   const [entries, { refetch }] = createResource(
     () => cwd(),
     async (dir): Promise<FolderEntry[]> => {
+      setError(undefined)
       try {
         const res: any = await sdk.client.file.list({ directory: dir, path: "." } as any)
         const data = res?.data ?? res
@@ -77,7 +79,10 @@ export function FolderPicker(props: PickerProps): JSX.Element {
           .filter((n: any) => n?.type === "directory" && !n.name.startsWith(".") && !n.ignored)
           .map((n: any) => ({ name: n.name as string, absolute: n.absolute as string }))
           .sort((a, b) => a.name.localeCompare(b.name))
-      } catch {
+      } catch (err) {
+        // Surface the failure instead of masking it as an empty folder — an
+        // empty list and a failed listing are very different states.
+        setError(err instanceof Error ? err.message : String(err))
         return []
       }
     },
@@ -461,40 +466,81 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               when={filtered().length > 0}
               fallback={
                 <Show when={!entries.loading}>
-                  <div
-                    class="thesis-fade-in"
-                    style={{
-                      padding: "32px 24px",
-                      "text-align": "center",
-                      "font-family": FONT_SANS,
-                      "font-size": "12px",
-                      color: "var(--color-text-faint)",
-                      display: "flex",
-                      "flex-direction": "column",
-                      gap: "8px",
-                    }}
-                  >
-                    <Show when={(entries() ?? []).length === 0} fallback={<span>nothing matches the filter</span>}>
-                      <Show
-                        when={
-                          /\/Desktop$|\/Documents$|\/Downloads$/.test(cwd()) ||
-                          cwd().endsWith("/Desktop") ||
-                          cwd().endsWith("/Documents") ||
-                          cwd().endsWith("/Downloads")
-                        }
-                        fallback={<span>this folder is empty · pick it with the button below</span>}
+                  <Show
+                    when={!error()}
+                    fallback={
+                      <div
+                        class="thesis-fade-in"
+                        style={{
+                          padding: "32px 24px",
+                          "text-align": "center",
+                          "font-family": FONT_SANS,
+                          "font-size": "12px",
+                          color: "var(--color-error)",
+                          display: "flex",
+                          "flex-direction": "column",
+                          "align-items": "center",
+                          gap: "10px",
+                        }}
                       >
-                        <span style={{ color: "var(--color-text)" }}>
-                          macOS is blocking the listing of <code>{cwd().split("/").pop()}</code>
+                        <span>couldn't read this folder</span>
+                        <span style={{ color: "var(--color-text-faint)", "max-width": "360px", "line-height": 1.5 }}>
+                          {error()}
                         </span>
-                        <span style={{ "max-width": "360px", "line-height": 1.5 }}>
-                          To list this folder we'd need Full Disk Access for the
-                          <code>openscience</code> binary. For now, paste the absolute path of the folder you want into
-                          the <em>go to</em> bar above — OpenScience can still open any path you give it.
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void refetch()}
+                          style={{
+                            all: "unset",
+                            cursor: "pointer",
+                            padding: "5px 12px",
+                            "border-radius": "4px",
+                            border: "1px solid var(--color-border)",
+                            "font-family": FONT_MONO,
+                            "font-size": "11px",
+                            color: "var(--color-text)",
+                          }}
+                        >
+                          retry
+                        </button>
+                      </div>
+                    }
+                  >
+                    <div
+                      class="thesis-fade-in"
+                      style={{
+                        padding: "32px 24px",
+                        "text-align": "center",
+                        "font-family": FONT_SANS,
+                        "font-size": "12px",
+                        color: "var(--color-text-faint)",
+                        display: "flex",
+                        "flex-direction": "column",
+                        gap: "8px",
+                      }}
+                    >
+                      <Show when={(entries() ?? []).length === 0} fallback={<span>nothing matches the filter</span>}>
+                        <Show
+                          when={
+                            /\/Desktop$|\/Documents$|\/Downloads$/.test(cwd()) ||
+                            cwd().endsWith("/Desktop") ||
+                            cwd().endsWith("/Documents") ||
+                            cwd().endsWith("/Downloads")
+                          }
+                          fallback={<span>this folder is empty · pick it with the button below</span>}
+                        >
+                          <span style={{ color: "var(--color-text)" }}>
+                            macOS is blocking the listing of <code>{cwd().split("/").pop()}</code>
+                          </span>
+                          <span style={{ "max-width": "360px", "line-height": 1.5 }}>
+                            To list this folder we'd need Full Disk Access for the
+                            <code>openscience</code> binary. For now, paste the absolute path of the folder you want
+                            into the <em>go to</em> bar above — OpenScience can still open any path you give it.
+                          </span>
+                        </Show>
                       </Show>
-                    </Show>
-                  </div>
+                    </div>
+                  </Show>
                 </Show>
               }
             >
