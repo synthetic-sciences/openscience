@@ -114,7 +114,9 @@ async function onboardManaged(): Promise<void> {
 }
 
 async function onboardByok(): Promise<void> {
-  prompts.log.info("Bring your own key — pick a provider next. Keys stay on this machine and are always free.")
+  prompts.log.info(
+    "Bring your own key or sign in with a subscription (ChatGPT/Codex, Claude Max) — pick next. Both stay on this machine and are free.",
+  )
   // Reuse the proven provider picker + key/OAuth flow. It also handles
   // Claude Max / ChatGPT / Copilot sign-in via the provider auth plugins.
   await AuthLoginCommand.handler({} as never)

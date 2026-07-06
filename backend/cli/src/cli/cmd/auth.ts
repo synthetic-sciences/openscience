@@ -38,15 +38,23 @@ async function handlePluginAuth(
 
   let index = candidates[0].originalIndex
   if (candidates.length > 1) {
-    const method = await prompts.select({
-      message: "Login method",
-      options: candidates.map((x) => ({
-        label: x.method.label,
-        value: x.originalIndex.toString(),
-      })),
-    })
-    if (prompts.isCancel(method)) throw new UI.CancelledError()
-    index = parseInt(method)
+    // Non-interactive shell (CI/piped): can't render a select, and a browser
+    // loopback flow won't work either — auto-pick a device-code method if one is
+    // offered so headless sign-in isn't a dead end.
+    if (!process.stdin.isTTY) {
+      const device = candidates.find((x) => /device/i.test(x.method.label))
+      index = (device ?? candidates[0]).originalIndex
+    } else {
+      const method = await prompts.select({
+        message: "Login method",
+        options: candidates.map((x) => ({
+          label: x.method.label,
+          value: x.originalIndex.toString(),
+        })),
+      })
+      if (prompts.isCancel(method)) throw new UI.CancelledError()
+      index = parseInt(method)
+    }
   }
   const method = plugin.auth.methods[index]
 
@@ -78,7 +86,15 @@ async function handlePluginAuth(
   }
 
   if (method.type === "oauth") {
-    const authorize = await method.authorize(inputs)
+    let authorize: Awaited<ReturnType<typeof method.authorize>>
+    try {
+      authorize = await method.authorize(inputs)
+    } catch (e) {
+      // e.g. the OAuth listener port is in use — surface a clean line, not a stack.
+      prompts.log.error(e instanceof Error ? e.message : "Couldn't start sign-in.")
+      prompts.outro("Not signed in")
+      return true
+    }
 
     if (authorize.url) {
       prompts.log.info("Go to: " + authorize.url)
@@ -90,29 +106,36 @@ async function handlePluginAuth(
       }
       const spinner = prompts.spinner()
       spinner.start("Waiting for authorization...")
-      const result = await authorize.callback()
-      if (result.type === "failed") {
-        spinner.stop("Failed to authorize", 1)
-      }
-      if (result.type === "success") {
-        const saveProvider = result.provider ?? provider
-        if ("refresh" in result) {
-          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
-          })
+      try {
+        const result = await authorize.callback()
+        if (result.type === "failed") {
+          spinner.stop("Sign-in wasn't completed", 1)
+          prompts.log.info("Declined, timed out, or cancelled. Retry with `openscience keys signin`.")
+        } else if (result.type === "success") {
+          const saveProvider = result.provider ?? provider
+          if ("refresh" in result) {
+            const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+            await Auth.set(saveProvider, {
+              type: "oauth",
+              refresh,
+              access,
+              expires,
+              ...extraFields,
+            })
+          }
+          if ("key" in result) {
+            await Auth.set(saveProvider, {
+              type: "api",
+              key: result.key,
+            })
+          }
+          spinner.stop("Login successful")
         }
-        if ("key" in result) {
-          await Auth.set(saveProvider, {
-            type: "api",
-            key: result.key,
-          })
-        }
-        spinner.stop("Login successful")
+      } catch (e) {
+        // A thrown callback (denied consent, CSRF, timeout, network) must not
+        // leave the spinner spinning or bubble a raw stack to the user.
+        spinner.stop("Sign-in failed", 1)
+        prompts.log.error(e instanceof Error ? e.message : "Unknown error")
       }
     }
 
@@ -302,6 +325,14 @@ export const AuthLoginCommand = cmd({
           message: "Select provider",
           maxItems: 8,
           options: [
+            // Codex is its own synthesized provider (openai-codex), so it isn't in
+            // the models.dev list — surface it explicitly at the top so signing in
+            // with a ChatGPT subscription is a first-class, discoverable choice.
+            {
+              value: "openai-codex",
+              label: "Sign in with ChatGPT (Codex)",
+              hint: "use your ChatGPT Plus/Pro/Business subscription — no API key",
+            },
             ...pipe(
               providers,
               values(),
@@ -315,7 +346,7 @@ export const AuthLoginCommand = cmd({
                 hint: {
                   synsci: "Atlas — recommended",
                   anthropic: "Claude Max or API key",
-                  openai: "Codex via ChatGPT Plus/Pro/Business, or API key",
+                  openai: "API key (to sign in with Codex/ChatGPT, use the option above)",
                 }[x.id],
               })),
             ),
