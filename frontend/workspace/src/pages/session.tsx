@@ -782,7 +782,7 @@ function SessionsSidebar(props: {
             gap: "6px",
             padding: "7px 12px",
             "border-radius": "4px",
-            background: "linear-gradient(180deg, var(--color-surface-solid), var(--color-bg-subtle))",
+            background: "var(--color-surface-solid)",
             border: "1px solid var(--color-border-strong)",
             "font-family": FONT_MONO,
             "font-size": "12px",
@@ -791,15 +791,9 @@ function SessionsSidebar(props: {
             transition: "all 120ms ease",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-bg-elevated)")}
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.background =
-              "linear-gradient(180deg, var(--color-surface-solid), var(--color-bg-subtle))")
-          }
+          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-surface-solid)")}
           onFocusIn={(e) => (e.currentTarget.style.background = "var(--color-bg-elevated)")}
-          onFocusOut={(e) =>
-            (e.currentTarget.style.background =
-              "linear-gradient(180deg, var(--color-surface-solid), var(--color-bg-subtle))")
-          }
+          onFocusOut={(e) => (e.currentTarget.style.background = "var(--color-surface-solid)")}
         >
           <IconPlus size={11} strokeWidth={2} />
           {props.creating ? "creating…" : "new session"}
