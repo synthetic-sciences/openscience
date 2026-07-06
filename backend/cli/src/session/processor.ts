@@ -60,12 +60,15 @@ export namespace SessionProcessor {
             // account — an empty wallet must never block or gate them.
             const credentialSource = await resolveCredentialSource(input.model.providerID, input.model.id)
 
-            // Managed spend is ON but this call resolved to a non-managed credential —
-            // the Atlas wallet isn't wired to this provider. Fail clearly instead of
-            // silently running on a BYOK/OAuth credential the user didn't intend.
-            if ((await llmBillingMode()) === "managed" && credentialSource !== "managed") {
+            // Managed spend is ON but this call resolved to the user's OWN api
+            // key (BYOK) — the wallet isn't wired to it, and silently spending a
+            // BYOK key the user set for a different mode is wrong. First-party
+            // OAuth subscriptions (Sign in with ChatGPT/Codex, Claude Pro/Max,
+            // Copilot) are the user's explicit sign-in and run free of the
+            // wallet, so they are NOT gated here.
+            if ((await llmBillingMode()) === "managed" && credentialSource === "byok") {
               throw new Error(
-                `Managed LLM spend is on, but ${input.model.providerID} isn't connected to your Atlas wallet. Sign in with \`openscience login\` and run \`openscience connect sync\`, or switch LLM spend to BYOK in Settings → Spend.`,
+                `Managed LLM spend is on, but ${input.model.providerID} isn't available through your Atlas wallet — it resolved to a non-managed key. Switch LLM spend to BYOK in Settings → Spend to use your own key, or pick a managed model.`,
               )
             }
 
