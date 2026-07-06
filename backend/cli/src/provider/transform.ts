@@ -778,7 +778,16 @@ export namespace ProviderTransform {
         result["textVerbosity"] = "low"
       }
 
-      if (input.model.providerID.startsWith("synsci")) {
+      // Managed OpenAI models carry providerID "openai" (post-rebrand), not
+      // "synsci" — but they route through the Atlas proxy baseURL. Reasoning
+      // summaries + encrypted content have to be requested on that path too,
+      // otherwise gpt-5.x streams reasoning *items* (start/end fire) with zero
+      // summary deltas, so every reasoning part lands empty and the UI shows a
+      // blank "thinking" block. Genuine BYOK (no proxy baseURL) is left alone,
+      // so an unverified org never gets an unexpected summary request.
+      const managedBaseURL = input.providerOptions?.["baseURL"]
+      const viaManagedProxy = typeof managedBaseURL === "string" && managedBaseURL.includes("/api/llm/proxy/")
+      if (input.model.providerID.startsWith("synsci") || viaManagedProxy) {
         result["promptCacheKey"] = input.sessionID
         result["include"] = ["reasoning.encrypted_content"]
         result["reasoningSummary"] = "auto"
