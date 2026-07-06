@@ -9,6 +9,7 @@ import type {
   AccountDeviceRevokeResponses,
   AccountDevicesResponses,
   AccountGetResponses,
+  AccountLoginKeyResponses,
   AccountLogoutResponses,
   AgentPartInput,
   AppAgentsResponses,
@@ -183,6 +184,7 @@ import type {
   SettingsStorageResetLocationResponses,
   SettingsStorageUsageResponses,
   SettingsUsageGetResponses,
+  SettingsWalletGetResponses,
   SubtaskPartInput,
   TextPartInput,
   ToolIdsErrors,
@@ -481,6 +483,28 @@ export class Account extends HeyApiClient {
     return (options?.client ?? this.client).get<AccountDevicesResponses, unknown, ThrowOnError>({
       url: "/account/devices",
       ...options,
+    })
+  }
+
+  /**
+   * Sign in with an Atlas API key
+   */
+  public loginKey<ThrowOnError extends boolean = false>(
+    parameters?: {
+      key?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "key" }] }])
+    return (options?.client ?? this.client).post<AccountLoginKeyResponses, unknown, ThrowOnError>({
+      url: "/account/login-key",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
@@ -995,6 +1019,18 @@ export class Billing extends HeyApiClient {
   }
 }
 
+export class Wallet extends HeyApiClient {
+  /**
+   * Get Atlas wallet balance, plan mode, and recent transactions
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsWalletGetResponses, unknown, ThrowOnError>({
+      url: "/settings/wallet",
+      ...options,
+    })
+  }
+}
+
 export class Skills extends HeyApiClient {
   /**
    * Install skill from git
@@ -1225,6 +1261,11 @@ export class Settings extends HeyApiClient {
   private _billing?: Billing
   get billing(): Billing {
     return (this._billing ??= new Billing({ client: this.client }))
+  }
+
+  private _wallet?: Wallet
+  get wallet(): Wallet {
+    return (this._wallet ??= new Wallet({ client: this.client }))
   }
 
   private _skills?: Skills
