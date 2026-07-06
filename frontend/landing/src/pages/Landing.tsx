@@ -803,6 +803,8 @@ export default function Landing() {
                   alt="The OpenScience model selector: Anthropic, OpenAI, and Google models with live pricing and an effort control"
                   className="block w-full h-auto select-none"
                   draggable={false}
+                  loading="lazy"
+                  decoding="async"
                 />
               </div>
               <div className={`mt-5 flex items-center justify-between gap-4 ${CAPTION}`}>
