@@ -55,6 +55,10 @@ The backend is a Bun and TypeScript application compiled to a single native bina
 
 Prompts are assembled in two layers: a provider-level system prompt selected by model (`src/session/system.ts`), and an agent-level workflow prompt injected by agent name (`src/session/prompt.ts`). See [CLAUDE.md](CLAUDE.md) for the routing details.
 
+### Skills
+
+Skills are instruction bundles the agent loads on demand (`src/skill`). Released builds fetch the catalog from the Atlas skill index and cache it; running from source loads the bundled `skills/` tree directly. A small set of system skills (for example `initialize-atlas-graph`) is embedded so it resolves even when the catalog omits it. See [docs/notes/skills.md](docs/notes/skills.md) for the full source order.
+
 ## Frontend
 
 - `frontend/workspace` is the workspace UI. It talks to the local server over the same API the SDK exposes, and renders sessions, files, a terminal, and inline scientific views (molecules, structures, genomes, plots). The CLI build embeds the compiled UI into the binary.
