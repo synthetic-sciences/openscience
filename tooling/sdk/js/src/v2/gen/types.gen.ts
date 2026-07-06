@@ -1758,6 +1758,10 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
+    /**
+     * Run a blind reviewer on a primary agent's final answer and append its verdict as a footer note ('annotate' = on, non-blocking). Off by default.
+     */
+    reviewGate?: "off" | "annotate"
   }
 }
 
@@ -2430,6 +2434,27 @@ export type AccountBillingModeSetResponses = {
 }
 
 export type AccountBillingModeSetResponse = AccountBillingModeSetResponses[keyof AccountBillingModeSetResponses]
+
+export type AccountLoginKeyData = {
+  body?: {
+    key: string
+  }
+  path?: never
+  query?: never
+  url: "/account/login-key"
+}
+
+export type AccountLoginKeyResponses = {
+  /**
+   * Login result
+   */
+  200: {
+    ok: boolean
+    error?: string
+  }
+}
+
+export type AccountLoginKeyResponse = AccountLoginKeyResponses[keyof AccountLoginKeyResponses]
 
 export type AccountLogoutData = {
   body?: never
@@ -3149,6 +3174,38 @@ export type SettingsBillingUpdateResponses = {
 }
 
 export type SettingsBillingUpdateResponse = SettingsBillingUpdateResponses[keyof SettingsBillingUpdateResponses]
+
+export type SettingsWalletGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/wallet"
+}
+
+export type SettingsWalletGetResponses = {
+  /**
+   * Wallet state
+   */
+  200: {
+    signedIn: boolean
+    /**
+     * Wallet balance in USD; -1 when signed out or unavailable
+     */
+    balanceUsd: number
+    billingMode: "managed" | "byok" | null
+    managedSupported: boolean
+    lifetimeSpentUsd: number
+    transactions: Array<{
+      id: string
+      amountCents: number
+      source: string
+      description: string
+      createdAt: string
+    }>
+  }
+}
+
+export type SettingsWalletGetResponse = SettingsWalletGetResponses[keyof SettingsWalletGetResponses]
 
 export type AuthRemoveData = {
   body?: never
