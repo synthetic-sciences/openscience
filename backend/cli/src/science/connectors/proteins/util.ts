@@ -30,9 +30,14 @@ export function asArray<T = unknown>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : []
 }
 
-/** True when a string looks like a UniProt accession (e.g. P00520, A0A0B5AC95). */
+/** True when a string looks like a UniProt accession (e.g. P00520, A0A0B5AC95).
+ *  The leading character must accept O, P and Q: Swiss-Prot accessions
+ *  overwhelmingly begin with them (P04637, P38398, O43426, Q9Y6K9, and this
+ *  file's own P00520 example). An earlier `[A-NR-Z0-9]` class silently excluded
+ *  O/P/Q, so the AlphaFold and SIFTS connectors skipped their fast-path exact-ac
+ *  lookup for the most common human proteins. */
 export function looksLikeAccession(value: string): boolean {
-  return /^[A-NR-Z0-9][A-Z0-9]{5,9}$/i.test(value.trim())
+  return /^[A-Z0-9][A-Z0-9]{5,9}$/i.test(value.trim())
 }
 
 interface UniProtLite {
