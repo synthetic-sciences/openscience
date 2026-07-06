@@ -346,7 +346,7 @@ export const AuthLoginCommand = cmd({
                 hint: {
                   synsci: "Atlas — recommended",
                   anthropic: "Claude Max or API key",
-                  openai: "API key (to sign in with Codex/ChatGPT, use the option above)",
+                  openai: "ChatGPT subscription (Codex) or an API key",
                 }[x.id],
               })),
             ),
@@ -358,6 +358,30 @@ export const AuthLoginCommand = cmd({
         })
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
+
+        // Selecting the OpenAI provider offers two distinct auth styles: a
+        // ChatGPT subscription (Codex OAuth, no API key) or an OpenAI Platform
+        // API key. Present the choice explicitly instead of only pinning Codex
+        // at the top of the list — users who look under "OpenAI" still find it.
+        if (provider === "openai") {
+          const style = await prompts.select({
+            message: "How do you want to authenticate OpenAI?",
+            options: [
+              {
+                value: "chatgpt",
+                label: "ChatGPT subscription (Codex)",
+                hint: "Plus/Pro/Business — sign in, no API key",
+              },
+              { value: "apikey", label: "OpenAI Platform API key", hint: "sk-… from platform.openai.com" },
+            ],
+          })
+          if (prompts.isCancel(style)) throw new UI.CancelledError()
+          if (style === "chatgpt") {
+            await runCodexAuthFlow()
+            return
+          }
+          // style === "apikey" → fall through to the API-key password prompt.
+        }
 
         const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
         if (plugin && plugin.auth) {
@@ -451,6 +475,21 @@ async function backendHasCodex(): Promise<boolean | null> {
   }
 }
 
+/** Run the Codex (ChatGPT subscription) OAuth flow. Shared by `keys signin` and
+ *  the ChatGPT branch of `keys add` so both reach the exact same flow. Returns
+ *  true when the flow ran, false when the codex auth plugin is unavailable. */
+async function runCodexAuthFlow(): Promise<boolean> {
+  const plugin = await Plugin.list().then((x) => x.find((p) => p.auth?.provider === "openai-codex"))
+  if (!plugin || !plugin.auth) {
+    prompts.log.error("Codex auth plugin not available")
+    return false
+  }
+  await handlePluginAuth({ auth: plugin.auth }, "openai-codex", {
+    filterMethods: (m) => m.type === "oauth",
+  })
+  return true
+}
+
 export const AuthCodexCommand = cmd({
   command: ["signin", "codex"],
   describe: "sign in with ChatGPT / Codex (Plus/Pro/Business subscription)",
@@ -490,15 +529,8 @@ export const AuthCodexCommand = cmd({
             }
           }
         }
-        const plugin = await Plugin.list().then((x) => x.find((p) => p.auth?.provider === "openai-codex"))
-        if (!plugin || !plugin.auth) {
-          prompts.log.error("Codex auth plugin not available")
-          prompts.outro("Done")
-          return
-        }
-        await handlePluginAuth({ auth: plugin.auth }, "openai-codex", {
-          filterMethods: (m) => m.type === "oauth",
-        })
+        const handled = await runCodexAuthFlow()
+        if (!handled) prompts.outro("Done")
       },
     })
   },
