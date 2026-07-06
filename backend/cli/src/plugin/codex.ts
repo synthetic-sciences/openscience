@@ -71,6 +71,28 @@ export function classifyDevicePollStatus(status: number): "pending" | "transient
   return "fail"
 }
 
+/**
+ * Send a Codex request and, on a 401, refresh the access token once and retry
+ * once. The loader's proactive refresh only catches token EXPIRY; a token
+ * revoked/invalidated server-side before its local `expires` (password change,
+ * admin revoke, clock skew) surfaces as a 401 that was otherwise returned
+ * verbatim — the request just failed. `refresh` returns the new access token,
+ * `undefined` to give up (the original 401 is returned unchanged), or throws to
+ * surface a fatal error (e.g. the refresh token itself is dead). Retries at most
+ * once, so it can never loop.
+ */
+export async function sendWithCodex401Retry(
+  send: (accessToken: string) => Promise<Response>,
+  accessToken: string,
+  refresh: () => Promise<string | undefined>,
+): Promise<Response> {
+  const response = await send(accessToken)
+  if (response.status !== 401) return response
+  const refreshed = await refresh()
+  if (!refreshed) return response
+  return send(refreshed)
+}
+
 interface PkceCodes {
   verifier: string
   challenge: string
@@ -541,10 +563,9 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               }
             }
 
-            // Set authorization header with access token
-            headers.set("authorization", `Bearer ${currentAuth.access}`)
-
-            // Set ChatGPT-Account-Id header for organization subscriptions
+            // Set ChatGPT-Account-Id header for organization subscriptions.
+            // (The authorization header is set per-attempt inside `send` below,
+            // so the 401-retry path can swap in a freshly-refreshed token.)
             if (authWithAccount.accountId) {
               headers.set("ChatGPT-Account-Id", authWithAccount.accountId)
             }
@@ -588,11 +609,55 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               }
             }
 
-            const response = await fetch(url, {
-              ...init,
-              headers,
-              body: bodyForRequest,
-            })
+            // Send with the current bearer; re-called by the 401-retry path with
+            // a refreshed token. Each attempt re-sets the authorization header.
+            const send = (accessToken: string) => {
+              headers.set("authorization", `Bearer ${accessToken}`)
+              return fetch(url, { ...init, headers, body: bodyForRequest })
+            }
+
+            // Reactive (on-401) refresh: the token was rejected even though it
+            // isn't locally expired. Re-read the latest persisted auth first (a
+            // sibling process may have already rotated the pair) and adopt a
+            // newer token if one exists; otherwise spend the refresh token and
+            // persist the rotated pair. Returns the fresh access token, undefined
+            // to keep the original 401 (transient failure), or throws when the
+            // refresh token itself is dead.
+            const forceRefreshOn401 = async (): Promise<string | undefined> => {
+              try {
+                const latest = (await getAuth()) as typeof currentAuth & { accountId?: string }
+                if (latest.type !== "oauth") return undefined
+                if (latest.access && latest.access !== currentAuth.access && latest.expires > Date.now()) {
+                  currentAuth.access = latest.access
+                  authWithAccount.accountId = latest.accountId ?? authWithAccount.accountId
+                  return latest.access
+                }
+                const tokens = await refreshAccessTokenSingleFlight(latest.refresh)
+                const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
+                await input.client.auth.set({
+                  path: { id: "openai-codex" },
+                  body: {
+                    type: "oauth",
+                    refresh: tokens.refresh_token,
+                    access: tokens.access_token,
+                    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                    ...(newAccountId && { accountId: newAccountId }),
+                  },
+                })
+                currentAuth.access = tokens.access_token
+                authWithAccount.accountId = newAccountId
+                return tokens.access_token
+              } catch (e) {
+                if (e instanceof CodexRefreshInvalidError)
+                  throw new Error("Codex sign-in expired. Reconnect it with `openscience keys signin`.")
+                log.warn("codex 401-triggered refresh failed", { error: String(e) })
+                return undefined
+              }
+            }
+
+            const response = isCodexRoute
+              ? await sendWithCodex401Retry(send, currentAuth.access, forceRefreshOn401)
+              : await send(currentAuth.access)
 
             // Fallback to shared key if OAuth quota exceeded
             if (response.status === 429 || response.status === 403) {
