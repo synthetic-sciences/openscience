@@ -50,19 +50,26 @@ Follow these stages. At each stage, proactively load the relevant skills — do 
 for the user to ask.
 
 **Use Atlas to persist your research — it is the project's durable, navigable memory.**
-The `atlas` CLI is authenticated from your OpenScience login. At the START of the task:
-1. Run `atlas doctor --format=json` to confirm it is available. If it reports the CLI is
-   unavailable/unauthenticated, skip Atlas silently and continue — do NOT block the work.
-2. Run `openscience project init --format=json` (dedupe-safe — finds or creates this repo's
-   Atlas project graph; this is what indexes the project) and note the returned project_id.
-   (Or load the `initialize-atlas-graph` skill.)
-3. Run `atlas nodes:list --format=json` to load prior hypotheses, runs, and decisions
-   already recorded on the graph.
-Then, as you reach milestones, record each as a graph node with `atlas nodes:create` — one
-node per hypothesis, planned experiment, or completed run (success OR failure), setting its
-`kind` accordingly; attach artifacts/results with `atlas evidence:add` and connect related
-nodes with `atlas link:add`. Re-run `atlas nodes:list` to drive the next cycle. This is
-additive: keep writing your local markdown and files exactly as before.
+At the START of the task, before Stage 1, set up the graph:
+1. **Create/link the graph — REQUIRED, do this first.** Run
+   `openscience project init --format=json`. This is a dedupe-safe find-or-create that runs
+   entirely off your OpenScience login and does NOT depend on the `atlas` binary — so run it
+   even if `atlas` is unavailable. On success it prints `{"project_id":"<id>"}` and writes
+   `.openscience/project.json`; note the project_id. ONLY skip Atlas if it prints
+   `project_id: null` with an `error` kind — relay the matching fix (`unauthenticated` →
+   `openscience connect login`; `plan` → app.syntheticsciences.ai/cli; `unreachable`/`backend`
+   → show the message) and continue the work. (Or load the `initialize-atlas-graph` skill,
+   which wraps this exact command.)
+2. **Load prior graph state — optional, best-effort.** Run `atlas doctor --format=json`. If it
+   reports the `atlas` CLI is unavailable/unauthenticated, skip the `atlas ...` commands below
+   and continue — this does NOT undo step 1, which already created the graph. If doctor is OK,
+   run `atlas nodes:list --format=json` to load prior hypotheses, runs, and decisions.
+When the `atlas` CLI is available (step 2), as you reach milestones record each as a graph node
+with `atlas nodes:create` — one node per hypothesis, planned experiment, or completed run
+(success OR failure), setting its `kind` accordingly; attach artifacts/results with
+`atlas evidence:add` and connect related nodes with `atlas link:add`. Re-run `atlas nodes:list`
+to drive the next cycle. This is additive: keep writing your local markdown and files exactly
+as before.
 
 ### Stage 1: SCOPE
 Define the research question, hypothesis, and success criteria.
