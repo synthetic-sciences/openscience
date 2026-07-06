@@ -32,7 +32,7 @@ export function asArray<T = unknown>(value: unknown): T[] {
 
 /** True when a string looks like a UniProt accession (e.g. P00520, A0A0B5AC95). */
 export function looksLikeAccession(value: string): boolean {
-  return /^[A-NR-Z0-9][A-Z0-9]{5,9}$/i.test(value.trim())
+  return /^[A-Z0-9][A-Z0-9]{5,9}$/i.test(value.trim())
 }
 
 interface UniProtLite {
