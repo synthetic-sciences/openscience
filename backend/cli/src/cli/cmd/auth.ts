@@ -174,6 +174,49 @@ async function handlePluginAuth(
   return false
 }
 
+async function runCodexAuthFlow(input: { intro?: boolean } = {}) {
+  if (input.intro !== false) prompts.intro("Sign in with ChatGPT")
+
+  const existing = await Auth.get("openai-codex")
+  if (existing?.type === "oauth") {
+    // Local has tokens. Check the backend before assuming "already
+    // signed in" — the user may have disconnected from the web UI
+    // (which only clears the backend, not local CLI state).
+    const backend = await backendHasCodex()
+
+    if (backend === false) {
+      // Backend says disconnected (user clicked Disconnect on the
+      // web). Honor that: wipe the stale local credential and fall
+      // through to a fresh OAuth flow. The user expects logging out
+      // from the web to clear their CLI session too.
+      await Auth.remove("openai-codex")
+      prompts.log.info("Codex was disconnected on the web — starting a fresh login.")
+      // fall through to the OAuth flow below
+    } else {
+      // backend === true (or null/unknown — treat as connected).
+      // Ask if the user wants a fresh OAuth despite already being
+      // signed in.
+      const again = await prompts.confirm({
+        message: "Already signed in to Codex. Sign in again?",
+        initialValue: false,
+      })
+      if (prompts.isCancel(again) || !again) {
+        prompts.outro("Done")
+        return
+      }
+    }
+  }
+  const plugin = await Plugin.list().then((x) => x.find((p) => p.auth?.provider === "openai-codex"))
+  if (!plugin || !plugin.auth) {
+    prompts.log.error("Codex auth plugin not available")
+    prompts.outro("Done")
+    return
+  }
+  await handlePluginAuth({ auth: plugin.auth }, "openai-codex", {
+    filterMethods: (m) => m.type === "oauth",
+  })
+}
+
 export const KeysCommand = cmd({
   command: "keys",
   aliases: ["auth"],
@@ -328,6 +371,30 @@ export const AuthLoginCommand = cmd({
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
+        if (provider === "openai") {
+          const method = await prompts.select({
+            message: "How do you want to connect OpenAI?",
+            initialValue: "codex",
+            options: [
+              {
+                value: "codex",
+                label: "ChatGPT subscription",
+                hint: "Plus/Pro/Business · browser sign-in",
+              },
+              {
+                value: "api",
+                label: "API key",
+                hint: "OpenAI Platform key · sk-...",
+              },
+            ],
+          })
+          if (prompts.isCancel(method)) throw new UI.CancelledError()
+          if (method === "codex") {
+            await runCodexAuthFlow({ intro: false })
+            return
+          }
+        }
+
         const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
         if (plugin && plugin.auth) {
           const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
@@ -428,46 +495,7 @@ export const AuthCodexCommand = cmd({
       directory: process.cwd(),
       async fn() {
         UI.empty()
-        prompts.intro("Sign in with ChatGPT")
-
-        const existing = await Auth.get("openai-codex")
-        if (existing?.type === "oauth") {
-          // Local has tokens. Check the backend before assuming "already
-          // signed in" — the user may have disconnected from the web UI
-          // (which only clears the backend, not local CLI state).
-          const backend = await backendHasCodex()
-
-          if (backend === false) {
-            // Backend says disconnected (user clicked Disconnect on the
-            // web). Honor that: wipe the stale local credential and fall
-            // through to a fresh OAuth flow. The user expects logging out
-            // from the web to clear their CLI session too.
-            await Auth.remove("openai-codex")
-            prompts.log.info("Codex was disconnected on the web — starting a fresh login.")
-            // fall through to the OAuth flow below
-          } else {
-            // backend === true (or null/unknown — treat as connected).
-            // Ask if the user wants a fresh OAuth despite already being
-            // signed in.
-            const again = await prompts.confirm({
-              message: "Already signed in to Codex. Sign in again?",
-              initialValue: false,
-            })
-            if (prompts.isCancel(again) || !again) {
-              prompts.outro("Done")
-              return
-            }
-          }
-        }
-        const plugin = await Plugin.list().then((x) => x.find((p) => p.auth?.provider === "openai-codex"))
-        if (!plugin || !plugin.auth) {
-          prompts.log.error("Codex auth plugin not available")
-          prompts.outro("Done")
-          return
-        }
-        await handlePluginAuth({ auth: plugin.auth }, "openai-codex", {
-          filterMethods: (m) => m.type === "oauth",
-        })
+        await runCodexAuthFlow()
       },
     })
   },
