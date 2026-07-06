@@ -851,16 +851,16 @@ export function ThesisCanvas(): JSX.Element {
                   when={selectedGraph()}
                   fallback={
                     <InitHero
-                      onInit={() => {
-                        // One-click: drop the skill invocation in the composer and send it.
-                        // The initialize-atlas-graph skill runs `openscience project init`
-                        // (idempotent) and seeds the graph; the canvas picks it up on the
-                        // next unlinked-refresh poll below.
-                        uiStore.setPrefill("/initialize-atlas-graph")
-                        uiStore.setPrefillSend(true)
-                      }}
-                      // Secondary: drop the same skill invocation in the composer WITHOUT
-                      // sending, so the user can review/edit before running it.
+                      // Primary: hit the deterministic find-or-create endpoint
+                      // directly (POST /api/thesis/project/init via thesisAPI) so
+                      // the button reliably creates the graph without depending on
+                      // the agent or the `atlas` binary. initGraph() refetches and
+                      // selects the new root, and toasts a typed error on failure.
+                      onInit={() => void initGraph()}
+                      // Secondary: route through the agent — drop the
+                      // initialize-atlas-graph skill invocation in the composer
+                      // WITHOUT sending, so the user can review/run it (useful when
+                      // the direct call reports a plan/auth issue to resolve in chat).
                       onChat={() => uiStore.setPrefill("/initialize-atlas-graph")}
                       busy={initializing()}
                     />
