@@ -31,8 +31,15 @@ function run(target) {
     console.error(result.error.message)
     process.exit(1)
   }
-  const code = typeof result.status === "number" ? result.status : 0
-  process.exit(code)
+  if (typeof result.status === "number") {
+    process.exit(result.status)
+  }
+  // Killed by a signal (status is null): report failure with the shell
+  // convention 128 + signal number instead of masking it as success.
+  if (result.signal) {
+    process.exit(128 + (os.constants.signals[result.signal] || 0))
+  }
+  process.exit(1)
 }
 
 // Helper: check if a path points to a real binary (not this wrapper script)
