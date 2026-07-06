@@ -53,7 +53,7 @@ const OAUTH_HTTP_TIMEOUT_MS = 20_000
 /** Thrown when a refresh is rejected with a 4xx — the refresh token itself is
  *  invalid (revoked or rotated away), so the user must reconnect. Distinct from a
  *  transient 5xx/network failure, which we retry and never surface as "expired". */
-class CodexRefreshInvalidError extends Error {}
+export class CodexRefreshInvalidError extends Error {}
 
 interface PkceCodes {
   verifier: string
@@ -170,7 +170,7 @@ async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: Pk
   return response.json()
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
+export async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
   let lastError: Error | undefined
   for (let attempt = 0; attempt < 3; attempt++) {
     let response: Response
