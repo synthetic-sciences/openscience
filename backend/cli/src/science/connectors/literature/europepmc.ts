@@ -23,6 +23,7 @@ interface Result {
   abstractText?: string
   pubYear?: string
   journalTitle?: string
+  journalInfo?: { journal?: { title?: string } }
   citedByCount?: number
 }
 
@@ -38,7 +39,8 @@ function url(r: Result): string | undefined {
 }
 
 function toHit(r: Result): ConnectorHit {
-  const meta = [r.authorString, r.journalTitle, r.pubYear].filter(Boolean).join(". ")
+  const journal = r.journalInfo?.journal?.title ?? r.journalTitle
+  const meta = [r.authorString, journal, r.pubYear].filter(Boolean).join(". ")
   return {
     id: r.source && r.id ? `${r.source}/${r.id}` : (r.id ?? ""),
     title: snippet(r.title, 300) ?? r.id ?? "Untitled",
