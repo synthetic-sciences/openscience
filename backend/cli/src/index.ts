@@ -37,6 +37,7 @@ import { ProjectCommand } from "./cli/cmd/project"
 import { WalletCommand } from "./cli/cmd/billing"
 import { KeysCommand, ConnectCommand, DisconnectCommand } from "./cli/cmd/auth"
 import { LocalCommand } from "./cli/cmd/local"
+import { SandboxCommand } from "./cli/cmd/sandbox"
 import { InitCommand, DoctorCommand } from "./cli/onboard"
 import { OpenScience } from "./openscience"
 
@@ -122,6 +123,7 @@ const cli = yargs(hideBin(process.argv))
   .command(WebCommand)
   .command(ModelsCommand)
   .command(LocalCommand)
+  .command(SandboxCommand)
   .command(SkillCommand)
   .command(StatsCommand)
   .command(ExportCommand)

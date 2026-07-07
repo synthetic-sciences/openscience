@@ -1,5 +1,6 @@
 import path from "path"
 import os from "os"
+import fs from "fs"
 import { spawnSync } from "child_process"
 import { lazy } from "@/util/lazy"
 import { Log } from "@/util/log"
@@ -274,5 +275,102 @@ export namespace Sandbox {
     const s = spec({ command: input.command, shell: input.shell, policy })!
     log.info("sandboxing command", { backend: b, network: policy.network, writable: policy.writable.length })
     return { file: s.file, args: s.args, useShell: false, sandboxed: true, backend: b }
+  }
+
+  // ── self-test (proves the boundary actually holds on this machine) ──────────
+
+  export interface Check {
+    name: string
+    pass: boolean
+    skipped?: boolean
+    detail?: string
+  }
+
+  export interface SelfTest {
+    backend: Backend
+    available: boolean
+    checks: Check[]
+    ok: boolean
+  }
+
+  function firstLine(s?: string): string | undefined {
+    const line = s?.trim().split("\n")[0]
+    return line || undefined
+  }
+
+  /**
+   * Empirically verify the sandbox on this machine: write inside a scratch
+   * workspace (must succeed), write outside it (must be blocked), and — when
+   * connectivity allows — confirm network-deny mode blocks egress. Spawns real
+   * sandboxed commands; safe to run anytime.
+   */
+  export function selfTest(): SelfTest {
+    const b = backend()
+    if (b === "none") return { backend: b, available: false, checks: [], ok: false }
+
+    const shell = process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : "/bin/sh"
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "openscience-sbx-"))
+    const outside = path.join(os.homedir(), `.openscience-sbx-escape-${process.pid}`)
+    const checks: Check[] = []
+
+    const run = (command: string, network: "allow" | "deny") => {
+      const p = plan({ command, shell, cwd: work, workspace: [work], options: { enabled: true, network } })
+      return spawnSync(p.file, p.args ?? [], { cwd: work, encoding: "utf8", timeout: 15000 })
+    }
+
+    try {
+      const inside = run(`printf hi > "${work}/probe" && cat "${work}/probe"`, "allow")
+      checks.push({
+        name: "write inside the workspace succeeds",
+        pass: inside.status === 0,
+        detail: inside.status === 0 ? undefined : firstLine(inside.stderr),
+      })
+
+      run(`printf x > "${outside}"`, "allow")
+      const escaped = fs.existsSync(outside)
+      checks.push({
+        name: "write outside the workspace is blocked",
+        pass: !escaped,
+        detail: escaped ? `a file escaped to ${outside}` : undefined,
+      })
+
+      const curlCmd = `curl -m 5 -s -o /dev/null https://example.com`
+      if (Bun.which("curl")) {
+        // Distinguish "sandbox blocked it" from "machine is offline" by checking
+        // that egress works in allow-mode before asserting deny-mode blocks it.
+        const allow = run(curlCmd, "allow")
+        if (allow.status !== 0) {
+          checks.push({
+            name: "network egress blocked in deny mode",
+            pass: true,
+            skipped: true,
+            detail: "no outbound connectivity — inconclusive",
+          })
+        } else {
+          const deny = run(curlCmd, "deny")
+          checks.push({
+            name: "network egress blocked in deny mode",
+            pass: deny.status !== 0,
+            detail: deny.status === 0 ? "egress succeeded despite deny" : undefined,
+          })
+        }
+      } else {
+        checks.push({
+          name: "network egress blocked in deny mode",
+          pass: true,
+          skipped: true,
+          detail: "curl not available — skipped",
+        })
+      }
+    } finally {
+      try {
+        fs.rmSync(outside, { force: true })
+      } catch {}
+      try {
+        fs.rmSync(work, { recursive: true, force: true })
+      } catch {}
+    }
+
+    return { backend: b, available: true, checks, ok: checks.filter((c) => !c.skipped).every((c) => c.pass) }
   }
 }
