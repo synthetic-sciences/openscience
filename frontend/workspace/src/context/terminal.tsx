@@ -86,7 +86,9 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
     ready,
     all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
-    new() {
+    // `opts.command`/`opts.args` run a specific program in the new terminal
+    // instead of the default shell (e.g. `ollama serve`, `ollama pull llama3.1`).
+    new(opts?: { command?: string; args?: string[]; title?: string }) {
       const existingTitleNumbers = new Set(
         store.all.flatMap((pty) => {
           const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
@@ -103,7 +105,10 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
         ) ?? 1
 
       sdk.client.pty
-        .create({ title: `Terminal ${nextNumber}` })
+        .create({
+          title: opts?.title ?? `Terminal ${nextNumber}`,
+          ...(opts?.command ? { command: opts.command, args: opts.args ?? [] } : {}),
+        })
         .then((pty) => {
           const id = pty.data?.id
           if (!id) return
