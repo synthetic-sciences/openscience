@@ -82,19 +82,27 @@ export namespace Config {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
         log.debug("fetching remote config", { url: `${key}/.well-known/openscience` })
-        const response = await fetch(`${key}/.well-known/openscience`)
-        if (!response.ok) {
-          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+        // A transient outage/DNS failure on a well-known host must NOT reject
+        // Config.get() and brick the whole CLI (it's only the lowest-precedence
+        // base layer) — mirror the synced-config resilience: log and continue.
+        try {
+          const response = await fetch(`${key}/.well-known/openscience`)
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const wellknown = (await response.json()) as any
+          const remoteConfig = wellknown.config ?? {}
+          // Add $schema to prevent load() from trying to write back to a non-existent file
+          if (!remoteConfig.$schema) remoteConfig.$schema = "https://syntheticsciences.ai/config.json"
+          result = mergeConfigConcatArrays(
+            result,
+            await load(JSON.stringify(remoteConfig), `${key}/.well-known/openscience`),
+          )
+          log.debug("loaded remote config from well-known", { url: key })
+        } catch (e) {
+          log.warn("failed to fetch remote config; continuing without it", {
+            url: key,
+            error: e instanceof Error ? e.message : String(e),
+          })
         }
-        const wellknown = (await response.json()) as any
-        const remoteConfig = wellknown.config ?? {}
-        // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://syntheticsciences.ai/config.json"
-        result = mergeConfigConcatArrays(
-          result,
-          await load(JSON.stringify(remoteConfig), `${key}/.well-known/openscience`),
-        )
-        log.debug("loaded remote config from well-known", { url: key })
       }
     }
 
@@ -177,17 +185,7 @@ export namespace Config {
       result.plugin.push(...(await loadPlugin(dir)))
     }
 
-    // Load managed config files last (highest priority) - enterprise admin-controlled
-    // Kept separate from directories array to avoid write operations when installing plugins
-    // which would fail on system directories requiring elevated permissions
-    // This way it only loads config file and not skills/plugins/commands
-    if (existsSync(managedConfigDir)) {
-      for (const file of CONFIG_FILES) {
-        result = mergeConfigConcatArrays(result, await loadFile(path.join(managedConfigDir, file)))
-      }
-    }
-
-    // Load synced config from dashboard (highest priority after managed).
+    // Load synced config from dashboard (below the enterprise-managed layer).
     // Written by OpenScience.syncServices() to the user's XDG config dir. Tolerate
     // a corrupt file: it must never brick config load (and thus the whole CLI).
     // Atomic writes prevent torn files going forward; this covers external
@@ -197,6 +195,19 @@ export namespace Config {
       result = mergeConfigConcatArrays(result, await loadFile(syncedConfig))
     } catch {
       // treat an unreadable synced config as absent
+    }
+
+    // Load managed config files LAST (highest priority) - enterprise admin-controlled.
+    // Kept separate from directories array to avoid write operations when installing plugins
+    // which would fail on system directories requiring elevated permissions
+    // This way it only loads config file and not skills/plugins/commands.
+    // Must merge AFTER the dashboard-synced config: an admin policy in
+    // /etc (or /Library/...) must win over a per-user dashboard value, otherwise
+    // the synced config silently overrode the admin's "overrides all" contract.
+    if (existsSync(managedConfigDir)) {
+      for (const file of CONFIG_FILES) {
+        result = mergeConfigConcatArrays(result, await loadFile(path.join(managedConfigDir, file)))
+      }
     }
 
     // Migrate deprecated mode field to agent field
@@ -1332,7 +1343,11 @@ export namespace Config {
   }
 
   export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
+    // Write to an actual project config READ path (openscience.json / .openscience/…)
+    // — the previous `<Instance.directory>/config.json` is only read as the GLOBAL
+    // config, never as project config, so PATCH /config appeared to save but the
+    // change vanished on the next Instance reload.
+    const filepath = projectConfigFile()
     const existing = await loadFile(filepath)
     await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
     await Instance.dispose()
