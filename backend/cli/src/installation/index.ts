@@ -61,7 +61,12 @@ export namespace Installation {
     if (process.execPath.includes(path.join(".openscience", "bin"))) return "curl"
     // legacy pre-rename curl installs lived under ~/.synsc/bin
     if (process.execPath.includes(path.join(".synsc", "bin"))) return "curl"
-    if (process.execPath.includes(path.join(".local", "bin"))) return "curl"
+    // ~/.local/bin is ALSO npm's target with `--prefix ~/.local`, pipx, and many
+    // package managers — so it's ambiguous. Defer it: let the package-manager
+    // probes below claim the install first, and only fall back to "curl" for
+    // .local/bin when none of them do (see after the loop). Otherwise a
+    // `npm i -g` into ~/.local was upgraded with the curl script.
+    const inLocalBin = process.execPath.includes(path.join(".local", "bin"))
     const exec = process.execPath.toLowerCase()
 
     const checks = [
@@ -113,6 +118,10 @@ export namespace Installation {
         return check.name
       }
     }
+
+    // No package manager claimed it — now honor the ambiguous ~/.local/bin as a
+    // curl install (the curl installer's default target).
+    if (inLocalBin) return "curl"
 
     return "unknown"
   }
