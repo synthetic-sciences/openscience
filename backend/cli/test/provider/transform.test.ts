@@ -1814,17 +1814,15 @@ describe("ProviderTransform.variants", () => {
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      // Nested under thinkingConfig so @ai-sdk/google actually reads the level.
       expect(result.low).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "low",
+        thinkingConfig: { includeThoughts: true, thinkingLevel: "low" },
       })
       expect(result.medium).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "medium",
+        thinkingConfig: { includeThoughts: true, thinkingLevel: "medium" },
       })
       expect(result.high).toEqual({
-        includeThoughts: true,
-        thinkingLevel: "high",
+        thinkingConfig: { includeThoughts: true, thinkingLevel: "high" },
       })
     })
   })

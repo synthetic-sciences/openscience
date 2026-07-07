@@ -141,6 +141,14 @@ export namespace ModelsDev {
     if (result) {
       await Bun.write(file, JSON.stringify(result))
       ModelsDev.Data.reset()
+      // Drop the memoized provider state so a long-running session picks up the
+      // refreshed catalog (new/renamed/removed models) instead of serving the
+      // snapshot captured at first build. Dynamic import avoids a static cycle
+      // (provider.ts imports ModelsDev). Best-effort.
+      try {
+        const { Provider } = await import("./provider")
+        Provider.invalidate()
+      } catch {}
     }
   }
 }

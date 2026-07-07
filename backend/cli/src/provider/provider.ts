@@ -977,7 +977,11 @@ export namespace Provider {
               video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
               pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
             },
-            interleaved: model.interleaved ?? false,
+            // Fall back to the catalog model's interleaved shape like every other
+            // capability above — otherwise overriding any single field (e.g. cost)
+            // on an interleaved-reasoning model dropped its {field} object, so
+            // normalizeMessages stopped relocating prior-turn reasoning.
+            interleaved: model.interleaved ?? existingModel?.capabilities.interleaved ?? false,
           },
           cost: {
             input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,

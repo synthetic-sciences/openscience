@@ -600,8 +600,13 @@ export namespace ProviderTransform {
           },
           max: {
             thinking: {
+              // Keep the thinking budget proportional (~3/4 of the output cap)
+              // instead of `cap - 1`: on a 32k-output model, a 31,999-token
+              // budget made maxOutputTokens() return just 1 text token, so the
+              // visible answer was truncated to a single token. Large-cap models
+              // are unaffected (still clamp at 31,999).
               type: "enabled",
-              budgetTokens: Math.min(31_999, cap - 1),
+              budgetTokens: Math.min(31_999, Math.floor((cap * 3) / 4)),
             },
           },
         }
@@ -672,13 +677,19 @@ export namespace ProviderTransform {
             },
           }
         }
-        // Gemini 3+ uses thinkingLevel
+        // Gemini 3+ uses thinkingLevel. Nest under `thinkingConfig` — the
+        // @ai-sdk/google provider only reads providerOptions.google.thinkingConfig.*,
+        // so the previous top-level keys were dropped and the selected effort was
+        // silently ignored (every call defaulted to the high thinkingLevel from
+        // options()). options()/smallOptions() already nest correctly.
         return Object.fromEntries(
           WIDELY_SUPPORTED_EFFORTS.map((effort) => [
             effort,
             {
-              includeThoughts: true,
-              thinkingLevel: effort,
+              thinkingConfig: {
+                includeThoughts: true,
+                thinkingLevel: effort,
+              },
             },
           ]),
         )

@@ -121,6 +121,49 @@ describe("ProviderTransform.options — BYOK / direct paths stay untouched", () 
   })
 })
 
+describe("ProviderTransform.variants — Anthropic max thinking budget", () => {
+  const claude = (cap: number) =>
+    model({
+      id: "anthropic/claude-opus-4-1",
+      providerID: "anthropic",
+      api: { id: "claude-opus-4-1", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+      limit: { context: 200_000, output: cap },
+    })
+
+  test("max thinking budget leaves real text headroom on a 32k-output model", () => {
+    const v = ProviderTransform.variants(claude(32_000))
+    const budget = (v.max as any).thinking.budgetTokens
+    expect(budget).toBeLessThan(32_000)
+    const textTokens = ProviderTransform.maxOutputTokens(
+      "@ai-sdk/anthropic",
+      { thinking: { type: "enabled", budgetTokens: budget } },
+      32_000,
+      32_000,
+    )
+    // Was 1 before the fix — now a usable amount of text.
+    expect(textTokens).toBeGreaterThanOrEqual(4_096)
+  })
+
+  test("large-cap models still clamp the budget at 31,999", () => {
+    const v = ProviderTransform.variants(claude(64_000))
+    expect((v.max as any).thinking.budgetTokens).toBe(31_999)
+  })
+})
+
+describe("ProviderTransform.variants — Gemini-3 nests under thinkingConfig", () => {
+  test("effort variants are wrapped so @ai-sdk/google actually reads them", () => {
+    const gem = model({
+      id: "google/gemini-3-pro",
+      providerID: "google",
+      api: { id: "gemini-3-pro", url: "https://generativelanguage.googleapis.com", npm: "@ai-sdk/google" },
+    })
+    const v = ProviderTransform.variants(gem)
+    expect(v.low).toEqual({ thinkingConfig: { includeThoughts: true, thinkingLevel: "low" } })
+    expect(v.high).toEqual({ thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } })
+    expect((v.low as any).thinkingLevel).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.smallOptions — OpenRouter", () => {
   test("small OR calls disable reasoning via the unified shape", () => {
     const result = ProviderTransform.smallOptions(orModel("openrouter/openai/gpt-5-nano", "openai/gpt-5-nano"))
