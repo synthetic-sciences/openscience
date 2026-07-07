@@ -20,7 +20,31 @@ import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource, llmB
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  // Hard ceiling on transient-error retries within a single message generation.
+  // The retry loop is otherwise unbounded, and retry.ts classifies any JSON
+  // body carrying an `error` field as retryable — so a persistently-failing
+  // provider (or a permanent error arriving as JSON) looped forever.
+  const MAX_RETRY_ATTEMPTS = 10
   const log = Log.create({ service: "session.processor" })
+
+  /** True when the last `threshold` TOOL calls are the same tool with the same
+   *  input, ignoring reasoning/text/step parts interleaved between them. A naive
+   *  "last N raw parts" check was defeated by reasoning models, which emit a
+   *  reasoning part before each tool call, so the doom-loop guard never fired. */
+  export function isDoomLoop(
+    parts: MessageV2.Part[],
+    toolName: string,
+    input: unknown,
+    threshold = DOOM_LOOP_THRESHOLD,
+  ): boolean {
+    const tools = parts.filter((p): p is MessageV2.ToolPart => p.type === "tool")
+    const last = tools.slice(-threshold)
+    if (last.length < threshold) return false
+    return last.every(
+      (p) =>
+        p.tool === toolName && p.state.status !== "pending" && JSON.stringify(p.state.input) === JSON.stringify(input),
+    )
+  }
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
@@ -182,18 +206,8 @@ export namespace SessionProcessor {
                     toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
                     const parts = await MessageV2.parts(input.assistantMessage.id)
-                    const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
 
-                    if (
-                      lastThree.length === DOOM_LOOP_THRESHOLD &&
-                      lastThree.every(
-                        (p) =>
-                          p.type === "tool" &&
-                          p.tool === value.toolName &&
-                          p.state.status !== "pending" &&
-                          JSON.stringify(p.state.input) === JSON.stringify(value.input),
-                      )
-                    ) {
+                    if (isDoomLoop(parts, value.toolName, value.input)) {
                       const agent = await Agent.get(input.assistantMessage.agent)
                       await PermissionNext.ask({
                         permission: "doom_loop",
@@ -419,7 +433,7 @@ export namespace SessionProcessor {
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             const retry = SessionRetry.retryable(error)
-            if (retry !== undefined) {
+            if (retry !== undefined && attempt < MAX_RETRY_ATTEMPTS) {
               attempt++
               const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
               SessionStatus.set(input.sessionID, {
@@ -432,10 +446,15 @@ export namespace SessionProcessor {
               continue
             }
             input.assistantMessage.error = error
-            Bus.publish(Session.Event.Error, {
-              sessionID: input.assistantMessage.sessionID,
-              error: input.assistantMessage.error,
-            })
+            // A user-initiated abort is a clean cancellation, not a failure —
+            // record it on the message (so the turn stops) but don't fire the
+            // session Error event the UI renders as an error state.
+            if (!MessageV2.AbortedError.isInstance(error)) {
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.assistantMessage.sessionID,
+                error: input.assistantMessage.error,
+              })
+            }
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)
