@@ -47,7 +47,17 @@ export async function runLocalModelSetup(input: LocalSetupInput = {}): Promise<s
   return Instance.provide({
     directory: process.cwd(),
     async fn() {
-      if (input.intro !== false) prompts.intro("Add a local model")
+      // Non-interactive when driven by flags (a url was supplied) or there's no
+      // TTY (CI / piped). In that mode we NEVER prompt — discover + register with
+      // sensible defaults, and error instead of blocking on input.
+      const interactive = input.url === undefined && !!process.stdin.isTTY
+      if (!interactive && !input.url) {
+        prompts.log.error(
+          "No endpoint to add. Pass --url http://localhost:11434/v1 (and optionally --model), or run interactively in a terminal.",
+        )
+        return null
+      }
+      if (input.intro !== false && interactive) prompts.intro("Add a local model")
 
       let baseURL: string
       let apiKey: string | undefined = input.key
@@ -107,23 +117,37 @@ export async function runLocalModelSetup(input: LocalSetupInput = {}): Promise<s
 
       // Discover models unless the caller specified them.
       let models = input.models ?? []
+      let listFailed = false
       if (!models.length) {
-        const spin = prompts.spinner()
-        spin.start(`Fetching models from ${baseURL}…`)
-        try {
-          models = await LocalProvider.listModels(baseURL, apiKey)
-          spin.stop(models.length ? `Found ${models.length} model(s)` : "Endpoint returned no models")
-        } catch (e) {
-          spin.stop("Couldn't reach the endpoint", 1)
-          prompts.log.warn(
-            `${e instanceof Error ? e.message : String(e)}\n` +
-              "Make sure the server is running (e.g. `ollama serve`), then retry — or enter a model id manually below.",
-          )
+        if (interactive) {
+          const spin = prompts.spinner()
+          spin.start(`Fetching models from ${baseURL}…`)
+          try {
+            models = await LocalProvider.listModels(baseURL, apiKey)
+            spin.stop(models.length ? `Found ${models.length} model(s)` : "Endpoint returned no models")
+          } catch (e) {
+            listFailed = true
+            spin.stop("Couldn't reach the endpoint", 1)
+            prompts.log.warn(
+              `${e instanceof Error ? e.message : String(e)}\n` +
+                "Make sure the server is running (e.g. `ollama serve`), then retry — or enter a model id manually below.",
+            )
+          }
+        } else {
+          // Non-interactive: probe once; if it fails, that's fatal (no fallback prompt).
+          models = (await LocalProvider.probe(baseURL, apiKey, 4000)) ?? []
+          if (!models.length) {
+            prompts.log.error(
+              `Couldn't list models from ${baseURL}. Pass --model <id> to register one without discovery, ` +
+                "or make sure the server is running.",
+            )
+            return null
+          }
         }
       }
 
       let selected: string[] = models
-      if (models.length && input.models === undefined) {
+      if (interactive && models.length && input.models === undefined) {
         const picked = await prompts.multiselect({
           message: "Which models do you want to add?",
           options: models.map((m) => ({ value: m, label: m })),
@@ -135,7 +159,12 @@ export async function runLocalModelSetup(input: LocalSetupInput = {}): Promise<s
       }
 
       if (!selected.length) {
+        if (!interactive) {
+          prompts.log.error("No models to add. Pass --model <id>.")
+          return null
+        }
         // No models discovered/selected — let the user name one directly.
+        if (listFailed) prompts.log.info("Enter a model id to register anyway:")
         const one = await prompts.text({
           message: "Model id to add",
           placeholder: "llama3.1",
@@ -160,17 +189,22 @@ export async function runLocalModelSetup(input: LocalSetupInput = {}): Promise<s
       const firstModel = `${id}/${selected[0]}`
       const makeDefault =
         input.setDefault ??
-        (await (async () => {
-          const yes = await prompts.confirm({ message: `Set ${firstModel} as your default model?`, initialValue: true })
-          return !prompts.isCancel(yes) && yes
-        })())
+        (interactive
+          ? await (async () => {
+              const yes = await prompts.confirm({
+                message: `Set ${firstModel} as your default model?`,
+                initialValue: true,
+              })
+              return !prompts.isCancel(yes) && yes
+            })()
+          : false)
       if (makeDefault) {
         await Config.update({ model: firstModel })
         prompts.log.info(`Default model set to ${firstModel}.`)
       }
 
       Provider.invalidate()
-      if (input.intro !== false) prompts.outro("Done")
+      if (input.intro !== false && interactive) prompts.outro("Done")
       prompts.log.message(`Use it now:  openscience run --model ${firstModel} "hello"`)
       return id
 
