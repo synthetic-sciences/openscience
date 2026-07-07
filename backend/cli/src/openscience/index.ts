@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import { existsSync, readFileSync, writeFileSync, chmodSync } from "fs"
 import { createRequire } from "module"
 import { fileURLToPath } from "url"
-import { randomUUID } from "crypto"
+import { randomUUID, createHash } from "crypto"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { Lock } from "../util/lock"
@@ -1235,12 +1235,29 @@ export namespace OpenScience {
 
   const pendingQueuePath = path.join(Global.Path.data, "usage-queue.jsonl")
 
-  async function persistToQueue(params: UsageParams) {
+  /** Stable per-account tag stored with a queued usage row so a later flush can't
+   *  bill a DIFFERENT account for it. user_id when known, else a short hash of the
+   *  api_key (never the raw key, which must not sit in the queue file). */
+  function accountTag(session: OpenScienceSession): string {
+    if (session.user_id) return session.user_id
+    return "k:" + createHash("sha256").update(session.api_key).digest("hex").slice(0, 16)
+  }
+
+  /** Whether a queued row tagged `rowAccount` may be flushed under `currentAccount`.
+   *  A row with no tag is legacy/accountless → best-effort send under the current
+   *  account; a row tagged for a DIFFERENT account is never sent (kept until that
+   *  account is active). Pure + exported for tests. */
+  export function shouldFlushForAccount(rowAccount: string | undefined, currentAccount: string): boolean {
+    return !rowAccount || rowAccount === currentAccount
+  }
+
+  async function persistToQueue(params: UsageParams, account?: string) {
     try {
       // Serialize against flushPendingUsage so an append can't land between
       // the flusher's read and its final rewrite (which would delete it).
       using _ = await Lock.write(pendingQueuePath)
-      await fs.appendFile(pendingQueuePath, JSON.stringify(params) + "\n")
+      const row = account ? { ...params, __account: account } : params
+      await fs.appendFile(pendingQueuePath, JSON.stringify(row) + "\n")
       log.info("usage queued for retry", { service: params.service })
     } catch (e) {
       log.warn("failed to persist usage to queue", { error: e instanceof Error ? e.message : String(e) })
@@ -1330,7 +1347,7 @@ export namespace OpenScience {
       return { recorded: false, modelBlocked: true }
     }
     if (!result.permanent) {
-      await persistToQueue(params)
+      await persistToQueue(params, accountTag(session))
     }
     return null
   }
@@ -1349,11 +1366,18 @@ export namespace OpenScience {
 
       const session = await getSession()
       if (!session) return
+      const currentAccount = accountTag(session)
 
       const retry: string[] = []
       for (const line of lines) {
         try {
-          const params: UsageParams = JSON.parse(line)
+          const { __account, ...params } = JSON.parse(line) as UsageParams & { __account?: string }
+          // Never bill the active account for usage another account generated —
+          // keep it queued until that account is the one flushing.
+          if (!shouldFlushForAccount(__account, currentAccount)) {
+            retry.push(line)
+            continue
+          }
           const result = await sendReport(params, session)
           if (!result.ok && !result.permanent) {
             retry.push(line)
