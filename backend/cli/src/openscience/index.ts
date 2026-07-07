@@ -307,7 +307,11 @@ export namespace OpenScience {
   // hang wedged whole sessions for >60 min. Overridable via OPENSCIENCE_ATLAS_TIMEOUT_MS.
   const ATLAS_FETCH_TIMEOUT_MS = Number(process.env["OPENSCIENCE_ATLAS_TIMEOUT_MS"]) || 60_000
   function atlasFetch(input: string, init: RequestInit = {}, timeoutMs = ATLAS_FETCH_TIMEOUT_MS): Promise<Response> {
-    return fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(timeoutMs) })
+    // Combine (don't replace) a caller's signal with the timeout, so passing an
+    // abort signal never silently drops the hang guard this function exists for.
+    const timeout = AbortSignal.timeout(timeoutMs)
+    const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout
+    return fetch(input, { ...init, signal })
   }
 
   export async function getSession(): Promise<OpenScienceSession | null> {
@@ -409,7 +413,13 @@ export namespace OpenScience {
       })
       if (!res.ok) return // fail open — keep current env
       const body = await res.json()
-      v = typeof body?.v === "number" ? body.v : null
+      // Coerce numeric strings too: a backend/proxy that returns {"v":"5"} would
+      // otherwise leave v=null forever, so cached_v never updates and the CLI
+      // keeps deferring the background sync for the TTL — dashboard changes never
+      // land, with no error surfaced.
+      const raw = body?.v
+      const num = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN
+      v = Number.isFinite(num) ? num : null
     } catch {
       return // network failure → use current env, retry next message
     }
@@ -718,7 +728,11 @@ export namespace OpenScience {
    *  a torn openscience-synced.json throws during config load and bricks the CLI
    *  until it's removed by hand. */
   async function atomicWrite(filepath: string, content: string, options?: { mode?: number }): Promise<void> {
-    const tmp = `${filepath}.${process.pid}.tmp`
+    // Unique per call (not just per PID): two concurrent syncs in the SAME
+    // process (e.g. a per-request /sync and the processor's background sync)
+    // would otherwise write the identical temp path, interleave, and publish a
+    // torn file or fail the rename.
+    const tmp = `${filepath}.${process.pid}.${randomUUID()}.tmp`
     await Bun.write(tmp, content, options)
     await fs.rename(tmp, filepath)
   }
@@ -972,7 +986,11 @@ export namespace OpenScience {
       if (!value) continue
       if (isManagedAtlasKey(value)) continue
       if (SHARED_PROVIDER_KEYS.has(key)) continue
-      const isSafe = SAFE_ENV_PREFIXES.some((p) => key === p || key.startsWith(p)) || SAFE_SYNCED_KEYS.has(key)
+      // Entries ending in `_` (LC_, XDG_) are true prefixes; the rest are exact
+      // names. Treating all as prefixes let HOME match HOMEBREW_GITHUB_API_TOKEN,
+      // USER match USERPROFILE, etc. — over-broad passthrough.
+      const isSafe =
+        SAFE_ENV_PREFIXES.some((p) => (p.endsWith("_") ? key.startsWith(p) : key === p)) || SAFE_SYNCED_KEYS.has(key)
       if (isSafe || !syncedSecretValues.has(key)) {
         result[key] = value
       }
