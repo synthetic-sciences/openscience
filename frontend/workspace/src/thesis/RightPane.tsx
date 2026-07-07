@@ -94,6 +94,17 @@ export function RightPane(): JSX.Element {
     const vis = visibleTabs()
     if (vis.length && !vis.some((t) => t.k === tab())) setTab(vis[0].k)
   })
+  // Run a command requested from elsewhere (e.g. the Local models settings
+  // panel's "run in terminal") in a fresh terminal tab, then reveal it.
+  const terminal = useTerminal()
+  createEffect(() => {
+    const cmd = uiStore.terminalCommand()
+    if (!cmd) return
+    terminal.new({ command: cmd.command, args: cmd.args, title: cmd.title })
+    setTab("terminal")
+    uiStore.setRightPaneOpen(true)
+    uiStore.setTerminalCommand(undefined)
+  })
   let dragStart: { x: number; w: number } | null = null
 
   const onHandlePointerDown = (e: PointerEvent) => {
