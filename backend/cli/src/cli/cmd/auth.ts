@@ -13,6 +13,7 @@ import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import { OpenScience } from "../../openscience"
 import { Log } from "../../util/log"
+import { runLocalModelSetup } from "./local"
 import type { Hooks } from "@synsci/plugin"
 
 const log = Log.create({ service: "cmd.logout" })
@@ -333,6 +334,14 @@ export const AuthLoginCommand = cmd({
               label: "Sign in with ChatGPT (Codex)",
               hint: "use your ChatGPT Plus/Pro/Business subscription — no API key",
             },
+            // Local models aren't in the models.dev catalog — surface them at the
+            // top so pointing OpenScience at Ollama / LM Studio / any local
+            // OpenAI-compatible endpoint is a first-class, discoverable choice.
+            {
+              value: "local",
+              label: "Local model (Ollama / LM Studio / OpenAI-compatible)",
+              hint: "an endpoint on your machine — free, offline, no API key",
+            },
             ...pipe(
               providers,
               values(),
@@ -358,6 +367,13 @@ export const AuthLoginCommand = cmd({
         })
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
+
+        // Local endpoint (Ollama / LM Studio / OpenAI-compatible): runs the local
+        // setup wizard, which writes a provider config block (not an auth key).
+        if (provider === "local") {
+          await runLocalModelSetup({ intro: false })
+          return
+        }
 
         // Selecting the OpenAI provider offers two distinct auth styles: a
         // ChatGPT subscription (Codex OAuth, no API key) or an OpenAI Platform
