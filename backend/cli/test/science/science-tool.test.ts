@@ -60,6 +60,18 @@ async function search(query: string) {
   })
 }
 
+async function searchWithAbort(db: string, query: string) {
+  const controller = new AbortController()
+  controller.abort()
+  return Instance.provide({
+    directory: projectRoot,
+    fn: async () => {
+      const tool = await ScienceSearchTool.init()
+      return tool.execute({ db, query, limit: 10 }, { ...ctx, abort: controller.signal })
+    },
+  })
+}
+
 beforeEach(() => {
   clearCache()
   resetRateLimits()
@@ -96,5 +108,13 @@ describe("science_search degradation (arxiv)", () => {
     expect(result.metadata.count).toBe(0)
     expect(result.title).toContain("source error")
     expect(result.output).not.toContain("## Error")
+  })
+
+  test("cancelled connector requests propagate abort instead of reporting no results", async () => {
+    globalThis.fetch = (async () => {
+      throw new DOMException("aborted", "AbortError")
+    }) as unknown as typeof fetch
+
+    await expect(searchWithAbort("uniprot", "BRCA1")).rejects.toThrow(/aborted/i)
   })
 })

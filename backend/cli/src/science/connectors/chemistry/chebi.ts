@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 
 /**
  * ChEBI — Chemical Entities of Biological Interest (EMBL-EBI), queried through
@@ -28,8 +28,10 @@ export const chebi: Connector = {
   async search(query, opts) {
     const rows = Math.min(opts?.limit ?? 10, 25)
     const url = `${OLS}/search?q=${encodeURIComponent(query)}&ontology=chebi&rows=${rows}`
-    const data = await getJSON<{ response?: { docs?: Doc[] } }>(url, { signal: opts?.signal }).catch(
-      () => ({}) as { response?: { docs?: Doc[] } },
+    const data = await orFallback(
+      getJSON<{ response?: { docs?: Doc[] } }>(url, { signal: opts?.signal }),
+      {} as { response?: { docs?: Doc[] } },
+      opts?.signal,
     )
     const docs = data.response?.docs ?? []
     return docs.slice(0, rows).map<ConnectorHit>((d) => {
@@ -46,8 +48,10 @@ export const chebi: Connector = {
 
   async fetch(id, opts) {
     const url = `${OLS}/ontologies/chebi/terms?obo_id=${encodeURIComponent(id)}`
-    const data = await getJSON<{ _embedded?: { terms?: unknown[] } }>(url, { signal: opts?.signal }).catch(
-      () => ({}) as { _embedded?: { terms?: unknown[] } },
+    const data = await orFallback(
+      getJSON<{ _embedded?: { terms?: unknown[] } }>(url, { signal: opts?.signal }),
+      {} as { _embedded?: { terms?: unknown[] } },
+      opts?.signal,
     )
     const terms = data._embedded?.terms
     return Array.isArray(terms) && terms.length ? terms[0] : data

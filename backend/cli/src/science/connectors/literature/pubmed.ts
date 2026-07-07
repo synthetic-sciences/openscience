@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON, getText } from "../http"
+import { getJSON, getText, orFallback } from "../http"
 import { raw, snippet } from "./shared"
 
 /**
@@ -88,9 +88,13 @@ export const pubmed: Connector = {
     const record = esummary.result?.[clean]
     const summary = record && !Array.isArray(record) ? record : undefined
 
-    const abstract = await getText(`${BASE}/efetch.fcgi?db=pubmed&rettype=abstract&retmode=text&id=${clean}`, {
-      signal: opts?.signal,
-    }).catch(() => undefined)
+    const abstract = await orFallback(
+      getText(`${BASE}/efetch.fcgi?db=pubmed&rettype=abstract&retmode=text&id=${clean}`, {
+        signal: opts?.signal,
+      }),
+      undefined,
+      opts?.signal,
+    )
 
     return {
       pmid: clean,

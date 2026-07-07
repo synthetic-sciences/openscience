@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 
 /**
  * ChEMBL — bioactive drug-like small molecules curated by EMBL-EBI.
@@ -40,8 +40,10 @@ export const chembl: Connector = {
   async search(query, opts) {
     const limit = Math.min(opts?.limit ?? 10, 25)
     const url = `${BASE}/molecule/search.json?q=${encodeURIComponent(query)}&limit=${limit}`
-    const data = await getJSON<{ molecules?: Molecule[] }>(url, { signal: opts?.signal }).catch(
-      () => ({}) as { molecules?: Molecule[] },
+    const data = await orFallback(
+      getJSON<{ molecules?: Molecule[] }>(url, { signal: opts?.signal }),
+      {} as { molecules?: Molecule[] },
+      opts?.signal,
     )
     const molecules = Array.isArray(data.molecules) ? data.molecules : []
     return molecules.slice(0, limit).map<ConnectorHit>((m) => {

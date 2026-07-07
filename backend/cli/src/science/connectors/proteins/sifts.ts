@@ -32,7 +32,8 @@ async function bestStructures(accession: string, signal?: AbortSignal): Promise<
       { signal },
     )
     return asArray<BestStructure>(data[accession])
-  } catch {
+  } catch (err) {
+    if (signal?.aborted) throw err
     return []
   }
 }

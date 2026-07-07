@@ -58,7 +58,8 @@ export async function resolveUniProtAccessions(query: string, limit: number, sig
     return asArray<{ primaryAccession?: string }>(data.results)
       .map((r) => r.primaryAccession)
       .filter((a): a is string => typeof a === "string")
-  } catch {
+  } catch (err) {
+    if (signal?.aborted) throw err
     return []
   }
 }

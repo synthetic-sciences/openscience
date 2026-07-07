@@ -261,6 +261,16 @@ export async function getText(url: string, opts?: HttpOptions): Promise<string> 
   return res.text()
 }
 
+/** Return a fallback for source errors, but never swallow caller cancellation. */
+export async function orFallback<T>(promise: Promise<T>, fallback: T, signal?: AbortSignal): Promise<T> {
+  try {
+    return await promise
+  } catch (err) {
+    if (signal?.aborted) throw err
+    return fallback
+  }
+}
+
 /** Clear the in-memory cache (test/debug helper). */
 export function clearCache(): void {
   cache.clear()

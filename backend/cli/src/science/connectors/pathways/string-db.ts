@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 import { asText, clampLimit, snippet } from "./util"
 
 /** A resolved identifier from STRING's `get_string_ids` endpoint. */
@@ -47,7 +47,7 @@ export const stringdb: Connector = {
       echo_query: "1",
     })
     const url = `${API}/json/get_string_ids?${params.toString()}`
-    const data = await getJSON<StringMatch[]>(url, { signal: opts?.signal }).catch(() => [])
+    const data = await orFallback(getJSON<StringMatch[]>(url, { signal: opts?.signal }), [], opts?.signal)
     const rows = Array.isArray(data) ? data : []
 
     return rows.slice(0, limit).map<ConnectorHit>((m) => {
@@ -67,7 +67,7 @@ export const stringdb: Connector = {
     const params = new URLSearchParams({ identifiers: id, limit: "25" })
     if (species) params.set("species", species)
     const url = `${API}/json/interaction_partners?${params.toString()}`
-    const partners = await getJSON<StringPartner[]>(url, { signal: opts?.signal }).catch(() => [])
+    const partners = await orFallback(getJSON<StringPartner[]>(url, { signal: opts?.signal }), [], opts?.signal)
     return { id, partners: Array.isArray(partners) ? partners : [] }
   },
 }

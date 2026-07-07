@@ -28,7 +28,8 @@ const API = "https://alphafold.ebi.ac.uk/api/prediction"
 async function predict(accession: string, signal?: AbortSignal): Promise<Prediction[]> {
   try {
     return asArray<Prediction>(await getJSON(`${API}/${encodeURIComponent(accession)}`, { signal }))
-  } catch {
+  } catch (err) {
+    if (signal?.aborted) throw err
     return []
   }
 }

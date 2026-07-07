@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 import { asText, clampLimit, snippet, stripTags } from "./util"
 
 /** A single entry inside a Reactome search result group. */
@@ -36,7 +36,11 @@ export const reactome: Connector = {
     const species = asText(opts?.organism)
     if (species) params.set("species", species)
     const url = `${CONTENT}/search/query?${params.toString()}`
-    const data = await getJSON<ReactomeSearch>(url, { signal: opts?.signal }).catch(() => ({}) as ReactomeSearch)
+    const data = await orFallback(
+      getJSON<ReactomeSearch>(url, { signal: opts?.signal }),
+      {} as ReactomeSearch,
+      opts?.signal,
+    )
 
     const hits: ConnectorHit[] = []
     for (const group of data.results ?? []) {
@@ -58,6 +62,6 @@ export const reactome: Connector = {
 
   async fetch(id, opts) {
     const url = `${CONTENT}/data/query/${encodeURIComponent(id)}`
-    return getJSON(url, { signal: opts?.signal }).catch(() => null)
+    return orFallback(getJSON(url, { signal: opts?.signal }), null, opts?.signal)
   },
 }
