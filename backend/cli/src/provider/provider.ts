@@ -196,13 +196,19 @@ export namespace Provider {
         },
       }
     },
-    async openscience(input) {
+    // Keyed on the catalog provider id `synsci` (the Atlas wire-contract id) — a
+    // stale `openscience` key here never matched database["openscience"], so the
+    // loop logged "Provider does not exist in model list openscience" and this
+    // loader never ran: the zero-cost demo's `apiKey: "public"` sentinel was
+    // never set (new keyless users couldn't use the demo at all) and the
+    // "drop paid models when no key" gating was skipped.
+    async synsci(input) {
       const hasKey = await (async () => {
         const env = Env.all()
         if (input.env.some((item) => env[item])) return true
         if (await Auth.get(input.id)) return true
         const config = await Config.get()
-        if (config.provider?.["synsci"]?.options?.apiKey) return true
+        if (config.provider?.[input.id]?.options?.apiKey) return true
         return false
       })()
 
