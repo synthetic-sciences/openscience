@@ -9,7 +9,7 @@
   "scripts": {
     "preinstall": "node ./script/preinstall.mjs || exit 0",
     "typecheck": "tsgo --noEmit",
-    "test": "bun test",
+    "test": "bun test --timeout 15000",
     "build": "bun run script/build.ts",
     "dev": "bun run --conditions=browser ./src/index.ts"
   },

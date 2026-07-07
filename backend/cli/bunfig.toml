@@ -1,3 +1,6 @@
 [test]
 preload = ["./test/preload.ts"]
-timeout = 10000  # 10 seconds (default is 5000ms)
+# NOTE: bun ignores a `timeout` key here (verified: a 7s sleep test still
+# dies at the 5000ms default with this file present). The per-test default
+# timeout only applies via the CLI flag - see `--timeout` in package.json's
+# test script.
