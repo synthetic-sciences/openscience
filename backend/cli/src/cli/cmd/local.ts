@@ -199,7 +199,10 @@ export async function runLocalModelSetup(input: LocalSetupInput = {}): Promise<s
             })()
           : false)
       if (makeDefault) {
-        await Config.update({ model: firstModel })
+        // Set the default in the SAME scope as the provider block (global by
+        // default) — never write into whatever project happens to be the cwd.
+        if (input.project) await Config.update({ model: firstModel })
+        else await Config.updateGlobal({ model: firstModel })
         prompts.log.info(`Default model set to ${firstModel}.`)
       }
 
