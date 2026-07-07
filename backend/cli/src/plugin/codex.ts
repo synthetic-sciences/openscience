@@ -742,7 +742,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                     })
                     // Re-sync after backend now knows about the new codex
                     // credential, so `openai-codex` shows up in the local
-                    // provider list without a separate `openscience connect sync`.
+                    // provider list without a separate `openscience sync`.
                     await OpenScience.syncServices?.().catch((e: unknown) => {
                       log.warn("post-codex-login sync failed", { error: String(e) })
                     })

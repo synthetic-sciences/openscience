@@ -406,7 +406,7 @@ export async function initProjectDetailed(directory: string): Promise<InitProjec
   if (!directory)
     return { projectId: null, failure: { kind: "backend", message: "no directory provided", host: API_BASE } }
   // Fail fast offline: no managed session means no request can succeed —
-  // don't turn a missing `openscience connect login` into a network error.
+  // don't turn a missing `openscience login` into a network error.
   if (!(await token())) return { projectId: null, failure: { kind: "unauthenticated", host: API_BASE } }
   const existing = await resolveProjectId(directory)
   if (existing) return { projectId: existing }

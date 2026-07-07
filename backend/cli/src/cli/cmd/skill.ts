@@ -308,7 +308,7 @@ const SkillListCommand = cmd({
           UI.println(
             "Only a small bundled skill set is visible; this usually means the full OpenScience skill index was not fetched.",
           )
-          UI.println("Run `openscience connect sync` or try again once online/authenticated.")
+          UI.println("Run `openscience sync` or try again once online/authenticated.")
           UI.println("")
         } else if (!showAll) {
           UI.println("Use `openscience skill list --all` to show bundled OpenScience skills.")

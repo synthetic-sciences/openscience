@@ -57,7 +57,7 @@ At the START of the task, before Stage 1, set up the graph:
    even if `atlas` is unavailable. On success it prints `{"project_id":"<id>"}` and writes
    `.openscience/project.json`; note the project_id. ONLY skip Atlas if it prints
    `project_id: null` with an `error` kind — relay the matching fix (`unauthenticated` →
-   `openscience connect login`; `plan` → app.syntheticsciences.ai/cli; `unreachable`/`backend`
+   `openscience login`; `plan` → app.syntheticsciences.ai/cli; `unreachable`/`backend`
    → show the message) and continue the work. (Or load the `initialize-atlas-graph` skill,
    which wraps this exact command.)
 2. **Load prior graph state — optional, best-effort.** Run `atlas doctor --format=json`. If it

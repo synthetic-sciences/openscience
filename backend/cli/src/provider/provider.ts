@@ -120,7 +120,7 @@ export namespace Provider {
     if (isAtlasProxyBaseURL(options["baseURL"])) return
     throw new Error(
       `${provider.id} is using a managed Atlas key without an Atlas proxy URL. ` +
-        "Run `openscience connect sync` and try again.",
+        "Run `openscience sync` and try again.",
     )
   }
 

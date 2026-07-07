@@ -4,7 +4,7 @@
  * Runs BEFORE any provider SDK construction (Anthropic, OpenAI,
  * @ai-sdk/google) so those SDKs see the correct ANTHROPIC_BASE_URL /
  * ANTHROPIC_API_KEY / etc. on their own startup, without waiting for
- * the asynchronous `openscience connect sync` call later in CLI boot.
+ * the asynchronous `openscience sync` call later in CLI boot.
  *
  * Without this, the first invocation after a fresh terminal session
  * would race: sync sets process.env in-process, but the SDK had

@@ -37,7 +37,7 @@ if (API_BASE !== DEFAULT_API_BASE) {
   }
 }
 
-// User-facing URL the CLI prints during `openscience connect login`. Defaults
+// User-facing URL the CLI prints during `openscience login`. Defaults
 // to the unified Atlas frontend's /cli route — Plan tab, key management,
 // and billing all live there. SYNSC_AUTH_URL overrides (e.g. point at a
 // staging frontend or the old auth.syntheticsciences.ai surface).
@@ -514,7 +514,7 @@ export namespace OpenScience {
     } catch {}
     // Union of what this process synced (in-memory map) and what the last
     // sync persisted (disk snapshot, replayed by preload-env.ts at boot) —
-    // a fresh `connect logout` process has only the latter.
+    // a fresh `logout` process has only the latter.
     const synced = await readSyncedSnapshot()
     for (const [key, value] of syncedSecretValues.entries()) synced.set(key, value)
     for (const name of ["synced-env.json", "openscience-synced.json"]) {

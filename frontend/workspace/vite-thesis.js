@@ -44,7 +44,7 @@ function sessionToken() {
 
 async function atlasFetch(method, path, body) {
   const token = sessionToken()
-  if (!token) throw new Error("not logged in — run `openscience connect login`")
+  if (!token) throw new Error("not logged in — run `openscience login`")
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {

@@ -536,6 +536,87 @@ export const AuthCodexCommand = cmd({
   },
 })
 
+/** Best-effort server-side disconnect of the Codex credential, mirroring
+ *  pushTokensToBackend's POST. Runs BEFORE the local removal so the thk_ key can
+ *  still authenticate the call. Never throws — the local Auth.remove is what
+ *  actually signs the CLI out. */
+async function disconnectCodexBackend(): Promise<void> {
+  const session = await OpenScience.getSession?.()
+  const thkToken = session?.api_key
+  if (!thkToken) return
+  try {
+    await fetch(`${managedApiBase()}/api/keys/openai-codex`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${thkToken}` },
+    })
+  } catch {
+    /* best-effort — local removal below is the source of truth */
+  }
+}
+
+/** `openscience connect [codex]` — sign in with a ChatGPT (Codex) subscription.
+ *  The connect/disconnect verb pair is Codex's; Atlas uses login/logout. */
+export const ConnectCommand = cmd({
+  command: "connect [service]",
+  describe: "connect a ChatGPT subscription (Codex) — sign in with ChatGPT",
+  builder: (yargs) =>
+    yargs.positional("service", {
+      type: "string",
+      choices: ["codex"] as const,
+      default: "codex",
+      describe: "service to connect (only `codex` today)",
+    }),
+  async handler() {
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("Connect ChatGPT (Codex)")
+        const handled = await runCodexAuthFlow()
+        if (!handled) prompts.outro("Done")
+      },
+    })
+  },
+})
+
+/** `openscience disconnect [codex]` — sign out of ChatGPT (Codex): clears the
+ *  local OAuth credential and best-effort revokes it server-side. */
+export const DisconnectCommand = cmd({
+  command: "disconnect [service]",
+  describe: "disconnect your ChatGPT subscription (Codex)",
+  builder: (yargs) =>
+    yargs.positional("service", {
+      type: "string",
+      choices: ["codex"] as const,
+      default: "codex",
+      describe: "service to disconnect (only `codex` today)",
+    }),
+  async handler() {
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("Disconnect ChatGPT (Codex)")
+
+        const existing = await Auth.get("openai-codex")
+        const backend = await backendHasCodex()
+        if (!existing && backend !== true) {
+          prompts.log.warn("ChatGPT (Codex) isn't connected.")
+          prompts.outro("Done")
+          return
+        }
+
+        // Revoke server-side while the thk_ key can still authenticate, then
+        // drop the local credential (the part that actually signs the CLI out).
+        await disconnectCodexBackend()
+        await Auth.remove("openai-codex")
+        prompts.log.success("Disconnected ChatGPT (Codex)")
+        prompts.outro("Done")
+      },
+    })
+  },
+})
+
 export const AuthLogoutCommand = cmd({
   command: ["remove", "rm", "logout"],
   describe: "remove a saved provider key",
