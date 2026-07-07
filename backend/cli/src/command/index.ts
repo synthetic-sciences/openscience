@@ -28,6 +28,10 @@ export namespace Command {
       agent: z.string().optional(),
       model: z.string().optional(),
       mcp: z.boolean().optional(),
+      // Surface this command in the composer slash menu. Only no-argument action
+      // commands (e.g. /compact) should set it — arg-taking prompt-template
+      // commands can't receive their args from that menu.
+      menu: z.boolean().optional(),
       // workaround for zod not supporting async functions natively so we use getters
       // https://zod.dev/v4/changelog?id=zfunction
       template: z.promise(z.string()).or(z.string()),
@@ -55,6 +59,7 @@ export namespace Command {
     INIT: "init",
     REVIEW: "review",
     LEARN: "learn",
+    COMPACT: "compact",
   } as const
 
   const state = Instance.state(async () => {
@@ -85,6 +90,17 @@ export namespace Command {
           return PROMPT_LEARN
         },
         hints: hints(PROMPT_LEARN),
+      },
+      // Action command, not a prompt template — SessionPrompt.command intercepts
+      // it and runs SessionCompaction directly. The empty template is never used.
+      [Default.COMPACT]: {
+        name: Default.COMPACT,
+        description: "summarize the conversation so far to free up context",
+        menu: true,
+        get template() {
+          return ""
+        },
+        hints: [],
       },
     }
 

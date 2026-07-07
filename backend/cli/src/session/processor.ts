@@ -54,12 +54,16 @@ export namespace SessionProcessor {
     sessionID: string
     model: Provider.Model
     abort: AbortSignal
+    // Status published while this processor is streaming. Compaction turns pass
+    // "compacting" so the UI can show a distinct loader.
+    busyStatus?: "busy" | "compacting"
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+    let overflow = false
 
     const result = {
       get message() {
@@ -71,6 +75,7 @@ export namespace SessionProcessor {
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
         needsCompaction = false
+        overflow = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
           try {
@@ -121,7 +126,7 @@ export namespace SessionProcessor {
               input.abort.throwIfAborted()
               switch (value.type) {
                 case "start":
-                  SessionStatus.set(input.sessionID, { type: "busy" })
+                  SessionStatus.set(input.sessionID, { type: input.busyStatus ?? "busy" })
                   break
 
                 case "reasoning-start":
@@ -361,7 +366,14 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
-                  if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
+                  // Skip the summary turn itself: its input IS the over-threshold
+                  // history being compacted, so it would always trip isOverflow and
+                  // return "compact" — which skips the auto-resume Continue injection
+                  // in compaction.process and strands the task after compacting.
+                  if (
+                    !input.assistantMessage.summary &&
+                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
+                  ) {
                     needsCompaction = true
                   }
                   break
@@ -432,28 +444,41 @@ export namespace SessionProcessor {
               stack: JSON.stringify(e.stack),
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
-            const retry = SessionRetry.retryable(error)
-            if (retry !== undefined && attempt < MAX_RETRY_ATTEMPTS) {
-              attempt++
-              const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-              SessionStatus.set(input.sessionID, {
-                type: "retry",
-                attempt,
-                message: retry,
-                next: Date.now() + delay,
-              })
-              await SessionRetry.sleep(delay, input.abort).catch(() => {})
-              continue
+            // A context-window overflow is deterministic — retrying the same
+            // oversized input can only fail again. Signal the outer loop (via the
+            // "overflow" return below) to compact + resume instead of burning
+            // retries or surfacing an error. Checked BEFORE retryable() so it
+            // isn't swallowed by the generic "Provider Server Error" bucket.
+            overflow = SessionRetry.isContextOverflow(error)
+            if (overflow) {
+              log.info("context overflow — compacting instead of retrying", { sessionID: input.sessionID })
+              // Mark the turn finished so it isn't persisted as a blank, statusless
+              // assistant bubble; the outer loop compacts it away and resumes.
+              input.assistantMessage.finish = "compact"
             }
-            input.assistantMessage.error = error
-            // A user-initiated abort is a clean cancellation, not a failure —
-            // record it on the message (so the turn stops) but don't fire the
-            // session Error event the UI renders as an error state.
-            if (!MessageV2.AbortedError.isInstance(error)) {
-              Bus.publish(Session.Event.Error, {
-                sessionID: input.assistantMessage.sessionID,
-                error: input.assistantMessage.error,
-              })
+            if (!overflow) {
+              const retry = SessionRetry.retryable(error)
+              if (retry !== undefined && attempt < MAX_RETRY_ATTEMPTS) {
+                attempt++
+                const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+                SessionStatus.set(input.sessionID, {
+                  type: "retry",
+                  attempt,
+                  message: retry,
+                  next: Date.now() + delay,
+                })
+                await SessionRetry.sleep(delay, input.abort).catch(() => {})
+                continue
+              }
+              input.assistantMessage.error = error
+              // A user-initiated abort is a clean cancellation, not a failure —
+              // record it on the message but don't fire the session Error event.
+              if (!MessageV2.AbortedError.isInstance(error)) {
+                Bus.publish(Session.Event.Error, {
+                  sessionID: input.assistantMessage.sessionID,
+                  error: input.assistantMessage.error,
+                })
+              }
             }
           }
           if (snapshot) {
@@ -489,6 +514,7 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+          if (overflow) return "overflow"
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"

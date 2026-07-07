@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import type { NamedError } from "@synsci/util/error"
 import { APICallError } from "ai"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
+import { NamedError } from "@synsci/util/error"
 
 function apiError(headers?: Record<string, string>): MessageV2.APIError {
   return new MessageV2.APIError({
@@ -12,8 +12,8 @@ function apiError(headers?: Record<string, string>): MessageV2.APIError {
   }).toObject() as MessageV2.APIError
 }
 
-function wrap(message: unknown): ReturnType<NamedError["toObject"]> {
-  return { data: { message } } as ReturnType<NamedError["toObject"]>
+function wrap(message: unknown) {
+  return new NamedError.Unknown({ message: String(message) }).toObject()
 }
 
 describe("session.retry.delay", () => {
@@ -175,5 +175,88 @@ describe("session.message-v2.fromError", () => {
     })
     const result = MessageV2.fromError(error, { providerID: "openai" }) as MessageV2.APIError
     expect(result.data.isRetryable).toBe(true)
+  })
+})
+
+describe("SessionRetry.isContextOverflow", () => {
+  const api = (data: {
+    statusCode?: number
+    responseBody?: string
+    message?: string
+  }) =>
+    new MessageV2.APIError({ message: "", isRetryable: true, ...data }).toObject() as MessageV2.APIError
+
+  test("true for OpenAI/Codex context_length_exceeded code in responseBody", () => {
+    const err = api({
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: { type: "invalid_request_error", code: "context_length_exceeded", message: "Your input exceeds the context window of this model." },
+      }),
+    })
+    expect(SessionRetry.isContextOverflow(err)).toBe(true)
+  })
+
+  test("true for string_above_max_length code", () => {
+    const err = api({ statusCode: 400, responseBody: JSON.stringify({ error: { code: "string_above_max_length", message: "too long" } }) })
+    expect(SessionRetry.isContextOverflow(err)).toBe(true)
+  })
+
+  test("true for Anthropic-style 'prompt is too long' message (no code)", () => {
+    const err = wrap(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "prompt is too long: 250000 tokens > 200000 maximum" } }))
+    expect(SessionRetry.isContextOverflow(err)).toBe(true)
+  })
+
+  test("true for Gemini-style INVALID_ARGUMENT message that mentions the context window", () => {
+    const err = wrap(JSON.stringify({ error: { status: "INVALID_ARGUMENT", message: "The input token count exceeds the maximum number of tokens allowed." } }))
+    expect(SessionRetry.isContextOverflow(err)).toBe(true)
+  })
+
+  test("false for a 5xx server error even if its body mentions context", () => {
+    const err = api({ statusCode: 503, responseBody: JSON.stringify({ error: { message: "context service temporarily unavailable" } }) })
+    expect(SessionRetry.isContextOverflow(err)).toBe(false)
+  })
+
+  test("false for a plain rate limit", () => {
+    const err = api({ statusCode: 429, responseBody: JSON.stringify({ error: { type: "too_many_requests", message: "Rate limited" } }) })
+    expect(SessionRetry.isContextOverflow(err)).toBe(false)
+  })
+
+  test("false for an unrelated bad-parameter invalid_request_error", () => {
+    const err = api({ statusCode: 400, responseBody: JSON.stringify({ error: { type: "invalid_request_error", message: "Unknown parameter: 'foo'." } }) })
+    expect(SessionRetry.isContextOverflow(err)).toBe(false)
+  })
+
+  test("false for a 429 rate limit whose message mentions reducing prompt length", () => {
+    // A retryable TPM rate limit must not be treated as a deterministic overflow.
+    const err = api({
+      statusCode: 429,
+      responseBody: JSON.stringify({ error: { message: "Rate limit reached. Please reduce your prompt length and retry." } }),
+    })
+    expect(SessionRetry.isContextOverflow(err)).toBe(false)
+  })
+
+  test("false for rate-limit-guidance wording no longer in the overflow patterns", () => {
+    // "too many tokens" / "reduce the length" were removed — they also appear in
+    // rate-limit guidance, and no remaining overflow pattern is present here.
+    const err = api({
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message: "You are sending too many tokens; reduce the length of the messages." } }),
+    })
+    expect(SessionRetry.isContextOverflow(err)).toBe(false)
+  })
+
+  test("false for a streamed (statusCode-less) rate limit that also mentions token counts", () => {
+    // No statusCode → the numeric 5xx/429 guards can't fire. A Gemini/quota rate limit
+    // whose text mentions "input token count" must stay retryable, not be turned into a
+    // deterministic overflow (which would burn the turn on a terminal 'too large').
+    const err = wrap(
+      JSON.stringify({
+        error: {
+          status: "RESOURCE_EXHAUSTED",
+          message: "Quota exceeded: input token count over the per-minute limit, please try again later.",
+        },
+      }),
+    )
+    expect(SessionRetry.isContextOverflow(err)).toBe(false)
   })
 })

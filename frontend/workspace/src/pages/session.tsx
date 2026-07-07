@@ -19,6 +19,7 @@ import { useLayout } from "@/context/layout"
 import { useTheme } from "@synsci/ui/theme"
 import { PromptInput } from "@/components/prompt-input"
 import { NewSessionView } from "@/components/session/session-new-view"
+import { AsciiSpinner } from "@/thesis/shared/AsciiSpinner"
 import { Wordmark } from "@/thesis/Wordmark"
 import { AppHeader, HeaderIconButton, HeaderDivider } from "@/thesis/AppHeader"
 import { RightPane } from "@/thesis/RightPane"
@@ -238,6 +239,23 @@ export default function Page(): JSX.Element {
     const revertID = revertInfo()?.messageID
     return messages().filter((m) => m.role === "user" && (!revertID || m.id < revertID))
   })
+  const sessionStatus = createMemo(() =>
+    params.id ? (sync.data.session_status?.[params.id] as { type?: string } | undefined)?.type : undefined,
+  )
+  // A message is a compaction boundary when it carries a `compaction` part.
+  const hasCompactionPart = (id: string) => (sync.data.part[id] ?? []).some((p) => p.type === "compaction")
+  // While compacting, an inline loader replaces the divider on the compaction
+  // message currently being summarized (the most recent one). Once compaction
+  // finishes the status leaves "compacting" and it becomes the "context
+  // compacted" divider; older boundaries always render as dividers.
+  const compactingMessageId = createMemo(() => {
+    if (sessionStatus() !== "compacting") return undefined
+    const msgs = turnMessages()
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (hasCompactionPart(msgs[i].id)) return msgs[i].id
+    }
+    return undefined
+  })
   const revertedCount = createMemo(() => {
     const revertID = revertInfo()?.messageID
     if (!revertID) return 0
@@ -305,6 +323,26 @@ export default function Page(): JSX.Element {
         onSelect: () => void restoreRevert(),
       })
     }
+    // /compact — summarize the conversation to free up context. Runs the backend
+    // compaction action (model/agent default to the session's last); it does NOT
+    // prefill text, so it must be a builtin option, not a `sync.data.command`
+    // entry (those prefill). The backend command is deduped out of the prompt
+    // menu's custom list by its `menu` flag.
+    list.push({
+      id: "session.compact",
+      title: "Compact conversation",
+      description: "Summarize the conversation so far to free up context",
+      category: language.t("command.category.session"),
+      slash: "compact",
+      onSelect: () => {
+        void sdk.client.session
+          .command({ sessionID: id, command: "compact", arguments: "" } as any)
+          .catch((e: unknown) => {
+            console.error("compact failed", e)
+            toast.error("could not compact", e instanceof Error ? e.message : String(e))
+          })
+      },
+    })
     return list
   })
 
@@ -530,20 +568,67 @@ export default function Page(): JSX.Element {
                       <For each={turnMessages()}>
                         {(message, index) => (
                           <div data-message-id={message.id} class="min-w-0 w-full max-w-full">
-                            <SessionTurn
-                              sessionID={params.id!}
-                              messageID={message.id}
-                              lastUserMessageID={lastUserMessage()?.id}
-                              stepsExpanded={stepsExpanded()[message.id] ?? false}
-                              onStepsExpandedToggle={() => toggleSteps(message.id)}
-                              classes={{
-                                root: "min-w-0 w-full relative",
-                                content: "flex flex-col justify-between !overflow-visible",
-                                container: "w-full px-4 md:px-6",
-                              }}
-                            />
-                            {/* The v1.1.116 between-turns rule */}
-                            <Show when={index() < turnMessages().length - 1}>
+                            <Show
+                              when={!hasCompactionPart(message.id)}
+                              fallback={
+                                <Show
+                                  when={message.id === compactingMessageId()}
+                                  fallback={
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        "align-items": "center",
+                                        gap: "10px",
+                                        padding: "2px 16px",
+                                        "font-size": "11px",
+                                        "letter-spacing": "0.06em",
+                                        "text-transform": "uppercase",
+                                        color: "var(--color-text-faint)",
+                                      }}
+                                    >
+                                      <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
+                                      <span>context compacted</span>
+                                      <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
+                                    </div>
+                                  }
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      "align-items": "center",
+                                      "justify-content": "center",
+                                      gap: "8px",
+                                      padding: "6px 16px",
+                                      "font-family": FONT_MONO,
+                                      "font-size": "11px",
+                                      "letter-spacing": "0.06em",
+                                      "text-transform": "uppercase",
+                                      color: "var(--color-text-faint)",
+                                    }}
+                                  >
+                                    <AsciiSpinner size={10} />
+                                    <span>compacting conversation…</span>
+                                  </div>
+                                </Show>
+                              }
+                            >
+                              <SessionTurn
+                                sessionID={params.id!}
+                                messageID={message.id}
+                                lastUserMessageID={lastUserMessage()?.id}
+                                stepsExpanded={stepsExpanded()[message.id] ?? false}
+                                onStepsExpandedToggle={() => toggleSteps(message.id)}
+                                classes={{
+                                  root: "min-w-0 w-full relative",
+                                  content: "flex flex-col justify-between !overflow-visible",
+                                  container: "w-full px-4 md:px-6",
+                                }}
+                              />
+                            </Show>
+                            {/* The v1.1.116 between-turns rule — skipped for a
+                                compaction row, which already draws its own "context
+                                compacted" divider (avoids a doubled rule). */}
+                            <Show when={index() < turnMessages().length - 1 && !hasCompactionPart(message.id)}>
                               <div class="w-full px-4 md:px-6 pt-2 pb-1">
                                 <div class="h-[2px] bg-border-weak-base rounded-full" />
                               </div>

@@ -18,6 +18,9 @@ export namespace SessionStatus {
       z.object({
         type: z.literal("busy"),
       }),
+      z.object({
+        type: z.literal("compacting"),
+      }),
     ])
     .meta({
       ref: "SessionStatus",

@@ -27,15 +27,33 @@ export namespace SessionCompaction {
     ),
   }
 
+  // Fraction of the usable context budget at which auto-compaction fires. 0.75
+  // matches Claude Code / opencode: ~25% headroom so the NEXT turn (plus its
+  // output) can't blow the hard limit before compaction runs. Overridable via
+  // config.compaction.threshold.
+  export const DEFAULT_THRESHOLD = 0.75
+
+  // Assumed context window when a provider reports 0 (local / OpenAI-compatible
+  // / Codex). Matches the existing unknown-model fallback at provider.ts:770.
+  // Overridable via config.compaction.fallbackContext — a small local model
+  // (e.g. an 8k Ollama build reporting context 0) should lower it, or proactive
+  // compaction never fires until far past its real window.
+  export const FALLBACK_CONTEXT = 128_000
+
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
-    const context = input.model.limit.context
-    if (context === 0) return false
+    const context = input.model.limit.context || config.compaction?.fallbackContext || FALLBACK_CONTEXT
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
+    const cap = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
+    // Never reserve more than half the window for output. On a small model (or a
+    // small fallbackContext like the 8k the config text recommends) the 32k default
+    // output cap exceeds the whole context, so `context - output` goes negative and
+    // `count > usable*threshold` is true for ANY count — compacting every single turn.
+    const output = Math.min(cap, Math.floor(context / 2))
     const usable = input.model.limit.input || context - output
-    return count > usable
+    const threshold = config.compaction?.threshold ?? DEFAULT_THRESHOLD
+    return count > usable * threshold
   }
 
   export const PRUNE_MINIMUM = 20_000
@@ -97,6 +115,7 @@ export namespace SessionCompaction {
     sessionID: string
     abort: AbortSignal
     auto: boolean
+    focus?: string
   }) {
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
@@ -133,6 +152,7 @@ export namespace SessionCompaction {
       sessionID: input.sessionID,
       model,
       abort: input.abort,
+      busyStatus: "compacting",
     })
     // Allow plugins to inject context or replace compaction prompt
     const compacting = await Plugin.trigger(
@@ -142,7 +162,10 @@ export namespace SessionCompaction {
     )
     const defaultPrompt =
       "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
-    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    const focusLine = input.focus?.trim()
+      ? `\n\nThe next session will focus on: ${input.focus.trim()}. Tailor the summary toward that.`
+      : ""
+    const promptText = compacting.prompt ?? [defaultPrompt + focusLine, ...compacting.context].join("\n\n")
     const result = await processor.process({
       user: userMessage,
       agent,
@@ -164,6 +187,11 @@ export namespace SessionCompaction {
       ],
       model,
     })
+
+    // The summarization request itself exceeded the context window — no summary
+    // was produced. Surface it so the caller fails the turn instead of
+    // re-attempting a compaction that can never succeed.
+    if (result === "overflow") return "overflow"
 
     if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({
@@ -203,6 +231,7 @@ export namespace SessionCompaction {
         modelID: z.string(),
       }),
       auto: z.boolean(),
+      focus: z.string().optional(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
@@ -221,6 +250,7 @@ export namespace SessionCompaction {
         sessionID: msg.sessionID,
         type: "compaction",
         auto: input.auto,
+        focus: input.focus,
       })
     },
   )

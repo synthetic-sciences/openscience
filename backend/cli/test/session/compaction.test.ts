@@ -94,7 +94,8 @@ describe("session.compaction.isOverflow", () => {
       directory: tmp.path,
       fn: async () => {
         const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
-        const tokens = { input: 200_000, output: 20_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
+        // count = 150_000 + 20_000 + 10_000 = 180_000; 0.75 * 272_000 = 204_000 → false
+        const tokens = { input: 150_000, output: 20_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
         expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(false)
       },
     })
@@ -112,13 +113,27 @@ describe("session.compaction.isOverflow", () => {
     })
   })
 
-  test("returns false when model context limit is 0", async () => {
+  test("uses 128k fallback context when model reports context limit 0", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const model = createModel({ context: 0, output: 32_000 })
+        // fallback usable = 128_000 - 32_000 = 96_000; count = 110_000 > 0.75 * 96_000 = 72_000 → true
         const tokens = { input: 100_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(true)
+      },
+    })
+  })
+
+  test("fallback context does not over-trigger when usage is small", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 0, output: 32_000 })
+        // fallback usable = 96_000; count = 35_000 < 0.75 * 96_000 = 72_000 → false
+        const tokens = { input: 30_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
         expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(false)
       },
     })
@@ -141,6 +156,60 @@ describe("session.compaction.isOverflow", () => {
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
         expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(false)
+      },
+    })
+  })
+
+  test("respects config.compaction.threshold override", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "openscience.json"), JSON.stringify({ compaction: { threshold: 0.5 } }))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 32_000 })
+        // usable = 68_000; count = 40_000. Over 0.5*68_000=34_000 (true) but under default 0.75*68_000=51_000.
+        const tokens = { input: 35_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(true)
+      },
+    })
+  })
+
+  test("respects config.compaction.fallbackContext for context=0 models", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "openscience.json"), JSON.stringify({ compaction: { fallbackContext: 8_000 } }))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // context 0 → fallback 8_000; output reserve = min(2_000, 32_000) = 2_000; usable = 6_000; trigger = 0.75*6_000 = 4_500
+        const model = createModel({ context: 0, output: 2_000 })
+        const over = { input: 5_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens: over, model })).toBe(true)
+        const under = { input: 3_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens: under, model })).toBe(false)
+      },
+    })
+  })
+
+  test("does not compact every turn when the window is smaller than the output reserve", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // context 8k, output limit 0 → the 32k default output cap would exceed the
+        // whole window, making `context - output` negative and isOverflow true for
+        // ANY count (compact every turn). The reserve is capped at half (4k) → usable
+        // 4k, trigger 0.75*4k = 3k.
+        const model = createModel({ context: 8_000, output: 0 })
+        const small = { input: 500, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens: small, model })).toBe(false)
+        const large = { input: 5_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens: large, model })).toBe(true)
       },
     })
   })

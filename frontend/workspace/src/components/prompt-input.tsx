@@ -511,13 +511,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "builtin" as const,
       }))
 
-    const custom = sync.data.command.map((cmd) => ({
-      id: `custom.${cmd.name}`,
-      trigger: cmd.name,
-      title: cmd.name,
-      description: cmd.description,
-      type: "custom" as const,
-    }))
+    const custom = sync.data.command
+      // `menu` commands are executable action commands (e.g. /compact) that must RUN
+      // on select, not prefill text. They're surfaced by their owning context as a
+      // builtin `command.options` entry (with a matching `slash`) and dropped here so
+      // they don't ALSO appear as a prefill-only custom entry. A menu command is
+      // therefore visible only where that builtin is registered — e.g. /compact only
+      // once a session exists (session.tsx registers it under params.id); it is
+      // intentionally absent in the new-session composer, where there's nothing to
+      // compact and a prefilled "/compact " would not execute anyway.
+      .filter((cmd) => !(cmd as { menu?: boolean }).menu)
+      .map((cmd) => ({
+        id: `custom.${cmd.name}`,
+        trigger: cmd.name,
+        title: cmd.name,
+        description: cmd.description,
+        type: "custom" as const,
+      }))
 
     // Surface installed skills as slash entries. Selecting one prefills a
     // "Use the <name> skill: " prompt that the agent matches against its

@@ -58,6 +58,96 @@ export namespace SessionRetry {
     return Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS)
   }
 
+  // Codes that unambiguously mean "input too big". Deliberately small — never
+  // generic buckets like `invalid_request_error`, which also cover bad params.
+  const OVERFLOW_CODES = new Set(["context_length_exceeded", "string_above_max_length"])
+
+  // Substrings from the human-readable message of a context-window rejection.
+  // Cross-provider fallback: Anthropic has no dedicated code, Gemini uses the
+  // generic INVALID_ARGUMENT — but the message always describes the condition.
+  //
+  // Deliberately excludes generic phrasings that also appear in retryable
+  // RATE-LIMIT (429/TPM) guidance — "too many tokens", "reduce the length",
+  // "reduce your prompt" — so a transient rate limit isn't misclassified as a
+  // deterministic overflow and turned into a terminal error. Rate limits are
+  // additionally excluded by the 429 guard in isContextOverflow.
+  const OVERFLOW_PATTERNS = [
+    "context length",
+    "context window",
+    "maximum context",
+    "exceeds the context",
+    "prompt is too long",
+    "input is too long",
+    "too long for the model",
+    "input token count",
+    "maximum prompt length",
+  ]
+
+  // Explicit transient / rate-limit signals. Streamed errors arrive as
+  // NamedError.Unknown with NO statusCode, so the numeric 5xx/429 guards in
+  // isContextOverflow can't protect them; a transient failure whose text mentions
+  // tokens (e.g. a Gemini quota message carrying "input token count") would otherwise
+  // match an OVERFLOW_PATTERN and be turned into a terminal "too large" error. These
+  // phrases mark it retryable, never a deterministic overflow.
+  const RATELIMIT_PATTERNS = [
+    "rate limit",
+    "rate_limit",
+    "too many requests",
+    "quota",
+    "resource exhausted",
+    "resource_exhausted",
+    "overloaded",
+    "please try again",
+    "try again later",
+    "temporarily unavailable",
+  ]
+
+  const asString = (value: unknown) => (typeof value === "string" ? value : "")
+
+  // Flatten any provider error — HTTP responseBody or in-stream error chunk —
+  // into one canonical { statusCode, code, message } so a single classifier
+  // runs over every provider's differing JSON shape.
+  function normalizeOverflow(error: ReturnType<NamedError["toObject"]>) {
+    const isApi = MessageV2.APIError.isInstance(error)
+    const statusCode = isApi ? error.data.statusCode : undefined
+    const raw = asString(error.data?.message)
+    let code = ""
+    let message = raw
+    for (const source of [isApi ? error.data.responseBody : undefined, raw]) {
+      if (!source) continue
+      const json = iife(() => {
+        try {
+          return JSON.parse(source)
+        } catch {
+          return undefined
+        }
+      })
+      if (!json || typeof json !== "object") continue
+      const err = json.error && typeof json.error === "object" ? json.error : json
+      code = asString(err.code) || asString(err.type) || asString(json.code) || asString(json.type) || code
+      message = asString(err.message) || asString(json.message) || message
+      break
+    }
+    return { statusCode, code, message }
+  }
+
+  // True when an error means the request exceeded the model's context window.
+  // Deterministic: retrying the same input can only fail again, so the caller
+  // should compact + resume rather than retry.
+  export function isContextOverflow(error: ReturnType<NamedError["toObject"]>): boolean {
+    const { statusCode, code, message } = normalizeOverflow(error)
+    // A context-window rejection is always a client error (400/413). A 5xx is a
+    // genuine server fault, and 429 is a rate limit — both retryable, not overflow.
+    if (statusCode && statusCode >= 500) return false
+    if (statusCode === 429) return false
+    if (OVERFLOW_CODES.has(code)) return true
+    const lower = message.toLowerCase()
+    // Catches transient failures with no statusCode (streamed error chunks) whose
+    // text would otherwise match an overflow pattern — keep them retryable.
+    if (RATELIMIT_PATTERNS.some((pattern) => lower.includes(pattern))) return false
+    return OVERFLOW_PATTERNS.some((pattern) => lower.includes(pattern))
+  }
+
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
