@@ -116,3 +116,14 @@ The agent is not sandboxed. The permission system keeps you aware of what the ag
 Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 OpenScience is an independent project. It is not affiliated with, endorsed by, or sponsored by Anthropic. "Claude" is a trademark of Anthropic, PBC, used here only to describe compatibility.
+
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=synthetic-sciences%2Fopenscience&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=synthetic-sciences/openscience&type=date&theme=dark&legend=top-left&sealed_token=UO_mxaOKYQgaHSNbYa7ODQRVg4ZZXxF1PjrhE5dbu1Y9wVhz9XxKch0AtpudD8ROxqtlCm4M9m3u6MhSD4tr1tqmdNACvH26kRM8JOYStHBeksNrsXRjog" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=synthetic-sciences/openscience&type=date&legend=top-left&sealed_token=UO_mxaOKYQgaHSNbYa7ODQRVg4ZZXxF1PjrhE5dbu1Y9wVhz9XxKch0AtpudD8ROxqtlCm4M9m3u6MhSD4tr1tqmdNACvH26kRM8JOYStHBeksNrsXRjog" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=synthetic-sciences/openscience&type=date&legend=top-left&sealed_token=UO_mxaOKYQgaHSNbYa7ODQRVg4ZZXxF1PjrhE5dbu1Y9wVhz9XxKch0AtpudD8ROxqtlCm4M9m3u6MhSD4tr1tqmdNACvH26kRM8JOYStHBeksNrsXRjog" />
+ </picture>
+</a>
