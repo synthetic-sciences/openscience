@@ -28,6 +28,7 @@ export type SettingsPanelId =
   | "specialists"
   | "memory"
   | "compute"
+  | "local-models"
   | "network"
   | "permissions"
   | "credentials"
@@ -81,6 +82,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "server",
     section: "capabilities",
     component: lazy(() => import("./Compute")),
+  },
+  {
+    id: "local-models",
+    title: "Local models",
+    icon: "models",
+    section: "capabilities",
+    component: lazy(() => import("./LocalModels")),
   },
   {
     id: "network",

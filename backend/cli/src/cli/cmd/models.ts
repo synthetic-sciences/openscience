@@ -30,6 +30,9 @@ function routingLabel(providerID: string, provider: Provider.Info): string {
   if (key.startsWith("thk_")) return "managed"
   const baseURL = (provider.options?.baseURL as string | undefined) ?? ""
   if (baseURL.includes("/api/llm/proxy/")) return "managed"
+  // A config-registered local endpoint stores its key under options.apiKey (not
+  // provider.key), so it would otherwise read as "unconfigured".
+  if (Provider.isLocalBaseURL(baseURL)) return "local"
   if (provider.key) return "your key"
   return "unconfigured"
 }

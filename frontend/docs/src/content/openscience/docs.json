@@ -12,7 +12,7 @@
           },
           {
             "group": "Use the agent",
-            "pages": ["agents", "models", "skills", "sessions", "atlas"]
+            "pages": ["agents", "models", "local-models", "skills", "sessions", "atlas"]
           }
         ]
       },

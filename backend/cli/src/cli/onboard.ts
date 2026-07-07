@@ -5,10 +5,12 @@ import { UI } from "./ui"
 import { OpenScience } from "../openscience"
 import { Auth } from "../auth"
 import { Config } from "../config/config"
+import { Provider } from "../provider/provider"
 import { Global } from "../global"
 import { openUrl } from "../util/open-url"
 import { runAtlasLogin } from "./cmd/connect"
 import { AuthLoginCommand } from "./cmd/auth"
+import { runLocalModelSetup } from "./cmd/local"
 
 const PLAN_URL = process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || "https://app.syntheticsciences.ai/cli"
 const MARKER = path.join(Global.Path.state, "onboarded")
@@ -122,12 +124,21 @@ async function onboardByok(): Promise<void> {
   await AuthLoginCommand.handler({} as never)
 }
 
+async function onboardLocal(): Promise<void> {
+  prompts.log.info(
+    "Point OpenScience at a local model server (Ollama, LM Studio, or any OpenAI-compatible endpoint). " +
+      "It runs on your machine — free, offline, no API key.",
+  )
+  await runLocalModelSetup({ intro: false })
+}
+
 function onboardSkip(): void {
   prompts.log.info("No problem — start right away with the free demo models.")
   prompts.log.message(
     "When you're ready:\n" +
       "  openscience login       connect Atlas managed models (prepaid wallet)\n" +
-      "  openscience keys add    add your own provider key (always free)",
+      "  openscience keys add    add your own provider key (always free)\n" +
+      "  openscience local add   use a local model (Ollama / LM Studio / OpenAI-compatible)",
   )
 }
 
@@ -169,6 +180,11 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
     options: [
       { value: "managed", label: "Atlas managed", hint: "★ recommended · prepaid wallet · zero setup" },
       { value: "byok", label: "Your own keys", hint: "Anthropic · OpenAI · Google · 100+ providers · always free" },
+      {
+        value: "local",
+        label: "Local models",
+        hint: "Ollama · LM Studio · OpenAI-compatible endpoint · free, offline",
+      },
       { value: "skip", label: "Not now", hint: "free demo models now, set up anytime" },
     ],
   })
@@ -180,6 +196,7 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
 
   if (choice === "managed") await onboardManaged()
   else if (choice === "byok") await onboardByok()
+  else if (choice === "local") await onboardLocal()
   else onboardSkip()
 
   await offerAtlasCli()
@@ -228,6 +245,12 @@ export const DoctorCommand = cmd({
 
     try {
       const config = await Config.get()
+      const locals = Object.entries(config.provider ?? {}).filter(([, p]) =>
+        Provider.isLocalBaseURL(p?.options?.baseURL ?? p?.api),
+      )
+      if (locals.length) {
+        prompts.log.success(`Local models: ${locals.map(([id]) => id).join(", ")}  (run \`openscience local list\`)`)
+      }
       prompts.log.info(`Default model: ${config.model ?? "auto (chosen from available providers)"}`)
     } catch {}
 

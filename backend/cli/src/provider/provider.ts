@@ -150,6 +150,20 @@ export namespace Provider {
     return providerID === "openrouter" || providerID.startsWith("synsci")
   }
 
+  /** True when a base URL points at the local machine (localhost / loopback).
+   *  A provider with a local baseURL runs on the user's own hardware, is free,
+   *  and is BYOK-class — so it's kept available even in managed-wallet mode
+   *  (where the wallet itself still routes only through OpenRouter). Pure. */
+  export function isLocalBaseURL(url: unknown): boolean {
+    if (typeof url !== "string" || !url) return false
+    try {
+      const host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "")
+      return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1"
+    } catch {
+      return false
+    }
+  }
+
   /**
    * Blocker (c) — the inverse of requireAtlasProxyForManagedKey.
    *
@@ -878,9 +892,19 @@ export namespace Provider {
     // the single seam that makes defaultModel()/getSmallModel() managed-safe:
     // both read the filtered state, so they can only resolve openrouter/synsci.
     const managedOpenRouterOnly = managedRoutesOpenRouterOnly(config)
+    // Config-registered providers pointing at the local machine (Ollama, LM
+    // Studio, any OpenAI-compatible localhost endpoint). They're free and run on
+    // the user's own hardware, so they stay available even in managed-wallet
+    // mode — the wallet still only routes real inference through OpenRouter.
+    const localProviderIds = new Set(
+      Object.entries(config.provider ?? {})
+        .filter(([, p]) => isLocalBaseURL(p?.options?.baseURL ?? p?.api))
+        .map(([id]) => id),
+    )
 
     function isProviderAllowed(providerID: string): boolean {
-      if (managedOpenRouterOnly && !managedProviderAllowed(providerID)) return false
+      if (managedOpenRouterOnly && !managedProviderAllowed(providerID) && !localProviderIds.has(providerID))
+        return false
       if (enabled && !enabled.has(providerID)) return false
       if (disabled.has(providerID)) return false
       return true
