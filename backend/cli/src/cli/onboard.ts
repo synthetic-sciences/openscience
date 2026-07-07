@@ -255,19 +255,18 @@ export const DoctorCommand = cmd({
       prompts.log.info(`Default model: ${config.model ?? "auto (chosen from available providers)"}`)
 
       const sandbox = Sandbox.describe()
-      if (config.sandbox?.enabled) {
-        if (sandbox.available) {
-          prompts.log.success(`Sandbox: on (${sandbox.backend})  (run \`openscience sandbox test\`)`)
-        } else {
-          prompts.log.warn(`Sandbox: on but no backend here — ${sandbox.reason}`)
-        }
-      } else {
-        prompts.log.info(
-          sandbox.available
-            ? `Sandbox: off  (${sandbox.backend} available — \`openscience sandbox enable\`)`
-            : "Sandbox: off",
-        )
-      }
+      const sandboxOn = (await Config.trustedSandbox())?.enabled === true
+      const sandboxLine = sandboxOn
+        ? sandbox.available
+          ? { level: "success" as const, msg: `Sandbox: on (${sandbox.backend})  (run \`openscience sandbox test\`)` }
+          : { level: "warn" as const, msg: `Sandbox: on but no backend here — ${sandbox.reason}` }
+        : {
+            level: "info" as const,
+            msg: sandbox.available
+              ? `Sandbox: off  (${sandbox.backend} available — \`openscience sandbox enable\`)`
+              : "Sandbox: off",
+          }
+      prompts.log[sandboxLine.level](sandboxLine.msg)
     } catch {}
 
     if (!(await isConfigured())) {

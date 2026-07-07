@@ -16,8 +16,10 @@ const PatchSchema = z.object({
 })
 
 async function currentConfig() {
-  const config = await Config.get().catch(() => ({}) as Awaited<ReturnType<typeof Config.get>>)
-  return config.sandbox ?? {}
+  // Read the trusted (global + managed) policy directly — the same source the
+  // bash tool enforces — rather than Config.get(), which needs an Instance
+  // context this route is mounted before and would otherwise always throw → {}.
+  return (await Config.trustedSandbox().catch(() => undefined)) ?? {}
 }
 
 /**
@@ -35,10 +37,10 @@ export const SandboxSettingsRoutes = lazy(() =>
     .put("/", validator("json", PatchSchema), async (c) => {
       const patch = c.req.valid("json")
       log.info("updating sandbox config", { keys: Object.keys(patch) })
-      const { config } = await Config.setSandbox(patch, "global")
-      return c.json({ config: config.sandbox ?? {}, status: Sandbox.describe() })
+      await Config.setSandbox(patch)
+      return c.json({ config: await currentConfig(), status: Sandbox.describe() })
     })
 
     // Run the empirical containment self-test.
-    .post("/test", async (c) => c.json(Sandbox.selfTest())),
+    .post("/test", async (c) => c.json(await Sandbox.selfTest())),
 )

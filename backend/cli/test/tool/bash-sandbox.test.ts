@@ -19,18 +19,20 @@ const ctx = {
 }
 
 // End-to-end through the real bash tool (not the Sandbox module in isolation):
-// with sandbox enabled via project config, a command that writes outside the
-// workspace must be blocked, while one that writes inside must succeed.
+// with the sandbox enabled, a command that writes outside the workspace must be
+// blocked, while one that writes inside must succeed. The sandbox policy is read
+// only from trusted (global + managed) config — never project config — so we
+// enable it via the test-isolated managed config dir, not a project file.
 describe("tool.bash sandbox integration", () => {
   test("confines the bash tool's writes to the workspace", async () => {
     if (!Sandbox.available()) return // no OS backend on this platform — nothing to enforce
 
     await using tmp = await tmpdir({ git: true })
-    // Enable the sandbox for THIS project only (never touches global config).
-    fs.writeFileSync(
-      path.join(tmp.path, "openscience.json"),
-      JSON.stringify({ sandbox: { enabled: true, network: "deny" } }),
-    )
+    const managedDir = process.env.OPENSCIENCE_TEST_MANAGED_CONFIG_DIR!
+    const managedFile = path.join(managedDir, "openscience.json")
+    fs.mkdirSync(managedDir, { recursive: true })
+    fs.writeFileSync(managedFile, JSON.stringify({ sandbox: { enabled: true, network: "deny" } }))
+
     const outside = path.join(os.homedir(), `.openscience-bash-escape-${process.pid}`)
     fs.rmSync(outside, { force: true })
 
@@ -57,6 +59,8 @@ describe("tool.bash sandbox integration", () => {
       })
     } finally {
       fs.rmSync(outside, { force: true })
+      // don't leak "sandbox on" into any test that runs after this one
+      fs.rmSync(managedFile, { force: true })
     }
   })
 })

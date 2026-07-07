@@ -177,7 +177,7 @@ export const BashTool = Tool.define("bash", async () => {
         shell,
         cwd,
         workspace: [Instance.directory, Instance.worktree],
-        options: (await Config.get()).sandbox,
+        options: await Config.trustedSandbox(),
       })
 
       const proc = sandbox.sandboxed

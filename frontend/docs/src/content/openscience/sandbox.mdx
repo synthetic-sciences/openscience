@@ -6,7 +6,7 @@ icon: "lock"
 
 The permission system decides **whether** the agent runs a command; it does not decide **what that command can reach** once it runs. An approved (or auto-approved) command executes with your full user authority — it can touch `~/.ssh`, rewrite `~/.bashrc`, or delete another project. The permission prompt keeps you *aware*; it is not an isolation boundary.
 
-The execution sandbox adds the missing boundary. When enabled, every command the `bash` tool runs is wrapped in a real OS sandbox that **confines writes to the workspace** and can optionally **deny network egress**. It is **off by default** — turn it on when you want the agent's blast radius contained.
+The execution sandbox adds the missing boundary. When enabled, everything the agent executes — shell commands via the `bash` tool, and code run by the Python and R notebook kernels — is wrapped in a real OS sandbox that **confines writes to the workspace** and can optionally **deny network egress**. It is **off by default** — turn it on when you want the agent's blast radius contained.
 
 ## Quick start
 
@@ -46,14 +46,13 @@ openscience sandbox disable         # turn off
 openscience sandbox test            # empirical containment self-test
 ```
 
-Add `--project` to write to the project's `openscience.json` instead of the global config.
+The sandbox is a machine-wide safety setting, so it is always written to your **global** config.
 
 | Flag | Meaning |
 | --- | --- |
 | `--network` | `allow` (default) or `deny` network egress from sandboxed commands. |
 | `--allow` | An absolute path, beyond the workspace and temp dirs, the sandbox may write to. Repeatable. |
 | `--on-unavailable` | Behaviour where no backend exists: `warn` (default, runs unsandboxed with a notice), `error` (refuses to run), `allow` (runs unsandboxed silently). |
-| `--project` | Write to the project config instead of the global one. |
 
 ## From the workspace GUI
 
@@ -61,7 +60,7 @@ Open **Settings → Sandbox**. The panel shows whether a backend is available on
 
 ## By hand (config)
 
-The sandbox is a `sandbox` block in `openscience.json`. `openscience sandbox enable` writes it for you:
+The sandbox is a `sandbox` block in your **global** `openscience.json` (or an enterprise **managed** config). `openscience sandbox enable` writes it for you. The policy is read **only** from global and managed config — never from a project's `openscience.json` — so opening an untrusted repo cannot weaken or disable your sandbox:
 
 ```jsonc
 {
@@ -84,6 +83,7 @@ The sandbox is a `sandbox` block in `openscience.json`. `openscience sandbox ena
 This is deliberately a **write-containment** sandbox, not a deny-by-default syscall jail. Research workflows run arbitrary compilers, package managers, and interpreters, and a strict jail would break far more than it protects. Concretely:
 
 - **Reads are not restricted.** A sandboxed command can still read files it has permission to read.
+- **Local IPC is not blocked.** Network-deny stops IP egress, but a command can still reach host UNIX-domain sockets (e.g. a Docker daemon socket). Treat access to such a socket as equivalent to the privileges it exposes.
 - **It is not a security boundary against a determined local attacker** the way a container or VM is. For hostile code, run OpenScience inside a container or VM as well.
 - **Linux needs bubblewrap** and unprivileged user namespaces; where they're unavailable the sandbox can't engage (`onUnavailable` decides what happens).
 - **Windows has no backend** yet.

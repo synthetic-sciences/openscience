@@ -5,6 +5,8 @@ import path from "path"
 import os from "os"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
+import { Config } from "@/config/config"
+import { Sandbox } from "@/sandbox/sandbox"
 
 const KERNEL_SCRIPT = `
 import sys, json, io, traceback, os
@@ -134,7 +136,16 @@ async function getKernel(sessionID: string): Promise<Kernel> {
   await Bun.write(scriptPath, KERNEL_SCRIPT)
 
   const pythonBin = await findPython()
-  const proc = spawn(pythonBin, ["-u", scriptPath], {
+  // Confine the kernel to the workspace when the execution sandbox is on: it runs
+  // arbitrary agent-authored code — the same threat model as the bash tool.
+  const sandboxed = Sandbox.wrapArgv({
+    file: pythonBin,
+    args: ["-u", scriptPath],
+    workspace: [Instance.directory, Instance.worktree],
+    extraWritable: [scriptPath],
+    options: await Config.trustedSandbox(),
+  })
+  const proc = spawn(sandboxed.file, sandboxed.args, {
     cwd: Instance.directory,
     env: { ...(await OpenScience.subprocessEnv(process.env)), PYTHONUNBUFFERED: "1" },
     stdio: ["pipe", "pipe", "pipe"],

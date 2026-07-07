@@ -1489,13 +1489,32 @@ export namespace Config {
     return patchConfigPath(scope, ["provider", id], undefined)
   }
 
-  /** Merge a patch into the `sandbox` config block, JSONC-preserving. Defaults to
-   *  the GLOBAL config since the execution sandbox is a machine-wide safety
-   *  setting, not per-project. */
-  export async function setSandbox(patch: Partial<Sandbox>, scope: Scope = "global") {
-    const current = scope === "global" ? (await getGlobal()).sandbox : (await get()).sandbox
+  /**
+   * Execution-sandbox policy resolved from GLOBAL + MANAGED (admin) config only.
+   * Project config is deliberately excluded: the sandbox is a machine-wide safety
+   * boundary, so an untrusted repo's `openscience.json` must not be able to weaken
+   * or disable it. Managed (enterprise) config wins over the user's global config.
+   */
+  export async function trustedSandbox(): Promise<Sandbox | undefined> {
+    const base = (await global()).sandbox
+    let managed: Sandbox | undefined
+    if (existsSync(managedConfigDir)) {
+      let acc: Info = {}
+      for (const file of CONFIG_FILES) acc = mergeDeep(acc, await loadFile(path.join(managedConfigDir, file)))
+      managed = acc.sandbox
+    }
+    if (!base && !managed) return undefined
+    return { ...(base ?? {}), ...(managed ?? {}) }
+  }
+
+  /** Merge a patch into the GLOBAL `sandbox` config block, JSONC-preserving. The
+   *  execution sandbox is a machine-wide safety setting and is only ever read
+   *  from global + managed config (see {@link trustedSandbox}), so it is always
+   *  written globally — a project-scoped value would be silently ignored. */
+  export async function setSandbox(patch: Partial<Sandbox>) {
+    const current = (await getGlobal()).sandbox
     const next: Sandbox = { ...(current ?? {}), ...patch }
-    return patchConfigPath(scope, ["sandbox"], next)
+    return patchConfigPath("global", ["sandbox"], next)
   }
 
   /** Remove a key path from the global config (deep-merge can't unset). */

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import os from "os"
 import { Sandbox } from "../../src/sandbox/sandbox"
 
 const shell = "/bin/sh"
@@ -51,13 +52,19 @@ describe("Sandbox.bubblewrapArgs", () => {
     expect(Sandbox.bubblewrapArgs({ writable: ["/w"], network: true })).not.toContain("--unshare-net")
   })
 
-  test("does not re-bind /tmp over the writable tmpfs", () => {
+  test("skips the /tmp tmpfs root but binds workspace paths under it", () => {
     const args = Sandbox.bubblewrapArgs({ writable: ["/tmp", "/tmp/sub"], network: true })
-    // /tmp is provided as a tmpfs, never bound from the host
-    for (let n = 0; n < args.length; n++) {
-      if (args[n] === "--bind-try") expect(args[n + 1]?.startsWith("/tmp")).toBe(false)
-    }
     expect(args).toContain("--tmpfs")
+    const binds = args.flatMap((a, n) => (a === "--bind-try" ? [args[n + 1]!] : []))
+    // the /tmp mount root itself is never bound from the host (the tmpfs provides it)
+    expect(binds).not.toContain("/tmp")
+    // ...but a workspace living under /tmp must still be bound on top of the tmpfs,
+    // otherwise its writes vanish into the throwaway tmpfs
+    expect(binds).toContain("/tmp/sub")
+  })
+
+  test("unshares the PID namespace so /proc escape vectors are closed", () => {
+    expect(Sandbox.bubblewrapArgs({ writable: ["/w"], network: true })).toContain("--unshare-pid")
   })
 })
 
@@ -107,7 +114,7 @@ describe("Sandbox.plan", () => {
     expect(() => Sandbox.plan({ ...base, options: { enabled: true, onUnavailable: "error" } })).toThrow()
   })
 
-  test("sandboxed plan includes the cwd and temp dirs in the writable set", () => {
+  test("makes the workspace writable but not an out-of-workspace cwd", () => {
     if (!Sandbox.available()) return
     const p = Sandbox.plan({
       command: "true",
@@ -118,6 +125,26 @@ describe("Sandbox.plan", () => {
     })
     const argv = (p.args ?? []).join(" ")
     expect(argv).toContain("/work/project")
-    expect(argv).toContain("/work/elsewhere")
+    // an approved external cwd is a permission decision, not a reason to widen
+    // the sandbox's write boundary to the escape target
+    expect(argv).not.toContain("/work/elsewhere")
+  })
+
+  test("drops over-broad writable roots (worktree='/', $HOME) from the policy", () => {
+    if (!Sandbox.available()) return
+    const p = Sandbox.plan({
+      command: "true",
+      shell,
+      cwd: "/work/project",
+      workspace: ["/work/project", "/"],
+      options: { enabled: true, allowWrite: [os.homedir()] },
+    })
+    const argv = (p.args ?? []).join(" ")
+    expect(argv).toContain("/work/project")
+    // "/" must never become a writable root (seatbelt subpath / bwrap bind)
+    expect(argv).not.toContain('(subpath "/")')
+    expect(argv).not.toContain("--bind-try / /")
+    // nor $HOME itself
+    expect(argv).not.toContain(`(subpath "${os.homedir()}")`)
   })
 })

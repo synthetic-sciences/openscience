@@ -7,13 +7,9 @@ import { Sandbox } from "../../sandbox/sandbox"
 
 const S = UI.Style
 
-/** Effective (merged) sandbox config, falling back to global if no instance. */
+/** The trusted (global + managed) sandbox policy that actually gets enforced. */
 async function effectiveSandbox(): Promise<Config.Sandbox | undefined> {
-  try {
-    return (await Config.get()).sandbox
-  } catch {
-    return (await Config.getGlobal()).sandbox
-  }
+  return Config.trustedSandbox()
 }
 
 function printStatus(config?: Config.Sandbox) {
@@ -82,8 +78,7 @@ const EnableCommand = cmd({
       .option("on-unavailable", {
         choices: ["warn", "error", "allow"] as const,
         describe: "what to do when no backend exists on a machine (default: warn)",
-      })
-      .option("project", { type: "boolean", describe: "write to the project config instead of the global one" }),
+      }),
   handler: async (args) => {
     await Instance.provide({
       directory: process.cwd(),
@@ -93,12 +88,9 @@ const EnableCommand = cmd({
         if (args["on-unavailable"]) patch.onUnavailable = args["on-unavailable"] as "warn" | "error" | "allow"
         const allow = args.allow as string[] | undefined
         if (allow?.length) patch.allowWrite = allow
-        const scope = args.project ? "project" : "global"
-        await Config.setSandbox(patch, scope)
+        await Config.setSandbox(patch)
         UI.empty()
-        UI.println(
-          `${S.TEXT_SUCCESS_BOLD}Sandbox enabled${S.TEXT_NORMAL} ${S.TEXT_DIM}(${scope} config)${S.TEXT_NORMAL}`,
-        )
+        UI.println(`${S.TEXT_SUCCESS_BOLD}Sandbox enabled${S.TEXT_NORMAL} ${S.TEXT_DIM}(global config)${S.TEXT_NORMAL}`)
         const d = Sandbox.describe()
         if (!d.available) {
           UI.println(
@@ -118,20 +110,10 @@ const EnableCommand = cmd({
 const DisableCommand = cmd({
   command: "disable",
   describe: "turn the execution sandbox off",
-  builder: (yargs: Argv) =>
-    yargs.option("project", { type: "boolean", describe: "write to the project config instead of the global one" }),
-  handler: async (args) => {
-    await Instance.provide({
-      directory: process.cwd(),
-      async fn() {
-        const scope = args.project ? "project" : "global"
-        await Config.setSandbox({ enabled: false }, scope)
-        UI.empty()
-        UI.println(
-          `${S.TEXT_NORMAL_BOLD}Sandbox disabled${S.TEXT_NORMAL} ${S.TEXT_DIM}(${scope} config)${S.TEXT_NORMAL}`,
-        )
-      },
-    })
+  handler: async () => {
+    await Config.setSandbox({ enabled: false })
+    UI.empty()
+    UI.println(`${S.TEXT_NORMAL_BOLD}Sandbox disabled${S.TEXT_NORMAL} ${S.TEXT_DIM}(global config)${S.TEXT_NORMAL}`)
   },
 })
 
@@ -140,7 +122,7 @@ const TestCommand = cmd({
   describe: "prove the sandbox actually confines writes (and network) on this machine",
   handler: async () => {
     UI.empty()
-    const result = Sandbox.selfTest()
+    const result = await Sandbox.selfTest()
     if (!result.available) {
       const d = Sandbox.describe()
       UI.println(`${S.TEXT_WARNING}No sandbox backend available${S.TEXT_NORMAL} — ${d.reason}.`)
