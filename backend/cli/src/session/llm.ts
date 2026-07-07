@@ -263,7 +263,13 @@ export namespace LLM {
         middleware: [
           {
             async transformParams(args) {
-              if (args.type === "stream") {
+              // Apply for both stream and generate: message normalization does
+              // caching, image-mime correction, unsupported-part downgrade, and
+              // the providerOptions remap. Gating on "stream" only meant any
+              // non-stream call (structured output, a provider that internally
+              // does doGenerate) would bypass all of it and could crash on an
+              // unsupported file part.
+              if (args.type === "stream" || args.type === "generate") {
                 // @ts-expect-error
                 args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }

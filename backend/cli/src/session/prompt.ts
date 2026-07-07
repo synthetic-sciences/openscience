@@ -65,7 +65,10 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENSCIENCE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
-  const ARTIFACT_AGENTS = ["research", "biology", "ml"]
+  // physics is a compute agent (see COMPUTE_AGENTS) that also produces artifacts
+  // (PDE solutions, fitted params, plots), so it participates in artifact-context
+  // re-injection + RSI trajectory capture like its peer compute agents.
+  const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml"]
   // Science agents that dispatch GPU/compute work and should honor billing.compute.
   const COMPUTE_AGENTS = new Set(["research", "biology", "physics", "ml"])
 
