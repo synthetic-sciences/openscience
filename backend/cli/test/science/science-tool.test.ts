@@ -76,6 +76,7 @@ describe("science_search degradation (arxiv)", () => {
     expect(result.metadata.count).toBe(1)
     expect(result.metadata.error).toBeUndefined()
     expect(result.output).toContain("Attention Is All You Need")
+    expect(result.output).toContain("**pdf**: http://arxiv.org/pdf/1706.03762v7")
   })
 
   test("sustained 429 degrades to an actionable rate-limited result, not a raw HTTP 429", async () => {
