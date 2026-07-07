@@ -17,6 +17,8 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 import { OpenScience } from "@/openscience"
+import { Sandbox } from "@/sandbox/sandbox"
+import { Config } from "@/config/config"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENSCIENCE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 0
@@ -165,13 +167,33 @@ export const BashTool = Tool.define("bash", async () => {
       // provider keys (auth.json + shell env), not just synced managed ones.
       await OpenScience.refreshByokSecrets(process.env).catch(() => {})
 
-      const proc = spawn(params.command, {
+      const env = await OpenScience.subprocessEnv(process.env)
+
+      // Wrap the command in an OS sandbox when configured. The permission checks
+      // above decide *whether* to run; this decides *with what authority*. When
+      // sandbox is off (default) `plan` returns the raw command unchanged.
+      const sandbox = Sandbox.plan({
+        command: params.command,
         shell,
         cwd,
-        env: await OpenScience.subprocessEnv(process.env),
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
+        workspace: [Instance.directory, Instance.worktree],
+        options: (await Config.get()).sandbox,
       })
+
+      const proc = sandbox.sandboxed
+        ? spawn(sandbox.file, sandbox.args ?? [], {
+            cwd,
+            env,
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: process.platform !== "win32",
+          })
+        : spawn(sandbox.file, {
+            shell: sandbox.useShell,
+            cwd,
+            env,
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: process.platform !== "win32",
+          })
 
       let output = ""
 
@@ -252,6 +274,10 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const resultMetadata: string[] = []
+
+      if (sandbox.warning) {
+        resultMetadata.push(sandbox.warning)
+      }
 
       if (timedOut) {
         resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
