@@ -73,6 +73,45 @@ export namespace LocalProvider {
   /** The npm package every local OpenAI-compatible endpoint routes through. */
   export const NPM = "@ai-sdk/openai-compatible"
 
+  /** How to start / manage a runtime's server from its CLI, when OpenScience can
+   *  host it for the user. Only runtimes with a self-contained "serve" command
+   *  are auto-startable; the rest are BYO-server (the user runs it themselves). */
+  export interface RuntimeCommands {
+    /** CLI binary to detect (Bun.which) and drive. */
+    bin: string
+    /** Args that start the OpenAI-compatible server in the background. */
+    serve: string[]
+    /** Args to download/pull a model (visible, potentially long-running). */
+    pull?: (model: string) => string[]
+    /** Where to install the runtime if the binary is missing. */
+    install: string
+    /** Human command shown to users who prefer to run it in the terminal. */
+    serveHint: string
+    pullHint?: (model: string) => string
+  }
+
+  export const RUNTIME_COMMANDS: Readonly<Record<string, RuntimeCommands>> = {
+    ollama: {
+      bin: "ollama",
+      serve: ["serve"],
+      pull: (m) => ["pull", m],
+      install: "https://ollama.com/download",
+      serveHint: "ollama serve",
+      pullHint: (m) => `ollama pull ${m}`,
+    },
+    lmstudio: {
+      bin: "lms",
+      serve: ["server", "start"],
+      install: "https://lmstudio.ai/docs/cli",
+      serveHint: "lms server start",
+    },
+  } as const
+
+  /** Whether OpenScience can start this runtime itself (a known serve command). */
+  export function isAutoStartable(presetId: string): boolean {
+    return presetId in RUNTIME_COMMANDS
+  }
+
   /** The apiKey used when the user leaves it blank — local servers ignore it,
    *  but the SDK rejects an empty key. */
   export const DEFAULT_API_KEY = "local"
