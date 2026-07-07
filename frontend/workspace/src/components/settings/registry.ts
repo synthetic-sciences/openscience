@@ -31,6 +31,7 @@ export type SettingsPanelId =
   | "local-models"
   | "network"
   | "permissions"
+  | "sandbox"
   | "credentials"
   | "spend"
   | "wallet"
@@ -104,6 +105,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "check",
     section: "workspace",
     component: lazy(() => import("./Permissions")),
+  },
+  {
+    id: "sandbox",
+    title: "Sandbox",
+    icon: "console",
+    section: "workspace",
+    component: lazy(() => import("./Sandbox")),
   },
   {
     id: "credentials",
