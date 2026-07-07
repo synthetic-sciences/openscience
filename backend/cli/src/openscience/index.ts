@@ -336,6 +336,11 @@ export namespace OpenScience {
   }
 
   export async function getSession(): Promise<OpenScienceSession | null> {
+    // A missing file is a genuine logout → null, silently. Distinguish it from a
+    // read/parse error below so a torn file / EMFILE / permission blip isn't
+    // silently mis-read as "signed out" (which flips the billing gate to BYOK
+    // and diverts usage to the unauthenticated queue for an authed user).
+    if (!existsSync(filepath)) return null
     try {
       const file = Bun.file(filepath)
       const data = (await file.json()) as Partial<OpenScienceSession> & { access_token?: string }
@@ -359,13 +364,21 @@ export namespace OpenScience {
         cached_v: data.cached_v,
         last_check_ts: data.last_check_ts,
       }
-    } catch {
+    } catch (e) {
+      // The file exists but couldn't be read/parsed — NOT a logout. Return null
+      // so callers stay simple, but surface it so the transient failure is
+      // diagnosable rather than a silent, mis-billed "signed out".
+      log.warn("could not read session file (treating as signed out)", {
+        error: e instanceof Error ? e.message : String(e),
+      })
       return null
     }
   }
 
   export async function saveSession(session: OpenScienceSession) {
-    await Bun.write(Bun.file(filepath), JSON.stringify(session, null, 2), { mode: 0o600 })
+    // Atomic temp+rename so a crash or a concurrent reader never sees a torn
+    // session file (which getSession would mis-read as a logout).
+    await atomicWrite(filepath, JSON.stringify(session, null, 2), { mode: 0o600 })
     await ensureAtlasCliConfig(session)
   }
 
@@ -402,8 +415,12 @@ export namespace OpenScience {
   }
 
   /** Merge-update the persisted session. Fetches current session, spreads
-   *  the patch on top, and writes back. No-ops when unauthenticated. */
+   *  the patch on top, and writes back. No-ops when unauthenticated. Serialized
+   *  under a lock so two concurrent patches (e.g. an interactive last_check_ts
+   *  update racing a background cached_v update) can't lose each other's field
+   *  in the read-modify-write. */
   async function updateSession(patch: Partial<OpenScienceSession>): Promise<void> {
+    using _ = await Lock.write(filepath)
     const session = await getSession()
     if (!session) return
     await saveSession({ ...session, ...patch })
