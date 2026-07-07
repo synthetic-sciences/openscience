@@ -1,5 +1,6 @@
 import { test, expect, afterEach } from "bun:test"
 import path from "path"
+import fs from "fs/promises"
 import { OpenScience } from "../../src/openscience"
 import { Global } from "../../src/global"
 
@@ -9,9 +10,15 @@ import { Global } from "../../src/global"
 // billed managed one (the "billing flip" bug).
 
 const realFetch = globalThis.fetch
-afterEach(() => {
+afterEach(async () => {
   globalThis.fetch = realFetch
   delete process.env["ANTHROPIC_API_KEY"]
+  // seedSession() writes a real session file into the SHARED per-process test
+  // data dir. Leaving it behind turned every later test in the suite into an
+  // "authenticated" one - skill discovery, billing-mode and atlas-bridge then
+  // reached for the live Atlas API mid-suite (and hung CI whenever prod
+  // hiccuped). Always clear it.
+  await fs.rm(path.join(Global.Path.data, "openscience-session.json"), { force: true }).catch(() => {})
 })
 
 async function seedSession() {

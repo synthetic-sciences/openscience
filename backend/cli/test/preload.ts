@@ -52,6 +52,17 @@ process.env["OPENSCIENCE_DISABLE_DEFAULT_PLUGINS"] = "true"
 // Disable bundled skills to isolate skill discovery tests
 process.env["OPENSCIENCE_DISABLE_BUNDLED_SKILLS"] = "true"
 
+// Hermetic API base: several suite paths reach the Atlas backend whenever a
+// session file exists, and session-file.test.ts writes one into the shared
+// per-process test data dir - so later tests (skill discovery's
+// fetchLearnedSkills, billing-mode, atlas-bridge) silently depended on the
+// LIVE production API. When prod hiccuped, those tests hung to their timeout
+// and CI went red on an unrelated commit. Point the base at an unroutable
+// local port so any accidental call fails in milliseconds (ECONNREFUSED),
+// which every fetcher already handles as "offline -> null". Tests that need
+// a real server (fake-atlas fixtures) override this per-test.
+process.env["OPENSCIENCE_API_BASE"] = "http://127.0.0.1:9"
+
 // Clear provider env vars to ensure clean test state
 delete process.env["ANTHROPIC_API_KEY"]
 delete process.env["ANTHROPIC_BASE_URL"]
