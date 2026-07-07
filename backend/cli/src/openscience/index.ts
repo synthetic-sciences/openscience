@@ -61,6 +61,27 @@ function getSyncedConfigDir(): string {
   return path.join(xdg, "openscience")
 }
 
+// Seed the synced-secret set from the on-disk snapshot at import. preload-env.ts
+// replays synced-env.json into process.env at boot but never seeded this set, so
+// on a fresh process where no in-process sync runs (the common steady state, when
+// the dashboard version is unchanged) the set stayed empty — and a disk-replayed
+// synced secret that isn't a thk_ value was neither stripped from subprocess env
+// nor masked by redactSecrets(). Synchronous + best-effort so the hot sync paths
+// (redactSecrets) have the values available without an async read.
+;(() => {
+  try {
+    const raw = readFileSync(path.join(getSyncedConfigDir(), "synced-env.json"), "utf-8")
+    const parsed: unknown = JSON.parse(raw)
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value === "string" && value) syncedSecretValues.set(key, value)
+      }
+    }
+  } catch {
+    /* no snapshot on disk — nothing to seed */
+  }
+})()
+
 /** Shared provider API keys that must not leak to subprocesses */
 const SHARED_PROVIDER_KEYS = new Set([
   "ANTHROPIC_API_KEY",
@@ -519,9 +540,11 @@ export namespace OpenScience {
    */
   export async function clearSession() {
     const session = await getSession()
-    try {
-      await fs.unlink(filepath)
-    } catch {}
+    // Remove the synced credential artifacts FIRST, then delete the session file
+    // LAST. A crash after unlinking the session but before removing
+    // synced-env.json would otherwise leave preload-env.ts replaying the managed
+    // key into process.env on the next boot — the signed-out account's wallet
+    // kept being debited, the exact thing this function exists to prevent.
     // Union of what this process synced (in-memory map) and what the last
     // sync persisted (disk snapshot, replayed by preload-env.ts at boot) —
     // a fresh `logout` process has only the latter.
@@ -536,6 +559,10 @@ export namespace OpenScience {
     syncedSecretValues.clear()
     await clearAtlasCliConfig(session)
     await dropUsageQueue()
+    // Session file last, once the managed-key-replaying artifacts are gone.
+    try {
+      await fs.unlink(filepath)
+    } catch {}
   }
 
   /**
