@@ -22,6 +22,16 @@ interface Configured {
   baseURL: string
   models: string[]
 }
+interface Runtime {
+  id: string
+  name: string
+  baseURL?: string
+  installed: boolean
+  running: boolean
+  models: string[]
+  install: string
+  serveHint: string
+}
 
 const LocalModels: Component = () => {
   const sdk = useGlobalSDK()
@@ -36,9 +46,13 @@ const LocalModels: Component = () => {
   const [configured, { refetch: refetchConfigured }] = createResource(() =>
     call<{ providers: Configured[] }>("/").then((r) => r.providers),
   )
+  const [status, { refetch: refetchStatus }] = createResource(() =>
+    call<{ runtimes: Runtime[] }>("/status").then((r) => r.runtimes),
+  )
   const refetch = () => {
     refetchDetected()
     refetchConfigured()
+    refetchStatus()
   }
 
   const [busy, setBusy] = createSignal(false)
@@ -65,6 +79,49 @@ const LocalModels: Component = () => {
 
   const removeProvider = (id: string) =>
     guard(() => call(`/${encodeURIComponent(id)}`, { method: "DELETE" }), "Failed to remove provider")
+
+  // ── Start a runtime for the user (host it) ──
+  const [starting, setStarting] = createSignal<string>()
+  const startRuntime = async (rt: Runtime) => {
+    setStarting(rt.id)
+    try {
+      const r = await call<{
+        id: string
+        running: boolean
+        installed?: boolean
+        install?: string
+        models?: string[]
+      }>("/start", { method: "POST", body: JSON.stringify({ id: rt.id }) })
+      if (r.installed === false) {
+        showToast({ title: `${rt.name} isn't installed`, description: `Install it, then start it here.` })
+        window.open(r.install ?? rt.install, "_blank", "noopener")
+      } else if (r.running && r.models?.length) {
+        await call("/", {
+          method: "POST",
+          body: JSON.stringify({ url: rt.baseURL, id: rt.id, name: `${rt.name} (local)`, models: r.models }),
+        })
+        showToast({ title: `${rt.name} is running`, description: `Added ${r.models.length} model(s).` })
+      } else if (r.running) {
+        showToast({ title: `${rt.name} is running`, description: "No models yet — pull one below, then rescan." })
+      } else {
+        showToast({ title: `Couldn't start ${rt.name}`, description: "The server didn't come up in time." })
+      }
+      refetch()
+    } catch (err) {
+      showToast({ title: `Couldn't start ${rt.name}`, description: err instanceof Error ? err.message : String(err) })
+    }
+    setStarting(undefined)
+  }
+
+  const addRunning = (rt: Runtime) =>
+    guard(
+      () =>
+        call("/", {
+          method: "POST",
+          body: JSON.stringify({ url: rt.baseURL, id: rt.id, name: `${rt.name} (local)`, models: rt.models }),
+        }),
+      "Failed to add models",
+    )
 
   // ── Custom endpoint flow ──
   const [url, setUrl] = createSignal("")
@@ -121,6 +178,71 @@ const LocalModels: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 px-4 pb-12 sm:px-8 max-w-[820px]">
+        {/* ── Run locally (host it for the user) ── */}
+        <section class="flex flex-col gap-3">
+          <h3 class="text-13-medium text-text-strong">Run a model locally</h3>
+          <p class="text-12-regular text-text-weak/70">
+            Let OpenScience start and host a runtime for you — no terminal needed.
+          </p>
+          <For each={status()}>
+            {(rt) => (
+              <div class="flex items-center justify-between border border-border-weak-base rounded-[4px] p-3 bg-surface-base/40">
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-13-medium text-text-strong flex items-center gap-1.5">
+                    <Show when={rt.running}>
+                      <Icon name="check" class="text-text-success" />
+                    </Show>
+                    {rt.name}
+                  </span>
+                  <span class="text-11-regular text-text-weak">
+                    <Show
+                      when={!rt.installed}
+                      fallback={rt.running ? `running · ${rt.models.length} model(s)` : "installed · not running"}
+                    >
+                      not installed — <code>{rt.serveHint}</code>
+                    </Show>
+                  </span>
+                </div>
+                <Show
+                  when={rt.installed}
+                  fallback={
+                    <Button
+                      size="small"
+                      variant="secondary"
+                      onClick={() => window.open(rt.install, "_blank", "noopener")}
+                    >
+                      install
+                    </Button>
+                  }
+                >
+                  <Show
+                    when={rt.running}
+                    fallback={
+                      <Button
+                        size="small"
+                        variant="primary"
+                        disabled={busy() || !!starting()}
+                        onClick={() => startRuntime(rt)}
+                      >
+                        {starting() === rt.id ? "starting…" : "start"}
+                      </Button>
+                    }
+                  >
+                    <Button
+                      size="small"
+                      variant="primary"
+                      disabled={busy() || rt.models.length === 0}
+                      onClick={() => addRunning(rt)}
+                    >
+                      add {rt.models.length}
+                    </Button>
+                  </Show>
+                </Show>
+              </div>
+            )}
+          </For>
+        </section>
+
         {/* ── Detected runtimes ── */}
         <section class="flex flex-col gap-3">
           <div class="flex items-center justify-between">
