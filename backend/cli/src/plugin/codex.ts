@@ -27,6 +27,10 @@ export async function pushTokensToBackend(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
+      // Bound the push: the browser OAuth has already succeeded and the login
+      // callback awaits this, so a hung thesis backend would otherwise leave
+      // `keys signin` spinning on "Waiting for authorization…" indefinitely.
+      signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
     })
     if (!res.ok) {
       log.warn("codex backend push failed", { status: res.status })
@@ -109,10 +113,18 @@ async function generatePKCE(): Promise<PkceCodes> {
 
 function generateRandomString(length: number): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-  const bytes = crypto.getRandomValues(new Uint8Array(length))
-  return Array.from(bytes)
-    .map((b) => chars[b % chars.length])
-    .join("")
+  // Rejection sampling for a uniform distribution. `b % 66` over bytes 0-255
+  // biased toward the first 58 characters (256 mod 66 = 58); drop bytes in the
+  // non-uniform tail so every character is equally likely. (All chars are
+  // unreserved per RFC 3986, so the verifier stays URL-safe.)
+  const max = 256 - (256 % chars.length)
+  const out: string[] = []
+  while (out.length < length) {
+    for (const b of crypto.getRandomValues(new Uint8Array(length - out.length))) {
+      if (b < max) out.push(chars[b % chars.length])
+    }
+  }
+  return out.join("")
 }
 
 function base64UrlEncode(buffer: ArrayBuffer): string {
@@ -230,9 +242,13 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
       continue
     }
     if (response.ok) return response.json()
-    // 4xx = the refresh token is bad (revoked/rotated) — retrying won't help and
-    // the user must reconnect. 5xx = transient — retry with backoff.
-    if (response.status >= 400 && response.status < 500) {
+    // A genuine 4xx means the refresh token is bad (revoked/rotated) — retrying
+    // won't help and the user must reconnect. EXCEPT 429/408, which are
+    // rate-limit / timeout, i.e. transient: during a retry storm against an
+    // exhausted usage limit, auth.openai.com rate-limits the token endpoint, and
+    // treating that as "sign-in expired" forced a needless full re-auth. 5xx is
+    // transient too — retry all of these with backoff.
+    if (response.status >= 400 && response.status < 500 && response.status !== 429 && response.status !== 408) {
       throw new CodexRefreshInvalidError(`Token refresh rejected (HTTP ${response.status})`)
     }
     lastError = new Error(`Token refresh failed: HTTP ${response.status}`)
@@ -655,35 +671,19 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               }
             }
 
-            const response = isCodexRoute
+            // On quota exhaustion, return the 429/403 to the caller as-is. The
+            // previous "fall back to OPENAI_API_KEY against api.openai.com" path
+            // was removed: it forwarded the ChatGPT-internal Codex model id +
+            // Codex-shaped body to the standard OpenAI Responses API (which
+            // doesn't know those models, so it just 400s), and the substring
+            // quota-match ("quota"/"rate_limit"/"capacity") could misfire on
+            // unrelated 403s — silently charging the user's personal OpenAI key.
+            // A clean 429/403 is the correct signal that the subscription is
+            // rate-limited; the user's own `openai` provider (BYOK) is the
+            // supported way to run on an API key.
+            return isCodexRoute
               ? await sendWithCodex401Retry(send, currentAuth.access, forceRefreshOn401)
               : await send(currentAuth.access)
-
-            // Fallback to shared key if OAuth quota exceeded
-            if (response.status === 429 || response.status === 403) {
-              const body = await response
-                .clone()
-                .text()
-                .catch(() => "")
-              const isQuotaExceeded =
-                body.includes("quota") ||
-                body.includes("rate_limit") ||
-                body.includes("usage_limit") ||
-                body.includes("capacity")
-              if (isQuotaExceeded) {
-                const sharedKey = process.env.OPENAI_API_KEY
-                if (sharedKey && sharedKey !== OAUTH_DUMMY_KEY && !sharedKey.startsWith("thk_")) {
-                  log.warn("codex oauth quota exceeded, falling back to shared key")
-                  headers.set("authorization", `Bearer ${sharedKey}`)
-                  headers.delete("ChatGPT-Account-Id")
-                  // Route to standard OpenAI API instead of Codex endpoint
-                  const fallbackUrl = new URL("https://api.openai.com/v1/responses")
-                  return fetch(fallbackUrl, { ...init, headers })
-                }
-              }
-            }
-
-            return response
           },
         }
       },
