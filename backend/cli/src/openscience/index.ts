@@ -330,6 +330,12 @@ export namespace OpenScience {
   // both go through Atlas fetches, and with the agent's bash tool also unbounded a
   // hang wedged whole sessions for >60 min. Overridable via OPENSCIENCE_ATLAS_TIMEOUT_MS.
   const ATLAS_FETCH_TIMEOUT_MS = Number(process.env["OPENSCIENCE_ATLAS_TIMEOUT_MS"]) || 60_000
+  // Skill index/content fetches run on the GET /skill request path, and each only
+  // *enriches* a list that also comes from disk cache + bundled skills. A slow or
+  // unreachable backend must degrade fast (fall back to cached/empty) instead of
+  // wedging the request for the full Atlas timeout — the reporter in #138 saw a
+  // single /skill take 62s because these inherited the 60s default. Bound tighter.
+  const SKILL_FETCH_TIMEOUT_MS = Number(process.env["OPENSCIENCE_SKILL_TIMEOUT_MS"]) || 8_000
   function atlasFetch(input: string, init: RequestInit = {}, timeoutMs = ATLAS_FETCH_TIMEOUT_MS): Promise<Response> {
     // Combine (don't replace) a caller's signal with the timeout, so passing an
     // abort signal never silently drops the hang guard this function exists for.
@@ -1122,9 +1128,11 @@ export namespace OpenScience {
     if (!session) return null
 
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/skills`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
+      const res = await atlasFetch(
+        `${API_BASE}/api/cli/skills`,
+        { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
+      )
 
       if (!res.ok) {
         log.warn("failed to fetch skill index", { status: res.status })
@@ -1152,9 +1160,11 @@ export namespace OpenScience {
     if (!session) return null
 
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/skills/${encodeURIComponent(name)}`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
+      const res = await atlasFetch(
+        `${API_BASE}/api/cli/skills/${encodeURIComponent(name)}`,
+        { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
+      )
 
       if (!res.ok) {
         log.warn("failed to fetch skill content", { name, status: res.status })
@@ -1464,9 +1474,11 @@ export namespace OpenScience {
     if (!session) return null
 
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/learned-skills`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
+      const res = await atlasFetch(
+        `${API_BASE}/api/cli/learned-skills`,
+        { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
+      )
 
       if (!res.ok) {
         log.warn("failed to fetch learned skills index", { status: res.status })
@@ -1495,9 +1507,11 @@ export namespace OpenScience {
     if (!session) return null
 
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/learned-skills/${encodeURIComponent(name)}`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
+      const res = await atlasFetch(
+        `${API_BASE}/api/cli/learned-skills/${encodeURIComponent(name)}`,
+        { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
+      )
 
       if (!res.ok) {
         log.warn("failed to fetch learned skill content", { name, status: res.status })
@@ -1757,9 +1771,11 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return null
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/installed-skills`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
+      const res = await atlasFetch(
+        `${API_BASE}/api/cli/installed-skills`,
+        { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
+      )
       if (!res.ok) {
         log.warn("failed to fetch installed skills index", { status: res.status })
         return null
@@ -1779,6 +1795,7 @@ export namespace OpenScience {
       const res = await atlasFetch(
         `${API_BASE}/api/cli/installed-skills/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`,
         { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
       )
       if (!res.ok) return null
       const data = await res.json()

@@ -15,10 +15,40 @@ import { CopilotAuthPlugin } from "./copilot"
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["@synsci/anthropic-auth@0.0.13", "@gitlab/openscience-gitlab-auth@1.3.2"]
+  // Default plugins installed from npm at first run. Keep this list to packages
+  // that actually resolve on the public registry: a package that 404s is retried
+  // on EVERY startup (install() only short-circuits once a package is on disk, so
+  // a never-installable one never caches), serialized under the bun-install lock,
+  // which was the primary cause of the slow startup / "server unresponsive" report
+  // in #138. First-party auth that ships in-binary lives in INTERNAL_PLUGINS below.
+  const BUILTIN: string[] = []
+
+  // A single plugin install must never wedge startup. bun add for a missing/slow
+  // package can hang well past a reasonable wait; cap it so we log and move on.
+  const INSTALL_TIMEOUT_MS = Number(process.env["OPENSCIENCE_PLUGIN_INSTALL_TIMEOUT_MS"]) || 30_000
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin]
+
+  // Install a plugin package, but never wait longer than INSTALL_TIMEOUT_MS — a
+  // hung `bun add` (unreachable registry, missing package) must not block plugin
+  // init and, with it, the whole instance from becoming responsive.
+  async function installWithTimeout(pkg: string, version: string): Promise<string> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        BunProc.install(pkg, version),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`plugin install timed out after ${INSTALL_TIMEOUT_MS}ms`)),
+            INSTALL_TIMEOUT_MS,
+          )
+        }),
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
 
   const state = Instance.state(async () => {
     const client = createOpenScienceClient({
@@ -60,7 +90,7 @@ export namespace Plugin {
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
         const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
-        plugin = await BunProc.install(pkg, version).catch((err) => {
+        plugin = await installWithTimeout(pkg, version).catch((err) => {
           if (!builtin) throw err
 
           const message = err instanceof Error ? err.message : String(err)
