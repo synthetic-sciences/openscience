@@ -235,8 +235,15 @@ export namespace Skill {
     // === Learned Skills: from RSI distillation, cloud-synced + local ===
     const learnedDir = path.join(Global.Path.data, "learned-skills")
 
-    // Sync from cloud: fetch learned skills index and write any missing to disk
-    const cloudLearned = await OpenScience.fetchLearnedSkills().catch(() => null)
+    // Sync from cloud: fetch learned skills index and write any missing to disk.
+    // Gated on the same flag as the skill index above so it is one consistent
+    // "no server-side skill I/O" switch — this keeps skill discovery from
+    // blocking on a slow/unreachable backend (#138) and makes it deterministic
+    // in tests (preload sets the flag). The local learned-skills scan below still
+    // runs regardless.
+    const cloudLearned = Flag.OPENSCIENCE_DISABLE_BUNDLED_SKILLS
+      ? null
+      : await OpenScience.fetchLearnedSkills().catch(() => null)
     if (cloudLearned) {
       for (const entry of cloudLearned) {
         const skillDir = path.join(learnedDir, entry.name)
@@ -330,7 +337,12 @@ export namespace Skill {
       }
     }
 
-    const cloudInstalled = await OpenScience.fetchInstalledSkills().catch(() => null)
+    // Same gate as the learned + index fetches above: a slow/unreachable backend
+    // must not wedge skill discovery, and tests stay network-independent. The
+    // local installed-skills scan below still runs regardless.
+    const cloudInstalled = Flag.OPENSCIENCE_DISABLE_BUNDLED_SKILLS
+      ? null
+      : await OpenScience.fetchInstalledSkills().catch(() => null)
     if (cloudInstalled) {
       for (const entry of cloudInstalled) {
         const skillDir = path.join(installedDir, entry.namespace, "skills", entry.name)
