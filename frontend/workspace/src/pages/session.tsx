@@ -450,8 +450,6 @@ export default function Page(): JSX.Element {
                               lastUserMessageID={lastUserMessage()?.id}
                               stepsExpanded={stepsExpanded()[message.id] ?? false}
                               onStepsExpandedToggle={() => toggleSteps(message.id)}
-                              onRevertMessage={(id) => void revertTo(id)}
-                              hideTools={["task"]}
                               classes={{
                                 root: "min-w-0 w-full relative",
                                 content: "flex flex-col justify-between !overflow-visible",

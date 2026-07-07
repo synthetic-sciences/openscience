@@ -11,7 +11,10 @@ export const DialogManageModels: Component = () => {
   const language = useLanguage()
 
   return (
-    <Dialog title={language.t("dialog.model.manage")} description={language.t("dialog.model.manage.description")}>
+    <Dialog
+      title={language.t("dialog.model.manage")}
+      description={language.t("dialog.model.manage.description")}
+    >
       <List
         search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.model.empty")}
@@ -37,9 +40,9 @@ export const DialogManageModels: Component = () => {
         }}
       >
         {(i) => (
-          <div class="w-full flex items-center justify-between gap-3 text-13-regular">
-            <span class="truncate min-w-0">{i.name}</span>
-            <div class="shrink-0" onClick={(e) => e.stopPropagation()}>
+          <div class="w-full flex items-center justify-between gap-x-3">
+            <span>{i.name}</span>
+            <div onClick={(e) => e.stopPropagation()}>
               <Switch
                 checked={
                   !!local.model.visible({

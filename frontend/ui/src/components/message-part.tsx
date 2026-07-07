@@ -93,9 +93,6 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
-  /** When set, user messages render an undo action that reverts the
-   * conversation (and file changes) back to this message. */
-  onRevert?: () => void
 }
 
 export interface MessagePartProps {
@@ -108,6 +105,11 @@ export interface MessagePartProps {
 export type PartComponent = Component<MessagePartProps>
 
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
+
+// Openscience science-artifact tool renderer id. tool-renderer.tsx registers a
+// custom renderer under this name and imports it from here; re-exported so that
+// import resolves against the v1.1.116 message-part.
+export const ARTIFACT_TOOL = "__artifact__"
 
 const TEXT_RENDER_THROTTLE_MS = 100
 
@@ -286,9 +288,7 @@ export function Message(props: MessageProps) {
   return (
     <Switch>
       <Match when={props.message.role === "user" && props.message}>
-        {(userMessage) => (
-          <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} onRevert={props.onRevert} />
-        )}
+        {(userMessage) => <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} />}
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
         {(assistantMessage) => (
@@ -312,7 +312,7 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
   return <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; onRevert?: () => void }) {
+export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
   const dialog = useDialog()
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
@@ -429,20 +429,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
             <Icon name="chevron-down" size="small" />
           </button>
           <div data-slot="user-message-copy-wrapper">
-            <Show when={props.onRevert}>
-              <Tooltip value={i18n.t("ui.message.revert")} placement="top" gutter={8}>
-                <IconButton
-                  icon="undo"
-                  variant="secondary"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    props.onRevert?.()
-                  }}
-                  aria-label={i18n.t("ui.message.revert")}
-                />
-              </Tooltip>
-            </Show>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               placement="top"
@@ -557,14 +543,6 @@ export const ToolRegistry = {
   render: getTool,
 }
 
-/**
- * Reserved registry key for the app-side science-artifact renderer. Any tool
- * whose `metadata.artifact` is set but has no tool-specific renderer falls back
- * to whatever the app registers under this name (see the app's ScienceArtifact
- * side-effect import). Kept out of the tool namespace with a sentinel name.
- */
-export const ARTIFACT_TOOL = "__artifact__"
-
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
@@ -634,15 +612,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     return partMetadata()
   }
 
-  // Prefer a tool-specific renderer; otherwise, if the tool emitted a science
-  // artifact envelope in its metadata, fall back to the app-registered artifact
-  // renderer (see ARTIFACT_TOOL); otherwise the generic tool card.
-  const render = createMemo(
-    () =>
-      ToolRegistry.render(part.tool) ??
-      (metadata()?.artifact ? ToolRegistry.render(ARTIFACT_TOOL) : undefined) ??
-      GenericTool,
-  )
+  const render = ToolRegistry.render(part.tool) ?? GenericTool
 
   return (
     <div data-component="tool-part-wrapper" data-permission={showPermission()} data-question={showQuestion()}>
@@ -673,7 +643,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
         </Match>
         <Match when={true}>
           <Dynamic
-            component={render()}
+            component={render}
             input={input()}
             tool={part.tool}
             metadata={metadata()}
@@ -1077,7 +1047,9 @@ ToolRegistry.register({
     const i18n = useI18n()
     const openInShellTab = (e: MouseEvent) => {
       e.stopPropagation()
-      document.dispatchEvent(new CustomEvent("open-shell-tab", { detail: { partId: props.partID } }))
+      document.dispatchEvent(
+        new CustomEvent("open-shell-tab", { detail: { partId: props.partID } }),
+      )
     }
     return (
       <BasicTool
@@ -1088,7 +1060,12 @@ ToolRegistry.register({
           subtitle: props.input.description,
           action: (
             <Tooltip value="Open in Shell tab">
-              <IconButton icon="square-arrow-top-right" variant="ghost" class="h-5 w-5" onClick={openInShellTab} />
+              <IconButton
+                icon="square-arrow-top-right"
+                variant="ghost"
+                class="h-5 w-5"
+                onClick={openInShellTab}
+              />
             </Tooltip>
           ),
         }}
@@ -1177,13 +1154,10 @@ ToolRegistry.register({
           source: Array.isArray(cell.source) ? cell.source.join("") : (cell.source ?? ""),
           executionCount: cell.execution_count ?? null,
           outputs: (cell.outputs ?? []).map((o: any) => {
-            if (o.output_type === "stream")
-              return { type: "stream", name: o.name, text: Array.isArray(o.text) ? o.text.join("") : o.text }
-            if (o.output_type === "execute_result")
-              return { type: "execute_result", data: o.data ?? {}, executionCount: o.execution_count }
+            if (o.output_type === "stream") return { type: "stream", name: o.name, text: Array.isArray(o.text) ? o.text.join("") : o.text }
+            if (o.output_type === "execute_result") return { type: "execute_result", data: o.data ?? {}, executionCount: o.execution_count }
             if (o.output_type === "display_data") return { type: "display_data", data: o.data ?? {} }
-            if (o.output_type === "error")
-              return { type: "error", ename: o.ename, evalue: o.evalue, traceback: o.traceback ?? [] }
+            if (o.output_type === "error") return { type: "error", ename: o.ename, evalue: o.evalue, traceback: o.traceback ?? [] }
             return { type: "stream", name: "stdout", text: "" }
           }),
         }))
@@ -1214,24 +1188,24 @@ ToolRegistry.register({
         }
       >
         <Show when={props.input.content}>
-          <Show
-            when={isNotebook() && notebookCells().length > 0}
-            fallback={
-              <div data-component="write-content">
-                <Dynamic
-                  component={codeComponent}
-                  file={{
-                    name: props.input.filePath,
-                    contents: props.input.content,
-                    cacheKey: checksum(props.input.content),
-                  }}
-                  overflow="scroll"
-                />
-              </div>
-            }
-          >
+          <Show when={isNotebook() && notebookCells().length > 0} fallback={
             <div data-component="write-content">
-              <NotebookView cells={notebookCells()} title={filename()} />
+              <Dynamic
+                component={codeComponent}
+                file={{
+                  name: props.input.filePath,
+                  contents: props.input.content,
+                  cacheKey: checksum(props.input.content),
+                }}
+                overflow="scroll"
+              />
+            </div>
+          }>
+            <div data-component="write-content">
+              <NotebookView
+                cells={notebookCells()}
+                title={filename()}
+              />
             </div>
           </Show>
         </Show>
@@ -1472,9 +1446,7 @@ ToolRegistry.register({
           title: connected() ? "Colab Connected" : "Colab Connect",
           subtitle: connected()
             ? `${mode()} · ${gpu() || "GPU ready"}`
-            : mode() === "enterprise"
-              ? "Vertex AI"
-              : "Bridge notebook",
+            : mode() === "enterprise" ? "Vertex AI" : "Bridge notebook",
         }}
       >
         <Show when={props.output}>

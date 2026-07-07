@@ -1,12 +1,5 @@
 import { createSignal, For, Show, type JSX } from "solid-js"
-import DOMPurify from "dompurify"
 import { Icon } from "./icon"
-
-// Notebook `text/html` outputs are untrusted (a malicious .ipynb or a
-// prompt-injected cell can emit arbitrary markup). Sanitize before injecting so
-// tables/plots still render but <script>, event handlers, and javascript: URLs
-// are stripped. Default profile keeps html+svg+mathml.
-const sanitizeHtml = (html: string) => (DOMPurify.isSupported ? DOMPurify.sanitize(html) : "")
 
 export interface NotebookCellProps {
   cellType: "code" | "markdown"
@@ -55,7 +48,9 @@ export function NotebookCell(props: NotebookCellProps): JSX.Element {
         </div>
         <Show when={props.outputs && props.outputs.length > 0}>
           <div data-slot="notebook-cell-outputs">
-            <For each={props.outputs}>{(output) => <NotebookOutputView output={output} />}</For>
+            <For each={props.outputs}>
+              {(output) => <NotebookOutputView output={output} />}
+            </For>
           </div>
         </Show>
       </Show>
@@ -83,7 +78,7 @@ function NotebookOutputView(props: { output: NotebookOutput }): JSX.Element {
             />
           </Show>
           <Show when={output().data?.["text/html"]}>
-            <div data-slot="notebook-output-html" innerHTML={sanitizeHtml(output().data!["text/html"])} />
+            <div data-slot="notebook-output-html" innerHTML={output().data!["text/html"]} />
           </Show>
           <Show when={output().data?.["text/plain"] && !output().data?.["image/png"] && !output().data?.["text/html"]}>
             <pre data-slot="notebook-output-text">{output().data!["text/plain"]}</pre>
@@ -92,14 +87,10 @@ function NotebookOutputView(props: { output: NotebookOutput }): JSX.Element {
       </Show>
       <Show when={output().type === "error"}>
         <div data-slot="notebook-output-error">
-          <div data-slot="notebook-error-name">
-            {output().ename}: {output().evalue}
-          </div>
+          <div data-slot="notebook-error-name">{output().ename}: {output().evalue}</div>
           <Show when={output().traceback && output().traceback!.length > 0}>
             <pre data-slot="notebook-error-traceback">
-              {output()
-                .traceback!.map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""))
-                .join("\n")}
+              {output().traceback!.map((l) => l.replace(/\x1b\[[0-9;]*m/g, "")).join("\n")}
             </pre>
           </Show>
         </div>
@@ -108,7 +99,10 @@ function NotebookOutputView(props: { output: NotebookOutput }): JSX.Element {
   )
 }
 
-export function NotebookView(props: { cells: NotebookCellProps[]; title?: string }): JSX.Element {
+export function NotebookView(props: {
+  cells: NotebookCellProps[]
+  title?: string
+}): JSX.Element {
   return (
     <div data-component="notebook-view">
       <Show when={props.title}>
