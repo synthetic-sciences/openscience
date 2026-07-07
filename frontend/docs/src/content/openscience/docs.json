@@ -21,7 +21,7 @@
         "groups": [
           {
             "group": "CLI",
-            "pages": ["commands", "security"]
+            "pages": ["commands", "security", "sandbox"]
           }
         ]
       }

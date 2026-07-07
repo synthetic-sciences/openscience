@@ -6,9 +6,11 @@ icon: "shield-check"
 
 OpenScience is open source under Apache-2.0, so the whole security model below is auditable in the [repository](https://github.com/synthetic-sciences/openscience). The agent runs locally with the same filesystem and shell access you have. Two principles anchor the design: keep credentials out of subprocesses that do not need them, and make the trust boundary explicit instead of pretending the agent is a sandbox.
 
-## The agent is not a sandbox
+## The agent is not a sandbox by default
 
-The permission system prompts you before the agent runs a command or writes a file. That keeps you aware of what it is doing — it is not an isolation boundary. The agent can read, write, and execute anywhere your user can. For real isolation, run OpenScience inside a container or a VM.
+The permission system prompts you before the agent runs a command or writes a file. That keeps you aware of what it is doing — it is not, on its own, an isolation boundary. By default the agent can read, write, and execute anywhere your user can.
+
+You can add a real boundary: the opt-in [execution sandbox](/openscience/sandbox) wraps the agent's shell commands in an OS sandbox (macOS Seatbelt, Linux bubblewrap) that confines writes to the workspace and can deny network egress. Turn it on with `openscience sandbox enable` and verify it with `openscience sandbox test`. It is write-containment, not a full jail — for hostile code, still run OpenScience inside a container or a VM.
 
 ## Credential storage
 
