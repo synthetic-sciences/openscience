@@ -180,7 +180,11 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
     options: [
       { value: "managed", label: "Atlas managed", hint: "★ recommended · prepaid wallet · zero setup" },
       { value: "byok", label: "Your own keys", hint: "Anthropic · OpenAI · Google · 100+ providers · always free" },
-      { value: "local", label: "Local models", hint: "Ollama · LM Studio · OpenAI-compatible endpoint · free, offline" },
+      {
+        value: "local",
+        label: "Local models",
+        hint: "Ollama · LM Studio · OpenAI-compatible endpoint · free, offline",
+      },
       { value: "skip", label: "Not now", hint: "free demo models now, set up anytime" },
     ],
   })
