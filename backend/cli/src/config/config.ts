@@ -1447,6 +1447,19 @@ export namespace Config {
     return patchConfigPath(scope, ["mcp", name], undefined)
   }
 
+  /** Register a custom provider block (e.g. a local Ollama / LM Studio /
+   *  OpenAI-compatible endpoint) under `provider.<id>`, JSONC-preserving.
+   *  Defaults to the GLOBAL config since a local endpoint is machine-wide, not
+   *  per-project. Mirrors setMcp. */
+  export async function setProvider(id: string, provider: Provider, scope: Scope = "global") {
+    return patchConfigPath(scope, ["provider", id], provider)
+  }
+
+  /** Remove a custom provider block. */
+  export async function removeProvider(id: string, scope: Scope = "global") {
+    return patchConfigPath(scope, ["provider", id], undefined)
+  }
+
   /** Remove a key path from the global config (deep-merge can't unset). */
   export async function unsetGlobal(target: string[]) {
     return patchConfigPath("global", target, undefined)
