@@ -28,6 +28,37 @@ test("parseDotenv handles export prefix, quotes, comments, blanks, and embedded 
   ])
 })
 
+test("parseDotenv strips inline comments on unquoted values but keeps # inside quotes", () => {
+  const raw = [
+    "OPENROUTER_API_KEY=sk-or-abc123 # personal key",
+    "NOSPACE=sk-value#notacomment",
+    'QUOTED="a # b" # trailing',
+    "SINGLEQ='c # d'",
+  ].join("\n")
+  expect(parseDotenv(raw)).toEqual([
+    ["OPENROUTER_API_KEY", "sk-or-abc123"],
+    ["NOSPACE", "sk-value#notacomment"],
+    ["QUOTED", "a # b"],
+    ["SINGLEQ", "c # d"],
+  ])
+})
+
+test("loadProjectDotenv skips execution-affecting vars and empty values", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openscience-dotenv-"))
+  fs.writeFileSync(
+    path.join(dir, ".env"),
+    "NODE_OPTIONS=--require /tmp/evil.js\nLD_PRELOAD=/tmp/evil.so\nEMPTY=\nANTHROPIC_API_KEY=sk-ant-ok\n",
+  )
+  const env: NodeJS.ProcessEnv = {}
+  const applied = loadProjectDotenv(dir, env)
+  expect(env.NODE_OPTIONS).toBeUndefined() // dangerous — never from .env
+  expect(env.LD_PRELOAD).toBeUndefined()
+  expect(env.EMPTY).toBeUndefined() // empty skipped
+  expect(env.ANTHROPIC_API_KEY).toBe("sk-ant-ok")
+  expect(applied).toEqual(["ANTHROPIC_API_KEY"])
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
 test("loadProjectDotenv applies only unset vars (shell export wins) and returns applied names", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openscience-dotenv-"))
   fs.writeFileSync(path.join(dir, ".env"), "ANTHROPIC_API_KEY=from-dotenv\nGROQ_API_KEY=gsk-dotenv\n")

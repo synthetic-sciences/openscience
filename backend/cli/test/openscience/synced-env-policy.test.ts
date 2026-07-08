@@ -11,6 +11,7 @@ test("blocks every non-OpenRouter model-provider LLM credential (key + *_BASE_UR
     "GEMINI_BASE_URL",
     "GOOGLE_GENERATIVE_AI_API_KEY",
     "GOOGLE_GENERATIVE_AI_BASE_URL",
+    "GOOGLE_API_KEY",
     "TOGETHER_API_KEY",
     "GROQ_API_KEY",
     "FIREWORKS_API_KEY",
