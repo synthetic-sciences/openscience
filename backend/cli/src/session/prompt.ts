@@ -35,7 +35,6 @@ import { ListTool } from "../tool/ls"
 import { FileTime } from "../file/time"
 import { Flag } from "../flag/flag"
 import { RSITrajectory } from "./rsi/trajectory"
-import { SessionReview } from "./review"
 import { RLMArtifacts } from "./rlm/artifacts"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
@@ -331,12 +330,6 @@ export namespace SessionPrompt {
         // RSI: capture trajectory from ultra agent sessions (async, non-blocking)
         if (lastUser.agent && RSITrajectory.ARTIFACT_AGENTS.includes(lastUser.agent as any)) {
           RSITrajectory.pipeline(sessionID).catch(() => {})
-        }
-        // WS11 reviewer gate: blind review of the final answer, appended as a
-        // footer note. Off by default (config.experimental.reviewGate); the gate
-        // self-skips non-reviewable/trivial turns. Fire-and-forget, never blocks.
-        if (lastUser.agent) {
-          SessionReview.gate({ sessionID, agent: lastUser.agent, model: lastUser.model }).catch(() => {})
         }
         break
       }

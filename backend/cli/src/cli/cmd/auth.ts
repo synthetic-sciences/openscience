@@ -355,7 +355,7 @@ export const AuthLoginCommand = cmd({
                 hint: {
                   synsci: "Atlas — recommended",
                   anthropic: "Claude Max or API key",
-                  openai: "ChatGPT subscription (Codex) or an API key",
+                  openai: "API key (to sign in with Codex/ChatGPT, use the option above)",
                 }[x.id],
               })),
             ),

@@ -1201,12 +1201,6 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
-          reviewGate: z
-            .enum(["off", "annotate"])
-            .optional()
-            .describe(
-              "Run a blind reviewer on a primary agent's final answer and append its verdict as a footer note ('annotate' = on, non-blocking). Off by default.",
-            ),
         })
         .optional(),
     })

@@ -292,24 +292,6 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
               back
             </Button>
           </div>
-          {/* ChatGPT / Codex is OAuth (no API key). Its interactive flow runs from
-              the CLI (local callback on :1455), so surface it plainly here instead
-              of leaving it terminal-only and undiscoverable. */}
-          <div
-            style={{
-              "margin-top": "4px",
-              "padding-top": "12px",
-              "border-top": "1px solid var(--color-border)",
-              "font-family": FONT_MONO,
-              "font-size": "11px",
-              color: "var(--color-text-muted)",
-              "line-height": 1.55,
-            }}
-          >
-            Have a ChatGPT Plus / Pro / Business plan? Use it instead of an API key — run{" "}
-            <code style={{ color: "var(--color-text)" }}>openscience signin codex</code> in your terminal to sign in
-            with ChatGPT (Codex).
-          </div>
         </Show>
       </div>
     </Dialog>

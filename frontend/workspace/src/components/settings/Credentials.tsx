@@ -201,6 +201,28 @@ export const Credentials: Component = () => {
     }
   }
 
+  // ── Sign in with ChatGPT (Codex OAuth) — use an OpenAI plan's credits, no key ──
+  // Drives the existing provider-OAuth routes: authorize() starts the local :1455
+  // loopback + returns the auth URL; the client opens it; callback() long-polls
+  // until the browser redirect lands (up to ~5 min) and persists the tokens.
+  const [connectingCodex, setConnectingCodex] = createSignal(false)
+  const codexConnected = createMemo(() => providers.connected().some((p) => p.id === "openai-codex"))
+  const connectCodex = async () => {
+    if (connectingCodex()) return
+    setConnectingCodex(true)
+    setError(undefined)
+    try {
+      const { data } = await sdk.client.provider.oauth.authorize({ providerID: "openai-codex", method: 0 })
+      if (data?.url) platform.openLink(data.url)
+      await sdk.client.provider.oauth.callback({ providerID: "openai-codex", method: 0 })
+      await sdk.client.global.sync()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setConnectingCodex(false)
+    }
+  }
+
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
@@ -427,6 +449,42 @@ export const Credentials: Component = () => {
               Bring your own model-provider API keys. Stored on this machine, billed directly by each provider — free
               and unmetered here.
             </p>
+          </div>
+
+          {/* Sign in with ChatGPT (Codex OAuth) — an OpenAI plan's credits, no key */}
+          <div
+            class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between"
+            style={{ border: "1px solid var(--color-border)", "border-radius": "4px", padding: "14px 18px" }}
+          >
+            <div class="flex flex-col gap-0.5 min-w-0">
+              <span class="text-13-medium text-text-base">Sign in with ChatGPT</span>
+              <span class="text-12-regular text-text-weak">
+                Use your ChatGPT Plus / Pro / Business plan (Codex) — no API key needed.
+              </span>
+            </div>
+            <Show
+              when={!codexConnected()}
+              fallback={
+                <div class="flex items-center gap-2 shrink-0">
+                  <StatusDot status="active" size={8} />
+                  <span class="text-12-regular text-text-weak">Connected</span>
+                  <Button size="small" variant="secondary" onClick={() => void removeKey("openai-codex")}>
+                    disconnect
+                  </Button>
+                </div>
+              }
+            >
+              <Button
+                type="button"
+                size="small"
+                variant="primary"
+                class="shrink-0"
+                disabled={connectingCodex()}
+                onClick={() => void connectCodex()}
+              >
+                {connectingCodex() ? "waiting for ChatGPT…" : "Sign in with ChatGPT"}
+              </Button>
+            </Show>
           </div>
 
           <form
