@@ -2,6 +2,21 @@ import { describe, expect, test } from "bun:test"
 import { LLM } from "../../src/session/llm"
 import type { ModelMessage } from "ai"
 
+describe("session.llm.isCodexSubscriptionModel", () => {
+  test("returns true for the synthesized openai-codex OAuth provider", () => {
+    expect(LLM.isCodexSubscriptionModel({ providerID: "openai-codex" }, { type: "oauth" })).toBe(true)
+  })
+
+  test("does not treat the plain OpenAI provider as Codex subscription access", () => {
+    expect(LLM.isCodexSubscriptionModel({ providerID: "openai" }, { type: "oauth" })).toBe(false)
+  })
+
+  test("requires OAuth credentials for the Codex subscription provider", () => {
+    expect(LLM.isCodexSubscriptionModel({ providerID: "openai-codex" }, { type: "api" })).toBe(false)
+    expect(LLM.isCodexSubscriptionModel({ providerID: "openai-codex" })).toBe(false)
+  })
+})
+
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {
     expect(LLM.hasToolCalls([])).toBe(false)
