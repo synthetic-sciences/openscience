@@ -259,6 +259,23 @@ export const AuthListCommand = cmd({
   },
 })
 
+/**
+ * Classify the overloaded `keys add [url]` positional.
+ *  - a full http(s) URL → a custom endpoint (auth via /.well-known/openscience)
+ *  - a bare provider id (a-z, 0-9, hyphens; optional `@ai-sdk/` prefix stripped)
+ *    → preselect that provider, skipping the picker
+ *  - anything else (or absent) → neither; fall through to the interactive picker
+ *
+ * Keeps `keys add deepseek` from becoming `fetch("deepseek/.well-known/…")`,
+ * the "fetch() URL is invalid" crash in #142.
+ */
+export function classifyKeyTarget(arg?: string): { endpointUrl?: string; preselect?: string } {
+  if (!arg) return {}
+  if (/^https?:\/\//i.test(arg)) return { endpointUrl: arg }
+  const preselect = arg.replace(/^@ai-sdk\//, "").match(/^[0-9a-z-]+$/)?.[0]
+  return preselect ? { preselect } : {}
+}
+
 export const AuthLoginCommand = cmd({
   command: ["add [url]", "login [url]"],
   describe: "add a provider API key (BYOK)",
@@ -273,8 +290,20 @@ export const AuthLoginCommand = cmd({
       async fn() {
         UI.empty()
         prompts.intro("Add credential")
-        if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/openscience`).then((x) => x.json() as any)
+
+        // The positional is overloaded: a full http(s) URL means a custom
+        // endpoint that advertises its auth via /.well-known/openscience, while
+        // a bare token (e.g. `keys add deepseek`) is a provider id to preselect.
+        // Previously ANY positional went to the well-known fetch, so a provider
+        // name became `fetch("deepseek/.well-known/openscience")` → the
+        // "fetch() URL is invalid" crash from #142.
+        const { endpointUrl, preselect } = classifyKeyTarget(args.url)
+        if (args.url && !endpointUrl && !preselect) {
+          prompts.log.warn(`"${args.url}" is neither a URL nor a valid provider id — choose a provider below.`)
+        }
+
+        if (endpointUrl) {
+          const wellknown = await fetch(`${endpointUrl}/.well-known/openscience`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Bun.spawn({
             cmd: wellknown.auth.command,
@@ -287,12 +316,12 @@ export const AuthLoginCommand = cmd({
             return
           }
           const token = await new Response(proc.stdout).text()
-          await Auth.set(args.url, {
+          await Auth.set(endpointUrl, {
             type: "wellknown",
             key: wellknown.auth.env,
             token: token.trim(),
           })
-          prompts.log.success("Logged into " + args.url)
+          prompts.log.success("Logged into " + endpointUrl)
           prompts.outro("Done")
           return
         }
@@ -322,49 +351,69 @@ export const AuthLoginCommand = cmd({
           openrouter: 5,
           vercel: 6,
         }
-        let provider = await prompts.autocomplete({
-          message: "Select provider",
-          maxItems: 8,
-          options: [
-            // Codex is its own synthesized provider (openai-codex), so it isn't in
-            // the models.dev list — surface it explicitly at the top so signing in
-            // with a ChatGPT subscription is a first-class, discoverable choice.
-            {
-              value: "openai-codex",
-              label: "Sign in with ChatGPT (Codex)",
-              hint: "use your ChatGPT Plus/Pro/Business subscription — no API key",
-            },
-            // Local models aren't in the models.dev catalog — surface them at the
-            // top so pointing OpenScience at Ollama / LM Studio / any local
-            // OpenAI-compatible endpoint is a first-class, discoverable choice.
-            {
-              value: "local",
-              label: "Local model (Ollama / LM Studio / OpenAI-compatible)",
-              hint: "an endpoint on your machine — free, offline, no API key",
-            },
-            ...pipe(
-              providers,
-              values(),
-              sortBy(
-                (x) => priority[x.id] ?? 99,
-                (x) => x.name ?? x.id,
+        // A preselected provider id (bare positional) skips the picker and goes
+        // straight to that provider's auth path, so `keys add deepseek` works.
+        const specialIds = new Set([
+          "openai-codex",
+          "local",
+          "other",
+          "amazon-bedrock",
+          "synsci",
+          "vercel",
+          "cloudflare",
+          "cloudflare-ai-gateway",
+        ])
+        let provider: string | symbol | undefined = preselect
+        if (preselect && !providers[preselect] && !specialIds.has(preselect)) {
+          prompts.log.warn(
+            `${preselect} isn't in the model catalog — the key will be stored, but you'll need to configure the provider in openscience.json. See the docs.`,
+          )
+        }
+        if (!provider) {
+          provider = await prompts.autocomplete({
+            message: "Select provider",
+            maxItems: 8,
+            options: [
+              // Codex is its own synthesized provider (openai-codex), so it isn't in
+              // the models.dev list — surface it explicitly at the top so signing in
+              // with a ChatGPT subscription is a first-class, discoverable choice.
+              {
+                value: "openai-codex",
+                label: "Sign in with ChatGPT (Codex)",
+                hint: "use your ChatGPT Plus/Pro/Business subscription — no API key",
+              },
+              // Local models aren't in the models.dev catalog — surface them at the
+              // top so pointing OpenScience at Ollama / LM Studio / any local
+              // OpenAI-compatible endpoint is a first-class, discoverable choice.
+              {
+                value: "local",
+                label: "Local model (Ollama / LM Studio / OpenAI-compatible)",
+                hint: "an endpoint on your machine — free, offline, no API key",
+              },
+              ...pipe(
+                providers,
+                values(),
+                sortBy(
+                  (x) => priority[x.id] ?? 99,
+                  (x) => x.name ?? x.id,
+                ),
+                map((x) => ({
+                  label: x.name,
+                  value: x.id,
+                  hint: {
+                    synsci: "Atlas — recommended",
+                    anthropic: "Claude Max or API key",
+                    openai: "API key (to sign in with Codex/ChatGPT, use the option above)",
+                  }[x.id],
+                })),
               ),
-              map((x) => ({
-                label: x.name,
-                value: x.id,
-                hint: {
-                  synsci: "Atlas — recommended",
-                  anthropic: "Claude Max or API key",
-                  openai: "API key (to sign in with Codex/ChatGPT, use the option above)",
-                }[x.id],
-              })),
-            ),
-            {
-              value: "other",
-              label: "Other",
-            },
-          ],
-        })
+              {
+                value: "other",
+                label: "Other",
+              },
+            ],
+          })
+        }
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
