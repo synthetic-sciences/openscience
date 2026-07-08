@@ -57,7 +57,7 @@
     position: sticky;
     top: var(--session-title-height, 0px);
     z-index: 20;
-    background-color: var(--background-stronger);
+    background-color: var(--background-base);
     margin-left: -9px;
     padding-left: 9px;
     /* padding-bottom: 12px; */
@@ -72,7 +72,7 @@
       bottom: 0;
       left: 0;
       right: 0;
-      background-color: var(--background-stronger);
+      background-color: var(--background-base);
       z-index: -1;
     }
 
@@ -83,7 +83,7 @@
       left: 0;
       right: 0;
       height: 32px;
-      background: linear-gradient(to bottom, var(--background-stronger), transparent);
+      background: linear-gradient(to bottom, var(--background-base), transparent);
       pointer-events: none;
     }
   }
@@ -498,9 +498,32 @@
     align-items: center;
     gap: 8px;
     color: var(--text-weak);
+    /* Bigger, obviously-clickable hit area for the show/hide-steps toggle.
+       Negative inline margin keeps the enlarged target from shifting layout. */
+    cursor: pointer;
+    padding: 6px 10px;
+    margin: -6px -10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition:
+      background 0.12s ease,
+      border-color 0.12s ease,
+      color 0.12s ease;
+
+    &:hover {
+      background: var(--surface-raised-base);
+      border-color: var(--border-weak-base);
+      color: var(--text-base);
+    }
+
+    &:focus-visible {
+      border-color: var(--border-base);
+    }
 
     [data-slot="session-turn-trigger-icon"] {
       color: var(--icon-base);
+      flex-shrink: 0;
+      transition: transform 0.15s ease;
     }
 
     [data-component="spinner"] {

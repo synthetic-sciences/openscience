@@ -568,6 +568,10 @@ export function SessionTurn(
                                   fill="none"
                                   xmlns="http://www.w3.org/2000/svg"
                                   data-slot="session-turn-trigger-icon"
+                                  style={{
+                                    transform: props.stepsExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                                    transition: "transform 0.15s ease",
+                                  }}
                                 >
                                   <path
                                     d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
@@ -622,7 +626,7 @@ export function SessionTurn(
                               message={assistantMessage}
                               responsePartId={responsePartId()}
                               hideResponsePart={hideResponsePart()}
-                              hideReasoning={!working()}
+                              hideReasoning={false}
                             />
                           )}
                         </For>
