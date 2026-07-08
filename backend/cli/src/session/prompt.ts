@@ -645,7 +645,13 @@ export namespace SessionPrompt {
         !!lastFinished &&
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
-      if (overThreshold) {
+      // Circuit breaker: once repeated compactions have proven ineffective for this
+      // session (fixed overhead already exceeds the threshold), stop proactively
+      // compacting — it only burns tokens/latency. The reactive overflow-error path is
+      // the sole remaining backstop for a genuine hard overflow.
+      if (overThreshold && SessionCompaction.breakerTripped(sessionID)) {
+        log.warn("compaction circuit breaker tripped; proceeding without compacting", { sessionID })
+      } else if (overThreshold) {
         // Cheapest first: clear stale tool outputs / older images. If that reclaims a
         // meaningful chunk, skip the expensive LLM compaction this turn — the next turn
         // re-checks on real token usage. Only summarize when clearing can't hold budget.
@@ -656,6 +662,7 @@ export namespace SessionPrompt {
           // the threshold); prune's return value is the estimated reclaim.
           const before = lastFinished!.tokens.input + lastFinished!.tokens.cache.read + lastFinished!.tokens.output
           SessionTelemetry.recordCompaction({ sessionID, trigger: "proactive", mechanism: "prune", before, reclaimed })
+          SessionCompaction.noteCompaction({ sessionID, before, reclaimed })
           compactionArmed = true
         }
         if (reclaimed === 0 && (await armedCompact())) continue
@@ -665,8 +672,12 @@ export namespace SessionPrompt {
         if (reclaimed === 0)
           log.warn("auto-compaction did not bring context under threshold; proceeding", { sessionID })
       }
-      // Genuinely under threshold — re-arm for future growth.
-      if (!overThreshold && lastFinished && lastFinished.summary !== true) compactionArmed = true
+      // Genuinely under threshold — re-arm for future growth and clear the breaker so a
+      // later, legitimately-needed compaction can still fire.
+      if (!overThreshold && lastFinished && lastFinished.summary !== true) {
+        compactionArmed = true
+        SessionCompaction.resetBreaker(sessionID)
+      }
 
       // normal processing
       const agent = await Agent.get(lastUser.agent)

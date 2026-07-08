@@ -69,6 +69,37 @@ export namespace SessionCompaction {
     return count > usable * threshold
   }
 
+  // Circuit breaker (P2.5). A compaction that reclaims less than this fraction of the
+  // pre-compaction context is "ineffective" — fixed system+tool+summary overhead already
+  // dominates the window, so re-compacting won't help. After this many consecutive
+  // ineffective compactions we stop proactively compacting for the session and let the
+  // reactive overflow-error path be the only backstop — a runaway session can't spin
+  // burning tokens on doomed summaries.
+  export const EFFECTIVE_COMPACTION_RATIO = 0.1
+  export const CIRCUIT_BREAKER_LIMIT = 3
+
+  const breakerState = Instance.state(() => ({}) as Record<string, number>)
+
+  // Record a compaction's effectiveness. An unmeasurable `before` (0/undefined) leaves the
+  // counter untouched — we don't punish what we can't judge. Returns whether the breaker
+  // is now tripped.
+  export function noteCompaction(input: { sessionID: string; before?: number; reclaimed: number }) {
+    const state = breakerState()
+    if (input.before && input.before > 0) {
+      const effective = input.reclaimed / input.before >= EFFECTIVE_COMPACTION_RATIO
+      state[input.sessionID] = effective ? 0 : (state[input.sessionID] ?? 0) + 1
+    }
+    return { tripped: (state[input.sessionID] ?? 0) >= CIRCUIT_BREAKER_LIMIT }
+  }
+
+  export function breakerTripped(sessionID: string) {
+    return (breakerState()[sessionID] ?? 0) >= CIRCUIT_BREAKER_LIMIT
+  }
+
+  export function resetBreaker(sessionID: string) {
+    delete breakerState()[sessionID]
+  }
+
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
 
@@ -260,14 +291,17 @@ Do not mention that context was compacted or that you are summarizing. Do not as
         // reclamation (level 4) separately from the cheap prune (level 3).
         const before = MessageV2.composition(input.messages).total
         const after = Token.estimate(summaryText)
+        const reclaimed = Math.max(0, before - after)
         SessionTelemetry.recordCompaction({
           sessionID: input.sessionID,
           trigger: input.trigger ?? "manual",
           mechanism: "summary",
           before,
           after,
-          reclaimed: Math.max(0, before - after),
+          reclaimed,
         })
+        // Feed the circuit breaker: repeated low-yield summaries trip it (P2.5).
+        noteCompaction({ sessionID: input.sessionID, before, reclaimed })
         const root = path.resolve(Instance.worktree)
         const custom = input.handoffFile?.trim()
         const defaultTarget = path.resolve(root, ".openscience", "handoffs", `${input.sessionID}.md`)

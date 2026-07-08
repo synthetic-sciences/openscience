@@ -215,6 +215,87 @@ describe("session.compaction.isOverflow", () => {
   })
 })
 
+describe("session.compaction circuit breaker", () => {
+  const ineffective = (sid: string) => SessionCompaction.noteCompaction({ sessionID: sid, before: 100_000, reclaimed: 1_000 }) // 1%
+
+  test("trips after N consecutive ineffective (<10%) compactions", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const sid = "ses_a"
+        expect(SessionCompaction.breakerTripped(sid)).toBe(false)
+        ineffective(sid)
+        ineffective(sid)
+        expect(SessionCompaction.breakerTripped(sid)).toBe(false) // 2 < limit
+        const last = ineffective(sid)
+        expect(last.tripped).toBe(true) // 3rd trips
+        expect(SessionCompaction.breakerTripped(sid)).toBe(true)
+      },
+    })
+  })
+
+  test("an effective compaction resets the counter", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const sid = "ses_b"
+        ineffective(sid)
+        ineffective(sid)
+        SessionCompaction.noteCompaction({ sessionID: sid, before: 100_000, reclaimed: 50_000 }) // 50% effective
+        ineffective(sid)
+        expect(SessionCompaction.breakerTripped(sid)).toBe(false) // counter was reset
+      },
+    })
+  })
+
+  test("exactly 10% reclaim counts as effective", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const sid = "ses_c"
+        const r = SessionCompaction.noteCompaction({ sessionID: sid, before: 100_000, reclaimed: 10_000 })
+        expect(r.tripped).toBe(false)
+      },
+    })
+  })
+
+  test("an unknown `before` does not increment the counter", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const sid = "ses_d"
+        ineffective(sid)
+        ineffective(sid)
+        SessionCompaction.noteCompaction({ sessionID: sid, before: 0, reclaimed: 0 }) // unmeasurable → no-op
+        SessionCompaction.noteCompaction({ sessionID: sid, before: undefined, reclaimed: 5 })
+        expect(SessionCompaction.breakerTripped(sid)).toBe(false) // still only 2 ineffective
+        ineffective(sid)
+        expect(SessionCompaction.breakerTripped(sid)).toBe(true) // now 3
+      },
+    })
+  })
+
+  test("resetBreaker clears a tripped session", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const sid = "ses_e"
+        ineffective(sid)
+        ineffective(sid)
+        ineffective(sid)
+        expect(SessionCompaction.breakerTripped(sid)).toBe(true)
+        SessionCompaction.resetBreaker(sid)
+        expect(SessionCompaction.breakerTripped(sid)).toBe(false)
+      },
+    })
+  })
+})
+
 describe("util.token.estimate", () => {
   test("estimates tokens from text (4 chars per token)", () => {
     const text = "x".repeat(4000)
