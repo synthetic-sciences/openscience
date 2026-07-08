@@ -21,8 +21,12 @@ jobs:
             host: ubuntu-latest
             playwright: bunx playwright install --with-deps
             workdir: .
+            # Only the browser suite. The backend unit suite already runs in
+            # ci.yml on every push/PR; re-running it here fails (this job never
+            # configures a git identity) and reads the seeded XDG dirs as its
+            # global config.
             command: |
-              bun turbo test
+              bun turbo test --filter=@synsci/workspace
           # Windows e2e:local skipped — chronically failing since
           # 2026-04-28 across all PRs from all authors. Root cause is
           # the in-process Playwright/bun/Vite spawn chain not
