@@ -11,6 +11,7 @@ import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
 import { SessionCompaction } from "./compaction"
+import { SessionTelemetry } from "./telemetry"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
@@ -366,8 +367,8 @@ export namespace SessionPrompt {
           time: { created: Date.now(), completed: Date.now() },
         })
       }
-      const compact = () =>
-        SessionCompaction.create({ sessionID, agent: user.agent, model: user.model, auto: true })
+      const compact = (trigger: "proactive" | "overflow" = "proactive") =>
+        SessionCompaction.create({ sessionID, agent: user.agent, model: user.model, auto: true, trigger })
       // Latched compaction: fire once, then not again until context drops back under
       // the threshold (re-arm happens in the reactive branch). Returns whether it fired.
       const armedCompact = async () => {
@@ -627,6 +628,7 @@ export namespace SessionPrompt {
           auto: task.auto,
           focus: task.focus,
           handoffFile: task.handoffFile,
+          trigger: task.trigger,
         })
         if (result === "stop") break
         // The summarization request itself exceeded the window — the pending
@@ -650,6 +652,10 @@ export namespace SessionPrompt {
         const reclaimed = await SessionCompaction.prune({ sessionID })
         if (reclaimed > 0) {
           log.info("prune reclaimed context; deferring compaction", { sessionID, reclaimed })
+          // `before` is the last finished turn's real token usage (the reason we tripped
+          // the threshold); prune's return value is the estimated reclaim.
+          const before = lastFinished!.tokens.input + lastFinished!.tokens.cache.read + lastFinished!.tokens.output
+          SessionTelemetry.recordCompaction({ sessionID, trigger: "proactive", mechanism: "prune", before, reclaimed })
           compactionArmed = true
         }
         if (reclaimed === 0 && (await armedCompact())) continue
@@ -764,17 +770,24 @@ export namespace SessionPrompt {
         }
       }
 
+      const system = [
+        ...(await SystemPrompt.environment(model)),
+        ...(await InstructionPrompt.system()),
+        ...(await Memory.recall()),
+        ...artifactContext,
+      ]
+
+      // P0.1 telemetry: record what the working context is made of, by content type,
+      // for exactly the messages + system prompt about to be sent. Fire-and-forget so it
+      // never adds latency to the model call.
+      SessionTelemetry.recordContext({ sessionID, composition: MessageV2.composition(sessionMessages, { system }) })
+
       const result = await processor.process({
         user: lastUser,
         agent,
         abort,
         sessionID,
-        system: [
-          ...(await SystemPrompt.environment(model)),
-          ...(await InstructionPrompt.system()),
-          ...(await Memory.recall()),
-          ...artifactContext,
-        ],
+        system,
         messages: [
           // Keep only the most-recent images in full; older figures/screenshots become
           // text placeholders so re-shipping media every turn can't bloat the window.
@@ -814,7 +827,7 @@ export namespace SessionPrompt {
         // First overflow this turn: compact history, then the loop resumes the
         // same unanswered user message against the summary — the agent continues
         // on its own; the user never re-enters the prompt.
-        await compact()
+        await compact("overflow")
         // A compaction just ran; disarm so the reactive 0.75 branch doesn't
         // immediately re-compact the same (now-summarized) context next turn.
         compactionArmed = false
@@ -1958,6 +1971,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         model: { providerID: model.providerID, modelID: model.modelID },
         auto: false,
         focus: focus || undefined,
+        trigger: "manual",
       })
       const result = await loop(input.sessionID)
       Bus.publish(Command.Event.Executed, {
@@ -1983,6 +1997,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         model: { providerID: model.providerID, modelID: model.modelID },
         auto: false,
         handoffFile: input.arguments.trim() || undefined,
+        trigger: "manual",
       })
       const result = await loop(input.sessionID)
       Bus.publish(Command.Event.Executed, {

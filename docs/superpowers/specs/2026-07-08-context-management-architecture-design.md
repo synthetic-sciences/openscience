@@ -96,8 +96,8 @@ Four pillars, mapped to the action hierarchy:
 
 | ID | Phase | Task | Level | Size | Status |
 |----|-------|------|-------|------|--------|
-| P0.1 | Instrument | Per-turn context-composition telemetry (tokens by type: text/image/tool/reasoning/skills/system) | — | S | ☐ |
-| P0.2 | Instrument | Compaction telemetry: frequency, trigger source, tokens reclaimed per mechanism | — | S | ☐ |
+| P0.1 | Instrument | Per-turn context-composition telemetry (tokens by type: text/image/tool/reasoning/skills/system) | — | S | ☑ |
+| P0.2 | Instrument | Compaction telemetry: frequency, trigger source, tokens reclaimed per mechanism | — | S | ☑ |
 | **P1.1** | **Stop bleed** | **Flat image token estimate in `prune` (~1600/image attachment)** | 3 | S | ☑ |
 | **P1.2** | **Stop bleed** | **Strip historical media — replace base64 in all-but-newest image with `[image stripped]`** | 2 | S | ☑ |
 | **P1.3** | **Stop bleed** | **`stripMedia` option on `toModelMessages`, passed by the compaction summary request** | 2 | S | ☑ |
@@ -122,7 +122,8 @@ Four pillars, mapped to the action hierarchy:
 Sizes: S ≤ ½ day · M ≈ 1–2 days · L ≈ 3+ days / needs its own mini-spec.
 
 ### Phase acceptance criteria
-- **P0** — a debug view (or log line) shows the token breakdown by content type each turn; compaction events record what fired them and how much each mechanism reclaimed.
+- **P0** ☑ — a debug view (or log line) shows the token breakdown by content type each turn; compaction events record what fired them and how much each mechanism reclaimed.
+  - *Shipped:* `MessageV2.composition()` (pure, deterministic, mirrors `toModelMessages` accounting — pruned tool parts count their cleared placeholder so a prune visibly shrinks the breakdown). `SessionTelemetry` (`src/session/telemetry.ts`) defines two always-on bus events (auto-streamed to clients via the `BusEvent` registry) with a paired DEBUG log line: `session.context` (`{system,text,reasoning,tool,skills,image}` + `images` + `total`, emitted per turn before the model call) and `session.compaction` (`{trigger: proactive|overflow|manual, mechanism: prune|summary, before?, after?, reclaimed}`, one per reclaim mechanism). `trigger` threaded through `CompactionPart → create → process`. `skills` bucket = `skill`/`artifact` tool calls; the skill *catalog* lives in `system` (not separately isolated — future refinement). Live-verified: `session.context total=8740 system=1514 text=7226 …` fired on a real `--bare` turn.
 - **P1** *(the immediate fix)* — an image-heavy session (read 10 figures) does not trigger compaction from image accumulation; once an image is superseded its base64 is gone from later requests; the compaction summary request contains no base64.
 - **P2** — the LLM summary fires markedly less often; when it does, cheap reduction ran first and reclaimed measurable tokens; a runaway session cannot spin on doomed compactions.
 - **P3** — compaction produces no visible re-catch-up; a fresh session started from `handoff.md` continues the task correctly; when `handoff.md` is current, compaction makes no summarization API call.

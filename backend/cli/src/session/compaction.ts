@@ -10,6 +10,7 @@ import { SessionPrompt } from "./prompt"
 import { Token } from "../util/token"
 import { Log } from "../util/log"
 import { SessionProcessor } from "./processor"
+import { SessionTelemetry } from "./telemetry"
 import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
@@ -48,8 +49,9 @@ export namespace SessionCompaction {
 
   // Flat per-image token cost for pruning decisions. A tool output's TEXT is tiny but
   // its image attachments are ~1-2k tokens each; counting only text made image-heavy
-  // outputs invisible to prune. Matches claude-code/opencode (2000) / hermes (1500).
-  export const IMAGE_TOKEN_ESTIMATE = 1600
+  // outputs invisible to prune. Single source of truth is MessageV2.IMAGE_TOKENS (shared
+  // with context-composition telemetry); re-exported here for the prune math.
+  export const IMAGE_TOKEN_ESTIMATE = MessageV2.IMAGE_TOKENS
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
@@ -131,6 +133,7 @@ export namespace SessionCompaction {
     auto: boolean
     focus?: string
     handoffFile?: string
+    trigger?: "proactive" | "overflow" | "manual"
   }) {
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
@@ -252,6 +255,19 @@ Do not mention that context was compacted or that you are summarizing. Do not as
         .join("")
         .trim()
       if (summaryText) {
+        // Summary telemetry: `before` is the size of the history being compressed, `after`
+        // the size of the summary that replaces it. Attributes the expensive LLM-summary
+        // reclamation (level 4) separately from the cheap prune (level 3).
+        const before = MessageV2.composition(input.messages).total
+        const after = Token.estimate(summaryText)
+        SessionTelemetry.recordCompaction({
+          sessionID: input.sessionID,
+          trigger: input.trigger ?? "manual",
+          mechanism: "summary",
+          before,
+          after,
+          reclaimed: Math.max(0, before - after),
+        })
         const root = path.resolve(Instance.worktree)
         const custom = input.handoffFile?.trim()
         const defaultTarget = path.resolve(root, ".openscience", "handoffs", `${input.sessionID}.md`)
@@ -307,6 +323,7 @@ Do not mention that context was compacted or that you are summarizing. Do not as
       auto: z.boolean(),
       focus: z.string().optional(),
       handoffFile: z.string().optional(),
+      trigger: z.enum(["proactive", "overflow", "manual"]).optional(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
@@ -327,6 +344,7 @@ Do not mention that context was compacted or that you are summarizing. Do not as
         auto: input.auto,
         focus: input.focus,
         handoffFile: input.handoffFile,
+        trigger: input.trigger,
       })
     },
   )

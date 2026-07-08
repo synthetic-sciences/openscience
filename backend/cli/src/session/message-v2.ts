@@ -14,6 +14,7 @@ import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { correctImageMimeFromBase64 } from "@/util/image"
 import { Lock } from "@/util/lock"
+import { Token } from "@/util/token"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -163,6 +164,9 @@ export namespace MessageV2 {
     auto: z.boolean(),
     focus: z.string().optional(),
     handoffFile: z.string().optional(),
+    // What asked for this compaction — carried through to summary telemetry so we can
+    // tell proactive (0.75 threshold) from reactive (overflow backstop) from manual.
+    trigger: z.enum(["proactive", "overflow", "manual"]).optional(),
   }).meta({
     ref: "CompactionPart",
   })
@@ -665,6 +669,74 @@ export namespace MessageV2 {
         tools,
       },
     )
+  }
+
+  // Flat per-image token cost. An image's model cost bears no relation to its base64
+  // byte length, so a fixed estimate is what the reference tools use (claude-code /
+  // opencode 2000, hermes 1500). Single source of truth — SessionCompaction re-exports
+  // it as IMAGE_TOKEN_ESTIMATE (it can't import here without a cycle).
+  export const IMAGE_TOKENS = 1600
+
+  // Skill/artifact invocations are bucketed separately from generic tool traffic so the
+  // telemetry can attribute their cost. NOTE: the skill *catalog* (the bulk of skill
+  // tokens) lives in the agent/system prompt and is counted under `system`, not here.
+  const SKILL_TOOLS = new Set(["skill", "artifact"])
+
+  export type Composition = {
+    system: number
+    text: number
+    reasoning: number
+    tool: number
+    skills: number
+    image: number
+    images: number
+    total: number
+  }
+
+  // Deterministic, zero-cost breakdown of what the working context is made of, bucketed
+  // by content type. Mirrors `toModelMessages` accounting so the numbers match what is
+  // actually shipped: images are the flat IMAGE_TOKENS estimate, and a pruned
+  // (`time.compacted`) tool part counts its cleared placeholder with attachments dropped
+  // — so a prune visibly shrinks the breakdown. `system` covers the prompt strings that
+  // are not part of the message log. Powers P0 context-composition telemetry.
+  export function composition(input: WithParts[], options?: { system?: string[] }): Composition {
+    const out: Composition = { system: 0, text: 0, reasoning: 0, tool: 0, skills: 0, image: 0, images: 0, total: 0 }
+    for (const s of options?.system ?? []) out.system += Token.estimate(s)
+
+    const addImages = (count: number) => {
+      out.image += count * IMAGE_TOKENS
+      out.images += count
+    }
+
+    for (const msg of input)
+      for (const part of msg.parts) {
+        if (part.type === "text") {
+          if (part.ignored) continue
+          out.text += Token.estimate(part.text)
+          continue
+        }
+        if (part.type === "reasoning") {
+          out.reasoning += Token.estimate(part.text)
+          continue
+        }
+        if (part.type === "file") {
+          if (part.mime.startsWith("image/")) addImages(1)
+          continue
+        }
+        if (part.type === "tool") {
+          const bucket = SKILL_TOOLS.has(part.tool) ? "skills" : "tool"
+          out[bucket] += Token.estimate(JSON.stringify(part.state.input ?? {}))
+          if (part.state.status === "completed") {
+            const compacted = !!part.state.time.compacted
+            out[bucket] += Token.estimate(compacted ? "[Old tool result content cleared]" : part.state.output)
+            if (!compacted) addImages((part.state.attachments ?? []).filter((a) => a.mime.startsWith("image/")).length)
+          }
+          if (part.state.status === "error") out[bucket] += Token.estimate(part.state.error)
+        }
+      }
+
+    out.total = out.system + out.text + out.reasoning + out.tool + out.skills + out.image
+    return out
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
