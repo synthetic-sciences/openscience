@@ -398,9 +398,7 @@ function TerminalTab(): JSX.Element {
                   <Terminal
                     pty={pty}
                     onCleanup={(next) => terminal.update(next)}
-                    onConnectError={(e) =>
-                      toast.error("terminal disconnected", e instanceof Error ? e.message : String(e))
-                    }
+                    onConnectError={(e) => toast.error("terminal disconnected", e.message)}
                   />
                 </div>
               )}

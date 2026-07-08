@@ -4,6 +4,7 @@ import { useSDK } from "@/context/sdk"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
+import { connectionError } from "./terminal-error"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@synsci/ui/theme"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@synsci/ui/toast"
@@ -13,7 +14,7 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onSubmit?: () => void
   onCleanup?: (pty: LocalPTY) => void
   onConnect?: () => void
-  onConnectError?: (error: unknown) => void
+  onConnectError?: (error: Error) => void
 }
 
 let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty }> | undefined
@@ -321,7 +322,7 @@ export const Terminal = (props: TerminalProps) => {
         if (once.value) return
         once.value = true
         console.error("WebSocket error:", error)
-        local.onConnectError?.(error)
+        local.onConnectError?.(connectionError(error))
       }
       socket.addEventListener("error", handleError)
       cleanups.push(() => socket.removeEventListener("error", handleError))
@@ -347,7 +348,7 @@ export const Terminal = (props: TerminalProps) => {
         title: language.t("terminal.connectionLost.title"),
         description: err instanceof Error ? err.message : language.t("terminal.connectionLost.description"),
       })
-      local.onConnectError?.(err)
+      local.onConnectError?.(connectionError(err))
     })
   })
 
