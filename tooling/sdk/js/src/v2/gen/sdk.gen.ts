@@ -9,6 +9,7 @@ import type {
   AccountDeviceRevokeResponses,
   AccountDevicesResponses,
   AccountGetResponses,
+  AccountLoginKeyResponses,
   AccountLogoutResponses,
   AgentPartInput,
   AppAgentsResponses,
@@ -85,6 +86,9 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
+  PostSettingsLocalModelsResponses,
+  PostSettingsLocalResponses,
+  PostSettingsLocalStartResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
   ProjectUpdateErrors,
@@ -106,6 +110,7 @@ import type {
   PtyRemoveResponses,
   PtyUpdateErrors,
   PtyUpdateResponses,
+  PutSettingsSandboxResponses,
   QuestionAnswer,
   QuestionListResponses,
   QuestionRejectErrors,
@@ -183,6 +188,7 @@ import type {
   SettingsStorageResetLocationResponses,
   SettingsStorageUsageResponses,
   SettingsUsageGetResponses,
+  SettingsWalletGetResponses,
   SubtaskPartInput,
   TextPartInput,
   ToolIdsErrors,
@@ -481,6 +487,28 @@ export class Account extends HeyApiClient {
     return (options?.client ?? this.client).get<AccountDevicesResponses, unknown, ThrowOnError>({
       url: "/account/devices",
       ...options,
+    })
+  }
+
+  /**
+   * Sign in with an Atlas API key
+   */
+  public loginKey<ThrowOnError extends boolean = false>(
+    parameters?: {
+      key?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "key" }] }])
+    return (options?.client ?? this.client).post<AccountLoginKeyResponses, unknown, ThrowOnError>({
+      url: "/account/login-key",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
@@ -995,6 +1023,18 @@ export class Billing extends HeyApiClient {
   }
 }
 
+export class Wallet extends HeyApiClient {
+  /**
+   * Get Atlas wallet balance, plan mode, and recent transactions
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsWalletGetResponses, unknown, ThrowOnError>({
+      url: "/settings/wallet",
+      ...options,
+    })
+  }
+}
+
 export class Skills extends HeyApiClient {
   /**
    * Install skill from git
@@ -1225,6 +1265,11 @@ export class Settings extends HeyApiClient {
   private _billing?: Billing
   get billing(): Billing {
     return (this._billing ??= new Billing({ client: this.client }))
+  }
+
+  private _wallet?: Wallet
+  get wallet(): Wallet {
+    return (this._wallet ??= new Wallet({ client: this.client }))
   }
 
   private _skills?: Skills
@@ -2365,7 +2410,6 @@ export class Session extends HeyApiClient {
       system?: string
       variant?: string
       tier?: "fast" | "pro" | "ultra"
-      fast?: boolean
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -2385,7 +2429,6 @@ export class Session extends HeyApiClient {
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
-            { in: "body", key: "fast" },
             { in: "body", key: "parts" },
           ],
         },
@@ -2457,7 +2500,6 @@ export class Session extends HeyApiClient {
       system?: string
       variant?: string
       tier?: "fast" | "pro" | "ultra"
-      fast?: boolean
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -2477,7 +2519,6 @@ export class Session extends HeyApiClient {
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
-            { in: "body", key: "fast" },
             { in: "body", key: "parts" },
           ],
         },
@@ -3912,6 +3953,127 @@ export class OpenScienceClient extends HeyApiClient {
   constructor(args?: { client?: Client; key?: string }) {
     super(args)
     OpenScienceClient.__registry.set(this, args?.key)
+  }
+
+  public postSettingsLocalStart<ThrowOnError extends boolean = false>(
+    parameters?: {
+      id?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "id" }] }])
+    return (options?.client ?? this.client).post<PostSettingsLocalStartResponses, unknown, ThrowOnError>({
+      url: "/settings/local/start",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public postSettingsLocalModels<ThrowOnError extends boolean = false>(
+    parameters?: {
+      url?: string
+      key?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "url" },
+            { in: "body", key: "key" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PostSettingsLocalModelsResponses, unknown, ThrowOnError>({
+      url: "/settings/local/models",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public postSettingsLocal<ThrowOnError extends boolean = false>(
+    parameters?: {
+      url?: string
+      id?: string
+      name?: string
+      key?: string
+      models?: Array<string>
+      setDefault?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "url" },
+            { in: "body", key: "id" },
+            { in: "body", key: "name" },
+            { in: "body", key: "key" },
+            { in: "body", key: "models" },
+            { in: "body", key: "setDefault" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PostSettingsLocalResponses, unknown, ThrowOnError>({
+      url: "/settings/local",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public putSettingsSandbox<ThrowOnError extends boolean = false>(
+    parameters?: {
+      enabled?: boolean
+      network?: "allow" | "deny"
+      allowWrite?: Array<string>
+      onUnavailable?: "warn" | "error" | "allow"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "enabled" },
+            { in: "body", key: "network" },
+            { in: "body", key: "allowWrite" },
+            { in: "body", key: "onUnavailable" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<PutSettingsSandboxResponses, unknown, ThrowOnError>({
+      url: "/settings/sandbox",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
   }
 
   private _global?: Global

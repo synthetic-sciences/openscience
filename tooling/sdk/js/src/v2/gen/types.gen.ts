@@ -165,7 +165,6 @@ export type UserMessage = {
   }
   variant?: string
   tier?: "fast" | "pro" | "ultra"
-  fast?: boolean
 }
 
 export type ProviderAuthError = {
@@ -1540,6 +1539,28 @@ export type McpRemoteConfig = {
  */
 export type LayoutConfig = "auto" | "stretch"
 
+/**
+ * OS-level execution sandbox for the agent's shell commands.
+ */
+export type SandboxConfig = {
+  /**
+   * Run the agent's shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to the workspace. Off by default.
+   */
+  enabled?: boolean
+  /**
+   * Whether sandboxed commands may reach the network. Default: allow.
+   */
+  network?: "allow" | "deny"
+  /**
+   * Extra absolute paths — beyond the workspace and temp dirs — the sandbox may write to.
+   */
+  allowWrite?: Array<string>
+  /**
+   * Behaviour when no sandbox backend exists on this platform: 'warn' (default) runs unsandboxed with a notice, 'error' refuses to run the command, 'allow' runs unsandboxed silently.
+   */
+  onUnavailable?: "warn" | "error" | "allow"
+}
+
 export type Config = {
   /**
    * JSON schema reference for configuration validation
@@ -1693,6 +1714,7 @@ export type Config = {
   instructions?: Array<string>
   layout?: LayoutConfig
   permission?: PermissionConfig
+  sandbox?: SandboxConfig
   tools?: {
     [key: string]: boolean
   }
@@ -2431,6 +2453,27 @@ export type AccountBillingModeSetResponses = {
 
 export type AccountBillingModeSetResponse = AccountBillingModeSetResponses[keyof AccountBillingModeSetResponses]
 
+export type AccountLoginKeyData = {
+  body?: {
+    key: string
+  }
+  path?: never
+  query?: never
+  url: "/account/login-key"
+}
+
+export type AccountLoginKeyResponses = {
+  /**
+   * Login result
+   */
+  200: {
+    ok: boolean
+    error?: string
+  }
+}
+
+export type AccountLoginKeyResponse = AccountLoginKeyResponses[keyof AccountLoginKeyResponses]
+
 export type AccountLogoutData = {
   body?: never
   path?: never
@@ -3089,6 +3132,67 @@ export type SettingsPreferencesUpdateResponses = {
 export type SettingsPreferencesUpdateResponse =
   SettingsPreferencesUpdateResponses[keyof SettingsPreferencesUpdateResponses]
 
+export type PostSettingsLocalStartData = {
+  body?: {
+    id: string
+  }
+  path?: never
+  query?: never
+  url: "/settings/local/start"
+}
+
+export type PostSettingsLocalStartResponses = {
+  200: unknown
+}
+
+export type PostSettingsLocalModelsData = {
+  body?: {
+    url: string
+    key?: string
+  }
+  path?: never
+  query?: never
+  url: "/settings/local/models"
+}
+
+export type PostSettingsLocalModelsResponses = {
+  200: unknown
+}
+
+export type PostSettingsLocalData = {
+  body?: {
+    url: string
+    id?: string
+    name?: string
+    key?: string
+    models: Array<string>
+    setDefault?: boolean
+  }
+  path?: never
+  query?: never
+  url: "/settings/local"
+}
+
+export type PostSettingsLocalResponses = {
+  200: unknown
+}
+
+export type PutSettingsSandboxData = {
+  body?: {
+    enabled?: boolean
+    network?: "allow" | "deny"
+    allowWrite?: Array<string>
+    onUnavailable?: "warn" | "error" | "allow"
+  }
+  path?: never
+  query?: never
+  url: "/settings/sandbox"
+}
+
+export type PutSettingsSandboxResponses = {
+  200: unknown
+}
+
 export type SettingsBillingGetData = {
   body?: never
   path?: never
@@ -3149,6 +3253,38 @@ export type SettingsBillingUpdateResponses = {
 }
 
 export type SettingsBillingUpdateResponse = SettingsBillingUpdateResponses[keyof SettingsBillingUpdateResponses]
+
+export type SettingsWalletGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/wallet"
+}
+
+export type SettingsWalletGetResponses = {
+  /**
+   * Wallet state
+   */
+  200: {
+    signedIn: boolean
+    /**
+     * Wallet balance in USD; -1 when signed out or unavailable
+     */
+    balanceUsd: number
+    billingMode: "managed" | "byok" | null
+    managedSupported: boolean
+    lifetimeSpentUsd: number
+    transactions: Array<{
+      id: string
+      amountCents: number
+      source: string
+      description: string
+      createdAt: string
+    }>
+  }
+}
+
+export type SettingsWalletGetResponse = SettingsWalletGetResponses[keyof SettingsWalletGetResponses]
 
 export type AuthRemoveData = {
   body?: never
@@ -4189,7 +4325,6 @@ export type SessionPromptData = {
     system?: string
     variant?: string
     tier?: "fast" | "pro" | "ultra"
-    fast?: boolean
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -4378,7 +4513,6 @@ export type SessionPromptAsyncData = {
     system?: string
     variant?: string
     tier?: "fast" | "pro" | "ultra"
-    fast?: boolean
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
