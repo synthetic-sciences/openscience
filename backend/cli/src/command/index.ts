@@ -60,6 +60,7 @@ export namespace Command {
     REVIEW: "review",
     LEARN: "learn",
     COMPACT: "compact",
+    HANDOFF: "handoff",
   } as const
 
   const state = Instance.state(async () => {
@@ -96,6 +97,15 @@ export namespace Command {
       [Default.COMPACT]: {
         name: Default.COMPACT,
         description: "summarize the conversation so far to free up context",
+        menu: true,
+        get template() {
+          return ""
+        },
+        hints: [],
+      },
+      [Default.HANDOFF]: {
+        name: Default.HANDOFF,
+        description: "write a self-contained handoff.md for another agent, then compact",
         menu: true,
         get template() {
           return ""

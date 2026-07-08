@@ -14,6 +14,7 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import path from "node:path"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -116,6 +117,7 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
     focus?: string
+    handoffFile?: string
   }) {
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
@@ -160,8 +162,37 @@ export namespace SessionCompaction {
       { sessionID: input.sessionID },
       { context: [], prompt: undefined },
     )
-    const defaultPrompt =
-      "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
+    // The summary IS a handoff: it becomes the ONLY context the resumed (or a fresh)
+    // agent has. It must be self-contained enough to CONTINUE from without re-reading
+    // files or re-deriving state — otherwise the agent burns its whole fresh window
+    // catching up and immediately overflows again. A concrete "Next Move" and inline
+    // verified results are what let it act instead of re-exploring.
+    const defaultPrompt = `Write a self-contained handoff so another agent can continue this work WITHOUT re-reading the files or re-deriving state. This handoff is the ONLY context that agent will have — capture everything needed to act, and nothing more.
+
+Output exactly this Markdown structure, keeping every section (write "(none)" when a section is empty). Preserve exact file paths, commands, identifiers, error strings, and numeric results verbatim. Use terse bullets, not prose.
+
+## Objective
+- [what the user is ultimately trying to accomplish, in 1-2 sentences]
+
+## Constraints & Decisions
+- [rules/preferences that must hold, decisions made and WHY, key assumptions — the things a fresh agent would otherwise get wrong]
+
+## Work State
+### Done (verified)
+- [completed & verified work with the concrete result, so it need not be re-checked]
+### In progress
+- [what is partially done and exactly where it stands]
+### Blocked / open
+- [blockers, failing checks, unresolved questions]
+
+## Next Move
+1. [the exact next action to take right now]
+2. [the action after that, if known]
+
+## Key Files & Artifacts
+- [path — what it holds and why it matters; read it ONLY if the Next Move needs it]
+
+Do not mention that context was compacted or that you are summarizing. Do not ask questions.`
     const focusLine = input.focus?.trim()
       ? `\n\nThe next session will focus on: ${input.focus.trim()}. Tailor the summary toward that.`
       : ""
@@ -193,6 +224,29 @@ export namespace SessionCompaction {
     // re-attempting a compaction that can never succeed.
     if (result === "overflow") return "overflow"
 
+    // Persist the handoff to disk so a fresh agent/process can pick up from a single
+    // curated file instead of re-reading the whole project (and /compact leaves a
+    // durable checkpoint). Written to the project root as handoff.md unless a path was
+    // given via /handoff. Best-effort — a write failure never blocks the compaction.
+    if (result === "continue") {
+      const summaryText = (await MessageV2.parts(msg.id))
+        .filter((part) => part.type === "text")
+        .map((part) => (part.type === "text" ? part.text : ""))
+        .join("")
+        .trim()
+      if (summaryText) {
+        // Confine the write to the worktree: a /handoff path is user/agent-supplied
+        // and must not escape it via an absolute path or "..". Anything that would
+        // land outside falls back to the default handoff.md at the project root.
+        const root = path.resolve(Instance.worktree)
+        const resolved = path.resolve(root, input.handoffFile?.trim() || "handoff.md")
+        const target = resolved.startsWith(root + path.sep) ? resolved : path.join(root, "handoff.md")
+        await Bun.write(target, summaryText + "\n").catch((e) =>
+          log.warn("failed to write handoff file", { target, error: e instanceof Error ? e.message : String(e) }),
+        )
+      }
+    }
+
     if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
@@ -210,7 +264,7 @@ export namespace SessionCompaction {
         sessionID: input.sessionID,
         type: "text",
         synthetic: true,
-        text: "Continue if you have next steps",
+        text: "Continue from the 'Next Move' in the handoff above. Trust it as an accurate record — do not re-read files or re-verify completed work unless the immediate step actually requires it.",
         time: {
           start: Date.now(),
           end: Date.now(),
@@ -232,6 +286,7 @@ export namespace SessionCompaction {
       }),
       auto: z.boolean(),
       focus: z.string().optional(),
+      handoffFile: z.string().optional(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
@@ -251,6 +306,7 @@ export namespace SessionCompaction {
         type: "compaction",
         auto: input.auto,
         focus: input.focus,
+        handoffFile: input.handoffFile,
       })
     },
   )

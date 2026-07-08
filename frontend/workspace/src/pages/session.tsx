@@ -343,6 +343,22 @@ export default function Page(): JSX.Element {
           })
       },
     })
+    // /handoff — write a self-contained handoff.md for another agent, then compact.
+    list.push({
+      id: "session.handoff",
+      title: "Write handoff & compact",
+      description: "Write a self-contained handoff.md for another agent, then compact",
+      category: language.t("command.category.session"),
+      slash: "handoff",
+      onSelect: () => {
+        void sdk.client.session
+          .command({ sessionID: id, command: "handoff", arguments: "" } as any)
+          .catch((e: unknown) => {
+            console.error("handoff failed", e)
+            toast.error("could not write handoff", e instanceof Error ? e.message : String(e))
+          })
+      },
+    })
     return list
   })
 

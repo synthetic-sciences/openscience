@@ -626,6 +626,7 @@ export namespace SessionPrompt {
           sessionID,
           auto: task.auto,
           focus: task.focus,
+          handoffFile: task.handoffFile,
         })
         if (result === "stop") break
         // The summarization request itself exceeded the window — the pending
@@ -1945,6 +1946,31 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         model: { providerID: model.providerID, modelID: model.modelID },
         auto: false,
         focus: focus || undefined,
+      })
+      const result = await loop(input.sessionID)
+      Bus.publish(Command.Event.Executed, {
+        name: input.command,
+        sessionID: input.sessionID,
+        arguments: input.arguments,
+        messageID: result.info.id,
+      })
+      return result
+    }
+
+    // /handoff [path]: write a self-contained handoff to the project (handoff.md, or
+    // the given path) for another agent to pick up, then compact. Same summary as
+    // /compact — the only difference is where the doc lands and that it doesn't
+    // auto-resume (the point is a fresh agent continues from the file).
+    const userDefinedHandoff = (await Config.get()).command?.[Command.Default.HANDOFF]
+    if (input.command === Command.Default.HANDOFF && !userDefinedHandoff) {
+      const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
+      const agentName = input.agent ?? (await Agent.defaultAgent())
+      await SessionCompaction.create({
+        sessionID: input.sessionID,
+        agent: agentName,
+        model: { providerID: model.providerID, modelID: model.modelID },
+        auto: false,
+        handoffFile: input.arguments.trim() || undefined,
       })
       const result = await loop(input.sessionID)
       Bus.publish(Command.Event.Executed, {

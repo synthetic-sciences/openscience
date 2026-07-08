@@ -162,6 +162,7 @@ export namespace MessageV2 {
     type: z.literal("compaction"),
     auto: z.boolean(),
     focus: z.string().optional(),
+    handoffFile: z.string().optional(),
   }).meta({
     ref: "CompactionPart",
   })
