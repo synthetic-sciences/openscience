@@ -70,6 +70,7 @@ export const dict = {
   "ui.tool.multiedit": "Edycja wielokrotna",
   "ui.tool.learn": "Ucz się",
   "ui.tool.notebook": "Notatnik",
+  "ui.tool.skill": "Umiejętność: {{name}}",
 
   "ui.common.file.one": "plik",
   "ui.common.file.other": "pliki",

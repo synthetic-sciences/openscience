@@ -70,6 +70,7 @@ export const dict = {
   "ui.tool.multiedit": "Множественное редактирование",
   "ui.tool.learn": "Обучение",
   "ui.tool.notebook": "Блокнот",
+  "ui.tool.skill": "Навык: {{name}}",
 
   "ui.common.file.one": "файл",
   "ui.common.file.other": "файлов",

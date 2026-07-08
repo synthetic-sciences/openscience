@@ -73,6 +73,7 @@ export const dict: Record<Keys, string> = {
   "ui.tool.multiedit": "Multiredigering",
   "ui.tool.learn": "Lær",
   "ui.tool.notebook": "Notatbok",
+  "ui.tool.skill": "Skill: {{name}}",
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",

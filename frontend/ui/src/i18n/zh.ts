@@ -74,6 +74,7 @@ export const dict = {
   "ui.tool.multiedit": "多重编辑",
   "ui.tool.learn": "学习",
   "ui.tool.notebook": "笔记本",
+  "ui.tool.skill": "技能: {{name}}",
 
   "ui.common.file.one": "个文件",
   "ui.common.file.other": "个文件",
