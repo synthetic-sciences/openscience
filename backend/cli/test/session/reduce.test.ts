@@ -101,6 +101,36 @@ describe("session.message-v2.toModelMessages — compacted tool rendering (P2.2)
   })
 })
 
+describe("session.message-v2.truncateArgs (P2.3)", () => {
+  test("truncates a string value longer than the cap and marks how much was dropped", () => {
+    const out = MessageV2.truncateArgs({ content: "x".repeat(1000) }, 200)
+    expect(out.content).toBe("x".repeat(200) + "…[+800 chars]")
+  })
+
+  test("leaves short strings and non-string values untouched", () => {
+    const out = MessageV2.truncateArgs({ filePath: "/a", count: 5, deep: { a: 1 } }, 200)
+    expect(out).toEqual({ filePath: "/a", count: 5, deep: { a: 1 } })
+  })
+})
+
+describe("session.message-v2.toModelMessages — compacted tool args (P2.3)", () => {
+  test("truncates oversized args of a compacted tool call, keeps small ones", () => {
+    const state = completedTool("write", { filePath: "/a", content: "x".repeat(1000) }, "ok", { compacted: true })
+    const input: MessageV2.WithParts[] = [{ info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "write", state)] }]
+    const s = JSON.stringify(MessageV2.toModelMessages(input, model))
+    expect(s).not.toContain("x".repeat(1000))
+    expect(s).toContain("chars]") // truncation marker present
+    expect(s).toContain("/a") // small arg preserved
+  })
+
+  test("does NOT truncate args of a live (non-compacted) tool call", () => {
+    const state = completedTool("write", { filePath: "/a", content: "x".repeat(1000) }, "ok")
+    const input: MessageV2.WithParts[] = [{ info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "write", state)] }]
+    const s = JSON.stringify(MessageV2.toModelMessages(input, model))
+    expect(s).toContain("x".repeat(1000))
+  })
+})
+
 describe("session.message-v2.composition — stays in sync with compacted rendering", () => {
   test("a compacted tool counts the summary length, matching what is actually sent", () => {
     const state = completedTool("bash", { command: "npm test" }, "a\nb\nc", { title: "npm test", compacted: true })

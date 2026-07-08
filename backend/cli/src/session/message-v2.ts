@@ -620,7 +620,7 @@ export namespace MessageV2 {
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
                 toolCallId: part.callID,
-                input: part.state.input,
+                input: part.state.time.compacted ? truncateArgs(part.state.input) : part.state.input,
                 output,
                 ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
@@ -681,6 +681,19 @@ export namespace MessageV2 {
   // telemetry can attribute their cost. NOTE: the skill *catalog* (the bulk of skill
   // tokens) lives in the agent/system prompt and is counted under `system`, not here.
   const SKILL_TOOLS = new Set(["skill", "artifact"])
+
+  // Per-string cap for the args of a reduced (pruned) tool call. Once a call is
+  // compacted its result is gone, so an oversized payload arg (a 50KB `write` content, a
+  // long `edit` oldString) is dead weight — truncate it while keeping the JSON valid and
+  // the small identifying args (paths, flags) intact so the call still reads correctly.
+  export const ARG_TRUNCATE_CHARS = 200
+
+  export function truncateArgs(input: Record<string, any>, cap = ARG_TRUNCATE_CHARS): Record<string, any> {
+    const out: Record<string, any> = {}
+    for (const [k, v] of Object.entries(input ?? {}))
+      out[k] = typeof v === "string" && v.length > cap ? v.slice(0, cap) + `…[+${v.length - cap} chars]` : v
+    return out
+  }
 
   // A 1-line, tool-aware stand-in for a reduced (pruned) tool output. Replaces the blunt
   // "[Old tool result content cleared]" so the model retains the gist — which tool ran,
@@ -745,9 +758,9 @@ export namespace MessageV2 {
         }
         if (part.type === "tool") {
           const bucket = SKILL_TOOLS.has(part.tool) ? "skills" : "tool"
-          out[bucket] += Token.estimate(JSON.stringify(part.state.input ?? {}))
+          const compacted = part.state.status === "completed" && !!part.state.time.compacted
+          out[bucket] += Token.estimate(JSON.stringify((compacted ? truncateArgs(part.state.input) : part.state.input) ?? {}))
           if (part.state.status === "completed") {
-            const compacted = !!part.state.time.compacted
             out[bucket] += Token.estimate(compacted ? toolSummary(part.tool, part.state) : part.state.output)
             if (!compacted) addImages((part.state.attachments ?? []).filter((a) => a.mime.startsWith("image/")).length)
           }
