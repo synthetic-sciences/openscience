@@ -466,7 +466,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("replaces compacted tool output with placeholder", () => {
+  test("replaces compacted tool output with a 1-line tool-aware summary", () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -526,7 +526,7 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "bash",
-            output: { type: "text", value: "[Old tool result content cleared]" },
+            output: { type: "text", value: "[bash] Bash → cleared (1 line)" },
           },
         ],
       },

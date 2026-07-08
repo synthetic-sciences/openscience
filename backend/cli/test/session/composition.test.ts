@@ -138,18 +138,18 @@ describe("session.message-v2.composition", () => {
     expect(c.total).toBe(13)
   })
 
-  test("a compacted tool part counts the cleared placeholder and drops its attachments", () => {
-    const input: MessageV2.WithParts[] = [
-      {
-        info: assistantInfo("a1", "u1"),
-        parts: [toolPart("a1", "t1", "bash", { cmd: "ls" }, "o".repeat(4000), { images: 1, compacted: true })],
-      },
-    ]
-    const c = MessageV2.composition(input)
-    // args 3 + "[Old tool result content cleared]" (33 chars → 8); attachments dropped
-    expect(c.tool).toBe(3 + 8)
-    expect(c.image).toBe(0)
-    expect(c.images).toBe(0)
+  test("a compacted tool part collapses to its 1-line summary and drops its attachments", () => {
+    const full = { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "bash", { cmd: "ls" }, "o".repeat(4000), { images: 1 })] }
+    const compacted = {
+      info: assistantInfo("a2", "u1"),
+      parts: [toolPart("a2", "t2", "bash", { cmd: "ls" }, "o".repeat(4000), { images: 1, compacted: true })],
+    }
+    const cFull = MessageV2.composition([full])
+    const cComp = MessageV2.composition([compacted])
+    expect(cFull.tool).toBeGreaterThan(900) // ~1000 tokens for a 4000-char output
+    expect(cComp.tool).toBeLessThan(20) // args + a single summary line
+    expect(cComp.image).toBe(0) // attachments dropped once compacted
+    expect(cComp.images).toBe(0)
   })
 
   test("counts the system prompt strings under `system`", () => {

@@ -606,7 +606,7 @@ export namespace MessageV2 {
                 if (dropped) droppedNote += `\n${dropped}`
                 return !dropped
               })
-              const baseText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+              const baseText = part.state.time.compacted ? toolSummary(part.tool, part.state) : part.state.output
               const outputText = baseText + droppedNote
               const output =
                 attachments.length > 0
@@ -682,6 +682,26 @@ export namespace MessageV2 {
   // tokens) lives in the agent/system prompt and is counted under `system`, not here.
   const SKILL_TOOLS = new Set(["skill", "artifact"])
 
+  // A 1-line, tool-aware stand-in for a reduced (pruned) tool output. Replaces the blunt
+  // "[Old tool result content cleared]" so the model retains the gist — which tool ran,
+  // against what, and how big the result was — and knows it can re-run to recover the
+  // body. Keeps the token cost to a single line. Used by both toModelMessages (render)
+  // and composition (accounting) so the two never disagree.
+  export function toolSummary(tool: string, state: ToolStateCompleted): string {
+    const descriptor = iife(() => {
+      const title = state.title?.trim()
+      if (title) return title
+      const entries = Object.entries(state.input ?? {})
+      if (!entries.length) return ""
+      return entries.map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`).join(" ")
+    })
+      .replace(/\s+/g, " ")
+      .slice(0, 80)
+      .trim()
+    const lines = state.output ? state.output.split("\n").length : 0
+    return `[${tool}]${descriptor ? " " + descriptor : ""} → cleared (${lines} line${lines === 1 ? "" : "s"})`
+  }
+
   export type Composition = {
     system: number
     text: number
@@ -728,7 +748,7 @@ export namespace MessageV2 {
           out[bucket] += Token.estimate(JSON.stringify(part.state.input ?? {}))
           if (part.state.status === "completed") {
             const compacted = !!part.state.time.compacted
-            out[bucket] += Token.estimate(compacted ? "[Old tool result content cleared]" : part.state.output)
+            out[bucket] += Token.estimate(compacted ? toolSummary(part.tool, part.state) : part.state.output)
             if (!compacted) addImages((part.state.attachments ?? []).filter((a) => a.mime.startsWith("image/")).length)
           }
           if (part.state.status === "error") out[bucket] += Token.estimate(part.state.error)
