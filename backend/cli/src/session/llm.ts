@@ -62,7 +62,7 @@ export namespace LLM {
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
     ])
-    const isCodex = provider.id === "openai" && auth?.type === "oauth"
+    const isCodex = isCodexSubscriptionModel(input.model, auth)
 
     const system = []
     system.push(
@@ -309,5 +309,9 @@ export namespace LLM {
       }
     }
     return false
+  }
+
+  export function isCodexSubscriptionModel(model: Pick<Provider.Model, "providerID">, auth?: { type?: string }) {
+    return model.providerID === "openai-codex" && auth?.type === "oauth"
   }
 }
