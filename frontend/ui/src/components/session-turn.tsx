@@ -253,6 +253,7 @@ export function SessionTurn(
       if (!msgParts) continue
       for (const p of msgParts) {
         if (p?.type === "tool") return true
+        if (p?.type === "reasoning" && (p.text ?? "").trim().length > 0) return true
       }
     }
     return false
