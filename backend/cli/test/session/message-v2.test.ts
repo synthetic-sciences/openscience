@@ -102,6 +102,43 @@ function basePart(messageID: string, id: string) {
   }
 }
 
+describe("session.message-v2.toModelMessage — media budgeting", () => {
+  const imagePart = (id: string, name: string) => ({
+    ...basePart("m-imgs", id),
+    type: "file" as const,
+    mime: "image/png",
+    filename: name,
+    url: "data:image/png;base64,Zm9v",
+  })
+  const imagesInput = (): MessageV2.WithParts[] => [
+    {
+      info: userInfo("m-imgs"),
+      parts: [imagePart("i1", "a.png"), imagePart("i2", "b.png"), imagePart("i3", "c.png")] as MessageV2.Part[],
+    },
+  ]
+
+  test("keepRecentImages keeps only the last N images; older ones become placeholders", () => {
+    const out = MessageV2.toModelMessages(imagesInput(), model, { keepRecentImages: 1 })
+    const s = JSON.stringify(out)
+    expect((s.match(/"type":"file"/g) ?? []).length).toBe(1) // only the newest image kept in full
+    expect((s.match(/older image omitted/g) ?? []).length).toBe(2) // the two older ones stripped
+  })
+
+  test("stripMedia replaces every image with a placeholder (compaction summary path)", () => {
+    const out = MessageV2.toModelMessages(imagesInput(), model, { stripMedia: true })
+    const s = JSON.stringify(out)
+    expect(s).not.toContain('"type":"file"')
+    expect((s.match(/image omitted/g) ?? []).length).toBe(3)
+    expect(s).not.toContain("Zm9v") // no base64 reaches the summarizer
+  })
+
+  test("no options → all images pass through unchanged (back-compat)", () => {
+    const s = JSON.stringify(MessageV2.toModelMessages(imagesInput(), model))
+    expect((s.match(/"type":"file"/g) ?? []).length).toBe(3)
+    expect(s).not.toContain("image omitted")
+  })
+})
+
 describe("session.message-v2.toModelMessage", () => {
   test("filters out messages with no parts", () => {
     const input: MessageV2.WithParts[] = [

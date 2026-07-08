@@ -440,9 +440,41 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessages(input: WithParts[], model: Provider.Model): ModelMessage[] {
+  export function toModelMessages(
+    input: WithParts[],
+    model: Provider.Model,
+    options?: { stripMedia?: boolean; keepRecentImages?: number },
+  ): ModelMessage[] {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
+
+    // Media budgeting. `stripMedia` (used for the compaction summary) drops ALL images;
+    // otherwise `keepRecentImages` keeps only the last N images in full and replaces
+    // older ones with a text placeholder — so re-shipping many figures every turn can't
+    // bloat the window. The image stays on disk and can be re-read on demand. Count up
+    // front so "last N" is well-defined; both passes visit images in input→part order.
+    const isImage = (mime: string) => mime.startsWith("image/")
+    let totalImages = 0
+    if (!options?.stripMedia && options?.keepRecentImages !== undefined) {
+      for (const msg of input)
+        for (const part of msg.parts) {
+          if (part.type === "file" && isImage(part.mime)) totalImages++
+          if (part.type === "tool" && part.state.status === "completed" && !part.state.time.compacted)
+            for (const a of part.state.attachments ?? []) if (isImage(a.mime)) totalImages++
+        }
+    }
+    let imagesSeen = 0
+    // Returns a placeholder string when this image occurrence should be dropped, else undefined.
+    const dropImage = (mime: string, filename?: string): string | undefined => {
+      if (!isImage(mime)) return undefined
+      if (options?.stripMedia) return `[image omitted${filename ? `: ${filename}` : ""}]`
+      if (options?.keepRecentImages === undefined) return undefined
+      const drop = imagesSeen < totalImages - options.keepRecentImages
+      imagesSeen++
+      return drop
+        ? `[older image omitted to save context${filename ? `: ${filename}` : ""} — read it again if you need it]`
+        : undefined
+    }
 
     const toModelOutput = (output: unknown) => {
       if (typeof output === "string") {
@@ -497,19 +529,24 @@ export namespace MessageV2 {
             })
           // text/plain and directory files are converted into text parts, ignore them
           if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
-            let mime = part.mime
-            if (mime.startsWith("image/") && part.url.startsWith("data:")) {
-              const commaIdx = part.url.indexOf(",")
-              if (commaIdx !== -1) {
-                mime = correctImageMimeFromBase64(mime, part.url.slice(commaIdx + 1))
+            const dropped = dropImage(part.mime, part.filename)
+            if (dropped) {
+              userMessage.parts.push({ type: "text", text: dropped })
+            } else {
+              let mime = part.mime
+              if (mime.startsWith("image/") && part.url.startsWith("data:")) {
+                const commaIdx = part.url.indexOf(",")
+                if (commaIdx !== -1) {
+                  mime = correctImageMimeFromBase64(mime, part.url.slice(commaIdx + 1))
+                }
               }
+              userMessage.parts.push({
+                type: "file",
+                url: mime !== part.mime ? `data:${mime};base64,${part.url.slice(part.url.indexOf(",") + 1)}` : part.url,
+                mediaType: mime,
+                filename: part.filename,
+              })
             }
-            userMessage.parts.push({
-              type: "file",
-              url: mime !== part.mime ? `data:${mime};base64,${part.url.slice(part.url.indexOf(",") + 1)}` : part.url,
-              mediaType: mime,
-              filename: part.filename,
-            })
           }
 
           if (part.type === "compaction") {
@@ -558,8 +595,15 @@ export namespace MessageV2 {
           if (part.type === "tool") {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
-              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
-              const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+              const rawAttachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+              let droppedNote = ""
+              const attachments = rawAttachments.filter((a) => {
+                const dropped = dropImage(a.mime, a.filename)
+                if (dropped) droppedNote += `\n${dropped}`
+                return !dropped
+              })
+              const baseText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+              const outputText = baseText + droppedNote
               const output =
                 attachments.length > 0
                   ? {

@@ -644,12 +644,20 @@ export namespace SessionPrompt {
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       if (overThreshold) {
-        if (await armedCompact()) continue
-        // Already compacted and still over threshold — fixed system+tool+summary
-        // overhead exceeds the threshold, so re-compacting is futile and would
-        // loop. Proceed silently; the model's real window + the overflow-error
-        // path are the backstop.
-        log.warn("auto-compaction did not bring context under threshold; proceeding", { sessionID })
+        // Cheapest first: clear stale tool outputs / older images. If that reclaims a
+        // meaningful chunk, skip the expensive LLM compaction this turn — the next turn
+        // re-checks on real token usage. Only summarize when clearing can't hold budget.
+        const reclaimed = await SessionCompaction.prune({ sessionID })
+        if (reclaimed > 0) {
+          log.info("prune reclaimed context; deferring compaction", { sessionID, reclaimed })
+          compactionArmed = true
+        }
+        if (reclaimed === 0 && (await armedCompact())) continue
+        // Nothing left to prune and already compacted — fixed system+tool+summary
+        // overhead exceeds the threshold, so re-compacting is futile and would loop.
+        // Proceed silently; the model's real window + the overflow-error path backstop.
+        if (reclaimed === 0)
+          log.warn("auto-compaction did not bring context under threshold; proceeding", { sessionID })
       }
       // Genuinely under threshold — re-arm for future growth.
       if (!overThreshold && lastFinished && lastFinished.summary !== true) compactionArmed = true
@@ -768,7 +776,11 @@ export namespace SessionPrompt {
           ...artifactContext,
         ],
         messages: [
-          ...MessageV2.toModelMessages(sessionMessages, model),
+          // Keep only the most-recent images in full; older figures/screenshots become
+          // text placeholders so re-shipping media every turn can't bloat the window.
+          ...MessageV2.toModelMessages(sessionMessages, model, {
+            keepRecentImages: SessionCompaction.KEEP_RECENT_IMAGES,
+          }),
           ...(isLastStep
             ? [
                 {

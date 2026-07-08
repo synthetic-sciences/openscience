@@ -41,6 +41,16 @@ export namespace SessionCompaction {
   // compaction never fires until far past its real window.
   export const FALLBACK_CONTEXT = 128_000
 
+  // How many of the most-recent images to keep in full in the model request. Older
+  // images are replaced with a text placeholder (they stay on disk, re-readable) so a
+  // session that reads many figures can't bloat the window with re-shipped base64.
+  export const KEEP_RECENT_IMAGES = 5
+
+  // Flat per-image token cost for pruning decisions. A tool output's TEXT is tiny but
+  // its image attachments are ~1-2k tokens each; counting only text made image-heavy
+  // outputs invisible to prune. Matches claude-code/opencode (2000) / hermes (1500).
+  export const IMAGE_TOKEN_ESTIMATE = 1600
+
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
@@ -67,7 +77,7 @@ export namespace SessionCompaction {
   // tool calls that are no longer relevant.
   export async function prune(input: { sessionID: string }) {
     const config = await Config.get()
-    if (config.compaction?.prune === false) return
+    if (config.compaction?.prune === false) return 0
     log.info("pruning")
     const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
@@ -89,7 +99,8 @@ export namespace SessionCompaction {
             if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
 
             if (part.state.time.compacted) break loop
-            const estimate = Token.estimate(part.state.output)
+            const images = (part.state.attachments ?? []).filter((a) => a.mime.startsWith("image/")).length
+            const estimate = Token.estimate(part.state.output) + images * IMAGE_TOKEN_ESTIMATE
             total += estimate
             if (total > PRUNE_PROTECT) {
               pruned += estimate
@@ -107,7 +118,9 @@ export namespace SessionCompaction {
         }
       }
       log.info("pruned", { count: toPrune.length })
+      return pruned
     }
+    return 0
   }
 
   export async function process(input: {
@@ -205,7 +218,9 @@ Do not mention that context was compacted or that you are summarizing. Do not as
       tools: {},
       system: [],
       messages: [
-        ...MessageV2.toModelMessages(input.messages, model),
+        // Strip ALL media from the summary request — the summarizer never needs the
+        // images and re-ingesting base64 can blow the summary call's own budget.
+        ...MessageV2.toModelMessages(input.messages, model, { stripMedia: true }),
         {
           role: "user",
           content: [

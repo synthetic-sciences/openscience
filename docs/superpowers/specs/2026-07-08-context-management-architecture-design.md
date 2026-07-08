@@ -98,10 +98,10 @@ Four pillars, mapped to the action hierarchy:
 |----|-------|------|-------|------|--------|
 | P0.1 | Instrument | Per-turn context-composition telemetry (tokens by type: text/image/tool/reasoning/skills/system) | — | S | ☐ |
 | P0.2 | Instrument | Compaction telemetry: frequency, trigger source, tokens reclaimed per mechanism | — | S | ☐ |
-| **P1.1** | **Stop bleed** | **Flat image token estimate in `prune` (~1600/image attachment)** | 3 | S | ☐ |
-| **P1.2** | **Stop bleed** | **Strip historical media — replace base64 in all-but-newest image with `[image stripped]`** | 2 | S | ☐ |
-| **P1.3** | **Stop bleed** | **`stripMedia` option on `toModelMessages`, passed by the compaction summary request** | 2 | S | ☐ |
-| **P1.4** | **Stop bleed** | **Run `prune` BEFORE full compaction; only LLM-summarize if still over threshold** | 3→4 | M | ☐ |
+| **P1.1** | **Stop bleed** | **Flat image token estimate in `prune` (~1600/image attachment)** | 3 | S | ☑ |
+| **P1.2** | **Stop bleed** | **Strip historical media — replace base64 in all-but-newest image with `[image stripped]`** | 2 | S | ☑ |
+| **P1.3** | **Stop bleed** | **`stripMedia` option on `toModelMessages`, passed by the compaction summary request** | 2 | S | ☑ |
+| **P1.4** | **Stop bleed** | **Run `prune` BEFORE full compaction; only LLM-summarize if still over threshold** | 3→4 | M | ☑ |
 | P2.1 | Reduce | Dedupe identical tool outputs (hash) → `[Duplicate tool output — see more recent call]` | 3 | M | ☐ |
 | P2.2 | Reduce | Replace old tool outputs with 1-line tool-aware summaries (`[bash] ran X → exit 0, 47 lines`) | 3 | M | ☐ |
 | P2.3 | Reduce | Truncate oversized tool-call args inside valid JSON | 3 | S | ☐ |
