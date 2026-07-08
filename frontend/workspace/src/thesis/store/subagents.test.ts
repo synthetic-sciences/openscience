@@ -1,7 +1,12 @@
 import { describe, test, expect } from "bun:test"
 import { activeSubagents, subagentStatusKind, activeCount } from "./subagents"
 
-const s = (id: string, parentID: string | undefined, updated: number, title = id) => ({ id, parentID, title, time: { updated } })
+const s = (id: string, parentID: string | undefined, updated: number, title = id) => ({
+  id,
+  parentID,
+  title,
+  time: { updated },
+})
 
 describe("subagentStatusKind", () => {
   test("busy → active, retry → pending, idle/missing → done", () => {

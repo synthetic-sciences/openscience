@@ -12,7 +12,11 @@ export function subagentStatusKind(status: Status): StatusKind {
   return "done"
 }
 
-export function activeSubagents(sessions: Session[], statuses: Record<string, Status>, parentId: string): SubagentRow[] {
+export function activeSubagents(
+  sessions: Session[],
+  statuses: Record<string, Status>,
+  parentId: string,
+): SubagentRow[] {
   return sessions
     .filter((session) => session.parentID === parentId)
     .map((session) => ({
