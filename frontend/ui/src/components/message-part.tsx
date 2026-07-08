@@ -272,6 +272,35 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         icon: "bubble-5",
         title: i18n.t("ui.tool.questions"),
       }
+    case "websearch":
+      return {
+        icon: "window-cursor",
+        title: i18n.t("ui.tool.websearch"),
+        subtitle: input.query,
+      }
+    case "codesearch":
+      return {
+        icon: "magnifying-glass-menu",
+        title: i18n.t("ui.tool.codesearch"),
+        subtitle: input.query ?? input.pattern,
+      }
+    case "multiedit":
+      return {
+        icon: "code-lines",
+        title: i18n.t("ui.tool.multiedit"),
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "learn":
+      return {
+        icon: "mcp",
+        title: i18n.t("ui.tool.learn"),
+      }
+    case "notebook":
+      return {
+        icon: "code-lines",
+        title: i18n.t("ui.tool.notebook"),
+        subtitle: input.path ? getFilename(input.path) : undefined,
+      }
     default:
       return {
         icon: "mcp",

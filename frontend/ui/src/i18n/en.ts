@@ -66,6 +66,11 @@ export const dict = {
   "ui.tool.todos.read": "Read to-dos",
   "ui.tool.questions": "Questions",
   "ui.tool.agent": "{{type}} Agent",
+  "ui.tool.websearch": "Web search",
+  "ui.tool.codesearch": "Code search",
+  "ui.tool.multiedit": "Multi-edit",
+  "ui.tool.learn": "Learn",
+  "ui.tool.notebook": "Notebook",
 
   "ui.common.file.one": "file",
   "ui.common.file.other": "files",

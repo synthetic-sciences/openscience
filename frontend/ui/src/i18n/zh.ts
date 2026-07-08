@@ -69,6 +69,11 @@ export const dict = {
   "ui.tool.todos.read": "读取待办",
   "ui.tool.questions": "问题",
   "ui.tool.agent": "{{type}} 智能体",
+  "ui.tool.websearch": "网络搜索",
+  "ui.tool.codesearch": "代码搜索",
+  "ui.tool.multiedit": "多重编辑",
+  "ui.tool.learn": "学习",
+  "ui.tool.notebook": "笔记本",
 
   "ui.common.file.one": "个文件",
   "ui.common.file.other": "个文件",

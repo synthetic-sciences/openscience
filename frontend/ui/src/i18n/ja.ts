@@ -65,6 +65,11 @@ export const dict = {
   "ui.tool.todos.read": "Todo読み込み",
   "ui.tool.questions": "質問",
   "ui.tool.agent": "{{type}}エージェント",
+  "ui.tool.websearch": "Web検索",
+  "ui.tool.codesearch": "コード検索",
+  "ui.tool.multiedit": "複数編集",
+  "ui.tool.learn": "学習",
+  "ui.tool.notebook": "ノートブック",
 
   "ui.common.file.one": "ファイル",
   "ui.common.file.other": "ファイル",
