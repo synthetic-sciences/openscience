@@ -665,9 +665,20 @@ export namespace Provider {
     // requiring any user config. The proxy URL is written by /api/cli/sync.
     google: async () => {
       const baseURL = Env.get("GOOGLE_GENERATIVE_AI_BASE_URL") ?? Env.get("GEMINI_BASE_URL")
+      // @ai-sdk/google auto-loads ONLY GOOGLE_GENERATIVE_AI_API_KEY, but the
+      // provider is detected from any of its aliases (GOOGLE_API_KEY /
+      // GEMINI_API_KEY). Resolve the key from whichever alias is set and pass it
+      // explicitly, otherwise a user who exported GOOGLE_API_KEY lists fine but
+      // hits "API key is missing" at call time. A managed proxy key (below), when
+      // present, overrides it.
+      const apiKey =
+        Env.get("GOOGLE_GENERATIVE_AI_API_KEY") ?? Env.get("GOOGLE_API_KEY") ?? Env.get("GEMINI_API_KEY")
       return {
         autoload: false,
-        options: baseURL ? { baseURL, ...(await managedProxyKey("google", baseURL)) } : {},
+        options: {
+          ...(apiKey ? { apiKey } : {}),
+          ...(baseURL ? { baseURL, ...(await managedProxyKey("google", baseURL)) } : {}),
+        },
       }
     },
   }

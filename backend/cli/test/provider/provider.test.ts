@@ -249,6 +249,23 @@ test("openrouter on a BYOK key ignores the managed whitelist and shows the full 
   })
 })
 
+test("google forwards a GOOGLE_API_KEY alias to the SDK apiKey (SDK only reads GOOGLE_GENERATIVE_AI_API_KEY)", async () => {
+  await using tmp = await tmpdir({})
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Detected from the alias, but @ai-sdk/google won't auto-load it — the
+      // loader must forward it or calls fail with "API key is missing".
+      Env.set("GOOGLE_API_KEY", "AIza-google-alias")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google"]).toBeDefined()
+      expect(providers["google"].options["apiKey"]).toBe("AIza-google-alias")
+    },
+  })
+})
+
 test("model whitelist filters models for provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
