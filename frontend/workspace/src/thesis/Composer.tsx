@@ -58,11 +58,6 @@ const SOURCE_DOT: Record<ModelSource, { color: string; opacity: number; meters: 
 // (low/medium/high/xhigh/none/minimal, exactly as the backend emits them) and
 // persists the choice via models.variant. No relabeling.
 //
-// A model exposes a REAL per-request "fast" API param only for gpt-5.5, where it
-// maps to OpenAI service_tier: priority (plumbed as providerOptions.openai.serviceTier
-// in src/session/llm.ts). Opus-4.8 speed:"fast" is real but not plumbable through the
-// installed @ai-sdk/anthropic, so no fast toggle is shown for it.
-const isGpt55 = (modelID: string) => /gpt-5\.5/.test(modelID.toLowerCase())
 
 // Collapse a model id to its FAMILY so the picker shows one current entry per
 // family and folds dated snapshots / superseded majors behind a "show older"
@@ -222,7 +217,6 @@ export function Composer(): JSX.Element {
     agent: string
     model: ModelKey
     variant: string | undefined
-    fast: boolean | undefined
   }
   const [queue, setQueue] = createSignal<QueuedPrompt[]>([])
   const [inflight, setInflight] = createSignal(false)
@@ -335,22 +329,6 @@ export function Composer(): JSX.Element {
     const m = model()
     if (m) models.variant.set(m, value)
   }
-
-  // Fast toggle — only gpt-5.5 has a real plumbable per-request "fast" param
-  // (OpenAI service_tier: priority). Sent as `fast` on the prompt; the backend
-  // guards it to gpt-5.5. Reset when the model changes (state is per-model).
-  const supportsFast = createMemo(() => {
-    const m = model()
-    return !!m && isGpt55(m.modelID)
-  })
-  const [fast, setFast] = createSignal(false)
-  createEffect(
-    on(
-      () => model()?.providerID + "/" + model()?.modelID,
-      () => setFast(false),
-      { defer: true },
-    ),
-  )
 
   // Context tier (Cursor "MAX mode" analogue). Only meaningful when the model
   // prices the >200k window differently. This is a price-preview + intent signal;
@@ -737,7 +715,6 @@ export function Composer(): JSX.Element {
       agent: agent(),
       model: chosen,
       variant: models.variant.get(chosen),
-      fast: isGpt55(chosen.modelID) ? fast() : undefined,
     }
     // Clear the input immediately in both paths so typing can continue.
     setText("")
@@ -822,7 +799,6 @@ export function Composer(): JSX.Element {
           model: p.model,
           agent: p.agent,
           variant: p.variant,
-          fast: p.fast,
           parts: promptParts,
         } as any)
         .catch((e: any) => {
@@ -927,9 +903,11 @@ export function Composer(): JSX.Element {
               ? "var(--color-border-strong)"
               : "var(--color-border)",
           "box-shadow":
-            dragOver() || focused() ? "0 0 0 3px var(--color-accent-subtle), var(--shadow-xs)" : "var(--shadow-xs)",
+            dragOver() || focused()
+              ? "0 0 0 4px color-mix(in srgb, var(--color-focus) 10%, transparent), var(--shadow-xs)"
+              : "var(--shadow-xs)",
           background: dragOver() ? "var(--color-accent-subtle)" : "var(--color-surface-solid)",
-          "border-radius": "4px",
+          "border-radius": "14px",
           transition: "background 120ms ease, box-shadow 120ms ease, border-color 120ms ease",
         }}
       >
@@ -1554,7 +1532,7 @@ export function Composer(): JSX.Element {
 
                       {/* controls for the selected model — one home for effort /
                           speed / context, so every list row stays uniform */}
-                      <Show when={!!model() && (variantKeys().length > 0 || supportsFast() || hasLongTier())}>
+                      <Show when={!!model() && (variantKeys().length > 0 || hasLongTier())}>
                         <div
                           onClick={(e) => e.stopPropagation()}
                           style={{
@@ -1574,19 +1552,6 @@ export function Composer(): JSX.Element {
                                 options={variantKeys().map((k) => ({ id: k, label: k }))}
                                 value={effort() ?? ""}
                                 onPick={(id) => setEffort(id)}
-                              />
-                            </span>
-                          </Show>
-                          <Show when={supportsFast()}>
-                            <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
-                              <span style={CONTROL_LABEL}>speed</span>
-                              <Segmented
-                                options={[
-                                  { id: "normal", label: "normal" },
-                                  { id: "fast", label: "fast" },
-                                ]}
-                                value={fast() ? "fast" : "normal"}
-                                onPick={(id) => setFast(id === "fast")}
                               />
                             </span>
                           </Show>

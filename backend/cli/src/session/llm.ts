@@ -109,18 +109,11 @@ export namespace LLM {
           sessionID: input.sessionID,
           providerOptions: provider.options,
         })
-    // Real per-request "fast" param — gpt-5.5 only. `serviceTier` is mapped to
-    // OpenAI's `service_tier` by @ai-sdk/openai and lands under providerOptions.
-    // openai via sdkKey. Effective only if the model config sets
-    // supportsPriorityProcessing (else the SDK drops it with a warning).
-    const fast = !input.small && !!input.user.fast && /gpt-5\.5/.test(input.model.id.toLowerCase())
-    const speed = fast ? { serviceTier: "priority" } : {}
     const options: Record<string, any> = pipe(
       base,
       mergeDeep(input.model.options),
       mergeDeep(input.agent.options),
       mergeDeep(variant),
-      mergeDeep(speed),
     )
     if (isCodex) {
       options.instructions = SystemPrompt.instructions()
@@ -263,7 +256,13 @@ export namespace LLM {
         middleware: [
           {
             async transformParams(args) {
-              if (args.type === "stream") {
+              // Apply for both stream and generate: message normalization does
+              // caching, image-mime correction, unsupported-part downgrade, and
+              // the providerOptions remap. Gating on "stream" only meant any
+              // non-stream call (structured output, a provider that internally
+              // does doGenerate) would bypass all of it and could crash on an
+              // unsupported file part.
+              if (args.type === "stream" || args.type === "generate") {
                 // @ts-expect-error
                 args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }

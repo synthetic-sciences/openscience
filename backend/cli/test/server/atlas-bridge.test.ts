@@ -1,5 +1,13 @@
-import { describe, expect, test } from "bun:test"
-import { classifyInitFailure, computeDedupeKey, initProjectDetailed } from "../../src/server/routes/atlas-bridge"
+import { describe, expect, test, beforeEach } from "bun:test"
+import fs from "node:fs/promises"
+import path from "node:path"
+import { Global } from "../../src/global"
+import {
+  classifyInitFailure,
+  computeDedupeKey,
+  initProjectDetailed,
+  pinMatchesKey,
+} from "../../src/server/routes/atlas-bridge"
 
 describe("computeDedupeKey", () => {
   test("derives repo:<host>/<owner>/<name> from a GitHub https remote", () => {
@@ -72,7 +80,36 @@ describe("classifyInitFailure", () => {
   })
 })
 
+describe("pinMatchesKey", () => {
+  test("honours a legacy pin with no dedupe key (back-compat)", () => {
+    expect(pinMatchesKey({ project_id: "p1" }, "repo:github.com/o/n")).toBe(true)
+  })
+
+  test("trusts a pin whose key matches the repo's computed key", () => {
+    const key = "repo:github.com/o/n"
+    expect(pinMatchesKey({ project_id: "p1", dedupe_key: key }, key)).toBe(true)
+  })
+
+  test("rejects a pin whose key belongs to a different repo identity", () => {
+    const pin = { project_id: "p1", dedupe_key: "repo:github.com/o/OLD" }
+    expect(pinMatchesKey(pin, "repo:github.com/o/NEW")).toBe(false)
+  })
+
+  test("rejects a local-folder pin that no longer matches the resolved key", () => {
+    const pin = { project_id: "p1", dedupe_key: "local-folder:/old/path" }
+    expect(pinMatchesKey(pin, "local-folder:/new/path")).toBe(false)
+  })
+})
+
 describe("initProjectDetailed", () => {
+  // The XDG data dir is isolated per-process, not per-test, so an earlier test
+  // in the suite may leave a session file behind — that makes token() non-null
+  // and defeats the no-session assertion below (it fails "unreachable" instead
+  // of "unauthenticated"). Clear it first so this test is order-independent.
+  beforeEach(async () => {
+    await fs.unlink(path.join(Global.Path.data, "openscience-session.json")).catch(() => {})
+  })
+
   test("fails fast as unauthenticated with no managed session (no network)", async () => {
     // Test env is XDG-isolated (see test/preload.ts) so no session file exists.
     const result = await initProjectDetailed(process.cwd())

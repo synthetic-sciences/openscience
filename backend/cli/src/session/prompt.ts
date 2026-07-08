@@ -35,7 +35,6 @@ import { ListTool } from "../tool/ls"
 import { FileTime } from "../file/time"
 import { Flag } from "../flag/flag"
 import { RSITrajectory } from "./rsi/trajectory"
-import { SessionReview } from "./review"
 import { RLMArtifacts } from "./rlm/artifacts"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
@@ -65,7 +64,10 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENSCIENCE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
-  const ARTIFACT_AGENTS = ["research", "biology", "ml"]
+  // physics is a compute agent (see COMPUTE_AGENTS) that also produces artifacts
+  // (PDE solutions, fitted params, plots), so it participates in artifact-context
+  // re-injection + RSI trajectory capture like its peer compute agents.
+  const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml"]
   // Science agents that dispatch GPU/compute work and should honor billing.compute.
   const COMPUTE_AGENTS = new Set(["research", "biology", "physics", "ml"])
 
@@ -118,8 +120,6 @@ export namespace SessionPrompt {
     system: z.string().optional(),
     variant: z.string().optional(),
     tier: z.enum(["fast", "pro", "ultra"]).optional(),
-    // Per-request fast API param (gpt-5.5 → service_tier:"priority"). See llm.ts.
-    fast: z.boolean().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -330,12 +330,6 @@ export namespace SessionPrompt {
         // RSI: capture trajectory from ultra agent sessions (async, non-blocking)
         if (lastUser.agent && RSITrajectory.ARTIFACT_AGENTS.includes(lastUser.agent as any)) {
           RSITrajectory.pipeline(sessionID).catch(() => {})
-        }
-        // WS11 reviewer gate: blind review of the final answer, appended as a
-        // footer note. Off by default (config.experimental.reviewGate); the gate
-        // self-skips non-reviewable/trivial turns. Fire-and-forget, never blocks.
-        if (lastUser.agent) {
-          SessionReview.gate({ sessionID, agent: lastUser.agent, model: lastUser.model }).catch(() => {})
         }
         break
       }
@@ -957,7 +951,6 @@ export namespace SessionPrompt {
       system: input.system,
       variant: input.variant,
       tier: input.tier,
-      fast: input.fast,
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 

@@ -2,7 +2,7 @@
 [data-component="dropdown-menu-sub-content"] {
   min-width: 8rem;
   overflow: hidden;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
   background-clip: padding-box;
   background-color: var(--surface-raised-stronger-non-alpha);
@@ -36,7 +36,7 @@
     align-items: center;
     gap: 8px;
     padding: 4px 8px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--radius-sm);
     cursor: default;
     user-select: none;
     outline: none;

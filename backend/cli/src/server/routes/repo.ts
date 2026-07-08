@@ -23,12 +23,34 @@ interface RunResult {
   err: string
 }
 
+/** Reject remote URLs that could run arbitrary commands via git's helper
+ *  transports (`ext::`/`fake::`) or argument injection (leading `-`). Normal
+ *  https/http/ssh/git@ remotes pass. Exported for tests. */
+export function assertSafeRemoteUrl(url: unknown): string {
+  const value = String(url ?? "").trim()
+  if (!value) throw new Error("remote URL required")
+  if (value.startsWith("-")) throw new Error("invalid remote URL")
+  if (/^(ext|fake)::/i.test(value)) throw new Error("unsupported remote transport")
+  if (!/^(https?:\/\/|ssh:\/\/|git@)/i.test(value)) throw new Error("unsupported remote URL scheme")
+  return value
+}
+
 function run(command: string, args: string[], cwd: string, ok: number[] = [0]): Promise<RunResult> {
   return new Promise((resolveP, rejectP) => {
     const child = spawn(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
       cwd,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+        // Defense in depth: refuse the code-executing helper transports even if a
+        // malicious remote URL slips past assertSafeRemoteUrl.
+        GIT_CONFIG_COUNT: "2",
+        GIT_CONFIG_KEY_0: "protocol.ext.allow",
+        GIT_CONFIG_VALUE_0: "never",
+        GIT_CONFIG_KEY_1: "protocol.fake.allow",
+        GIT_CONFIG_VALUE_1: "never",
+      },
     })
     let out = ""
     let err = ""
@@ -165,8 +187,7 @@ async function push(directory: string, branch: unknown) {
 
 async function setRemote(directory: string, url: unknown) {
   if (!directory) throw new Error("directory required")
-  const value = String(url ?? "").trim()
-  if (!value) throw new Error("remote URL required")
+  const value = assertSafeRemoteUrl(url)
   const hasOrigin = await git(["remote", "get-url", "origin"], directory)
     .then(() => true)
     .catch(() => false)

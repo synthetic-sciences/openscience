@@ -50,6 +50,8 @@ import { StorageRoutes } from "./routes/settings/storage"
 import { ComputeSettingsRoutes } from "./routes/settings/compute"
 import { RegistryPermissionsRoutes } from "./routes/settings/registry-permissions"
 import { SettingsPreferencesRoutes } from "./routes/settings/preferences"
+import { LocalModelsRoutes } from "./routes/settings/local"
+import { SandboxSettingsRoutes } from "./routes/settings/sandbox"
 import { BillingSettingsRoutes } from "./routes/settings/billing"
 import { WalletSettingsRoutes } from "./routes/settings/wallet"
 import { SettingsUsageRoutes } from "./routes/settings/usage"
@@ -159,6 +161,8 @@ export namespace Server {
         .route("/settings/compute", ComputeSettingsRoutes())
         .route("/settings/permissions", RegistryPermissionsRoutes())
         .route("/settings/preferences", SettingsPreferencesRoutes())
+        .route("/settings/local", LocalModelsRoutes())
+        .route("/settings/sandbox", SandboxSettingsRoutes())
         .route("/settings/billing", BillingSettingsRoutes())
         .route("/settings/wallet", WalletSettingsRoutes())
         .put(

@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 
 /**
  * BindingDB — measured binding affinities between proteins and small molecules.
@@ -47,7 +47,11 @@ export const bindingdb: Connector = {
 
   async search(query, opts) {
     const limit = Math.min(opts?.limit ?? 10, 25)
-    const body = await getJSON<unknown>(ligandsUrl(query.trim()), { signal: opts?.signal }).catch(() => undefined)
+    const body = await orFallback(
+      getJSON<unknown>(ligandsUrl(query.trim()), { signal: opts?.signal }),
+      undefined,
+      opts?.signal,
+    )
     const affinities = affinitiesOf(body)
     return affinities.slice(0, limit).map<ConnectorHit>((a) => {
       const mid = a.monomerid != null ? String(a.monomerid) : ""
@@ -64,6 +68,6 @@ export const bindingdb: Connector = {
 
   async fetch(id, opts) {
     // id is a UniProt accession; returns the full ligand-affinity set for the target.
-    return getJSON(ligandsUrl(id.trim()), { signal: opts?.signal }).catch(() => ({ affinities: [] }))
+    return orFallback(getJSON(ligandsUrl(id.trim()), { signal: opts?.signal }), { affinities: [] }, opts?.signal)
   },
 }

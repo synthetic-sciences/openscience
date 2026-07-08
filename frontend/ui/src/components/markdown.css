@@ -185,7 +185,7 @@
 
   th,
   td {
-    /* Minimal borders for structure, kept web-clean */
+    /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
     border-bottom: 1px solid var(--border-weaker-base);
     padding: 0.75rem 0.5rem;
     text-align: left;
@@ -206,4 +206,14 @@
     margin: 1.5rem 0;
     display: block;
   }
+}
+
+/* Inline file-path code spans made clickable by the markdown post-processor. */
+[data-component="markdown"] code[data-file-link] {
+  cursor: pointer;
+}
+[data-component="markdown"] code[data-file-link]:hover {
+  color: var(--text-interactive-base);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

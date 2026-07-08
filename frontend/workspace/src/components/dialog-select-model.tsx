@@ -10,55 +10,11 @@ import { Tag } from "@synsci/ui/tag"
 import { Dialog } from "@synsci/ui/dialog"
 import { List } from "@synsci/ui/list"
 import { Tooltip } from "@synsci/ui/tooltip"
+import { ProviderIcon } from "@synsci/ui/provider-icon"
+import type { IconName } from "@synsci/ui/icons/provider"
 import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
-import { isFreeCost, pricingLines } from "@/utils/model-cost"
-
-// ── Reasoning-effort variants ────────────────────────────────────────────────
-// models.dev exposes optional per-model `variants` (low/medium/high/…) that map
-// to provider reasoning-effort options. Surface them inline so an open-weight
-// reasoning model reads the same as a proprietary one.
-const VARIANT_LABEL: Record<string, string> = {
-  none: "None",
-  minimal: "Minimal",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Extra High",
-  max: "Max",
-}
-
-type VariantModel = { variants?: Record<string, { disabled?: boolean } | undefined> }
-
-function variantKeys(model: VariantModel): string[] {
-  const v = model.variants
-  if (!v) return []
-  return Object.keys(v).filter((k) => !v[k]?.disabled)
-}
-
-function variantHint(model: VariantModel): string | undefined {
-  const keys = variantKeys(model)
-  if (keys.length === 0) return undefined
-  return keys.map((k) => VARIANT_LABEL[k] ?? k).join(" · ")
-}
-
-// ── Credential source badge ──────────────────────────────────────────────────
-// Honest, provider-derived source for the composer's model rows. BYOK is the
-// first-class path for the OSS client, so anything with a raw key reads "Key".
-const SIGNED_IN = new Set(["github-copilot"])
-
-function sourceBadge(providerID: string): { label: string; tone: "managed" | "signin" | "byok" } {
-  if (providerID === "synsci") return { label: "Managed", tone: "managed" }
-  if (SIGNED_IN.has(providerID)) return { label: "Sign-in", tone: "signin" }
-  return { label: "Key", tone: "byok" }
-}
-
-const SOURCE_CLASS: Record<"managed" | "signin" | "byok", string> = {
-  managed: "text-text-strong",
-  signin: "text-text-weak",
-  byok: "text-text-weaker",
-}
 
 const ModelList: Component<{
   provider?: string
@@ -78,7 +34,7 @@ const ModelList: Component<{
 
   return (
     <List
-      class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
+      class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 [&_[data-slot=list-search-input]]:!text-[13px] [&_[data-slot=list-header]]:!text-[11px] [&_[data-slot=list-header]]:!uppercase [&_[data-slot=list-header]]:!tracking-wider [&_[data-slot=list-item]]:!py-1 [&_[data-slot=list-search]]:!p-1.5 ${props.class ?? ""}`}
       search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.provider.id}:${x.id}`}
@@ -100,7 +56,13 @@ const ModelList: Component<{
           placement="right-start"
           gutter={12}
           forceMount={false}
-          value={<ModelTooltip model={item} latest={item.latest} free={isFreeCost(item.cost)} />}
+          value={
+            <ModelTooltip
+              model={item}
+              latest={item.latest}
+              free={item.provider.id === "synsci" && (!item.cost || item.cost.input === 0)}
+            />
+          }
         >
           {node}
         </Tooltip>
@@ -112,41 +74,20 @@ const ModelList: Component<{
         props.onSelect()
       }}
     >
-      {(i) => {
-        const free = isFreeCost(i.cost)
-        const price = pricingLines(i.cost)
-        const source = sourceBadge(i.provider.id)
-        const hint = variantHint(i as unknown as VariantModel)
-        return (
-          <div class="w-full flex items-center gap-3 py-0.5">
-            <div class="flex flex-col min-w-0 gap-0.5">
-              <div class="flex items-center gap-1.5 min-w-0">
-                <span class="truncate text-13-regular text-text-strong">{i.name}</span>
-                <Show when={i.latest}>
-                  <Tag>{language.t("model.tag.latest")}</Tag>
-                </Show>
-              </div>
-              <div class="flex items-center gap-1.5 text-11-regular text-text-weaker min-w-0">
-                <span class={`shrink-0 ${SOURCE_CLASS[source.tone]}`}>{source.label}</span>
-                <Show when={hint}>
-                  <span class="shrink-0 text-text-weaker/70">·</span>
-                  <span class="truncate">{hint}</span>
-                </Show>
-              </div>
-            </div>
-            <span class="ml-auto shrink-0 flex items-center pl-2">
-              <Show when={!free} fallback={<Tag>{language.t("model.tag.free")}</Tag>}>
-                <span class="text-11-regular text-text-weaker tabular-nums">
-                  {language.t("model.tag.pricing", {
-                    input: price.input!,
-                    output: price.output!,
-                  })}
-                </span>
-              </Show>
-            </span>
-          </div>
-        )
-      }}
+      {(i) => (
+        <div class="w-full flex items-center gap-x-2 text-13-regular">
+          <ProviderIcon id={i.provider.id as IconName} class="size-4 shrink-0 opacity-90" />
+          <span class="truncate">{i.name}</span>
+          <span class="flex items-center gap-x-1.5 ml-auto shrink-0">
+            <Show when={i.provider.id === "synsci" && (!i.cost || i.cost?.input === 0)}>
+              <Tag>{language.t("model.tag.free")}</Tag>
+            </Show>
+            <Show when={i.latest}>
+              <Tag>{language.t("model.tag.latest")}</Tag>
+            </Show>
+          </span>
+        </div>
+      )}
     </List>
   )
 }
@@ -246,7 +187,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
       <Kobalte.Portal>
         <Kobalte.Content
           ref={(el) => setStore("content", el)}
-          class="w-[360px] h-[min(70vh,440px)] flex flex-col p-1.5 rounded-lg border border-border-weak-base bg-surface-raised-stronger-non-alpha shadow-lg z-50 outline-none overflow-hidden"
+          class="w-[264px] h-[min(52vh,288px)] flex flex-col p-1.5 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
           onEscapeKeyDown={(event) => {
             setStore("dismiss", "escape")
             setStore("open", false)
@@ -270,7 +211,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
           <ModelList
             provider={props.provider}
             onSelect={() => setStore("open", false)}
-            class="p-0.5"
+            class="p-1"
             action={
               <Tooltip placement="top" forceMount={false} value={language.t("dialog.model.manage")}>
                 <IconButton
@@ -296,16 +237,14 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
 
   return (
     <Dialog title={language.t("dialog.model.select.title")}>
-      <div class="flex flex-col h-[min(68vh,540px)] min-h-0">
-        <ModelList provider={props.provider} onSelect={() => dialog.close()} class="px-1" />
-        <Button
-          variant="ghost"
-          class="mt-3 mb-1 ml-1 text-text-base self-start"
-          onClick={() => dialog.show(() => <DialogManageModels />)}
-        >
-          {language.t("dialog.model.manage")}
-        </Button>
-      </div>
+      <ModelList provider={props.provider} onSelect={() => dialog.close()} />
+      <Button
+        variant="ghost"
+        class="ml-3 mt-5 mb-6 text-text-base self-start"
+        onClick={() => dialog.show(() => <DialogManageModels />)}
+      >
+        {language.t("dialog.model.manage")}
+      </Button>
     </Dialog>
   )
 }

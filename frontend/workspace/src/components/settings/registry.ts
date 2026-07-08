@@ -28,8 +28,10 @@ export type SettingsPanelId =
   | "specialists"
   | "memory"
   | "compute"
+  | "local-models"
   | "network"
   | "permissions"
+  | "sandbox"
   | "credentials"
   | "spend"
   | "wallet"
@@ -83,6 +85,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     component: lazy(() => import("./Compute")),
   },
   {
+    id: "local-models",
+    title: "Local models",
+    icon: "models",
+    section: "capabilities",
+    component: lazy(() => import("./LocalModels")),
+  },
+  {
     id: "network",
     title: "Network",
     icon: "share",
@@ -96,6 +105,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "check",
     section: "workspace",
     component: lazy(() => import("./Permissions")),
+  },
+  {
+    id: "sandbox",
+    title: "Sandbox",
+    icon: "console",
+    section: "workspace",
+    component: lazy(() => import("./Sandbox")),
   },
   {
     id: "credentials",

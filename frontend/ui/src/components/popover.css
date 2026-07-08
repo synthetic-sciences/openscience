@@ -6,7 +6,7 @@
   z-index: 50;
   min-width: 200px;
   max-width: 320px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background-color: var(--surface-raised-stronger-non-alpha);
 
   border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);

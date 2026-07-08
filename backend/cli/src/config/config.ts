@@ -82,19 +82,27 @@ export namespace Config {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
         log.debug("fetching remote config", { url: `${key}/.well-known/openscience` })
-        const response = await fetch(`${key}/.well-known/openscience`)
-        if (!response.ok) {
-          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+        // A transient outage/DNS failure on a well-known host must NOT reject
+        // Config.get() and brick the whole CLI (it's only the lowest-precedence
+        // base layer) — mirror the synced-config resilience: log and continue.
+        try {
+          const response = await fetch(`${key}/.well-known/openscience`)
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const wellknown = (await response.json()) as any
+          const remoteConfig = wellknown.config ?? {}
+          // Add $schema to prevent load() from trying to write back to a non-existent file
+          if (!remoteConfig.$schema) remoteConfig.$schema = "https://syntheticsciences.ai/config.json"
+          result = mergeConfigConcatArrays(
+            result,
+            await load(JSON.stringify(remoteConfig), `${key}/.well-known/openscience`),
+          )
+          log.debug("loaded remote config from well-known", { url: key })
+        } catch (e) {
+          log.warn("failed to fetch remote config; continuing without it", {
+            url: key,
+            error: e instanceof Error ? e.message : String(e),
+          })
         }
-        const wellknown = (await response.json()) as any
-        const remoteConfig = wellknown.config ?? {}
-        // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://syntheticsciences.ai/config.json"
-        result = mergeConfigConcatArrays(
-          result,
-          await load(JSON.stringify(remoteConfig), `${key}/.well-known/openscience`),
-        )
-        log.debug("loaded remote config from well-known", { url: key })
       }
     }
 
@@ -177,26 +185,42 @@ export namespace Config {
       result.plugin.push(...(await loadPlugin(dir)))
     }
 
-    // Load managed config files last (highest priority) - enterprise admin-controlled
-    // Kept separate from directories array to avoid write operations when installing plugins
-    // which would fail on system directories requiring elevated permissions
-    // This way it only loads config file and not skills/plugins/commands
-    if (existsSync(managedConfigDir)) {
-      for (const file of CONFIG_FILES) {
-        result = mergeConfigConcatArrays(result, await loadFile(path.join(managedConfigDir, file)))
-      }
-    }
-
-    // Load synced config from dashboard (highest priority after managed).
+    // Load synced config from dashboard (below the enterprise-managed layer).
     // Written by OpenScience.syncServices() to the user's XDG config dir. Tolerate
     // a corrupt file: it must never brick config load (and thus the whole CLI).
     // Atomic writes prevent torn files going forward; this covers external
     // corruption or a file written by an older, non-atomic version.
     const syncedConfig = path.join(Global.Path.config, "openscience-synced.json")
     try {
-      result = mergeConfigConcatArrays(result, await loadFile(syncedConfig))
+      const synced = await loadFile(syncedConfig)
+      // The dashboard sync is a MANAGED artifact: it pins `enabled_providers` to
+      // the wallet's OpenRouter route so a managed session can only reach the
+      // sanctioned catalog. Under an EXPLICIT byok toggle the user wants their
+      // OWN keys — so drop that managed-only whitelist before merging. Without
+      // this, a lingering managed sync (from a prior `openscience login`)
+      // whitelists away every byok provider the user has or later adds, so byok
+      // shows nothing but the leftover OpenRouter. Auto-detect (billing unset) is
+      // left alone. The managed openrouter *credential* is separately dropped in
+      // provider.ts under byok, so this only frees the catalog.
+      if (synced && (result as { billing?: { llm?: string } }).billing?.llm === "byok") {
+        delete (synced as { enabled_providers?: unknown }).enabled_providers
+      }
+      result = mergeConfigConcatArrays(result, synced)
     } catch {
       // treat an unreadable synced config as absent
+    }
+
+    // Load managed config files LAST (highest priority) - enterprise admin-controlled.
+    // Kept separate from directories array to avoid write operations when installing plugins
+    // which would fail on system directories requiring elevated permissions
+    // This way it only loads config file and not skills/plugins/commands.
+    // Must merge AFTER the dashboard-synced config: an admin policy in
+    // /etc (or /Library/...) must win over a per-user dashboard value, otherwise
+    // the synced config silently overrode the admin's "overrides all" contract.
+    if (existsSync(managedConfigDir)) {
+      for (const file of CONFIG_FILES) {
+        result = mergeConfigConcatArrays(result, await loadFile(path.join(managedConfigDir, file)))
+      }
     }
 
     // Migrate deprecated mode field to agent field
@@ -610,6 +634,34 @@ export namespace Config {
       ref: "PermissionConfig",
     })
   export type Permission = z.infer<typeof Permission>
+
+  export const Sandbox = z
+    .object({
+      enabled: z
+        .boolean()
+        .optional()
+        .describe(
+          "Run the agent's shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to the workspace. Off by default.",
+        ),
+      network: z
+        .enum(["allow", "deny"])
+        .optional()
+        .describe("Whether sandboxed commands may reach the network. Default: allow."),
+      allowWrite: z
+        .array(z.string())
+        .optional()
+        .describe("Extra absolute paths — beyond the workspace and temp dirs — the sandbox may write to."),
+      onUnavailable: z
+        .enum(["warn", "error", "allow"])
+        .optional()
+        .describe(
+          "Behaviour when no sandbox backend exists on this platform: 'warn' (default) runs unsandboxed with a notice, 'error' refuses to run the command, 'allow' runs unsandboxed silently.",
+        ),
+    })
+    .meta({
+      ref: "SandboxConfig",
+    })
+  export type Sandbox = z.infer<typeof Sandbox>
 
   export const Command = z.object({
     template: z.string(),
@@ -1093,6 +1145,7 @@ export namespace Config {
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
+      sandbox: Sandbox.optional().describe("OS-level execution sandbox for the agent's shell commands."),
       tools: z.record(z.string(), z.boolean()).optional(),
       enterprise: z
         .object({
@@ -1148,12 +1201,6 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
-          reviewGate: z
-            .enum(["off", "annotate"])
-            .optional()
-            .describe(
-              "Run a blind reviewer on a primary agent's final answer and append its verdict as a footer note ('annotate' = on, non-blocking). Off by default.",
-            ),
         })
         .optional(),
     })
@@ -1332,7 +1379,11 @@ export namespace Config {
   }
 
   export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
+    // Write to an actual project config READ path (openscience.json / .openscience/…)
+    // — the previous `<Instance.directory>/config.json` is only read as the GLOBAL
+    // config, never as project config, so PATCH /config appeared to save but the
+    // change vanished on the next Instance reload.
+    const filepath = projectConfigFile()
     const existing = await loadFile(filepath)
     await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
     await Instance.dispose()
@@ -1430,6 +1481,47 @@ export namespace Config {
 
   export async function removeMcp(name: string, scope: Scope = "global") {
     return patchConfigPath(scope, ["mcp", name], undefined)
+  }
+
+  /** Register a custom provider block (e.g. a local Ollama / LM Studio /
+   *  OpenAI-compatible endpoint) under `provider.<id>`, JSONC-preserving.
+   *  Defaults to the GLOBAL config since a local endpoint is machine-wide, not
+   *  per-project. Mirrors setMcp. */
+  export async function setProvider(id: string, provider: Provider, scope: Scope = "global") {
+    return patchConfigPath(scope, ["provider", id], provider)
+  }
+
+  /** Remove a custom provider block. */
+  export async function removeProvider(id: string, scope: Scope = "global") {
+    return patchConfigPath(scope, ["provider", id], undefined)
+  }
+
+  /**
+   * Execution-sandbox policy resolved from GLOBAL + MANAGED (admin) config only.
+   * Project config is deliberately excluded: the sandbox is a machine-wide safety
+   * boundary, so an untrusted repo's `openscience.json` must not be able to weaken
+   * or disable it. Managed (enterprise) config wins over the user's global config.
+   */
+  export async function trustedSandbox(): Promise<Sandbox | undefined> {
+    const base = (await global()).sandbox
+    let managed: Sandbox | undefined
+    if (existsSync(managedConfigDir)) {
+      let acc: Info = {}
+      for (const file of CONFIG_FILES) acc = mergeDeep(acc, await loadFile(path.join(managedConfigDir, file)))
+      managed = acc.sandbox
+    }
+    if (!base && !managed) return undefined
+    return { ...(base ?? {}), ...(managed ?? {}) }
+  }
+
+  /** Merge a patch into the GLOBAL `sandbox` config block, JSONC-preserving. The
+   *  execution sandbox is a machine-wide safety setting and is only ever read
+   *  from global + managed config (see {@link trustedSandbox}), so it is always
+   *  written globally — a project-scoped value would be silently ignored. */
+  export async function setSandbox(patch: Partial<Sandbox>) {
+    const current = (await getGlobal()).sandbox
+    const next: Sandbox = { ...(current ?? {}), ...patch }
+    return patchConfigPath("global", ["sandbox"], next)
   }
 
   /** Remove a key path from the global config (deep-merge can't unset). */

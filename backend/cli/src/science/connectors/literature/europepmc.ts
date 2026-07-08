@@ -22,8 +22,17 @@ interface Result {
   authorString?: string
   abstractText?: string
   pubYear?: string
+  // `resultType=core` records (this connector hardcodes core) nest the journal
+  // name under journalInfo.journal.title. Older/lite shapes put it top-level as
+  // journalTitle — keep both so either shape resolves.
   journalTitle?: string
+  journalInfo?: { journal?: { title?: string } }
   citedByCount?: number
+}
+
+/** The publication venue, from whichever shape the record uses. */
+export function journalName(r: Result): string | undefined {
+  return r.journalInfo?.journal?.title ?? r.journalTitle
 }
 
 interface SearchResponse {
@@ -38,7 +47,7 @@ function url(r: Result): string | undefined {
 }
 
 function toHit(r: Result): ConnectorHit {
-  const meta = [r.authorString, r.journalTitle, r.pubYear].filter(Boolean).join(". ")
+  const meta = [r.authorString, journalName(r), r.pubYear].filter(Boolean).join(". ")
   return {
     id: r.source && r.id ? `${r.source}/${r.id}` : (r.id ?? ""),
     title: snippet(r.title, 300) ?? r.id ?? "Untitled",

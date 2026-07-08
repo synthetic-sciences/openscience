@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import { existsSync, readFileSync, writeFileSync, chmodSync } from "fs"
 import { createRequire } from "module"
 import { fileURLToPath } from "url"
-import { randomUUID } from "crypto"
+import { randomUUID, createHash } from "crypto"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { Lock } from "../util/lock"
@@ -37,7 +37,7 @@ if (API_BASE !== DEFAULT_API_BASE) {
   }
 }
 
-// User-facing URL the CLI prints during `openscience connect login`. Defaults
+// User-facing URL the CLI prints during `openscience login`. Defaults
 // to the unified Atlas frontend's /cli route — Plan tab, key management,
 // and billing all live there. SYNSC_AUTH_URL overrides (e.g. point at a
 // staging frontend or the old auth.syntheticsciences.ai surface).
@@ -60,6 +60,27 @@ function getSyncedConfigDir(): string {
   const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")
   return path.join(xdg, "openscience")
 }
+
+// Seed the synced-secret set from the on-disk snapshot at import. preload-env.ts
+// replays synced-env.json into process.env at boot but never seeded this set, so
+// on a fresh process where no in-process sync runs (the common steady state, when
+// the dashboard version is unchanged) the set stayed empty — and a disk-replayed
+// synced secret that isn't a thk_ value was neither stripped from subprocess env
+// nor masked by redactSecrets(). Synchronous + best-effort so the hot sync paths
+// (redactSecrets) have the values available without an async read.
+;(() => {
+  try {
+    const raw = readFileSync(path.join(getSyncedConfigDir(), "synced-env.json"), "utf-8")
+    const parsed: unknown = JSON.parse(raw)
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value === "string" && value) syncedSecretValues.set(key, value)
+      }
+    }
+  } catch {
+    /* no snapshot on disk — nothing to seed */
+  }
+})()
 
 /** Shared provider API keys that must not leak to subprocesses */
 const SHARED_PROVIDER_KEYS = new Set([
@@ -128,6 +149,7 @@ type SyncedServiceReason =
   | "ineligible_plan"
   | "proxy_disabled"
   | "managed_key_unconfigured"
+  | "managed_via_openrouter"
 
 interface SyncedService {
   connected: boolean
@@ -171,6 +193,8 @@ function describeReason(provider: string, reason: SyncedServiceReason | undefine
       return `${provider}: Atlas managed mode is disabled on this deployment — BYOK only.`
     case "managed_key_unconfigured":
       return `${provider}: Atlas managed mode unavailable on this deployment — ask the admin.`
+    case "managed_via_openrouter":
+      return `${provider}: wallet access to ${provider} models routes through the openrouter provider — pick them there, or add your own ${provider} key for direct access.`
     default:
       return `${provider}: not connected.`
   }
@@ -306,11 +330,26 @@ export namespace OpenScience {
   // both go through Atlas fetches, and with the agent's bash tool also unbounded a
   // hang wedged whole sessions for >60 min. Overridable via OPENSCIENCE_ATLAS_TIMEOUT_MS.
   const ATLAS_FETCH_TIMEOUT_MS = Number(process.env["OPENSCIENCE_ATLAS_TIMEOUT_MS"]) || 60_000
+  // Skill index/content fetches run on the GET /skill request path, and each only
+  // *enriches* a list that also comes from disk cache + bundled skills. A slow or
+  // unreachable backend must degrade fast (fall back to cached/empty) instead of
+  // wedging the request for the full Atlas timeout — the reporter in #138 saw a
+  // single /skill take 62s because these inherited the 60s default. Bound tighter.
+  const SKILL_FETCH_TIMEOUT_MS = Number(process.env["OPENSCIENCE_SKILL_TIMEOUT_MS"]) || 8_000
   function atlasFetch(input: string, init: RequestInit = {}, timeoutMs = ATLAS_FETCH_TIMEOUT_MS): Promise<Response> {
-    return fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(timeoutMs) })
+    // Combine (don't replace) a caller's signal with the timeout, so passing an
+    // abort signal never silently drops the hang guard this function exists for.
+    const timeout = AbortSignal.timeout(timeoutMs)
+    const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout
+    return fetch(input, { ...init, signal })
   }
 
   export async function getSession(): Promise<OpenScienceSession | null> {
+    // A missing file is a genuine logout → null, silently. Distinguish it from a
+    // read/parse error below so a torn file / EMFILE / permission blip isn't
+    // silently mis-read as "signed out" (which flips the billing gate to BYOK
+    // and diverts usage to the unauthenticated queue for an authed user).
+    if (!existsSync(filepath)) return null
     try {
       const file = Bun.file(filepath)
       const data = (await file.json()) as Partial<OpenScienceSession> & { access_token?: string }
@@ -334,13 +373,21 @@ export namespace OpenScience {
         cached_v: data.cached_v,
         last_check_ts: data.last_check_ts,
       }
-    } catch {
+    } catch (e) {
+      // The file exists but couldn't be read/parsed — NOT a logout. Return null
+      // so callers stay simple, but surface it so the transient failure is
+      // diagnosable rather than a silent, mis-billed "signed out".
+      log.warn("could not read session file (treating as signed out)", {
+        error: e instanceof Error ? e.message : String(e),
+      })
       return null
     }
   }
 
   export async function saveSession(session: OpenScienceSession) {
-    await Bun.write(Bun.file(filepath), JSON.stringify(session, null, 2), { mode: 0o600 })
+    // Atomic temp+rename so a crash or a concurrent reader never sees a torn
+    // session file (which getSession would mis-read as a logout).
+    await atomicWrite(filepath, JSON.stringify(session, null, 2), { mode: 0o600 })
     await ensureAtlasCliConfig(session)
   }
 
@@ -377,8 +424,12 @@ export namespace OpenScience {
   }
 
   /** Merge-update the persisted session. Fetches current session, spreads
-   *  the patch on top, and writes back. No-ops when unauthenticated. */
+   *  the patch on top, and writes back. No-ops when unauthenticated. Serialized
+   *  under a lock so two concurrent patches (e.g. an interactive last_check_ts
+   *  update racing a background cached_v update) can't lose each other's field
+   *  in the read-modify-write. */
   async function updateSession(patch: Partial<OpenScienceSession>): Promise<void> {
+    using _ = await Lock.write(filepath)
     const session = await getSession()
     if (!session) return
     await saveSession({ ...session, ...patch })
@@ -409,7 +460,13 @@ export namespace OpenScience {
       })
       if (!res.ok) return // fail open — keep current env
       const body = await res.json()
-      v = typeof body?.v === "number" ? body.v : null
+      // Coerce numeric strings too: a backend/proxy that returns {"v":"5"} would
+      // otherwise leave v=null forever, so cached_v never updates and the CLI
+      // keeps deferring the background sync for the TTL — dashboard changes never
+      // land, with no error surfaced.
+      const raw = body?.v
+      const num = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN
+      v = Number.isFinite(num) ? num : null
     } catch {
       return // network failure → use current env, retry next message
     }
@@ -509,12 +566,14 @@ export namespace OpenScience {
    */
   export async function clearSession() {
     const session = await getSession()
-    try {
-      await fs.unlink(filepath)
-    } catch {}
+    // Remove the synced credential artifacts FIRST, then delete the session file
+    // LAST. A crash after unlinking the session but before removing
+    // synced-env.json would otherwise leave preload-env.ts replaying the managed
+    // key into process.env on the next boot — the signed-out account's wallet
+    // kept being debited, the exact thing this function exists to prevent.
     // Union of what this process synced (in-memory map) and what the last
     // sync persisted (disk snapshot, replayed by preload-env.ts at boot) —
-    // a fresh `connect logout` process has only the latter.
+    // a fresh `logout` process has only the latter.
     const synced = await readSyncedSnapshot()
     for (const [key, value] of syncedSecretValues.entries()) synced.set(key, value)
     for (const name of ["synced-env.json", "openscience-synced.json"]) {
@@ -526,6 +585,10 @@ export namespace OpenScience {
     syncedSecretValues.clear()
     await clearAtlasCliConfig(session)
     await dropUsageQueue()
+    // Session file last, once the managed-key-replaying artifacts are gone.
+    try {
+      await fs.unlink(filepath)
+    } catch {}
   }
 
   /**
@@ -718,7 +781,11 @@ export namespace OpenScience {
    *  a torn openscience-synced.json throws during config load and bricks the CLI
    *  until it's removed by hand. */
   async function atomicWrite(filepath: string, content: string, options?: { mode?: number }): Promise<void> {
-    const tmp = `${filepath}.${process.pid}.tmp`
+    // Unique per call (not just per PID): two concurrent syncs in the SAME
+    // process (e.g. a per-request /sync and the processor's background sync)
+    // would otherwise write the identical temp path, interleave, and publish a
+    // torn file or fail the rename.
+    const tmp = `${filepath}.${process.pid}.${randomUUID()}.tmp`
     await Bun.write(tmp, content, options)
     await fs.rename(tmp, filepath)
   }
@@ -972,7 +1039,11 @@ export namespace OpenScience {
       if (!value) continue
       if (isManagedAtlasKey(value)) continue
       if (SHARED_PROVIDER_KEYS.has(key)) continue
-      const isSafe = SAFE_ENV_PREFIXES.some((p) => key === p || key.startsWith(p)) || SAFE_SYNCED_KEYS.has(key)
+      // Entries ending in `_` (LC_, XDG_) are true prefixes; the rest are exact
+      // names. Treating all as prefixes let HOME match HOMEBREW_GITHUB_API_TOKEN,
+      // USER match USERPROFILE, etc. — over-broad passthrough.
+      const isSafe =
+        SAFE_ENV_PREFIXES.some((p) => (p.endsWith("_") ? key.startsWith(p) : key === p)) || SAFE_SYNCED_KEYS.has(key)
       if (isSafe || !syncedSecretValues.has(key)) {
         result[key] = value
       }
@@ -1057,9 +1128,11 @@ export namespace OpenScience {
     if (!session) return null
 
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/skills`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
+      const res = await atlasFetch(
+        `${API_BASE}/api/cli/skills`,
+        { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
+      )
 
       if (!res.ok) {
         log.warn("failed to fetch skill index", { status: res.status })
@@ -1087,9 +1160,11 @@ export namespace OpenScience {
     if (!session) return null
 
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/skills/${encodeURIComponent(name)}`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
+      const res = await atlasFetch(
+        `${API_BASE}/api/cli/skills/${encodeURIComponent(name)}`,
+        { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
+      )
 
       if (!res.ok) {
         log.warn("failed to fetch skill content", { name, status: res.status })
@@ -1190,12 +1265,29 @@ export namespace OpenScience {
 
   const pendingQueuePath = path.join(Global.Path.data, "usage-queue.jsonl")
 
-  async function persistToQueue(params: UsageParams) {
+  /** Stable per-account tag stored with a queued usage row so a later flush can't
+   *  bill a DIFFERENT account for it. user_id when known, else a short hash of the
+   *  api_key (never the raw key, which must not sit in the queue file). */
+  function accountTag(session: OpenScienceSession): string {
+    if (session.user_id) return session.user_id
+    return "k:" + createHash("sha256").update(session.api_key).digest("hex").slice(0, 16)
+  }
+
+  /** Whether a queued row tagged `rowAccount` may be flushed under `currentAccount`.
+   *  A row with no tag is legacy/accountless → best-effort send under the current
+   *  account; a row tagged for a DIFFERENT account is never sent (kept until that
+   *  account is active). Pure + exported for tests. */
+  export function shouldFlushForAccount(rowAccount: string | undefined, currentAccount: string): boolean {
+    return !rowAccount || rowAccount === currentAccount
+  }
+
+  async function persistToQueue(params: UsageParams, account?: string) {
     try {
       // Serialize against flushPendingUsage so an append can't land between
       // the flusher's read and its final rewrite (which would delete it).
       using _ = await Lock.write(pendingQueuePath)
-      await fs.appendFile(pendingQueuePath, JSON.stringify(params) + "\n")
+      const row = account ? { ...params, __account: account } : params
+      await fs.appendFile(pendingQueuePath, JSON.stringify(row) + "\n")
       log.info("usage queued for retry", { service: params.service })
     } catch (e) {
       log.warn("failed to persist usage to queue", { error: e instanceof Error ? e.message : String(e) })
@@ -1285,7 +1377,7 @@ export namespace OpenScience {
       return { recorded: false, modelBlocked: true }
     }
     if (!result.permanent) {
-      await persistToQueue(params)
+      await persistToQueue(params, accountTag(session))
     }
     return null
   }
@@ -1304,11 +1396,18 @@ export namespace OpenScience {
 
       const session = await getSession()
       if (!session) return
+      const currentAccount = accountTag(session)
 
       const retry: string[] = []
       for (const line of lines) {
         try {
-          const params: UsageParams = JSON.parse(line)
+          const { __account, ...params } = JSON.parse(line) as UsageParams & { __account?: string }
+          // Never bill the active account for usage another account generated —
+          // keep it queued until that account is the one flushing.
+          if (!shouldFlushForAccount(__account, currentAccount)) {
+            retry.push(line)
+            continue
+          }
           const result = await sendReport(params, session)
           if (!result.ok && !result.permanent) {
             retry.push(line)
@@ -1375,9 +1474,11 @@ export namespace OpenScience {
     if (!session) return null
 
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/learned-skills`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
+      const res = await atlasFetch(
+        `${API_BASE}/api/cli/learned-skills`,
+        { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
+      )
 
       if (!res.ok) {
         log.warn("failed to fetch learned skills index", { status: res.status })
@@ -1406,9 +1507,11 @@ export namespace OpenScience {
     if (!session) return null
 
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/learned-skills/${encodeURIComponent(name)}`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
+      const res = await atlasFetch(
+        `${API_BASE}/api/cli/learned-skills/${encodeURIComponent(name)}`,
+        { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
+      )
 
       if (!res.ok) {
         log.warn("failed to fetch learned skill content", { name, status: res.status })
@@ -1518,6 +1621,25 @@ export namespace OpenScience {
     lifetimeSpentCents: number
   }
 
+  /**
+   * The wallet balance the CLI can actually spend, in cents.
+   *
+   * Atlas `/api/credits` also returns `unified_balance_cents` — the sum of every
+   * pool: the CLI wallet + the Atlas-web wallet + the subscription cycle pool +
+   * gifted credits. But OpenScience managed mode debits ONLY the CLI wallet
+   * (Atlas `cli.py`: `category="cli"`; an Atlas plan grants BYOK + library quota,
+   * not CLI spending credits). Showing the unified pool made the wallet read
+   * e.g. $160 when the CLI could actually spend far less. Prefer the CLI wallet;
+   * fall back to the older aggregate fields only if a backend omits it.
+   */
+  export function cliSpendableCents(d: {
+    cli_balance_cents?: number
+    unified_balance_cents?: number
+    balance_cents?: number
+  }): number {
+    return d.cli_balance_cents ?? d.unified_balance_cents ?? d.balance_cents ?? 0
+  }
+
   export async function getCredits(): Promise<Credits | null> {
     const session = await getSession()
     if (!session) return null
@@ -1533,7 +1655,7 @@ export namespace OpenScience {
         cycle_credits_remaining_cents?: number
         lifetime_spent_cents?: number
       }
-      const cents = d.unified_balance_cents ?? d.balance_cents ?? 0
+      const cents = cliSpendableCents(d)
       return {
         balanceUsd: cents / 100,
         cliBalanceCents: d.cli_balance_cents ?? d.balance_cents ?? 0,
@@ -1668,9 +1790,11 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return null
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/installed-skills`, {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      })
+      const res = await atlasFetch(
+        `${API_BASE}/api/cli/installed-skills`,
+        { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
+      )
       if (!res.ok) {
         log.warn("failed to fetch installed skills index", { status: res.status })
         return null
@@ -1690,6 +1814,7 @@ export namespace OpenScience {
       const res = await atlasFetch(
         `${API_BASE}/api/cli/installed-skills/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`,
         { headers: { Authorization: `Bearer ${session.api_key}` } },
+        SKILL_FETCH_TIMEOUT_MS,
       )
       if (!res.ok) return null
       const data = await res.json()

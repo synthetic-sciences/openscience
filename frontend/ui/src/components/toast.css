@@ -96,12 +96,12 @@
   [data-slot="toast-title"] {
     color: var(--text-invert-strong);
 
-    /* text-13-medium */
+    /* text-14-medium */
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-base);
+    font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-large); /* 142.857% */
     letter-spacing: var(--letter-spacing-normal);
 
     margin: 0;
@@ -168,7 +168,7 @@
   [data-slot="toast-progress-fill"] {
     height: 100%;
     width: var(--kb-toast-progress-fill-width);
-    background-color: var(--surface-brand-base);
+    background-color: var(--color-primary);
     transition: width 250ms linear;
   }
 }

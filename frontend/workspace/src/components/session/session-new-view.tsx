@@ -2,6 +2,7 @@ import { Show, createMemo } from "solid-js"
 import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
+import { useModels } from "@/context/models"
 import { Icon } from "@synsci/ui/icon"
 import { getDirectory, getFilename } from "@synsci/util/path"
 
@@ -16,6 +17,12 @@ interface NewSessionViewProps {
 export function NewSessionView(props: NewSessionViewProps) {
   const sync = useSync()
   const language = useLanguage()
+  const models = useModels()
+  // No connected provider ⇒ no models ⇒ nothing to send. On BYOK this most
+  // often means no key is set (or the only synced credential was the managed
+  // wallet, which byok deliberately drops). Tell the user plainly instead of
+  // leaving them at a dead composer.
+  const noModel = createMemo(() => models.list().length === 0)
 
   const sandboxes = createMemo(() => sync.project?.sandboxes ?? [])
   const options = createMemo(() => [MAIN_WORKTREE, ...sandboxes(), CREATE_WORKTREE])
@@ -47,6 +54,16 @@ export function NewSessionView(props: NewSessionViewProps) {
   return (
     <div class="size-full flex flex-col justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6 pb-[calc(var(--prompt-height,11.25rem)+64px)]">
       <div class="text-20-medium text-text-weaker">{language.t("command.session.new")}</div>
+      <Show when={noModel()}>
+        <div class="flex flex-col gap-1.5 rounded-lg border border-border-base bg-surface-raised-base px-4 py-3 self-stretch max-w-full">
+          <div class="text-13-medium text-text-strong">No model connected</div>
+          <div class="text-12-regular text-text-weak leading-relaxed">
+            You don't have a provider key set. Bring your own with{" "}
+            <code class="text-text-base">openscience keys signin</code> (OpenAI · Anthropic · Gemini, or ChatGPT / Codex
+            — no API key needed), or use managed credits with <code class="text-text-base">openscience login</code>.
+          </div>
+        </div>
+      </Show>
       <div class="flex justify-center items-center gap-3">
         <Icon name="folder" size="small" />
         <div class="text-12-medium text-text-weak select-text">

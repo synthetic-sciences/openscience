@@ -488,16 +488,21 @@ Nested command template`,
   })
 })
 
-test("updates config and writes to file", async () => {
+test("update() persists to a project config read path (survives a reload)", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const newConfig = { model: "updated/model" }
-      await Config.update(newConfig as any)
-
-      const writtenConfig = JSON.parse(await Bun.file(path.join(tmp.path, "config.json")).text())
-      expect(writtenConfig.model).toBe("updated/model")
+      await Config.update({ model: "updated/model" } as any)
+    },
+  })
+  // The whole point of the fix: a fresh load reflects the persisted value.
+  // Previously update() wrote to config.json, which the loader never reads as
+  // project config, so the change vanished on reload.
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect((await Config.get()).model).toBe("updated/model")
     },
   })
 })

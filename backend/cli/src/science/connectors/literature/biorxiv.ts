@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit, SearchOptions } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 import { raw, snippet } from "./shared"
 
 /**
@@ -66,12 +66,20 @@ function toHit(p: Paper, score?: number): ConnectorHit {
 }
 
 async function recent(s: Server, count: number, opts?: SearchOptions): Promise<Paper[]> {
-  const data = await getJSON<Details>(`${BASE}/${s}/${count}`, { signal: opts?.signal }).catch(() => ({}) as Details)
+  const data = await orFallback(
+    getJSON<Details>(`${BASE}/${s}/${count}`, { signal: opts?.signal }),
+    {} as Details,
+    opts?.signal,
+  )
   return (data.collection ?? []).map((p) => ({ ...p, server: p.server ?? s }))
 }
 
 async function byDoi(s: Server, doi: string, opts?: SearchOptions | undefined): Promise<Paper[]> {
-  const data = await getJSON<Details>(`${BASE}/${s}/${doi}`, { signal: opts?.signal }).catch(() => ({}) as Details)
+  const data = await orFallback(
+    getJSON<Details>(`${BASE}/${s}/${doi}`, { signal: opts?.signal }),
+    {} as Details,
+    opts?.signal,
+  )
   return (data.collection ?? []).map((p) => ({ ...p, server: p.server ?? s }))
 }
 

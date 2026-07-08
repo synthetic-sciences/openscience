@@ -47,6 +47,10 @@ const [prefill, setPrefill] = createSignal<string | undefined>(undefined)
 // When true, the composer submits the prefilled text immediately instead of just
 // dropping it in the box (used by one-click actions like "initialize graph").
 const [prefillSend, setPrefillSend] = createSignal(false)
+// A command to open in a new terminal tab (e.g. `ollama serve`, `ollama pull …`).
+// A consumer inside the TerminalProvider (RightPane) runs it and clears this.
+export type TerminalCommand = { command: string; args?: string[]; title?: string }
+const [terminalCommand, setTerminalCommand] = createSignal<TerminalCommand | undefined>(undefined)
 
 function setAgent(name: string) {
   try {
@@ -94,4 +98,6 @@ export const uiStore = {
   setPrefill,
   prefillSend,
   setPrefillSend,
+  terminalCommand,
+  setTerminalCommand,
 }

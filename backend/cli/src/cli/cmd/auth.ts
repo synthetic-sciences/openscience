@@ -13,6 +13,7 @@ import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import { OpenScience } from "../../openscience"
 import { Log } from "../../util/log"
+import { runLocalModelSetup } from "./local"
 import type { Hooks } from "@synsci/plugin"
 
 const log = Log.create({ service: "cmd.logout" })
@@ -258,6 +259,23 @@ export const AuthListCommand = cmd({
   },
 })
 
+/**
+ * Classify the overloaded `keys add [url]` positional.
+ *  - a full http(s) URL → a custom endpoint (auth via /.well-known/openscience)
+ *  - a bare provider id (a-z, 0-9, hyphens; optional `@ai-sdk/` prefix stripped)
+ *    → preselect that provider, skipping the picker
+ *  - anything else (or absent) → neither; fall through to the interactive picker
+ *
+ * Keeps `keys add deepseek` from becoming `fetch("deepseek/.well-known/…")`,
+ * the "fetch() URL is invalid" crash in #142.
+ */
+export function classifyKeyTarget(arg?: string): { endpointUrl?: string; preselect?: string } {
+  if (!arg) return {}
+  if (/^https?:\/\//i.test(arg)) return { endpointUrl: arg }
+  const preselect = arg.replace(/^@ai-sdk\//, "").match(/^[0-9a-z-]+$/)?.[0]
+  return preselect ? { preselect } : {}
+}
+
 export const AuthLoginCommand = cmd({
   command: ["add [url]", "login [url]"],
   describe: "add a provider API key (BYOK)",
@@ -272,8 +290,20 @@ export const AuthLoginCommand = cmd({
       async fn() {
         UI.empty()
         prompts.intro("Add credential")
-        if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/openscience`).then((x) => x.json() as any)
+
+        // The positional is overloaded: a full http(s) URL means a custom
+        // endpoint that advertises its auth via /.well-known/openscience, while
+        // a bare token (e.g. `keys add deepseek`) is a provider id to preselect.
+        // Previously ANY positional went to the well-known fetch, so a provider
+        // name became `fetch("deepseek/.well-known/openscience")` → the
+        // "fetch() URL is invalid" crash from #142.
+        const { endpointUrl, preselect } = classifyKeyTarget(args.url)
+        if (args.url && !endpointUrl && !preselect) {
+          prompts.log.warn(`"${args.url}" is neither a URL nor a valid provider id — choose a provider below.`)
+        }
+
+        if (endpointUrl) {
+          const wellknown = await fetch(`${endpointUrl}/.well-known/openscience`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Bun.spawn({
             cmd: wellknown.auth.command,
@@ -286,12 +316,12 @@ export const AuthLoginCommand = cmd({
             return
           }
           const token = await new Response(proc.stdout).text()
-          await Auth.set(args.url, {
+          await Auth.set(endpointUrl, {
             type: "wellknown",
             key: wellknown.auth.env,
             token: token.trim(),
           })
-          prompts.log.success("Logged into " + args.url)
+          prompts.log.success("Logged into " + endpointUrl)
           prompts.outro("Done")
           return
         }
@@ -321,43 +351,102 @@ export const AuthLoginCommand = cmd({
           openrouter: 5,
           vercel: 6,
         }
-        let provider = await prompts.autocomplete({
-          message: "Select provider",
-          maxItems: 8,
-          options: [
-            // Codex is its own synthesized provider (openai-codex), so it isn't in
-            // the models.dev list — surface it explicitly at the top so signing in
-            // with a ChatGPT subscription is a first-class, discoverable choice.
-            {
-              value: "openai-codex",
-              label: "Sign in with ChatGPT (Codex)",
-              hint: "use your ChatGPT Plus/Pro/Business subscription — no API key",
-            },
-            ...pipe(
-              providers,
-              values(),
-              sortBy(
-                (x) => priority[x.id] ?? 99,
-                (x) => x.name ?? x.id,
+        // A preselected provider id (bare positional) skips the picker and goes
+        // straight to that provider's auth path, so `keys add deepseek` works.
+        const specialIds = new Set([
+          "openai-codex",
+          "local",
+          "other",
+          "amazon-bedrock",
+          "synsci",
+          "vercel",
+          "cloudflare",
+          "cloudflare-ai-gateway",
+        ])
+        let provider: string | symbol | undefined = preselect
+        if (preselect && !providers[preselect] && !specialIds.has(preselect)) {
+          prompts.log.warn(
+            `${preselect} isn't in the model catalog — the key will be stored, but you'll need to configure the provider in openscience.json. See the docs.`,
+          )
+        }
+        if (!provider) {
+          provider = await prompts.autocomplete({
+            message: "Select provider",
+            maxItems: 8,
+            options: [
+              // Codex is its own synthesized provider (openai-codex), so it isn't in
+              // the models.dev list — surface it explicitly at the top so signing in
+              // with a ChatGPT subscription is a first-class, discoverable choice.
+              {
+                value: "openai-codex",
+                label: "Sign in with ChatGPT (Codex)",
+                hint: "use your ChatGPT Plus/Pro/Business subscription — no API key",
+              },
+              // Local models aren't in the models.dev catalog — surface them at the
+              // top so pointing OpenScience at Ollama / LM Studio / any local
+              // OpenAI-compatible endpoint is a first-class, discoverable choice.
+              {
+                value: "local",
+                label: "Local model (Ollama / LM Studio / OpenAI-compatible)",
+                hint: "an endpoint on your machine — free, offline, no API key",
+              },
+              ...pipe(
+                providers,
+                values(),
+                sortBy(
+                  (x) => priority[x.id] ?? 99,
+                  (x) => x.name ?? x.id,
+                ),
+                map((x) => ({
+                  label: x.name,
+                  value: x.id,
+                  hint: {
+                    synsci: "Atlas — recommended",
+                    anthropic: "Claude Max or API key",
+                    openai: "API key (to sign in with Codex/ChatGPT, use the option above)",
+                  }[x.id],
+                })),
               ),
-              map((x) => ({
-                label: x.name,
-                value: x.id,
-                hint: {
-                  synsci: "Atlas — recommended",
-                  anthropic: "Claude Max or API key",
-                  openai: "API key (to sign in with Codex/ChatGPT, use the option above)",
-                }[x.id],
-              })),
-            ),
-            {
-              value: "other",
-              label: "Other",
-            },
-          ],
-        })
+              {
+                value: "other",
+                label: "Other",
+              },
+            ],
+          })
+        }
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
+
+        // Local endpoint (Ollama / LM Studio / OpenAI-compatible): runs the local
+        // setup wizard, which writes a provider config block (not an auth key).
+        if (provider === "local") {
+          await runLocalModelSetup({ intro: false })
+          return
+        }
+
+        // Selecting the OpenAI provider offers two distinct auth styles: a
+        // ChatGPT subscription (Codex OAuth, no API key) or an OpenAI Platform
+        // API key. Present the choice explicitly instead of only pinning Codex
+        // at the top of the list — users who look under "OpenAI" still find it.
+        if (provider === "openai") {
+          const style = await prompts.select({
+            message: "How do you want to authenticate OpenAI?",
+            options: [
+              {
+                value: "chatgpt",
+                label: "ChatGPT subscription (Codex)",
+                hint: "Plus/Pro/Business — sign in, no API key",
+              },
+              { value: "apikey", label: "OpenAI Platform API key", hint: "sk-… from platform.openai.com" },
+            ],
+          })
+          if (prompts.isCancel(style)) throw new UI.CancelledError()
+          if (style === "chatgpt") {
+            await runCodexAuthFlow()
+            return
+          }
+          // style === "apikey" → fall through to the API-key password prompt.
+        }
 
         const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
         if (plugin && plugin.auth) {
@@ -451,6 +540,21 @@ async function backendHasCodex(): Promise<boolean | null> {
   }
 }
 
+/** Run the Codex (ChatGPT subscription) OAuth flow. Shared by `keys signin` and
+ *  the ChatGPT branch of `keys add` so both reach the exact same flow. Returns
+ *  true when the flow ran, false when the codex auth plugin is unavailable. */
+async function runCodexAuthFlow(): Promise<boolean> {
+  const plugin = await Plugin.list().then((x) => x.find((p) => p.auth?.provider === "openai-codex"))
+  if (!plugin || !plugin.auth) {
+    prompts.log.error("Codex auth plugin not available")
+    return false
+  }
+  await handlePluginAuth({ auth: plugin.auth }, "openai-codex", {
+    filterMethods: (m) => m.type === "oauth",
+  })
+  return true
+}
+
 export const AuthCodexCommand = cmd({
   command: ["signin", "codex"],
   describe: "sign in with ChatGPT / Codex (Plus/Pro/Business subscription)",
@@ -490,15 +594,89 @@ export const AuthCodexCommand = cmd({
             }
           }
         }
-        const plugin = await Plugin.list().then((x) => x.find((p) => p.auth?.provider === "openai-codex"))
-        if (!plugin || !plugin.auth) {
-          prompts.log.error("Codex auth plugin not available")
+        const handled = await runCodexAuthFlow()
+        if (!handled) prompts.outro("Done")
+      },
+    })
+  },
+})
+
+/** Best-effort server-side disconnect of the Codex credential, mirroring
+ *  pushTokensToBackend's POST. Runs BEFORE the local removal so the thk_ key can
+ *  still authenticate the call. Never throws — the local Auth.remove is what
+ *  actually signs the CLI out. */
+async function disconnectCodexBackend(): Promise<void> {
+  const session = await OpenScience.getSession?.()
+  const thkToken = session?.api_key
+  if (!thkToken) return
+  try {
+    await fetch(`${managedApiBase()}/api/keys/openai-codex`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${thkToken}` },
+    })
+  } catch {
+    /* best-effort — local removal below is the source of truth */
+  }
+}
+
+/** `openscience connect [codex]` — sign in with a ChatGPT (Codex) subscription.
+ *  The connect/disconnect verb pair is Codex's; Atlas uses login/logout. */
+export const ConnectCommand = cmd({
+  command: "connect [service]",
+  describe: "connect a ChatGPT subscription (Codex) — sign in with ChatGPT",
+  builder: (yargs) =>
+    yargs.positional("service", {
+      type: "string",
+      choices: ["codex"] as const,
+      default: "codex",
+      describe: "service to connect (only `codex` today)",
+    }),
+  async handler() {
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("Connect ChatGPT (Codex)")
+        const handled = await runCodexAuthFlow()
+        if (!handled) prompts.outro("Done")
+      },
+    })
+  },
+})
+
+/** `openscience disconnect [codex]` — sign out of ChatGPT (Codex): clears the
+ *  local OAuth credential and best-effort revokes it server-side. */
+export const DisconnectCommand = cmd({
+  command: "disconnect [service]",
+  describe: "disconnect your ChatGPT subscription (Codex)",
+  builder: (yargs) =>
+    yargs.positional("service", {
+      type: "string",
+      choices: ["codex"] as const,
+      default: "codex",
+      describe: "service to disconnect (only `codex` today)",
+    }),
+  async handler() {
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("Disconnect ChatGPT (Codex)")
+
+        const existing = await Auth.get("openai-codex")
+        const backend = await backendHasCodex()
+        if (!existing && backend !== true) {
+          prompts.log.warn("ChatGPT (Codex) isn't connected.")
           prompts.outro("Done")
           return
         }
-        await handlePluginAuth({ auth: plugin.auth }, "openai-codex", {
-          filterMethods: (m) => m.type === "oauth",
-        })
+
+        // Revoke server-side while the thk_ key can still authenticate, then
+        // drop the local credential (the part that actually signs the CLI out).
+        await disconnectCodexBackend()
+        await Auth.remove("openai-codex")
+        prompts.log.success("Disconnected ChatGPT (Codex)")
+        prompts.outro("Done")
       },
     })
   },

@@ -8,17 +8,8 @@
   text-decoration: none;
   user-select: none;
   cursor: default;
+  outline: none;
   white-space: nowrap;
-  transition: scale var(--duration-fast) var(--ease-standard);
-
-  &:focus-visible {
-    outline: 2px solid var(--border-selected);
-    outline-offset: 2px;
-  }
-
-  &:active:not(:disabled) {
-    scale: 0.99;
-  }
 
   &[data-variant="primary"] {
     background-color: var(--button-primary-base);
@@ -40,7 +31,6 @@
     }
     &:disabled {
       background-color: var(--icon-strong-disabled);
-      cursor: not-allowed;
 
       [data-slot="icon-svg"] {
         color: var(--icon-invert-base);
@@ -103,11 +93,12 @@
     }
     &:active:not(:disabled) {
       background-color: var(--button-secondary-base);
+      scale: 0.99;
+      transition: all 150ms ease-out;
     }
     &:disabled {
       border-color: var(--border-disabled);
       background-color: var(--surface-disabled);
-      box-shadow: var(--shadow-xxs-border);
       color: var(--text-weak);
       cursor: not-allowed;
     }
@@ -120,10 +111,13 @@
   &[data-size="small"] {
     height: 22px;
     padding: 0 8px;
-    gap: 4px;
     &[data-icon] {
       padding: 0 12px 0 4px;
     }
+
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+    gap: 4px;
 
     /* text-12-medium */
     font-family: var(--font-family-sans);
@@ -137,11 +131,13 @@
   &[data-size="normal"] {
     height: 24px;
     line-height: 24px;
-    padding: 0 10px;
-    gap: 6px;
+    padding: 0 6px;
     &[data-icon] {
       padding: 0 12px 0 4px;
     }
+
+    font-size: var(--font-size-small);
+    gap: 6px;
 
     /* text-12-medium */
     font-family: var(--font-family-sans);
@@ -153,19 +149,24 @@
 
   &[data-size="large"] {
     height: 32px;
-    padding: 0 12px;
-    gap: 6px;
+    padding: 6px 12px;
 
     &[data-icon] {
       padding: 0 12px 0 8px;
     }
 
-    /* text-13-medium */
+    gap: 4px;
+
+    /* text-14-medium */
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-base);
+    font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: var(--line-height-large); /* 142.857% */
     letter-spacing: var(--letter-spacing-normal);
+  }
+
+  &:focus {
+    outline: none;
   }
 }

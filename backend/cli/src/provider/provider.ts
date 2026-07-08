@@ -93,10 +93,16 @@ export namespace Provider {
   // managed token and 401 the proxy ("thk_* token not found"). Returns {} unless
   // both managed spend is on AND the baseURL is the Atlas proxy — genuine BYOK
   // (no proxy URL) is untouched and hits the provider directly.
-  async function managedProxyKey(baseURL: unknown): Promise<{ apiKey?: string }> {
+  async function managedProxyKey(providerID: string, baseURL: unknown): Promise<{ apiKey?: string }> {
     const managed =
       isAtlasProxyBaseURL(baseURL) && (await Config.get().catch(() => undefined))?.billing?.llm === "managed"
     if (!managed) return {}
+    // Managed wallet routes through OpenRouter ONLY: never attach the wallet's
+    // thk_ token to a first-party proxy (anthropic / openai / google). Those
+    // providers are also dropped from availability (see isProviderAllowed), so
+    // this is belt-and-suspenders — a managed token can only ever reach the
+    // sanctioned OpenRouter (or hosted synsci) route.
+    if (!managedProviderAllowed(providerID)) return {}
     const session = await OpenScience.getSession().catch(() => null)
     return session?.api_key ? { apiKey: session.api_key } : {}
   }
@@ -114,7 +120,7 @@ export namespace Provider {
     if (isAtlasProxyBaseURL(options["baseURL"])) return
     throw new Error(
       `${provider.id} is using a managed Atlas key without an Atlas proxy URL. ` +
-        "Run `openscience connect sync` and try again.",
+        "Run `openscience sync` and try again.",
     )
   }
 
@@ -122,6 +128,40 @@ export namespace Provider {
    *  "public" sentinel used for the zero-cost openscience demo models. */
   function isByokKey(key: unknown): key is string {
     return typeof key === "string" && key.length > 0 && key !== "public" && !isAtlasApiKey(key)
+  }
+
+  /** Managed wallet ⇒ OpenRouter-only routing.
+   *
+   *  When the LLM spend toggle is explicitly "managed", every wallet inference
+   *  call flows through OpenRouter — the one gateway whose stream exposes a
+   *  single, unified reasoning format (`reasoning` / `reasoning_details`). The
+   *  first-party managed proxies (anthropic / openai / google), each with a
+   *  different reasoning shape, are taken out of the managed path entirely; the
+   *  hosted zero-cost `synsci` demo provider is kept. BYOK and the legacy
+   *  auto-detect path (`billing.llm` unset / null / "byok") are UNTOUCHED —
+   *  this only fires on an explicit managed-wallet opt-in. Pure + sync. */
+  export function managedRoutesOpenRouterOnly(config: Config.Info): boolean {
+    return config.billing?.llm === "managed"
+  }
+
+  /** Providers a managed (OpenRouter-only) wallet session may load: OpenRouter
+   *  for all real inference, plus the hosted `synsci` demo. Pure + sync. */
+  export function managedProviderAllowed(providerID: string): boolean {
+    return providerID === "openrouter" || providerID.startsWith("synsci")
+  }
+
+  /** True when a base URL points at the local machine (localhost / loopback).
+   *  A provider with a local baseURL runs on the user's own hardware, is free,
+   *  and is BYOK-class — so it's kept available even in managed-wallet mode
+   *  (where the wallet itself still routes only through OpenRouter). Pure. */
+  export function isLocalBaseURL(url: unknown): boolean {
+    if (typeof url !== "string" || !url) return false
+    try {
+      const host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "")
+      return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1"
+    } catch {
+      return false
+    }
   }
 
   /**
@@ -162,7 +202,7 @@ export namespace Provider {
       return {
         autoload: false,
         options: {
-          ...(baseURL ? { baseURL, ...(await managedProxyKey(baseURL)) } : {}),
+          ...(baseURL ? { baseURL, ...(await managedProxyKey("anthropic", baseURL)) } : {}),
           headers: {
             "anthropic-beta":
               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
@@ -170,13 +210,19 @@ export namespace Provider {
         },
       }
     },
-    async openscience(input) {
+    // Keyed on the catalog provider id `synsci` (the Atlas wire-contract id) — a
+    // stale `openscience` key here never matched database["openscience"], so the
+    // loop logged "Provider does not exist in model list openscience" and this
+    // loader never ran: the zero-cost demo's `apiKey: "public"` sentinel was
+    // never set (new keyless users couldn't use the demo at all) and the
+    // "drop paid models when no key" gating was skipped.
+    async synsci(input) {
       const hasKey = await (async () => {
         const env = Env.all()
         if (input.env.some((item) => env[item])) return true
         if (await Auth.get(input.id)) return true
         const config = await Config.get()
-        if (config.provider?.["synsci"]?.options?.apiKey) return true
+        if (config.provider?.[input.id]?.options?.apiKey) return true
         return false
       })()
 
@@ -199,7 +245,7 @@ export namespace Provider {
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
-        options: baseURL ? { baseURL, ...(await managedProxyKey(baseURL)) } : {},
+        options: baseURL ? { baseURL, ...(await managedProxyKey("openai", baseURL)) } : {},
       }
     },
     "github-copilot": async () => {
@@ -405,7 +451,7 @@ export namespace Provider {
       return {
         autoload: false,
         options: {
-          ...(baseURL ? { baseURL, ...(await managedProxyKey(baseURL)) } : {}),
+          ...(baseURL ? { baseURL, ...(await managedProxyKey("openrouter", baseURL)) } : {}),
           headers: {
             "HTTP-Referer": "https://syntheticsciences.ai/",
             "X-Title": "synsci",
@@ -598,7 +644,7 @@ export namespace Provider {
       const baseURL = Env.get("GOOGLE_GENERATIVE_AI_BASE_URL") ?? Env.get("GEMINI_BASE_URL")
       return {
         autoload: false,
-        options: baseURL ? { baseURL, ...(await managedProxyKey(baseURL)) } : {},
+        options: baseURL ? { baseURL, ...(await managedProxyKey("google", baseURL)) } : {},
       }
     },
   }
@@ -838,8 +884,27 @@ export namespace Provider {
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
+    // Managed wallet ⇒ OpenRouter-only. Drop every other provider (the
+    // first-party managed proxies included) from a managed session so wallet
+    // inference can only flow through OpenRouter's unified reasoning stream,
+    // plus the hosted zero-cost demo. Gated on the explicit toggle, so BYOK and
+    // legacy auto-detect sessions see every provider exactly as before. This is
+    // the single seam that makes defaultModel()/getSmallModel() managed-safe:
+    // both read the filtered state, so they can only resolve openrouter/synsci.
+    const managedOpenRouterOnly = managedRoutesOpenRouterOnly(config)
+    // Config-registered providers pointing at the local machine (Ollama, LM
+    // Studio, any OpenAI-compatible localhost endpoint). They're free and run on
+    // the user's own hardware, so they stay available even in managed-wallet
+    // mode — the wallet still only routes real inference through OpenRouter.
+    const localProviderIds = new Set(
+      Object.entries(config.provider ?? {})
+        .filter(([, p]) => isLocalBaseURL(p?.options?.baseURL ?? p?.api))
+        .map(([id]) => id),
+    )
 
     function isProviderAllowed(providerID: string): boolean {
+      if (managedOpenRouterOnly && !managedProviderAllowed(providerID) && !localProviderIds.has(providerID))
+        return false
       if (enabled && !enabled.has(providerID)) return false
       if (disabled.has(providerID)) return false
       return true
@@ -936,7 +1001,11 @@ export namespace Provider {
               video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
               pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
             },
-            interleaved: model.interleaved ?? false,
+            // Fall back to the catalog model's interleaved shape like every other
+            // capability above — otherwise overriding any single field (e.g. cost)
+            // on an interleaved-reasoning model dropped its {field} object, so
+            // normalizeMessages stopped relocating prior-turn reasoning.
+            interleaved: model.interleaved ?? existingModel?.capabilities.interleaved ?? false,
           },
           cost: {
             input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
@@ -1110,6 +1179,25 @@ export namespace Provider {
       if (!isProviderAllowed(providerID)) {
         delete providers[providerID]
         continue
+      }
+
+      // Under an EXPLICIT byok toggle, drop any provider whose effective
+      // credential is a managed Atlas (thk_) key. The managed sync writes
+      // OPENROUTER_BASE_URL + a thk_ OPENROUTER_API_KEY into the environment and
+      // those survive a managed→byok switch — so without this, byok silently
+      // keeps routing through the wallet proxy (and billing managed spend) on a
+      // credential the user never brought. BYOK must use the user's OWN keys
+      // only; auto-detect (billing unset) is left alone so a thk_ key can still
+      // resolve to managed there.
+      if (config.billing?.llm === "byok") {
+        const effective =
+          (typeof provider.options?.["apiKey"] === "string" ? (provider.options["apiKey"] as string) : undefined) ??
+          provider.key ??
+          provider.env.map((key) => Env.get(key)).find((value): value is string => !!value)
+        if (isAtlasApiKey(effective)) {
+          delete providers[providerID]
+          continue
+        }
       }
 
       const configProvider = config.provider?.[providerID]

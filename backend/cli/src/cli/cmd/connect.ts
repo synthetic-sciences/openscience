@@ -303,18 +303,8 @@ export const DevicesCommand = cmd({
   },
 })
 
-/** Back-compat umbrella: `openscience connect <login|logout|status|sync|devices>`
- *  still works and forwards to the promoted top-level commands. */
-export const ConnectCommand = cmd({
-  command: "connect",
-  describe: "Atlas account (alias for `login` / `logout` / `status` / `sync` / `devices`)",
-  builder: (yargs) =>
-    yargs
-      .command(LoginCommand)
-      .command(LogoutCommand)
-      .command(StatusCommand)
-      .command(SyncCommand)
-      .command(DevicesCommand)
-      .demandCommand(),
-  async handler() {},
-})
+// Atlas is `login` / `logout` (+ `status` / `sync` / `devices`), all top-level.
+// The `connect` / `disconnect` verbs now belong to Codex (see cli/cmd/auth.ts):
+// `connect` signs in with ChatGPT, `disconnect` signs out. Keeping the two
+// account types on distinct verb pairs removes the old ambiguity where
+// `connect login` and `login` both meant the Atlas account.

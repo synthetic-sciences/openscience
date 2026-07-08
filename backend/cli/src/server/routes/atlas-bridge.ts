@@ -234,16 +234,32 @@ function projectIdOf(p: any): string | null {
 // resolve. Read FIRST so a linked repo shows its graph instantly (and offline)
 // without re-hitting the API — closing the gap where the pin was written but
 // never honoured. Lives at the repo root next to .git.
-function readProjectPin(root: string): string | null {
+export interface ProjectPin {
+  project_id: string
+  /** The dedupe key this project was resolved for; absent in legacy pins. */
+  dedupe_key?: string
+}
+
+function readProjectPin(root: string): ProjectPin | null {
   // legacy `.synsci/` pins predate the OpenScience rename; still honored
   for (const dir of [".openscience", ".synsci"]) {
     try {
       const raw = readFileSync(join(root, dir, "project.json"), "utf8")
       const j = JSON.parse(raw)
-      if (typeof j?.project_id === "string" && j.project_id) return j.project_id
+      if (typeof j?.project_id === "string" && j.project_id)
+        return { project_id: j.project_id, dedupe_key: typeof j?.dedupe_key === "string" ? j.dedupe_key : undefined }
     } catch {}
   }
   return null
+}
+
+/** Trust a pin only when it carries no dedupe key (legacy/back-compat) or its
+ *  key matches the repo's freshly-computed key. A pin whose key differs belongs
+ *  to a DIFFERENT repo identity (e.g. the remote was re-pointed, or a stale
+ *  `.openscience/` was copied in) and must not shadow — or block find-or-create
+ *  of — the correct project. */
+export function pinMatchesKey(pin: ProjectPin, key: string): boolean {
+  return !pin.dedupe_key || pin.dedupe_key === key
 }
 
 function writeProjectPin(root: string, projectId: string, key: string): void {
@@ -268,10 +284,13 @@ async function resolveProjectId(directory: string): Promise<string | null> {
     // Root to the git repo top-level so a subfolder / a clone at a different
     // path resolves to the SAME project + graph as the repo itself.
     const root = await repoRoot(directory)
-    const pinned = readProjectPin(root)
-    if (pinned) return pinned
     const ctx = await repoContext(root)
     const key = computeDedupeKey(root, ctx.repo_url)
+    // Honour the local pin first (instant + offline) — but ONLY when it was
+    // resolved for THIS repo identity, so a stale pin can't shadow the right
+    // project (or block find-or-create from ever creating it).
+    const pin = readProjectPin(root)
+    if (pin && pinMatchesKey(pin, key)) return pin.project_id
     const res = await atlas("GET", `/api/agent/projects?dedupe_key=${encodeURIComponent(key)}`)
     if (!res.ok) return null
     const data = await res.json()
@@ -387,7 +406,7 @@ export async function initProjectDetailed(directory: string): Promise<InitProjec
   if (!directory)
     return { projectId: null, failure: { kind: "backend", message: "no directory provided", host: API_BASE } }
   // Fail fast offline: no managed session means no request can succeed —
-  // don't turn a missing `openscience connect login` into a network error.
+  // don't turn a missing `openscience login` into a network error.
   if (!(await token())) return { projectId: null, failure: { kind: "unauthenticated", host: API_BASE } }
   const existing = await resolveProjectId(directory)
   if (existing) return { projectId: existing }

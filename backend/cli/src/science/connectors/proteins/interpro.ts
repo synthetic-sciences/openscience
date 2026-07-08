@@ -10,7 +10,7 @@
  * in single-entry responses, so it is resolved defensively.
  */
 import type { Connector, ConnectorHit, FetchOptions, SearchOptions } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 import { asArray, clampLimit, firstString, toRaw } from "./util"
 
 interface GoTerm {
@@ -65,7 +65,11 @@ function makeConnector(db: Db, meta: Omit<Connector, "search" | "fetch">): Conne
     async search(query, opts?: SearchOptions): Promise<ConnectorHit[]> {
       const size = clampLimit(opts?.limit, 10, 25)
       const url = `${API}/${db}/?search=${encodeURIComponent(query)}&page_size=${size}`
-      const data = await getJSON<ListResponse>(url, { signal: opts?.signal }).catch(() => ({}) as ListResponse)
+      const data = await orFallback(
+        getJSON<ListResponse>(url, { signal: opts?.signal }),
+        {} as ListResponse,
+        opts?.signal,
+      )
       const hits: ConnectorHit[] = []
       for (const r of asArray<ListResult>(data.results)) {
         const m = r.metadata

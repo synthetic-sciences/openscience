@@ -1,0 +1,91 @@
+---
+title: "Execution sandbox"
+description: "Confine the agent's shell commands to the workspace with a real OS sandbox — macOS Seatbelt, Linux bubblewrap. Opt-in, off by default."
+icon: "lock"
+---
+
+The permission system decides **whether** the agent runs a command; it does not decide **what that command can reach** once it runs. An approved (or auto-approved) command executes with your full user authority — it can touch `~/.ssh`, rewrite `~/.bashrc`, or delete another project. The permission prompt keeps you *aware*; it is not an isolation boundary.
+
+The execution sandbox adds the missing boundary. When enabled, everything the agent executes — shell commands via the `bash` tool, and code run by the Python and R notebook kernels — is wrapped in a real OS sandbox that **confines writes to the workspace** and can optionally **deny network egress**. It is **off by default** — turn it on when you want the agent's blast radius contained.
+
+## Quick start
+
+```bash
+openscience sandbox enable          # turn it on (global)
+openscience sandbox test            # prove it actually confines writes + network
+openscience sandbox                 # show status: backend + current policy
+```
+
+`sandbox test` runs real sandboxed commands — it writes inside a scratch workspace (must succeed), writes outside it (must be blocked), and checks that network-deny mode blocks egress — then prints a pass/fail for each. If it doesn't say **Containment verified**, don't rely on the sandbox.
+
+## What it does
+
+- **Writes** are denied everywhere except the workspace (your working directory and its worktree), the system temp dirs, and any extra paths you allow. Everything else on disk is read-only to the agent.
+- **Reads** stay open. The threat model is *tampering and exfiltration*, not hiding your files from a tool that needs to read them.
+- **Network** is allowed by default; set it to deny to stop sandboxed commands from reaching the network at all.
+
+## Backends
+
+| Platform | Backend | Requirement |
+| --- | --- | --- |
+| macOS | Seatbelt (`sandbox-exec`) | Built in. |
+| Linux | bubblewrap (`bwrap`) | Install `bubblewrap`; unprivileged user namespaces must be enabled. |
+| Windows | — | No backend; commands run per `onUnavailable` (see below). |
+
+Check what's available on your machine with `openscience sandbox` or `openscience doctor`.
+
+## The `sandbox` command
+
+```bash
+openscience sandbox                 # status (backend + config)
+openscience sandbox enable          # turn on
+openscience sandbox enable --network deny          # also block network egress
+openscience sandbox enable --allow /data/shared    # extra writable path (repeatable)
+openscience sandbox enable --on-unavailable error  # refuse to run where no backend exists
+openscience sandbox disable         # turn off
+openscience sandbox test            # empirical containment self-test
+```
+
+The sandbox is a machine-wide safety setting, so it is always written to your **global** config.
+
+| Flag | Meaning |
+| --- | --- |
+| `--network` | `allow` (default) or `deny` network egress from sandboxed commands. |
+| `--allow` | An absolute path, beyond the workspace and temp dirs, the sandbox may write to. Repeatable. |
+| `--on-unavailable` | Behaviour where no backend exists: `warn` (default, runs unsandboxed with a notice), `error` (refuses to run), `allow` (runs unsandboxed silently). |
+
+## From the workspace GUI
+
+Open **Settings → Sandbox**. The panel shows whether a backend is available on this machine, an on/off toggle, the network and fallback policies, an editor for extra writable paths, and a **run self-test** button that shows the same containment checks the CLI does.
+
+## By hand (config)
+
+The sandbox is a `sandbox` block in your **global** `openscience.json` (or an enterprise **managed** config). `openscience sandbox enable` writes it for you. The policy is read **only** from global and managed config — never from a project's `openscience.json` — so opening an untrusted repo cannot weaken or disable your sandbox:
+
+```jsonc
+{
+  "sandbox": {
+    "enabled": true,
+    "network": "deny",
+    "allowWrite": ["/data/shared"],
+    "onUnavailable": "error"
+  }
+}
+```
+
+- `enabled` — master switch. Off by default.
+- `network` — `allow` (default) or `deny`.
+- `allowWrite` — extra absolute paths the sandbox may write to.
+- `onUnavailable` — `warn` (default) · `error` · `allow`, for machines with no backend.
+
+## Limitations
+
+This is deliberately a **write-containment** sandbox, not a deny-by-default syscall jail. Research workflows run arbitrary compilers, package managers, and interpreters, and a strict jail would break far more than it protects. Concretely:
+
+- **Reads are not restricted.** A sandboxed command can still read files it has permission to read.
+- **Local IPC is not blocked.** Network-deny stops IP egress, but a command can still reach host UNIX-domain sockets (e.g. a Docker daemon socket). Treat access to such a socket as equivalent to the privileges it exposes.
+- **It is not a security boundary against a determined local attacker** the way a container or VM is. For hostile code, run OpenScience inside a container or VM as well.
+- **Linux needs bubblewrap** and unprivileged user namespaces; where they're unavailable the sandbox can't engage (`onUnavailable` decides what happens).
+- **Windows has no backend** yet.
+
+What it *does* reliably stop: an agent command writing outside your workspace, and — in deny mode — a command phoning home. Verify it on your machine with `openscience sandbox test`.

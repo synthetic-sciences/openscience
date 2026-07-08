@@ -61,7 +61,12 @@ export namespace Installation {
     if (process.execPath.includes(path.join(".openscience", "bin"))) return "curl"
     // legacy pre-rename curl installs lived under ~/.synsc/bin
     if (process.execPath.includes(path.join(".synsc", "bin"))) return "curl"
-    if (process.execPath.includes(path.join(".local", "bin"))) return "curl"
+    // ~/.local/bin is ALSO npm's target with `--prefix ~/.local`, pipx, and many
+    // package managers — so it's ambiguous. Defer it: let the package-manager
+    // probes below claim the install first, and only fall back to "curl" for
+    // .local/bin when none of them do (see after the loop). Otherwise a
+    // `npm i -g` into ~/.local was upgraded with the curl script.
+    const inLocalBin = process.execPath.includes(path.join(".local", "bin"))
     const exec = process.execPath.toLowerCase()
 
     const checks = [
@@ -113,6 +118,10 @@ export namespace Installation {
         return check.name
       }
     }
+
+    // No package manager claimed it — now honor the ambiguous ~/.local/bin as a
+    // curl install (the curl installer's default target).
+    if (inLocalBin) return "curl"
 
     return "unknown"
   }
@@ -190,6 +199,17 @@ export namespace Installation {
   export const CHANNEL = typeof OPENSCIENCE_CHANNEL === "string" ? OPENSCIENCE_CHANNEL : "local"
   export const USER_AGENT = `openscience/${CHANNEL}/${VERSION}/${Flag.OPENSCIENCE_CLIENT}`
 
+  /** OData query for the latest published version of a Chocolatey package.
+   *  The id must match what the CLI actually publishes to Chocolatey
+   *  (`openscience`) — everywhere else in this file already uses it (`choco
+   *  list --limit-output openscience`, `choco upgrade openscience`). A leftover
+   *  pre-rename `synsc` id here queried a non-existent package, so choco users
+   *  could never resolve an upgrade target (`data.d.results[0]` was undefined). */
+  export function chocoLatestVersionUrl(pkg: string = "openscience"): string {
+    const filter = encodeURIComponent(`Id eq '${pkg}' and IsLatestVersion`)
+    return `https://community.chocolatey.org/api/v2/Packages?$filter=${filter}&$select=Version`
+  }
+
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
 
@@ -227,10 +247,7 @@ export namespace Installation {
     }
 
     if (detectedMethod === "choco") {
-      return fetch(
-        "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27synsc%27%20and%20IsLatestVersion&$select=Version",
-        { headers: { Accept: "application/json;odata=verbose" } },
-      )
+      return fetch(chocoLatestVersionUrl(), { headers: { Accept: "application/json;odata=verbose" } })
         .then((res) => {
           if (!res.ok) throw new Error(res.statusText)
           return res.json()

@@ -47,7 +47,7 @@
         letter-spacing: var(--letter-spacing-normal);
 
         &:hover {
-          background-color: var(--surface-inset-base-hover);
+          background-color: var(--surface-base);
         }
         &:focus-visible {
           outline: none;

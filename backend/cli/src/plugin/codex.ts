@@ -27,6 +27,10 @@ export async function pushTokensToBackend(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
+      // Bound the push: the browser OAuth has already succeeded and the login
+      // callback awaits this, so a hung thesis backend would otherwise leave
+      // `keys signin` spinning on "Waiting for authorization…" indefinitely.
+      signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
     })
     if (!res.ok) {
       log.warn("codex backend push failed", { status: res.status })
@@ -55,6 +59,44 @@ const OAUTH_HTTP_TIMEOUT_MS = 20_000
  *  transient 5xx/network failure, which we retry and never surface as "expired". */
 export class CodexRefreshInvalidError extends Error {}
 
+/**
+ * How the device-code poll loop should treat a non-OK poll response:
+ *   - "pending"   : the user hasn't approved yet (403/404) — keep polling.
+ *   - "transient" : a rate-limit (429) or upstream blip (5xx) — keep polling
+ *                   (the caller backs off on 429).
+ *   - "fail"      : a genuine terminal failure (denied, expired, bad request)
+ *                   — stop polling and surface a clean failure.
+ * Previously the loop failed on ANY status other than 403/404, so a single
+ * transient 429/5xx aborted the whole sign-in.
+ */
+export function classifyDevicePollStatus(status: number): "pending" | "transient" | "fail" {
+  if (status === 403 || status === 404) return "pending"
+  if (status === 429 || status >= 500) return "transient"
+  return "fail"
+}
+
+/**
+ * Send a Codex request and, on a 401, refresh the access token once and retry
+ * once. The loader's proactive refresh only catches token EXPIRY; a token
+ * revoked/invalidated server-side before its local `expires` (password change,
+ * admin revoke, clock skew) surfaces as a 401 that was otherwise returned
+ * verbatim — the request just failed. `refresh` returns the new access token,
+ * `undefined` to give up (the original 401 is returned unchanged), or throws to
+ * surface a fatal error (e.g. the refresh token itself is dead). Retries at most
+ * once, so it can never loop.
+ */
+export async function sendWithCodex401Retry(
+  send: (accessToken: string) => Promise<Response>,
+  accessToken: string,
+  refresh: () => Promise<string | undefined>,
+): Promise<Response> {
+  const response = await send(accessToken)
+  if (response.status !== 401) return response
+  const refreshed = await refresh()
+  if (!refreshed) return response
+  return send(refreshed)
+}
+
 interface PkceCodes {
   verifier: string
   challenge: string
@@ -71,10 +113,18 @@ async function generatePKCE(): Promise<PkceCodes> {
 
 function generateRandomString(length: number): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-  const bytes = crypto.getRandomValues(new Uint8Array(length))
-  return Array.from(bytes)
-    .map((b) => chars[b % chars.length])
-    .join("")
+  // Rejection sampling for a uniform distribution. `b % 66` over bytes 0-255
+  // biased toward the first 58 characters (256 mod 66 = 58); drop bytes in the
+  // non-uniform tail so every character is equally likely. (All chars are
+  // unreserved per RFC 3986, so the verifier stays URL-safe.)
+  const max = 256 - (256 % chars.length)
+  const out: string[] = []
+  while (out.length < length) {
+    for (const b of crypto.getRandomValues(new Uint8Array(length - out.length))) {
+      if (b < max) out.push(chars[b % chars.length])
+    }
+  }
+  return out.join("")
 }
 
 function base64UrlEncode(buffer: ArrayBuffer): string {
@@ -192,9 +242,13 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
       continue
     }
     if (response.ok) return response.json()
-    // 4xx = the refresh token is bad (revoked/rotated) — retrying won't help and
-    // the user must reconnect. 5xx = transient — retry with backoff.
-    if (response.status >= 400 && response.status < 500) {
+    // A genuine 4xx means the refresh token is bad (revoked/rotated) — retrying
+    // won't help and the user must reconnect. EXCEPT 429/408, which are
+    // rate-limit / timeout, i.e. transient: during a retry storm against an
+    // exhausted usage limit, auth.openai.com rate-limits the token endpoint, and
+    // treating that as "sign-in expired" forced a needless full re-auth. 5xx is
+    // transient too — retry all of these with backoff.
+    if (response.status >= 400 && response.status < 500 && response.status !== 429 && response.status !== 408) {
       throw new CodexRefreshInvalidError(`Token refresh rejected (HTTP ${response.status})`)
     }
     lastError = new Error(`Token refresh failed: HTTP ${response.status}`)
@@ -525,10 +579,9 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               }
             }
 
-            // Set authorization header with access token
-            headers.set("authorization", `Bearer ${currentAuth.access}`)
-
-            // Set ChatGPT-Account-Id header for organization subscriptions
+            // Set ChatGPT-Account-Id header for organization subscriptions.
+            // (The authorization header is set per-attempt inside `send` below,
+            // so the 401-retry path can swap in a freshly-refreshed token.)
             if (authWithAccount.accountId) {
               headers.set("ChatGPT-Account-Id", authWithAccount.accountId)
             }
@@ -572,37 +625,65 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               }
             }
 
-            const response = await fetch(url, {
-              ...init,
-              headers,
-              body: bodyForRequest,
-            })
+            // Send with the current bearer; re-called by the 401-retry path with
+            // a refreshed token. Each attempt re-sets the authorization header.
+            const send = (accessToken: string) => {
+              headers.set("authorization", `Bearer ${accessToken}`)
+              return fetch(url, { ...init, headers, body: bodyForRequest })
+            }
 
-            // Fallback to shared key if OAuth quota exceeded
-            if (response.status === 429 || response.status === 403) {
-              const body = await response
-                .clone()
-                .text()
-                .catch(() => "")
-              const isQuotaExceeded =
-                body.includes("quota") ||
-                body.includes("rate_limit") ||
-                body.includes("usage_limit") ||
-                body.includes("capacity")
-              if (isQuotaExceeded) {
-                const sharedKey = process.env.OPENAI_API_KEY
-                if (sharedKey && sharedKey !== OAUTH_DUMMY_KEY && !sharedKey.startsWith("thk_")) {
-                  log.warn("codex oauth quota exceeded, falling back to shared key")
-                  headers.set("authorization", `Bearer ${sharedKey}`)
-                  headers.delete("ChatGPT-Account-Id")
-                  // Route to standard OpenAI API instead of Codex endpoint
-                  const fallbackUrl = new URL("https://api.openai.com/v1/responses")
-                  return fetch(fallbackUrl, { ...init, headers })
+            // Reactive (on-401) refresh: the token was rejected even though it
+            // isn't locally expired. Re-read the latest persisted auth first (a
+            // sibling process may have already rotated the pair) and adopt a
+            // newer token if one exists; otherwise spend the refresh token and
+            // persist the rotated pair. Returns the fresh access token, undefined
+            // to keep the original 401 (transient failure), or throws when the
+            // refresh token itself is dead.
+            const forceRefreshOn401 = async (): Promise<string | undefined> => {
+              try {
+                const latest = (await getAuth()) as typeof currentAuth & { accountId?: string }
+                if (latest.type !== "oauth") return undefined
+                if (latest.access && latest.access !== currentAuth.access && latest.expires > Date.now()) {
+                  currentAuth.access = latest.access
+                  authWithAccount.accountId = latest.accountId ?? authWithAccount.accountId
+                  return latest.access
                 }
+                const tokens = await refreshAccessTokenSingleFlight(latest.refresh)
+                const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
+                await input.client.auth.set({
+                  path: { id: "openai-codex" },
+                  body: {
+                    type: "oauth",
+                    refresh: tokens.refresh_token,
+                    access: tokens.access_token,
+                    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                    ...(newAccountId && { accountId: newAccountId }),
+                  },
+                })
+                currentAuth.access = tokens.access_token
+                authWithAccount.accountId = newAccountId
+                return tokens.access_token
+              } catch (e) {
+                if (e instanceof CodexRefreshInvalidError)
+                  throw new Error("Codex sign-in expired. Reconnect it with `openscience keys signin`.")
+                log.warn("codex 401-triggered refresh failed", { error: String(e) })
+                return undefined
               }
             }
 
-            return response
+            // On quota exhaustion, return the 429/403 to the caller as-is. The
+            // previous "fall back to OPENAI_API_KEY against api.openai.com" path
+            // was removed: it forwarded the ChatGPT-internal Codex model id +
+            // Codex-shaped body to the standard OpenAI Responses API (which
+            // doesn't know those models, so it just 400s), and the substring
+            // quota-match ("quota"/"rate_limit"/"capacity") could misfire on
+            // unrelated 403s — silently charging the user's personal OpenAI key.
+            // A clean 429/403 is the correct signal that the subscription is
+            // rate-limited; the user's own `openai` provider (BYOK) is the
+            // supported way to run on an API key.
+            return isCodexRoute
+              ? await sendWithCodex401Retry(send, currentAuth.access, forceRefreshOn401)
+              : await send(currentAuth.access)
           },
         }
       },
@@ -637,38 +718,45 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               instructions: "Complete authorization in your browser. This window will close automatically.",
               method: "auto" as const,
               callback: async () => {
-                const tokens = await callbackPromise
-                stopOAuthServer()
-                const accountId = extractAccountId(tokens)
+                // Stop the loopback listener on EVERY terminal outcome (success,
+                // CSRF/denied, or timeout), not just success — otherwise a failed
+                // attempt leaks port 1455 for the life of the process and the next
+                // browser sign-in can't bind it.
+                try {
+                  const tokens = await callbackPromise
+                  const accountId = extractAccountId(tokens)
 
-                // Fire-and-forget: push tokens to thesis backend so the
-                // dashboard + managed-mode proxy can use them. Local login
-                // succeeds regardless of whether this call succeeds.
-                const thesisBase = managedApiBase()
-                if (thkToken) {
-                  await pushTokensToBackend(thesisBase, thkToken, {
-                    access_token: tokens.access_token,
-                    refresh_token: tokens.refresh_token,
-                    expires_in: tokens.expires_in ?? 3600,
-                    account_id: accountId,
-                    id_token_claims: tokens.id_token
-                      ? (parseJwtClaims(tokens.id_token) as Record<string, unknown> | undefined)
-                      : undefined,
-                  })
-                  // Re-sync after backend now knows about the new codex
-                  // credential, so `openai-codex` shows up in the local
-                  // provider list without a separate `openscience connect sync`.
-                  await OpenScience.syncServices?.().catch((e: unknown) => {
-                    log.warn("post-codex-login sync failed", { error: String(e) })
-                  })
-                }
+                  // Fire-and-forget: push tokens to thesis backend so the
+                  // dashboard + managed-mode proxy can use them. Local login
+                  // succeeds regardless of whether this call succeeds.
+                  const thesisBase = managedApiBase()
+                  if (thkToken) {
+                    await pushTokensToBackend(thesisBase, thkToken, {
+                      access_token: tokens.access_token,
+                      refresh_token: tokens.refresh_token,
+                      expires_in: tokens.expires_in ?? 3600,
+                      account_id: accountId,
+                      id_token_claims: tokens.id_token
+                        ? (parseJwtClaims(tokens.id_token) as Record<string, unknown> | undefined)
+                        : undefined,
+                    })
+                    // Re-sync after backend now knows about the new codex
+                    // credential, so `openai-codex` shows up in the local
+                    // provider list without a separate `openscience sync`.
+                    await OpenScience.syncServices?.().catch((e: unknown) => {
+                      log.warn("post-codex-login sync failed", { error: String(e) })
+                    })
+                  }
 
-                return {
-                  type: "success" as const,
-                  refresh: tokens.refresh_token,
-                  access: tokens.access_token,
-                  expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                  accountId,
+                  return {
+                    type: "success" as const,
+                    refresh: tokens.refresh_token,
+                    access: tokens.access_token,
+                    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                    accountId,
+                  }
+                } finally {
+                  stopOAuthServer()
                 }
               },
             }
@@ -685,6 +773,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                 "User-Agent": `openscience/${Installation.VERSION}`,
               },
               body: JSON.stringify({ client_id: CLIENT_ID }),
+              signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
             })
 
             if (!deviceResponse.ok) throw new Error("Failed to initiate device authorization")
@@ -707,18 +796,30 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               method: "auto" as const,
               async callback() {
                 const deadline = Date.now() + DEVICE_TIMEOUT_MS
+                // Mutable so a rate-limit (429) can back the poll cadence off.
+                let pollInterval = interval
                 while (Date.now() < deadline) {
-                  const response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      "User-Agent": `openscience/${Installation.VERSION}`,
-                    },
-                    body: JSON.stringify({
-                      device_auth_id: deviceData.device_auth_id,
-                      user_code: deviceData.user_code,
-                    }),
-                  })
+                  let response: Response
+                  try {
+                    response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "User-Agent": `openscience/${Installation.VERSION}`,
+                      },
+                      body: JSON.stringify({
+                        device_auth_id: deviceData.device_auth_id,
+                        user_code: deviceData.user_code,
+                      }),
+                      signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
+                    })
+                  } catch {
+                    // A network blip or a single hung poll timing out is transient —
+                    // keep polling until the overall DEVICE_TIMEOUT_MS deadline
+                    // instead of aborting the whole login on one bad socket.
+                    await Bun.sleep(pollInterval + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                    continue
+                  }
 
                   if (response.ok) {
                     const data = (await response.json()) as {
@@ -736,6 +837,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                         client_id: CLIENT_ID,
                         code_verifier: data.code_verifier,
                       }).toString(),
+                      signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
                     })
 
                     if (!tokenResponse.ok) {
@@ -771,11 +873,17 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                     }
                   }
 
-                  if (response.status !== 403 && response.status !== 404) {
+                  // Keep polling while the authorization is pending or a
+                  // transient rate-limit/upstream blip is in flight; only a
+                  // genuine terminal status ends the login.
+                  if (classifyDevicePollStatus(response.status) === "fail") {
                     return { type: "failed" as const }
                   }
+                  if (response.status === 429) {
+                    pollInterval = Math.min(pollInterval * 2, 30_000)
+                  }
 
-                  await Bun.sleep(interval + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                  await Bun.sleep(pollInterval + OAUTH_POLLING_SAFETY_MARGIN_MS)
                 }
                 // Deadline hit without approval — surface a clean failure rather
                 // than polling forever.

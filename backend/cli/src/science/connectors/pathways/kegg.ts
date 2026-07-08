@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getText } from "../http"
+import { getText, orFallback } from "../http"
 import { asText, clampLimit } from "./util"
 
 const REST = "https://rest.kegg.jp"
@@ -22,7 +22,7 @@ export const kegg: Connector = {
     const limit = clampLimit(opts?.limit, 10, 50)
     const database = asText(opts?.params?.["database"]) ?? "pathway"
     const url = `${REST}/find/${encodeURIComponent(database)}/${encodeURIComponent(query)}`
-    const text = await getText(url, { signal: opts?.signal }).catch(() => "")
+    const text = await orFallback(getText(url, { signal: opts?.signal }), "", opts?.signal)
 
     const hits: ConnectorHit[] = []
     for (const line of text.split("\n")) {
@@ -48,7 +48,7 @@ export const kegg: Connector = {
 
   async fetch(id, opts) {
     const url = `${REST}/get/${encodeURIComponent(id)}`
-    const text = await getText(url, { signal: opts?.signal }).catch(() => "")
+    const text = await orFallback(getText(url, { signal: opts?.signal }), "", opts?.signal)
     return { id, format: "kegg-flat", text }
   },
 }

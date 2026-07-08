@@ -420,14 +420,20 @@ export namespace ProviderTransform {
     if (!model.capabilities.reasoning) return {}
 
     const id = model.id.toLowerCase()
-    if (
-      id.includes("deepseek") ||
-      id.includes("minimax") ||
-      id.includes("glm") ||
-      id.includes("mistral") ||
-      id.includes("kimi")
-    )
-      return {}
+
+    // Reasoning-effort coverage for families that previously had none. On
+    // OpenRouter the unified `reasoning.effort` works for ANY reasoning model (it
+    // normalizes effort to a token budget where the native API is on/off only), so
+    // these fall through to the OpenRouter case below. Natively: DeepSeek (v4) and
+    // GLM-5.2+ expose `reasoning_effort` through their OpenAI-compatible API
+    // (handled in the openai-compatible case); Kimi rejects `reasoning_effort`
+    // alongside its `thinking` param, and MiniMax/Mistral have no effort dial — so
+    // those get no *native* effort variants (they still get them on OpenRouter).
+    if (model.api.npm !== "@openrouter/ai-sdk-provider") {
+      if (id.includes("minimax") || id.includes("mistral") || id.includes("kimi")) return {}
+      if (id.includes("glm") && !/glm-[5-9]/.test(id)) return {}
+      if (id.includes("deepseek") && !/deepseek-v[4-9]/.test(id)) return {}
+    }
 
     // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
     if (id.includes("grok") && id.includes("grok-3-mini")) {
@@ -446,16 +452,20 @@ export namespace ProviderTransform {
 
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
-        if (model.id.includes("gemini-3")) {
-          return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
+        // OpenRouter accepts a unified `reasoning.effort` for ANY reasoning-capable
+        // model (Claude, DeepSeek, GLM, Kimi, Gemini, OpenAI), normalizing effort
+        // to a token budget where the native API is on/off only. gpt keeps its
+        // wider ladder (none/minimal/xhigh); everything else uses the universal
+        // low/medium/high floor.
+        if (model.id.includes("gpt")) {
+          return Object.fromEntries(
+            (id.includes("gpt-5.5") ? OPENAI_GPT55_EFFORTS : OPENAI_EFFORTS).map((effort) => [
+              effort,
+              { reasoning: { effort } },
+            ]),
+          )
         }
-        if (!model.id.includes("gpt")) return {}
-        return Object.fromEntries(
-          (id.includes("gpt-5.5") ? OPENAI_GPT55_EFFORTS : OPENAI_EFFORTS).map((effort) => [
-            effort,
-            { reasoning: { effort } },
-          ]),
-        )
+        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
 
       // NOTE: the gateway rejects max_tokens when reasoningEffort is set — the
       // conflict is resolved in maxOutputTokens() (drops the cap for gateway
@@ -488,6 +498,14 @@ export namespace ProviderTransform {
       case "@ai-sdk/deepinfra":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
       case "@ai-sdk/openai-compatible":
+        // DeepSeek-v4 and GLM-5.2+ accept a `max` tier above high; their OpenAI-
+        // compatible provider maps `reasoningEffort` -> body `reasoning_effort`.
+        // Other openai-compatible providers use the widely-supported floor.
+        if (/deepseek-v[4-9]/.test(id) || /glm-[5-9]/.test(id)) {
+          return Object.fromEntries(
+            [...WIDELY_SUPPORTED_EFFORTS, "max"].map((effort) => [effort, { reasoningEffort: effort }]),
+          )
+        }
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/azure":
@@ -600,8 +618,13 @@ export namespace ProviderTransform {
           },
           max: {
             thinking: {
+              // Keep the thinking budget proportional (~3/4 of the output cap)
+              // instead of `cap - 1`: on a 32k-output model, a 31,999-token
+              // budget made maxOutputTokens() return just 1 text token, so the
+              // visible answer was truncated to a single token. Large-cap models
+              // are unaffected (still clamp at 31,999).
               type: "enabled",
-              budgetTokens: Math.min(31_999, cap - 1),
+              budgetTokens: Math.min(31_999, Math.floor((cap * 3) / 4)),
             },
           },
         }
@@ -672,13 +695,19 @@ export namespace ProviderTransform {
             },
           }
         }
-        // Gemini 3+ uses thinkingLevel
+        // Gemini 3+ uses thinkingLevel. Nest under `thinkingConfig` — the
+        // @ai-sdk/google provider only reads providerOptions.google.thinkingConfig.*,
+        // so the previous top-level keys were dropped and the selected effort was
+        // silently ignored (every call defaulted to the high thinkingLevel from
+        // options()). options()/smallOptions() already nest correctly.
         return Object.fromEntries(
           WIDELY_SUPPORTED_EFFORTS.map((effort) => [
             effort,
             {
-              includeThoughts: true,
-              thinkingLevel: effort,
+              thinkingConfig: {
+                includeThoughts: true,
+                thinkingLevel: effort,
+              },
             },
           ]),
         )
@@ -733,8 +762,15 @@ export namespace ProviderTransform {
       result["usage"] = {
         include: true,
       }
-      if (input.model.api.id.includes("gemini-3")) {
-        result["reasoning"] = { effort: "high" }
+      // OpenRouter streams reasoning through its unified `reasoning` /
+      // `reasoning_details` fields, but ONLY when reasoning is explicitly
+      // requested — without a `reasoning` object the upstream reasons silently
+      // and OR drops the trace, so every reasoning part lands empty. Request it
+      // by default for every reasoning-capable model (a selected effort variant
+      // overrides this via mergeDeep in llm.ts). This is the single normalized
+      // reasoning path that all managed wallet inference now flows through.
+      if (input.model.capabilities.reasoning) {
+        result["reasoning"] = { effort: input.model.api.id.includes("gemini-3") ? "high" : "medium" }
       }
     }
 
@@ -765,7 +801,16 @@ export namespace ProviderTransform {
       }
     }
 
-    if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
+    // OpenRouter-routed gpt-5 (e.g. "openai/gpt-5") is handled by the unified
+    // OpenRouter reasoning branch above. The OpenAI-Responses-only keys below
+    // (reasoningEffort / reasoningSummary / include: reasoning.encrypted_content)
+    // are meaningless to OR's /chat/completions and were silently making managed
+    // gpt-5 reasoning stream blank — exclude the OR npm here.
+    if (
+      input.model.api.id.includes("gpt-5") &&
+      !input.model.api.id.includes("gpt-5-chat") &&
+      input.model.api.npm !== "@openrouter/ai-sdk-provider"
+    ) {
       if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
       }
@@ -778,7 +823,25 @@ export namespace ProviderTransform {
         result["textVerbosity"] = "low"
       }
 
-      if (input.model.providerID.startsWith("synsci")) {
+      // Managed OpenAI models carry providerID "openai" (post-rebrand), not
+      // "synsci" — but they route through the Atlas proxy baseURL. Reasoning
+      // summaries + encrypted content have to be requested on that path too,
+      // otherwise gpt-5.x streams reasoning *items* (start/end fire) with zero
+      // summary deltas, so every reasoning part lands empty and the UI shows a
+      // blank "thinking" block.
+      const managedBaseURL = input.providerOptions?.["baseURL"]
+      const viaManagedProxy = typeof managedBaseURL === "string" && managedBaseURL.includes("/api/llm/proxy/")
+      // Request summaries + encrypted content on every OpenAI-Responses path that
+      // can carry them: managed (synsci native + Atlas-proxied "openai") and direct
+      // BYOK openai. This mirrors the per-effort variant options above (the
+      // @ai-sdk/openai, azure, and github-copilot cases already ship these exact
+      // keys for openai models) — this block just applies the same defaults when no
+      // effort variant is selected, so the trace renders instead of streaming blank.
+      // On verification: reasoning.encrypted_content + summaries need an OpenAI-
+      // verified org, but that is the SAME gate OpenAI requires to *stream* gpt-5 at
+      // all. Any org that can stream the model can also receive these keys, so this
+      // adds no failure surface beyond the streaming requirement already in force.
+      if (input.model.providerID.startsWith("synsci") || viaManagedProxy || input.model.providerID === "openai") {
         result["promptCacheKey"] = input.sessionID
         result["include"] = ["reasoning.encrypted_content"]
         result["reasoningSummary"] = "auto"
@@ -793,6 +856,13 @@ export namespace ProviderTransform {
   }
 
   export function smallOptions(model: Provider.Model) {
+    // OpenRouter first: an OR-routed gpt-5 / gemini model must use OR's unified
+    // `reasoning` shape, not the OpenAI/Google keys the branches below emit. OR
+    // silently ignores `reasoningEffort`, so without this a small OR call (title
+    // / summary / compaction) would still reason and bill. Small = skip it.
+    if (model.api.npm === "@openrouter/ai-sdk-provider" || model.providerID === "openrouter") {
+      return { reasoning: { enabled: false } }
+    }
     if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
       if (model.api.id.includes("5.")) {
         return { reasoningEffort: "low" }
@@ -805,12 +875,6 @@ export namespace ProviderTransform {
         return { thinkingConfig: { thinkingLevel: "low" } }
       }
       return { thinkingConfig: { thinkingBudget: 0 } }
-    }
-    if (model.providerID === "openrouter") {
-      if (model.api.id.includes("google")) {
-        return { reasoning: { enabled: false } }
-      }
-      return { reasoningEffort: "minimal" }
     }
     return {}
   }

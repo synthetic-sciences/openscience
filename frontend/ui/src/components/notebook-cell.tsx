@@ -1,12 +1,5 @@
 import { createSignal, For, Show, type JSX } from "solid-js"
-import DOMPurify from "dompurify"
 import { Icon } from "./icon"
-
-// Notebook `text/html` outputs are untrusted (a malicious .ipynb or a
-// prompt-injected cell can emit arbitrary markup). Sanitize before injecting so
-// tables/plots still render but <script>, event handlers, and javascript: URLs
-// are stripped. Default profile keeps html+svg+mathml.
-const sanitizeHtml = (html: string) => (DOMPurify.isSupported ? DOMPurify.sanitize(html) : "")
 
 export interface NotebookCellProps {
   cellType: "code" | "markdown"
@@ -83,7 +76,7 @@ function NotebookOutputView(props: { output: NotebookOutput }): JSX.Element {
             />
           </Show>
           <Show when={output().data?.["text/html"]}>
-            <div data-slot="notebook-output-html" innerHTML={sanitizeHtml(output().data!["text/html"])} />
+            <div data-slot="notebook-output-html" innerHTML={output().data!["text/html"]} />
           </Show>
           <Show when={output().data?.["text/plain"] && !output().data?.["image/png"] && !output().data?.["text/html"]}>
             <pre data-slot="notebook-output-text">{output().data!["text/plain"]}</pre>

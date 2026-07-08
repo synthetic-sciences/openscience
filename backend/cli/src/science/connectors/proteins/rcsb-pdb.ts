@@ -9,7 +9,7 @@
  * data API. Enrichment failures degrade gracefully to the bare identifier.
  */
 import type { Connector, ConnectorHit, FetchOptions, SearchOptions } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 import { asArray, clampLimit, firstString, toRaw } from "./util"
 
 interface SearchResult {
@@ -67,7 +67,11 @@ export const rcsbPdb: Connector = {
       request_options: { paginate: { start: 0, rows } },
     }
     const url = `https://search.rcsb.org/rcsbsearch/v2/query?json=${encodeURIComponent(JSON.stringify(payload))}`
-    const data = await getJSON<SearchResponse>(url, { signal: opts?.signal }).catch(() => ({}) as SearchResponse)
+    const data = await orFallback(
+      getJSON<SearchResponse>(url, { signal: opts?.signal }),
+      {} as SearchResponse,
+      opts?.signal,
+    )
     const hits = asArray<SearchResult>(data.result_set).filter((r) => typeof r.identifier === "string")
     const enriched = await Promise.all(
       hits.map(async (r) => {

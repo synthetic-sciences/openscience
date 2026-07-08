@@ -27,7 +27,7 @@ Run this skill when:
    atlas doctor --format=json
    ```
    If it reports unavailable/unauthenticated, tell the user to run
-   `openscience connect login` — the graph cannot be created without a session.
+   `openscience login` — the graph cannot be created without a session.
 
 2. **Create or link the graph** (idempotent — safe to re-run; returns the
    existing graph if one already exists):
@@ -41,7 +41,7 @@ Run this skill when:
    `status`, `message` when known). Relay the fix that matches the kind — do
    NOT guess or tell the user to re-login for a network problem:
    - `"unauthenticated"` — no session, or the backend rejected the saved key.
-     Tell the user to run `openscience connect login`.
+     Tell the user to run `openscience login`.
    - `"unreachable"` — the Atlas backend at the printed `host` could not be
      reached (network/DNS error or 5xx). The user IS logged in; suggest checking
      connectivity and any `OPENSCIENCE_API_BASE`/`SYNSC_API_BASE` override, then

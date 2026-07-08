@@ -32,17 +32,12 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
-import {
-  ConnectCommand,
-  LoginCommand,
-  LogoutCommand,
-  StatusCommand,
-  SyncCommand,
-  DevicesCommand,
-} from "./cli/cmd/connect"
+import { LoginCommand, LogoutCommand, StatusCommand, SyncCommand, DevicesCommand } from "./cli/cmd/connect"
 import { ProjectCommand } from "./cli/cmd/project"
 import { WalletCommand } from "./cli/cmd/billing"
-import { KeysCommand } from "./cli/cmd/auth"
+import { KeysCommand, ConnectCommand, DisconnectCommand } from "./cli/cmd/auth"
+import { LocalCommand } from "./cli/cmd/local"
+import { SandboxCommand } from "./cli/cmd/sandbox"
 import { InitCommand, DoctorCommand } from "./cli/onboard"
 import { OpenScience } from "./openscience"
 
@@ -127,6 +122,8 @@ const cli = yargs(hideBin(process.argv))
   .command(ServeCommand)
   .command(WebCommand)
   .command(ModelsCommand)
+  .command(LocalCommand)
+  .command(SandboxCommand)
   .command(SkillCommand)
   .command(StatsCommand)
   .command(ExportCommand)
@@ -145,6 +142,7 @@ const cli = yargs(hideBin(process.argv))
   .command(DoctorCommand)
   .command(ProjectCommand)
   .command(ConnectCommand)
+  .command(DisconnectCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

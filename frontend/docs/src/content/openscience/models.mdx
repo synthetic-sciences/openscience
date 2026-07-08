@@ -17,6 +17,17 @@ openscience
 
 Keys stay on your machine. Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, DeepSeek, and dozens more work the same way — the catalogue is models.dev-backed, so any `provider/model` id a provider currently exposes is addressable. You can also paste keys into the Credentials panel in the [workspace](/openscience/workspace) instead of exporting them, and OpenAI Codex signs in via OAuth.
 
+## Local models
+
+Prefer to run offline? OpenScience talks to any OpenAI-compatible endpoint on your machine — Ollama, LM Studio, llama.cpp, vLLM, and more:
+
+```bash
+openscience local add        # detects Ollama / LM Studio, lists + adds their models
+openscience run --model ollama/llama3.1 "hello"
+```
+
+Local models are free and never metered. See **[Local models](/openscience/local-models)** for the full guide.
+
 ## List what is configured
 
 ```bash
@@ -24,7 +35,7 @@ openscience models             # grouped by provider, with a routing label per p
 openscience models anthropic   # one provider
 ```
 
-Each provider is labeled `your key`, `managed`, `Signed in with Codex`, or `unconfigured`, so you always know which route a model takes. `--verbose` adds per-model metadata like costs, `--refresh` refetches the catalogue, and `--flat` prints one `provider/model` id per line for scripting.
+Each provider is labeled `your key`, `managed`, `local`, `Signed in with Codex`, or `unconfigured`, so you always know which route a model takes. `--verbose` adds per-model metadata like costs, `--refresh` refetches the catalogue, and `--flat` prints one `provider/model` id per line for scripting.
 
 ## Pick a model per run
 

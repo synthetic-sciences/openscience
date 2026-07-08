@@ -61,6 +61,17 @@ Connecting an Atlas account is optional — see [Atlas](/openscience/atlas). Ope
 | `openscience wallet` | Wallet balance and key routing (alias `billing`). |
 | `openscience wallet topup` | Open the app to add credit. |
 
+## Sandbox
+
+| Command | Use |
+| --- | --- |
+| `openscience sandbox` | Show sandbox status: OS backend + current policy. |
+| `openscience sandbox enable` | Confine the agent's shell + notebook execution to the workspace (`--network deny`, `--allow <path>`, `--on-unavailable <warn\|error\|allow>`). |
+| `openscience sandbox disable` | Turn the sandbox off. |
+| `openscience sandbox test` | Prove containment on this machine (writes inside/outside the workspace, network egress). |
+
+Off by default. See [Execution sandbox](/openscience/sandbox).
+
 ## Agent profiles
 
 | Command | Use |

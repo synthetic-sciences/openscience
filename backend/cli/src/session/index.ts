@@ -417,7 +417,11 @@ export namespace Session {
         ? (input.usage.inputTokens ?? 0)
         : (input.usage.inputTokens ?? 0) - cacheReadInputTokens - cacheWriteInputTokens
       const safe = (value: number) => {
-        if (!Number.isFinite(value)) return 0
+        // Clamp non-finite AND negative values: for providers not in the
+        // excludes-cached set, `inputTokens - cacheRead - cacheWrite` can go
+        // negative when the provider already excludes cached tokens, which would
+        // otherwise flow a negative token count (and negative cost) downstream.
+        if (!Number.isFinite(value) || value < 0) return 0
         return value
       }
 
@@ -431,8 +435,12 @@ export namespace Session {
         },
       }
 
+      // The over-200k pricing tier keys off the full prompt size, which includes
+      // cache-CREATION tokens too. Omitting cache.write meant a mostly-cache-write
+      // request that really exceeded 200k was billed at the base tier (cost
+      // under-report).
       const costInfo =
-        input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read > 200_000
+        input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read + tokens.cache.write > 200_000
           ? input.model.cost.experimentalOver200K
           : input.model.cost
       return {
