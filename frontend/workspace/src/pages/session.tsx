@@ -553,53 +553,58 @@ export default function Page(): JSX.Element {
                 </Match>
               </Switch>
 
-              {/* Prompt dock — gradient fade + centered PromptInput (v1.1.116) */}
-              <div class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-base via-background-base to-transparent pointer-events-none">
-                <div class="w-full px-4 pointer-events-auto md:max-w-200 md:mx-auto">
-                  <Show when={revertInfo()}>
-                    <div
-                      class="mb-3"
-                      style={{
-                        display: "flex",
-                        "align-items": "center",
-                        gap: "12px",
-                        padding: "8px 12px",
-                        border: "1px solid var(--color-border)",
-                        "border-radius": "8px",
-                        "font-size": "12px",
-                        "font-family": FONT_SANS,
-                        color: "var(--color-text-muted)",
-                        background: "var(--color-bg)",
-                      }}
-                    >
-                      <span style={{ flex: 1, "min-width": 0 }}>
-                        Conversation reverted. {revertedCount()} turn{revertedCount() === 1 ? "" : "s"} hidden and file
-                        changes rolled back. Sending a new message makes this permanent.
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => void restoreRevert()}
+              {/* Prompt dock — gradient fade + centered PromptInput (v1.1.116). Hidden on
+                subagent (child) transcripts: those are read-only inspection views, and typing
+                here would spawn an independent turn on the worker session, disconnected from the
+                parent that owns it. Use "back to parent session" to continue. */}
+              <Show when={!activeSession()?.parentID}>
+                <div class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-base via-background-base to-transparent pointer-events-none">
+                  <div class="w-full px-4 pointer-events-auto md:max-w-200 md:mx-auto">
+                    <Show when={revertInfo()}>
+                      <div
+                        class="mb-3"
                         style={{
+                          display: "flex",
+                          "align-items": "center",
+                          gap: "12px",
+                          padding: "8px 12px",
                           border: "1px solid var(--color-border)",
-                          background: "transparent",
-                          color: "inherit",
-                          padding: "4px 10px",
                           "border-radius": "8px",
                           "font-size": "12px",
-                          cursor: "pointer",
-                          "white-space": "nowrap",
+                          "font-family": FONT_SANS,
+                          color: "var(--color-text-muted)",
+                          background: "var(--color-bg)",
                         }}
                       >
-                        restore
-                      </button>
-                    </div>
-                  </Show>
-                  <PromptInput
-                    newSessionWorktree={newSessionWorktree()}
-                    onNewSessionWorktreeReset={() => setNewSessionWorktree("main")}
-                  />
+                        <span style={{ flex: 1, "min-width": 0 }}>
+                          Conversation reverted. {revertedCount()} turn{revertedCount() === 1 ? "" : "s"} hidden and
+                          file changes rolled back. Sending a new message makes this permanent.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void restoreRevert()}
+                          style={{
+                            border: "1px solid var(--color-border)",
+                            background: "transparent",
+                            color: "inherit",
+                            padding: "4px 10px",
+                            "border-radius": "8px",
+                            "font-size": "12px",
+                            cursor: "pointer",
+                            "white-space": "nowrap",
+                          }}
+                        >
+                          restore
+                        </button>
+                      </div>
+                    </Show>
+                    <PromptInput
+                      newSessionWorktree={newSessionWorktree()}
+                      onNewSessionWorktreeReset={() => setNewSessionWorktree("main")}
+                    />
+                  </div>
                 </div>
-              </div>
+              </Show>
             </div>
 
             {/* files — the host explorer, mounted on first visit */}
