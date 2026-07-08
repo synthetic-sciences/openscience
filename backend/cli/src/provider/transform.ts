@@ -39,6 +39,17 @@ export namespace ProviderTransform {
     return undefined
   }
 
+  // Whether a model is Anthropic/Claude on ANY route (native, Bedrock, Vertex, or
+  // OpenRouter). Checks the display id AND the wire api.id, lowercased, plus the
+  // provider/npm — so a config alias, mixed-case slug, or id/api.id divergence
+  // can't slip past a caller's guard. Mirrors the canonical detection in message().
+  function isAnthropic(model: Provider.Model): boolean {
+    if (model.providerID === "anthropic") return true
+    if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") return true
+    const ids = `${model.id} ${model.api.id}`.toLowerCase()
+    return ids.includes("claude") || ids.includes("anthropic")
+  }
+
   function normalizeMessages(
     msgs: ModelMessage[],
     model: Provider.Model,
@@ -452,11 +463,22 @@ export namespace ProviderTransform {
 
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
+        // Claude via OpenRouter cannot round-trip reasoning. Anthropic requires the
+        // signed thinking block to be replayed unmodified on the next step of a
+        // tool-use turn, but OpenRouter strips that signature on these routes — so
+        // the moment Claude produces a thinking block and the turn continues (tool
+        // call → result), the replay is rejected with 400 "Invalid `signature`…" /
+        // "…blocks cannot be modified", surfaced as the generic "Provider returned
+        // error" that stalls the loop. Offer NO reasoning-effort variants for it, so
+        // no thinking block is ever generated to fail — matching the last-known-good
+        // release (1.2.5). Native-Anthropic BYOK is a different npm (@ai-sdk/anthropic)
+        // and keeps its reasoning, since it carries a valid signature. Uses the SAME
+        // predicate as options() above so the two guards can't disagree and leak.
+        if (isAnthropic(model)) return {}
         // OpenRouter accepts a unified `reasoning.effort` for ANY reasoning-capable
-        // model (Claude, DeepSeek, GLM, Kimi, Gemini, OpenAI), normalizing effort
-        // to a token budget where the native API is on/off only. gpt keeps its
-        // wider ladder (none/minimal/xhigh); everything else uses the universal
-        // low/medium/high floor.
+        // model (DeepSeek, GLM, Kimi, Gemini, OpenAI), normalizing effort to a token
+        // budget where the native API is on/off only. gpt keeps its wider ladder
+        // (none/minimal/xhigh); everything else uses the universal low/medium/high floor.
         if (model.id.includes("gpt")) {
           return Object.fromEntries(
             (id.includes("gpt-5.5") ? OPENAI_GPT55_EFFORTS : OPENAI_EFFORTS).map((effort) => [
@@ -769,7 +791,31 @@ export namespace ProviderTransform {
       // by default for every reasoning-capable model (a selected effort variant
       // overrides this via mergeDeep in llm.ts). This is the single normalized
       // reasoning path that all managed wallet inference now flows through.
-      if (input.model.capabilities.reasoning) {
+      //
+      // EXCEPT Claude via OpenRouter: Anthropic requires the signed thinking block
+      // to be replayed unmodified on the next step of a tool-use turn, but OpenRouter
+      // strips that signature on these routes — so any multi-step turn that produced
+      // thinking is rejected with 400 "Invalid `signature`…" / "…cannot be modified",
+      // surfaced as the generic "Provider returned error" that stalls the loop. Don't
+      // request reasoning for it, so no unreplayable thinking block is ever generated
+      // (1.2.5 requested reasoning for gemini-3 only). Native-Anthropic BYOK is a
+      // different npm (@ai-sdk/anthropic) and keeps its properly-signed reasoning.
+      //
+      // This is a workaround, not the ceiling. The corruption lives in
+      // @openrouter/ai-sdk-provider@1.5.x: it emits per-`reasoning-delta`
+      // reasoning_details fragments with no signature and duplicates them across the
+      // message on replay, so the signed block can never be reconstructed intact
+      // (see Kilo-Org/kilo#303). Re-enabling Claude-OR reasoning requires the fix in
+      // @openrouter/ai-sdk-provider@2.x, which needs ai@^6 — a breaking upgrade
+      // tracked separately. When that lands, drop this guard AND the one in variants().
+      //
+      // Explicitly DISABLE rather than merely omit: adaptive-thinking Claude (Opus
+      // 4.7+/Claude 5) defaults thinking ON on the wire, and llm.ts merges
+      // model/agent `options.reasoning` AFTER this base — `{ enabled: false }` (the
+      // same shape smallOptions() uses) survives both, where an omission would not.
+      const claude = isAnthropic(input.model)
+      if (claude) result["reasoning"] = { enabled: false }
+      if (!claude && input.model.capabilities.reasoning) {
         result["reasoning"] = { effort: input.model.api.id.includes("gemini-3") ? "high" : "medium" }
       }
     }

@@ -39,7 +39,7 @@ const orModel = (id: string, apiId: string, extra: Partial<any> = {}) =>
 describe("ProviderTransform.options — managed OpenRouter reasoning", () => {
   test("reasoning-capable OR model requests unified reasoning + usage, no OpenAI keys", () => {
     const result = ProviderTransform.options({
-      model: orModel("openrouter/anthropic/claude-sonnet-4", "anthropic/claude-sonnet-4"),
+      model: orModel("openrouter/deepseek/deepseek-r1", "deepseek/deepseek-r1"),
       sessionID,
       providerOptions: { baseURL: PROXY_OR },
     })
@@ -48,6 +48,57 @@ describe("ProviderTransform.options — managed OpenRouter reasoning", () => {
     expect(result.reasoningEffort).toBeUndefined()
     expect(result.reasoningSummary).toBeUndefined()
     expect(result.include).toBeUndefined()
+  })
+
+  test("Claude via OpenRouter explicitly DISABLES reasoning (unreplayable signed thinking → 400)", () => {
+    const result = ProviderTransform.options({
+      model: orModel("openrouter/anthropic/claude-sonnet-4", "anthropic/claude-sonnet-4"),
+      sessionID,
+      providerOptions: { baseURL: PROXY_OR },
+    })
+    // usage tracking still on, reasoning explicitly off → no thinking blocks, even
+    // for adaptive-thinking models that default on and past a config effort merge.
+    expect(result.usage).toEqual({ include: true })
+    expect(result.reasoning).toEqual({ enabled: false })
+  })
+
+  test("Claude-OR reasoning is disabled even when only api.id (mixed-case) carries the token", () => {
+    // options() and variants() must key off the SAME both-field, lowercased predicate,
+    // or an uppercase/aliased Claude id slips options() and re-triggers the 400.
+    const upper = ProviderTransform.options({
+      model: orModel("openrouter/some-alias", "Anthropic/Claude-Sonnet-4"),
+      sessionID,
+      providerOptions: { baseURL: PROXY_OR },
+    })
+    expect(upper.reasoning).toEqual({ enabled: false })
+    // model.id carries the token, api.id does not → still caught (both fields checked).
+    const aliased = ProviderTransform.options({
+      model: orModel("openrouter/anthropic/claude-x", "vendor/opaque-slug"),
+      sessionID,
+      providerOptions: { baseURL: PROXY_OR },
+    })
+    expect(aliased.reasoning).toEqual({ enabled: false })
+  })
+
+  test("Claude via OpenRouter offers no reasoning-effort variants (same predicate as options)", () => {
+    expect(
+      ProviderTransform.variants(orModel("openrouter/anthropic/claude-sonnet-4", "anthropic/claude-sonnet-4")),
+    ).toEqual({})
+    // mixed-case api.id must also yield no picker, matching options() above.
+    expect(ProviderTransform.variants(orModel("openrouter/some-alias", "Anthropic/Claude-Sonnet-4"))).toEqual({})
+  })
+
+  test("a non-Claude OR model whose id merely contains a vendor token is unaffected", () => {
+    // deepseek model, id has no claude/anthropic → keeps reasoning + effort variants.
+    const opts = ProviderTransform.options({
+      model: orModel("openrouter/deepseek/deepseek-r1", "deepseek/deepseek-r1"),
+      sessionID,
+      providerOptions: { baseURL: PROXY_OR },
+    })
+    expect(opts.reasoning).toEqual({ effort: "medium" })
+    expect(
+      Object.keys(ProviderTransform.variants(orModel("openrouter/deepseek/deepseek-r1", "deepseek/deepseek-r1"))),
+    ).toContain("medium")
   })
 
   test("OR-routed gpt-5 uses reasoning.effort (not the OpenAI keys), even via the managed proxy", () => {
