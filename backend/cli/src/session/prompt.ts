@@ -279,6 +279,9 @@ export namespace SessionPrompt {
       item.reject()
     }
     delete s[sessionID]
+    // Flush any coalesced (debounced) streaming part writes now, so the final
+    // text/reasoning content is durable the moment the turn goes idle.
+    Session.flushPendingParts()
     SessionStatus.set(sessionID, { type: "idle" })
     return
   }
