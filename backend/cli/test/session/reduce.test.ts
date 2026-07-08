@@ -45,7 +45,7 @@ const completedTool = (
   tool: string,
   input: Record<string, unknown>,
   output: string,
-  opts?: { title?: string; compacted?: boolean },
+  opts?: { title?: string; compacted?: boolean; attachments?: MessageV2.FilePart[] },
 ): MessageV2.ToolStateCompleted => ({
   status: "completed",
   input,
@@ -53,6 +53,7 @@ const completedTool = (
   title: opts?.title ?? "",
   metadata: {},
   time: { start: 0, end: 1, ...(opts?.compacted ? { compacted: 2 } : {}) },
+  ...(opts?.attachments ? { attachments: opts.attachments } : {}),
 })
 
 const toolPart = (messageID: string, id: string, tool: string, state: MessageV2.ToolStateCompleted): MessageV2.Part =>
@@ -128,6 +129,48 @@ describe("session.message-v2.toModelMessages — compacted tool args (P2.3)", ()
     const input: MessageV2.WithParts[] = [{ info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "write", state)] }]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s).toContain("x".repeat(1000))
+  })
+})
+
+describe("session.message-v2.supersededOutputs (P2.1)", () => {
+  const two = (o1: string, o2: string, attach?: MessageV2.FilePart[]): MessageV2.WithParts[] => [
+    { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "x" }, o1, { attachments: attach }))] },
+    { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "read", completedTool("read", { p: "x" }, o2))] },
+  ]
+
+  test("marks the older of two identical outputs as superseded, keeps the newest", () => {
+    const set = MessageV2.supersededOutputs(two("y".repeat(300), "y".repeat(300)), 200)
+    expect(set.has("t1")).toBe(true)
+    expect(set.has("t2")).toBe(false)
+  })
+
+  test("does not dedupe distinct outputs", () => {
+    const set = MessageV2.supersededOutputs(two("a".repeat(300), "b".repeat(300)), 200)
+    expect(set.size).toBe(0)
+  })
+
+  test("does not dedupe outputs shorter than the minimum", () => {
+    const set = MessageV2.supersededOutputs(two("z".repeat(50), "z".repeat(50)), 200)
+    expect(set.size).toBe(0)
+  })
+
+  test("does not dedupe a part that carries attachments", () => {
+    const att = [{ id: "att", sessionID, messageID: "a1", type: "file", mime: "image/png", filename: "x.png", url: "data:image/png;base64,Zm9v" }] as unknown as MessageV2.FilePart[]
+    const set = MessageV2.supersededOutputs(two("y".repeat(300), "y".repeat(300), att), 200)
+    expect(set.size).toBe(0)
+  })
+})
+
+describe("session.message-v2.toModelMessages — duplicate output back-reference (P2.1)", () => {
+  test("the older identical output becomes a back-reference; the newest keeps the full body", () => {
+    const big = "y".repeat(300)
+    const input: MessageV2.WithParts[] = [
+      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "x" }, big))] },
+      { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "read", completedTool("read", { p: "x" }, big))] },
+    ]
+    const s = JSON.stringify(MessageV2.toModelMessages(input, model))
+    expect(s.split(big).length - 1).toBe(1) // full body shipped exactly once (the newest)
+    expect(s).toContain("Duplicate tool output")
   })
 })
 

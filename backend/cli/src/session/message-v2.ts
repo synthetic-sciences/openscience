@@ -451,6 +451,8 @@ export namespace MessageV2 {
   ): ModelMessage[] {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
+    // P2.1: older tool outputs identical to a more recent call collapse to a back-ref.
+    const superseded = supersededOutputs(input)
 
     // Media budgeting. `stripMedia` (used for the compaction summary) drops ALL images;
     // otherwise `keepRecentImages` keeps only the last N images in full and replaces
@@ -599,14 +601,19 @@ export namespace MessageV2 {
           if (part.type === "tool") {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
-              const rawAttachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+              const isDuplicate = superseded.has(part.id)
+              const rawAttachments = part.state.time.compacted || isDuplicate ? [] : (part.state.attachments ?? [])
               let droppedNote = ""
               const attachments = rawAttachments.filter((a) => {
                 const dropped = dropImage(a.mime, a.filename)
                 if (dropped) droppedNote += `\n${dropped}`
                 return !dropped
               })
-              const baseText = part.state.time.compacted ? toolSummary(part.tool, part.state) : part.state.output
+              const baseText = isDuplicate
+                ? DUPLICATE_OUTPUT
+                : part.state.time.compacted
+                  ? toolSummary(part.tool, part.state)
+                  : part.state.output
               const outputText = baseText + droppedNote
               const output =
                 attachments.length > 0
@@ -682,6 +689,34 @@ export namespace MessageV2 {
   // tokens) lives in the agent/system prompt and is counted under `system`, not here.
   const SKILL_TOOLS = new Set(["skill", "artifact"])
 
+  // Deterministic, lossless dedupe of repeated tool output. Re-reading a file or
+  // re-running a command re-ships the identical body every turn; only the newest copy is
+  // useful, so older identical outputs become a back-reference. Minimum size guards
+  // against churning on trivially-small outputs (the back-ref itself costs a line), and
+  // parts with attachments are left alone (identical text ≠ identical media).
+  export const DEDUPE_MIN_CHARS = 200
+  export const DUPLICATE_OUTPUT = "[Duplicate tool output — see the more recent identical call]"
+
+  // Returns the ids of completed tool parts whose output is byte-identical to a LATER
+  // (more recent) call's output — i.e. the ones safe to replace with a back-reference.
+  export function supersededOutputs(input: WithParts[], min = DEDUPE_MIN_CHARS): Set<string> {
+    const newest = new Map<string, string>() // output text -> id of its newest occurrence
+    const eligible: { id: string; output: string }[] = []
+    for (const msg of input)
+      for (const part of msg.parts) {
+        if (part.type !== "tool" || part.state.status !== "completed") continue
+        if (part.state.time.compacted) continue
+        if ((part.state.attachments ?? []).length) continue
+        const output = part.state.output ?? ""
+        if (output.length < min) continue
+        eligible.push({ id: part.id, output })
+        newest.set(output, part.id) // forward iteration → newest wins
+      }
+    const superseded = new Set<string>()
+    for (const e of eligible) if (newest.get(e.output) !== e.id) superseded.add(e.id)
+    return superseded
+  }
+
   // Per-string cap for the args of a reduced (pruned) tool call. Once a call is
   // compacted its result is gone, so an oversized payload arg (a 50KB `write` content, a
   // long `edit` oldString) is dead weight — truncate it while keeping the JSON valid and
@@ -735,6 +770,7 @@ export namespace MessageV2 {
   export function composition(input: WithParts[], options?: { system?: string[] }): Composition {
     const out: Composition = { system: 0, text: 0, reasoning: 0, tool: 0, skills: 0, image: 0, images: 0, total: 0 }
     for (const s of options?.system ?? []) out.system += Token.estimate(s)
+    const superseded = supersededOutputs(input)
 
     const addImages = (count: number) => {
       out.image += count * IMAGE_TOKENS
@@ -761,8 +797,14 @@ export namespace MessageV2 {
           const compacted = part.state.status === "completed" && !!part.state.time.compacted
           out[bucket] += Token.estimate(JSON.stringify((compacted ? truncateArgs(part.state.input) : part.state.input) ?? {}))
           if (part.state.status === "completed") {
-            out[bucket] += Token.estimate(compacted ? toolSummary(part.tool, part.state) : part.state.output)
-            if (!compacted) addImages((part.state.attachments ?? []).filter((a) => a.mime.startsWith("image/")).length)
+            const body = superseded.has(part.id)
+              ? DUPLICATE_OUTPUT
+              : compacted
+                ? toolSummary(part.tool, part.state)
+                : part.state.output
+            out[bucket] += Token.estimate(body)
+            if (!compacted && !superseded.has(part.id))
+              addImages((part.state.attachments ?? []).filter((a) => a.mime.startsWith("image/")).length)
           }
           if (part.state.status === "error") out[bucket] += Token.estimate(part.state.error)
         }
