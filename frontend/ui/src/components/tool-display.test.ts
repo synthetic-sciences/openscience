@@ -1,0 +1,27 @@
+import { describe, test, expect } from "bun:test"
+import { humanizeToolName, skillName } from "./tool-display"
+
+describe("humanizeToolName", () => {
+  test("titlecases a simple id", () => {
+    expect(humanizeToolName("websearch")).toBe("Websearch")
+    expect(humanizeToolName("multi_edit")).toBe("Multi Edit")
+  })
+  test("splits an mcp namespace_tool id", () => {
+    expect(humanizeToolName("playwright_browser_click")).toBe("playwright · browser click")
+  })
+})
+
+describe("skillName", () => {
+  test("prefers metadata.name", () => {
+    expect(skillName({ metadata: { name: "deep-research" }, input: { name: "x" } })).toBe("deep-research")
+  })
+  test("falls back to input.name", () => {
+    expect(skillName({ input: { name: "brainstorming" } })).toBe("brainstorming")
+  })
+  test("strips the title prefix", () => {
+    expect(skillName({ title: "Loaded skill: qa" })).toBe("qa")
+  })
+  test("defaults to 'skill'", () => {
+    expect(skillName({})).toBe("skill")
+  })
+})
