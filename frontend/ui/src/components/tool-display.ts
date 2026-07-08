@@ -16,6 +16,15 @@ export function humanizeToolName(tool: string): string {
   return titlecase(tool)
 }
 
+// OpenRouter (and some providers) return encrypted reasoning as a "[REDACTED]"
+// placeholder appended to — or standing in for — the readable summary; the real
+// payload is the encrypted blob carried in the part's metadata for model
+// continuity, never meant for display. Strip the placeholder from reasoning text.
+// (Tool output keeps its own "[REDACTED]" secret masking; this is reasoning-only.)
+export function stripRedactedReasoning(text: string): string {
+  return (text ?? "").replaceAll("[REDACTED]", "").trim()
+}
+
 export function skillName(source: {
   metadata?: Record<string, unknown>
   input?: Record<string, unknown>

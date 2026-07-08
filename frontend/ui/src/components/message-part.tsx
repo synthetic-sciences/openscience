@@ -51,7 +51,7 @@ import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { NotebookView, type NotebookCellProps } from "./notebook-cell"
-import { skillName } from "./tool-display"
+import { skillName, stripRedactedReasoning } from "./tool-display"
 
 interface Diagnostic {
   range: {
@@ -718,7 +718,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = props.part as ReasoningPart
-  const text = () => part.text.trim()
+  // OpenRouter returns encrypted reasoning as a "[REDACTED]" placeholder (the real
+  // payload is the encrypted blob kept in metadata for model continuity, not for
+  // display). Strip it so the reasoning isn't cluttered with "[REDACTED]" — a
+  // whole-encrypted part collapses to empty and the <Show> hides it. This only
+  // touches reasoning; tool output keeps its legitimate secret masking.
+  const text = () => stripRedactedReasoning(part.text)
   const throttledText = createTypewriter(text)
 
   return (
