@@ -78,6 +78,14 @@ describe("science_search degradation (arxiv)", () => {
     expect(result.output).toContain("Attention Is All You Need")
   })
 
+  test("renders the arXiv PDF link the connector extracted", async () => {
+    stubFetch(() => new Response(PAPER_FEED, { status: 200 }))
+    const result = await search("attention is all you need")
+    // The connector parses the self-closing title="pdf" link into extra.pdf;
+    // the renderer must surface it so the agent sees the full-text URL.
+    expect(result.output).toContain("**pdf**: http://arxiv.org/pdf/1706.03762v7")
+  })
+
   test("sustained 429 degrades to an actionable rate-limited result, not a raw HTTP 429", async () => {
     stubFetch(() => new Response("rate limited", { status: 429, headers: { "Retry-After": "0" } }))
     const result = await search("anything")
