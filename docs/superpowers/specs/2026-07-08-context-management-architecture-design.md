@@ -102,11 +102,11 @@ Four pillars, mapped to the action hierarchy:
 | **P1.2** | **Stop bleed** | **Strip historical media — replace base64 in all-but-newest image with `[image stripped]`** | 2 | S | ☑ |
 | **P1.3** | **Stop bleed** | **`stripMedia` option on `toModelMessages`, passed by the compaction summary request** | 2 | S | ☑ |
 | **P1.4** | **Stop bleed** | **Run `prune` BEFORE full compaction; only LLM-summarize if still over threshold** | 3→4 | M | ☑ |
-| P2.1 | Reduce | Dedupe identical tool outputs (hash) → `[Duplicate tool output — see more recent call]` | 3 | M | ☐ |
-| P2.2 | Reduce | Replace old tool outputs with 1-line tool-aware summaries (`[bash] ran X → exit 0, 47 lines`) | 3 | M | ☐ |
-| P2.3 | Reduce | Truncate oversized tool-call args inside valid JSON | 3 | S | ☐ |
-| P2.4 | Reduce | Image resize before send (2000px, ≤5MB, JPEG quality ladder) + `[N images omitted]` on failure | 1/2 | L | ☐ |
-| P2.5 | Reduce | Circuit breaker: stop after N consecutive ineffective (<10%) compactions | 4 | S | ☐ |
+| P2.1 | Reduce | Dedupe identical tool outputs (hash) → `[Duplicate tool output — see more recent call]` | 3 | M | ☑ |
+| P2.2 | Reduce | Replace old tool outputs with 1-line tool-aware summaries (`[bash] ran X → exit 0, 47 lines`) | 3 | M | ☑ |
+| P2.3 | Reduce | Truncate oversized tool-call args inside valid JSON | 3 | S | ☑ |
+| P2.4 | Reduce | Image resize before send (2000px, ≤5MB, JPEG quality ladder) + `[N images omitted]` on failure | 1/2 | L | ◐ |
+| P2.5 | Reduce | Circuit breaker: stop after N consecutive ineffective (<10%) compactions | 4 | S | ☑ |
 | P3.1 | Handoff | Anchored/incremental summary — feed prior `handoff.md` back, "update not regenerate" | 4 | M | ☐ |
 | P3.2 | Handoff | Head+tail protection: keep system + first-N and recent tail verbatim; force last user msg into tail | 4 | M | ☐ |
 | P3.3 | Handoff | Background maintenance pass — refresh `handoff.md` after significant steps (aux/cheap model) | 4 | L | ☐ |
@@ -125,7 +125,13 @@ Sizes: S ≤ ½ day · M ≈ 1–2 days · L ≈ 3+ days / needs its own mini-sp
 - **P0** ☑ — a debug view (or log line) shows the token breakdown by content type each turn; compaction events record what fired them and how much each mechanism reclaimed.
   - *Shipped:* `MessageV2.composition()` (pure, deterministic, mirrors `toModelMessages` accounting — pruned tool parts count their cleared placeholder so a prune visibly shrinks the breakdown). `SessionTelemetry` (`src/session/telemetry.ts`) defines two always-on bus events (auto-streamed to clients via the `BusEvent` registry) with a paired DEBUG log line: `session.context` (`{system,text,reasoning,tool,skills,image}` + `images` + `total`, emitted per turn before the model call) and `session.compaction` (`{trigger: proactive|overflow|manual, mechanism: prune|summary, before?, after?, reclaimed}`, one per reclaim mechanism). `trigger` threaded through `CompactionPart → create → process`. `skills` bucket = `skill`/`artifact` tool calls; the skill *catalog* lives in `system` (not separately isolated — future refinement). Live-verified: `session.context total=8740 system=1514 text=7226 …` fired on a real `--bare` turn.
 - **P1** *(the immediate fix)* — an image-heavy session (read 10 figures) does not trigger compaction from image accumulation; once an image is superseded its base64 is gone from later requests; the compaction summary request contains no base64.
-- **P2** — the LLM summary fires markedly less often; when it does, cheap reduction ran first and reclaimed measurable tokens; a runaway session cannot spin on doomed compactions.
+- **P2** ◐ — the LLM summary fires markedly less often; when it does, cheap reduction ran first and reclaimed measurable tokens; a runaway session cannot spin on doomed compactions.
+  - *Shipped (P2.1/2/3/5):* deterministic reduction ladder in `message-v2.ts`, applied to pruned/superseded tool parts and kept in lockstep with `composition()`:
+    - **P2.2** `toolSummary()` — a pruned tool output renders a 1-line tool-aware stand-in (`[bash] npm test → cleared (3 lines)`) instead of the blunt `[Old tool result content cleared]`.
+    - **P2.3** `truncateArgs()` — a pruned tool call's oversized string args are capped at 200 chars (`…[+N chars]`) inside valid JSON; live calls keep full args.
+    - **P2.1** `supersededOutputs()` — an older tool output byte-identical to a more recent call collapses to `[Duplicate tool output — see the more recent identical call]` (lossless; newest keeps the body; skips small outputs and parts with attachments).
+    - **P2.5** circuit breaker (`compaction.ts`) — `noteCompaction`/`breakerTripped`/`resetBreaker`; 3 consecutive <10% reclaims stop proactive compaction for the session (reactive overflow path remains the backstop); fed by both prune + summary.
+  - *Deferred (P2.4 → own mini-spec):* image resize needs a decode/re-encode dependency (no `sharp`/`photon`/`jimp`/`canvas` in the tree; `util/image.ts` is pure byte-parsing). The CLI ships as **native cross-platform binaries**, so adding a native module is a packaging decision, not a code detail — needs its own mini-spec (native `sharp` vs WASM `photon`/`jimp` vs a resize subagent). Image bloat is already bounded by P1 (flat token accounting + `keepRecentImages` + `stripMedia`), so this is an incremental win, not the immediate fix. `readImageDimensions()` already exists as a primitive a future resizer can build on.
 - **P3** — compaction produces no visible re-catch-up; a fresh session started from `handoff.md` continues the task correctly; when `handoff.md` is current, compaction makes no summarization API call.
 - **P4** — during heavy exploration the main window stays roughly flat while a subagent's window absorbs the tokens; figure verification never puts base64 in the main loop.
 - **P5** — the main window is a curated view: files/outputs are handles fetched on demand; re-reads don't re-inject content; retained set tracks the active task, not recency.
