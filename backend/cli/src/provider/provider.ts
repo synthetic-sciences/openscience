@@ -133,9 +133,16 @@ export namespace Provider {
    *  by the routing-label display and the managed/BYOK proxy guards so all read
    *  the credential the same way. `options` defaults to the provider's own; the
    *  proxy guards pass the mutable getSDK options instead. */
-  export function effectiveKey(provider: Info, options: Record<string, unknown> = provider.options ?? {}): string | undefined {
+  export function effectiveKey(
+    provider: Info,
+    options: Record<string, unknown> = provider.options ?? {},
+  ): string | undefined {
     const optionKey = typeof options["apiKey"] === "string" ? (options["apiKey"] as string) : undefined
-    return optionKey ?? provider.key ?? (provider.env ?? []).map((name) => Env.get(name)).find((value): value is string => !!value)
+    return (
+      optionKey ??
+      provider.key ??
+      (provider.env ?? []).map((name) => Env.get(name)).find((value): value is string => !!value)
+    )
   }
 
   /** Managed wallet ⇒ OpenRouter-only routing.
@@ -671,8 +678,7 @@ export namespace Provider {
       // explicitly, otherwise a user who exported GOOGLE_API_KEY lists fine but
       // hits "API key is missing" at call time. A managed proxy key (below), when
       // present, overrides it.
-      const apiKey =
-        Env.get("GOOGLE_GENERATIVE_AI_API_KEY") ?? Env.get("GOOGLE_API_KEY") ?? Env.get("GEMINI_API_KEY")
+      const apiKey = Env.get("GOOGLE_GENERATIVE_AI_API_KEY") ?? Env.get("GOOGLE_API_KEY") ?? Env.get("GEMINI_API_KEY")
       return {
         autoload: false,
         options: {
