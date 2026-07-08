@@ -37,6 +37,7 @@ import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Button } from "./button"
 import { Card } from "./card"
+import { createTypewriter } from "./typewriter"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
@@ -112,45 +113,10 @@ export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
 // import resolves against the v1.1.116 message-part.
 export const ARTIFACT_TOOL = "__artifact__"
 
-const TEXT_RENDER_THROTTLE_MS = 100
-
 function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
   return a.every((x, i) => x === b[i])
-}
-
-function createThrottledValue(getValue: () => string) {
-  const [value, setValue] = createSignal(getValue())
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  let last = 0
-
-  createEffect(() => {
-    const next = getValue()
-    const now = Date.now()
-    const remaining = TEXT_RENDER_THROTTLE_MS - (now - last)
-    if (remaining <= 0) {
-      if (timeout) {
-        clearTimeout(timeout)
-        timeout = undefined
-      }
-      last = now
-      setValue(next)
-      return
-    }
-    if (timeout) clearTimeout(timeout)
-    timeout = setTimeout(() => {
-      last = Date.now()
-      setValue(next)
-      timeout = undefined
-    }, remaining)
-  })
-
-  onCleanup(() => {
-    if (timeout) clearTimeout(timeout)
-  })
-
-  return value
 }
 
 function relativizeProjectPaths(text: string, directory?: string) {
@@ -713,7 +679,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const i18n = useI18n()
   const part = props.part as TextPart
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
-  const throttledText = createThrottledValue(displayText)
+  const throttledText = createTypewriter(displayText)
   const [copied, setCopied] = createSignal(false)
 
   const handleCopy = async () => {
@@ -753,7 +719,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = props.part as ReasoningPart
   const text = () => part.text.trim()
-  const throttledText = createThrottledValue(text)
+  const throttledText = createTypewriter(text)
 
   return (
     <Show when={throttledText()}>
