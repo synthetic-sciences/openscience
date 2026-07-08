@@ -22,6 +22,8 @@ import { Terminal } from "@/components/terminal"
 import { confirmDialog } from "@/thesis/dialogs"
 import { URLS } from "@/config/urls"
 import { uiStore, type RightPaneTab } from "@/thesis/store/ui"
+import { activeSubagents, activeCount } from "@/thesis/store/subagents"
+import { AgentsTab } from "@/thesis/AgentsTab"
 import { OpenScienceFileTree } from "@/thesis/OpenScienceFileTree"
 import { FilePreview } from "@/thesis/FilePreview"
 import { SkillLibraryDialog } from "@/thesis/SkillsBrowser"
@@ -71,6 +73,14 @@ function readSavedWidth(): number {
 export function RightPane(): JSX.Element {
   const tab = uiStore.rightPaneTab
   const setTab = uiStore.setRightPaneTab
+  const sync = useSync()
+  const routeParams = useParams()
+  const agentCount = createMemo(() => {
+    const id = routeParams.id
+    if (!id || id === "new") return 0
+    const rows = activeSubagents(sync.data.session as any, sync.data.session_status ?? {}, id)
+    return activeCount(rows)
+  })
   // Keep-alive: once a tab has been opened it stays mounted (hidden via CSS),
   // so switching tabs never re-mounts/re-fetches/re-animates — no flash.
   const [visited, setVisited] = createSignal<Set<RightPaneTab>>(new Set([tab()]))
@@ -86,6 +96,7 @@ export function RightPane(): JSX.Element {
   const TABS: { k: RightPaneTab; label?: string; Icon: (p: { size?: number; strokeWidth?: number }) => JSX.Element }[] =
     [
       { k: "canvas", label: "atlas", Icon: IconLayoutGrid },
+      { k: "agents", label: "agents", Icon: IconCpu },
       { k: "terminal", Icon: IconTerminal },
     ]
   const visibleTabs = createMemo(() => TABS.filter((t) => !uiStore.isTabHidden(t.k)))
@@ -191,7 +202,14 @@ export function RightPane(): JSX.Element {
           >
             <For each={visibleTabs()}>
               {(t) => (
-                <TabBtn k={t.k} label={t.label} Icon={t.Icon} active={tab() === t.k} onClick={() => setTab(t.k)} />
+                <TabBtn
+                  k={t.k}
+                  label={t.label}
+                  Icon={t.Icon}
+                  active={tab() === t.k}
+                  onClick={() => setTab(t.k)}
+                  badge={t.k === "agents" ? agentCount() : undefined}
+                />
               )}
             </For>
           </div>
@@ -258,6 +276,9 @@ export function RightPane(): JSX.Element {
         <div style={{ flex: 1, "min-height": 0, position: "relative", display: "flex", "flex-direction": "column" }}>
           <KeepAlive show={tab() === "canvas"} mounted={visited().has("canvas")}>
             <CanvasTab />
+          </KeepAlive>
+          <KeepAlive show={tab() === "agents"} mounted={visited().has("agents")}>
+            <AgentsTab />
           </KeepAlive>
           <KeepAlive show={tab() === "terminal"} mounted={visited().has("terminal")}>
             <TerminalTab />
