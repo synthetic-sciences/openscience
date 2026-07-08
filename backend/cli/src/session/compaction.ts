@@ -239,10 +239,12 @@ Do not mention that context was compacted or that you are summarizing. Do not as
     // re-attempting a compaction that can never succeed.
     if (result === "overflow") return "overflow"
 
-    // Persist the handoff to disk so a fresh agent/process can pick up from a single
-    // curated file instead of re-reading the whole project (and /compact leaves a
-    // durable checkpoint). Written to the project root as handoff.md unless a path was
-    // given via /handoff. Best-effort — a write failure never blocks the compaction.
+    // Persist the handoff so a fresh agent/process can pick up from one curated file
+    // instead of re-reading the whole project. Default is a PER-SESSION file at
+    // .openscience/handoffs/<sessionID>.md — one writer per file, so parallel sessions
+    // and subagents never clobber each other (no shared mutable "latest"; the caller
+    // knows its session id, and a human can `ls -t` for the newest). /handoff <path>
+    // overrides with an explicit file. Best-effort — a write failure never blocks it.
     if (result === "continue") {
       const summaryText = (await MessageV2.parts(msg.id))
         .filter((part) => part.type === "text")
@@ -250,12 +252,15 @@ Do not mention that context was compacted or that you are summarizing. Do not as
         .join("")
         .trim()
       if (summaryText) {
-        // Confine the write to the worktree: a /handoff path is user/agent-supplied
-        // and must not escape it via an absolute path or "..". Anything that would
-        // land outside falls back to the default handoff.md at the project root.
         const root = path.resolve(Instance.worktree)
-        const resolved = path.resolve(root, input.handoffFile?.trim() || "handoff.md")
-        const target = resolved.startsWith(root + path.sep) ? resolved : path.join(root, "handoff.md")
+        const custom = input.handoffFile?.trim()
+        const defaultTarget = path.resolve(root, ".openscience", "handoffs", `${input.sessionID}.md`)
+        // Confine a user-supplied /handoff path to the worktree (no absolute / ".."
+        // escape); on escape, fall back to the default per-session file.
+        const resolved = custom ? path.resolve(root, custom) : defaultTarget
+        const target = resolved.startsWith(root + path.sep) ? resolved : defaultTarget
+        // Self-ignoring dir so per-session handoffs never show up in `git status`.
+        if (!custom) await Bun.write(path.join(path.dirname(defaultTarget), ".gitignore"), "*\n").catch(() => {})
         await Bun.write(target, summaryText + "\n").catch((e) =>
           log.warn("failed to write handoff file", { target, error: e instanceof Error ? e.message : String(e) }),
         )

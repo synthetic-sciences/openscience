@@ -153,7 +153,7 @@ Track before/after each phase (P0 enables these):
 ---
 
 ## 9. Open questions / decisions
-- Q1. Where does `handoff.md` live long-term — project root (visible, git-noise risk) vs `.openscience/handoff.md` (hidden, cache-safe)? *(Leaning: gitignored `.openscience/` with a project-root symlink/opt-in.)*
+- Q1. **RESOLVED** — per-session `.openscience/handoffs/<sessionID>.md`: one writer per file, so parallel sessions/subagents never clobber (no shared mutable `latest.md` — that reintroduces cross-talk; "latest" is a read-time `ls -t`, not a written file). Dir self-ignores via a `*` `.gitignore`. `/handoff <path>` overrides with an explicit file.
 - Q2. Should the background handoff pass (P3.3) be a subagent or an inline aux-model call? *(Subagent = isolation; inline = simpler/cheaper.)*
 - Q3. Delegation policy (P4.1) — automatic (harness decides) vs advisory (prompt tells the agent to delegate)? Start advisory (low-risk), measure, then automate.
 - Q4. Do we adopt Anthropic's server-side `clear_tool_uses` for the managed path, or keep client-side control? *(Client-side is provider-agnostic; server-side is free but Anthropic-only.)*
