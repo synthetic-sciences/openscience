@@ -115,7 +115,11 @@ jobs:
       - name: Run openscience server
         if: matrix.settings.name != 'windows'
         working-directory: backend/cli
-        run: bun dev -- --print-logs --log-level WARN serve --port 4096 --hostname 127.0.0.1 &
+        # `serve` is loopback-only and rejects --hostname (yargs exits 1 with
+        # help text), so don't pass one. Keep the log on disk: a backgrounded
+        # process loses its output once this step ends, which made boot
+        # failures undiagnosable.
+        run: bun dev -- --print-logs --log-level WARN serve --port 4096 > "$RUNNER_TEMP/openscience-server.log" 2>&1 &
         env:
           OPENSCIENCE_DISABLE_SHARE: "true"
           OPENSCIENCE_DISABLE_LSP_DOWNLOAD: "true"
@@ -135,6 +139,7 @@ jobs:
             curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null && exit 0
             sleep 1
           done
+          echo "::error::openscience server never became healthy on 127.0.0.1:4096"
           exit 1
 
       - name: run
@@ -158,6 +163,10 @@ jobs:
           OPENSCIENCE_CLIENT: "app"
         timeout-minutes: 30
 
+      - name: Print server log
+        if: failure() && matrix.settings.name != 'windows'
+        run: cat "$RUNNER_TEMP/openscience-server.log" || true
+
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -168,3 +177,4 @@ jobs:
           path: |
             frontend/workspace/e2e/test-results
             frontend/workspace/e2e/playwright-report
+            ${{ runner.temp }}/openscience-server.log
