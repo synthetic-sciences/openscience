@@ -23,7 +23,16 @@ export interface DropdownMenuSubTriggerProps extends ComponentProps<typeof Kobal
 export interface DropdownMenuSubContentProps extends ComponentProps<typeof Kobalte.SubContent> {}
 
 function DropdownMenuRoot(props: DropdownMenuProps) {
-  return <Kobalte {...props} data-component="dropdown-menu" />
+  // Default to non-modal. Kobalte's modal menu installs its own body scroll-lock
+  // (padding-right scrollbar compensation). When a menu opens inside an
+  // already-modal Dialog, the two locks stack, and Kobalte captures the
+  // already-padded body width as its "original" — so each open/close cycle
+  // leaves extra padding-right behind. Invisible on macOS overlay scrollbars,
+  // but on Windows' classic scrollbars it narrows the app a little more every
+  // time (#145: the GUI "shrinks" on repeated `...` menu clicks). A dropdown
+  // menu doesn't need a scroll-lock or focus-trap; it still dismisses on
+  // outside-click and Escape. Callers can opt back in with modal={true}.
+  return <Kobalte modal={false} {...props} data-component="dropdown-menu" />
 }
 
 function DropdownMenuTrigger(props: ParentProps<DropdownMenuTriggerProps>) {
