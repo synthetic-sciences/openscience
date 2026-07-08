@@ -6,8 +6,6 @@ Investigation-heavy workstreams (CI, compute, sandboxing) are findings-first.
 
 Nothing irreversible ships without owner sign-off — **sandboxing (10) is design-only pending a go/no-go**.
 
-> **Update (shipped in v1.2.6):** every workstream except sandboxing (10) has landed. See the [changelog](../../CHANGELOG.md) for the release notes and [deferred work](../notes/deferred.md) for what stayed parked and why. The table below is the original Phase-0 plan, kept for provenance.
-
 ## Workstreams
 
 | #   | Workstream                     | Plan                                                       | Kind                    | Status |

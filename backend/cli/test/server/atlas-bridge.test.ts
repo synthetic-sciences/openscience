@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, beforeEach } from "bun:test"
+import fs from "node:fs/promises"
+import path from "node:path"
+import { Global } from "../../src/global"
 import {
   classifyInitFailure,
   computeDedupeKey,
@@ -99,6 +102,14 @@ describe("pinMatchesKey", () => {
 })
 
 describe("initProjectDetailed", () => {
+  // The XDG data dir is isolated per-process, not per-test, so an earlier test
+  // in the suite may leave a session file behind — that makes token() non-null
+  // and defeats the no-session assertion below (it fails "unreachable" instead
+  // of "unauthenticated"). Clear it first so this test is order-independent.
+  beforeEach(async () => {
+    await fs.unlink(path.join(Global.Path.data, "openscience-session.json")).catch(() => {})
+  })
+
   test("fails fast as unauthenticated with no managed session (no network)", async () => {
     // Test env is XDG-isolated (see test/preload.ts) so no session file exists.
     const result = await initProjectDetailed(process.cwd())

@@ -93,7 +93,7 @@
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="checkbox-checkbox-control"],
   &[data-indeterminate]:hover:not([data-disabled]) [data-slot="checkbox-checkbox-control"] {
     border-color: var(--border-hover);
-    background-color: var(--surface-weak);
+    background-color: var(--surface-hover);
   }
 
   &[data-checked] [data-slot="checkbox-checkbox-indicator"],

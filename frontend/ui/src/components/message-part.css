@@ -30,7 +30,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    border-radius: 2px;
+    border-radius: 6px;
     overflow: hidden;
     background: var(--surface-weak);
     border: 1px solid var(--border-weak-base);
@@ -76,10 +76,10 @@
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
-    background: var(--surface-raised-base);
-    border: 1px solid var(--border-base);
-    padding: 10px 14px;
-    border-radius: 14px;
+    background: var(--surface-weak);
+    border: 1px solid var(--border-weak-base);
+    padding: 8px 12px;
+    border-radius: 4px;
 
     [data-highlight="file"] {
       color: var(--syntax-property);
@@ -93,9 +93,6 @@
       position: absolute;
       top: 7px;
       right: 7px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
       opacity: 0;
       transition: opacity 0.15s ease;
     }
@@ -149,7 +146,7 @@
 
   [data-component="markdown"] {
     margin-top: 24px;
-    font-style: italic !important;
+    font-style: normal;
 
     p:has(strong) {
       margin-top: 24px;
@@ -419,7 +416,7 @@
     color: var(--text-on-critical-base);
     font-weight: var(--font-weight-medium);
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: -0.5px;
     flex-shrink: 0;
   }
 
@@ -462,7 +459,7 @@
     top: calc(2px + var(--sticky-header-height, 40px));
     bottom: 0px;
     z-index: 20;
-    border-radius: 2px;
+    border-radius: 6px;
     border: none;
     box-shadow: var(--shadow-xs-border-base);
     background-color: var(--surface-raised-base);
@@ -596,7 +593,7 @@
     gap: 8px;
 
     [data-slot="question-text"] {
-      font-size: var(--font-size-base);
+      font-size: 14px;
       color: var(--text-base);
       line-height: 1.5;
     }
@@ -615,7 +612,7 @@
       padding: 8px 12px;
       background-color: var(--surface-base);
       border: 1px solid var(--border-weaker-base);
-      border-radius: 2px;
+      border-radius: 6px;
       cursor: pointer;
       text-align: left;
       width: 100%;
@@ -640,9 +637,9 @@
       }
 
       [data-slot="option-label"] {
-        font-size: var(--font-size-base);
+        font-size: 14px;
         color: var(--text-base);
-        font-weight: 400;
+        font-weight: 500;
       }
 
       [data-slot="option-description"] {
@@ -660,9 +657,9 @@
       [data-slot="custom-input"] {
         flex: 1;
         padding: 8px 12px;
-        font-size: var(--font-size-base);
+        font-size: 14px;
         border: 1px solid var(--border-default);
-        border-radius: 2px;
+        border-radius: 6px;
         background-color: var(--surface-base);
         color: var(--text-base);
         outline: none;
@@ -828,4 +825,17 @@
     flex-shrink: 0;
     color: var(--icon-weak);
   }
+}
+
+/* Clickable file references — read/write/edit tool cards expose their filename;
+   clicking it opens the file as a document tab (data.openFile). */
+[data-slot="basic-tool-tool-subtitle"].clickable,
+[data-slot="message-part-title-filename"].clickable {
+  cursor: pointer;
+}
+[data-slot="basic-tool-tool-subtitle"].clickable:hover,
+[data-slot="message-part-title-filename"].clickable:hover {
+  color: var(--text-interactive-base);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

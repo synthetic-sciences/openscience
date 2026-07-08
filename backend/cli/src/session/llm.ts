@@ -109,18 +109,11 @@ export namespace LLM {
           sessionID: input.sessionID,
           providerOptions: provider.options,
         })
-    // Real per-request "fast" param — gpt-5.5 only. `serviceTier` is mapped to
-    // OpenAI's `service_tier` by @ai-sdk/openai and lands under providerOptions.
-    // openai via sdkKey. Effective only if the model config sets
-    // supportsPriorityProcessing (else the SDK drops it with a warning).
-    const fast = !input.small && !!input.user.fast && /gpt-5\.5/.test(input.model.id.toLowerCase())
-    const speed = fast ? { serviceTier: "priority" } : {}
     const options: Record<string, any> = pipe(
       base,
       mergeDeep(input.model.options),
       mergeDeep(input.agent.options),
       mergeDeep(variant),
-      mergeDeep(speed),
     )
     if (isCodex) {
       options.instructions = SystemPrompt.instructions()

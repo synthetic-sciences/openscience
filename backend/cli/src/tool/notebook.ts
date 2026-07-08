@@ -6,6 +6,8 @@ import os from "os"
 import { unlinkSync } from "fs"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
+import { Config } from "@/config/config"
+import { Sandbox } from "@/sandbox/sandbox"
 import type {
   Kernel,
   KernelManager,
@@ -234,7 +236,17 @@ class PythonKernel implements Kernel {
     this.scriptPath = scriptPath
 
     const bin = await findPython(opts?.binary)
-    const proc = spawn(bin, ["-u", scriptPath], {
+    // Confine the kernel to the workspace when the execution sandbox is on: the
+    // notebook runs arbitrary agent-authored code — the same threat model as the
+    // bash tool — so it must not be able to escape the boundary bash respects.
+    const sandboxed = Sandbox.wrapArgv({
+      file: bin,
+      args: ["-u", scriptPath],
+      workspace: [Instance.directory, Instance.worktree],
+      extraWritable: [scriptPath],
+      options: await Config.trustedSandbox(),
+    })
+    const proc = spawn(sandboxed.file, sandboxed.args, {
       cwd: opts?.cwd ?? Instance.directory,
       env: { ...(await OpenScience.subprocessEnv(process.env)), ...(opts?.env ?? {}), PYTHONUNBUFFERED: "1" },
       stdio: ["pipe", "pipe", "pipe"],

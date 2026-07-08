@@ -57,7 +57,7 @@
     position: sticky;
     top: var(--session-title-height, 0px);
     z-index: 20;
-    background-color: var(--background-stronger);
+    background-color: var(--background-base);
     margin-left: -9px;
     padding-left: 9px;
     /* padding-bottom: 12px; */
@@ -72,7 +72,7 @@
       bottom: 0;
       left: 0;
       right: 0;
-      background-color: var(--background-stronger);
+      background-color: var(--background-base);
       z-index: -1;
     }
 
@@ -82,8 +82,8 @@
       top: 100%;
       left: 0;
       right: 0;
-      height: 16px;
-      background: linear-gradient(to bottom, var(--background-stronger), transparent 100%);
+      height: 32px;
+      background: linear-gradient(to bottom, var(--background-base), transparent);
       pointer-events: none;
     }
   }
@@ -147,7 +147,7 @@
     height: 22px;
     width: 22px;
     border: none;
-    border-radius: 2px;
+    border-radius: 6px;
     background: transparent;
     cursor: pointer;
     color: var(--text-weak);
@@ -179,7 +179,7 @@
   [data-slot="session-turn-message-title"] {
     width: 100%;
     font-size: var(--font-size-large);
-    font-weight: 400;
+    font-weight: 500;
     color: var(--text-strong);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -222,10 +222,6 @@
     [data-slot="session-turn-response"] {
       position: relative;
       width: 100%;
-      border: 1px solid var(--border-base);
-      border-radius: 14px;
-      padding: 16px 18px;
-      background: var(--surface-raised-base);
     }
 
     [data-slot="session-turn-response-copy-wrapper"] {
@@ -247,10 +243,11 @@
     }
   }
 
-  /* The answer is obviously the answer in a chat layout — drop the "RESPONSE"
-     eyebrow so the assistant bubble reads cleanly. */
   [data-slot="session-turn-summary-title"] {
-    display: none;
+    font-size: 13px;
+    /* text-12-medium */
+    font-weight: 500;
+    color: var(--text-weak);
   }
 
   [data-slot="session-turn-markdown"],
@@ -261,7 +258,7 @@
 
   [data-slot="session-turn-markdown"] {
     &[data-diffs="true"] {
-      font-size: var(--font-size-large);
+      font-size: 15px;
     }
 
     &[data-fade="true"] > * {
@@ -501,9 +498,32 @@
     align-items: center;
     gap: 8px;
     color: var(--text-weak);
+    /* Bigger, obviously-clickable hit area for the show/hide-steps toggle.
+       Negative inline margin keeps the enlarged target from shifting layout. */
+    cursor: pointer;
+    padding: 6px 10px;
+    margin: -6px -10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition:
+      background 0.12s ease,
+      border-color 0.12s ease,
+      color 0.12s ease;
+
+    &:hover {
+      background: var(--surface-raised-base);
+      border-color: var(--border-weak-base);
+      color: var(--text-base);
+    }
+
+    &:focus-visible {
+      border-color: var(--border-base);
+    }
 
     [data-slot="session-turn-trigger-icon"] {
       color: var(--icon-base);
+      flex-shrink: 0;
+      transition: transform 0.15s ease;
     }
 
     [data-component="spinner"] {
@@ -519,7 +539,7 @@
   }
 
   [data-slot="session-turn-retry-message"] {
-    font-weight: 400;
+    font-weight: 500;
     color: var(--syntax-critical);
   }
 
@@ -539,7 +559,7 @@
   [data-slot="session-turn-details-text"] {
     font-size: 13px;
     /* text-12-medium */
-    font-weight: 400;
+    font-weight: 500;
   }
 
   .error-card {

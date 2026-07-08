@@ -2,6 +2,7 @@
 
 @import "./colors.css" layer(theme);
 @import "./theme.css" layer(theme);
+@import "./legacy-compat.css" layer(theme);
 
 @import "./base.css" layer(base);
 /* katex CSS is NOT imported globally — it's ~790 rules (the bulk of the app's

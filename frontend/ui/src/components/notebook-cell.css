@@ -9,7 +9,7 @@
     padding: 8px 12px;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
-    font-weight: 700;
+    font-weight: 600;
     color: var(--text-base);
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border-weaker-base);
@@ -40,7 +40,7 @@
 
   [data-slot="notebook-cell-prompt"] {
     font-family: var(--font-family-mono);
-    font-size: var(--font-size-x-small);
+    font-size: var(--font-size-xs);
     color: var(--text-weak);
     min-width: 32px;
   }
@@ -53,7 +53,7 @@
       margin: 0;
       padding: 8px 12px 8px 52px;
       font-family: var(--font-family-mono);
-      font-size: var(--font-size-x-small);
+      font-size: var(--font-size-xs);
       line-height: 1.5;
       color: var(--text-base);
       background: var(--bg-base);
@@ -88,7 +88,7 @@
   [data-slot="notebook-output-stream"] {
     margin: 0;
     font-family: var(--font-family-mono);
-    font-size: var(--font-size-x-small);
+    font-size: var(--font-size-xs);
     line-height: 1.5;
     color: var(--text-base);
     white-space: pre-wrap;
@@ -102,7 +102,7 @@
   [data-slot="notebook-output-text"] {
     margin: 0;
     font-family: var(--font-family-mono);
-    font-size: var(--font-size-x-small);
+    font-size: var(--font-size-xs);
     line-height: 1.5;
     color: var(--text-base);
     white-space: pre-wrap;
@@ -121,11 +121,11 @@
 
   [data-slot="notebook-output-error"] {
     font-family: var(--font-family-mono);
-    font-size: var(--font-size-x-small);
+    font-size: var(--font-size-xs);
     color: var(--text-error);
 
     [data-slot="notebook-error-name"] {
-      font-weight: 700;
+      font-weight: 600;
       padding: 4px 0;
     }
 

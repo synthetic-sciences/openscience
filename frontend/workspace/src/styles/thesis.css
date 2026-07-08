@@ -145,6 +145,39 @@
   outline: none !important;
 }
 
+/* The v1.1.116 chat + composer buttons carry their own subtle focus treatment
+   (button.css shadow-xs-border-focus). Suppress the app-wide hard teal
+   :focus-visible box on interactive elements inside the conversation and the
+   PromptInput so the controls (agent / model / effort / speed) read like the
+   old UI instead of a harsh 2px outline. Focus stays visible via button.css. */
+[data-component="prompt-input"] :is(button, [role="button"], a, [tabindex]):focus-visible,
+.session-scroller :is(button, [role="button"], a, [tabindex]):focus-visible {
+  outline: none !important;
+}
+
+/* Composer control chips — agent / model / effort / speed were ghost buttons
+   with no resting surface, so they read as plain low-contrast text. Give them a
+   subtle chip (surface + hairline) so they're clearly interactive, and lift the
+   contrast on hover. Scoped to the control row, so send / attach are untouched. */
+[data-slot="prompt-controls"] [data-component="button"][data-variant="ghost"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-weak-base);
+  color: var(--text-base);
+  font-size: 14px;
+  border-radius: 11px;
+}
+[data-slot="prompt-controls"] [data-component="button"][data-variant="ghost"]:hover:not(:disabled) {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-base);
+  color: var(--text-strong);
+}
+/* The agent/mode <Select> trigger renders its value at 13px (--font-size-base)
+   while the ghost buttons above are bumped to 14px — match them so the whole
+   control row is one consistent size. */
+[data-slot="prompt-controls"] [data-component="select"] [data-slot="select-select-trigger-value"] {
+  font-size: 14px;
+}
+
 /* The old light-mode "cream neutralisation" remap block is gone: the default
    openscience theme now ships the product's neutral greys directly, so the ui
    semantic layer needs no app-side patching (and non-default themes render

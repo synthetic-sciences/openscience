@@ -5,7 +5,7 @@
   flex-shrink: 0;
   height: 20px;
   padding: 0 8px;
-  border-radius: var(--radius-xs);
+  border-radius: 2px;
   background: var(--surface-base);
   box-shadow: var(--shadow-xxs-border);
 

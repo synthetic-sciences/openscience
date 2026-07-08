@@ -59,7 +59,9 @@ At the START of the task, before Stage 1, set up the graph:
    `project_id: null` with an `error` kind — relay the matching fix (`unauthenticated` →
    `openscience login`; `plan` → app.syntheticsciences.ai/cli; `unreachable`/`backend`
    → show the message) and continue the work. (Or load the `initialize-atlas-graph` skill,
-   which wraps this exact command.)
+   which wraps this exact command.) When you mention the graph to the user, call it the
+   **Atlas** project graph (the durable, graph-based research memory) — never an
+   "OpenScience project graph". `openscience project init` is just the CLI that links it.
 2. **Load prior graph state — optional, best-effort.** Run `atlas doctor --format=json`. If it
    reports the `atlas` CLI is unavailable/unauthenticated, skip the `atlas ...` commands below
    and continue — this does NOT undo step 1, which already created the graph. If doctor is OK,

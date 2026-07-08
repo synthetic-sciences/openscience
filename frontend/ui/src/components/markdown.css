@@ -23,27 +23,12 @@
   h4,
   h5,
   h6 {
+    font-size: var(--font-size-base);
     color: var(--text-strong);
     font-weight: var(--font-weight-medium);
-    margin-top: 1.75rem;
-    margin-bottom: 0.6rem;
-    line-height: var(--line-height-large);
-  }
-  /* A real heading hierarchy so long, structured answers stay scannable. */
-  h1 {
-    font-size: 1.45em;
     margin-top: 2rem;
-  }
-  h2 {
-    font-size: 1.2em;
-  }
-  h3 {
-    font-size: 1.08em;
-  }
-  h4,
-  h5,
-  h6 {
-    font-size: 1em;
+    margin-bottom: 0.75rem;
+    line-height: var(--line-height-large);
   }
 
   /* Emphasis & Strong: Neutral strong color */
@@ -176,46 +161,33 @@
     }
   }
 
-  /* Inline code reads as a quiet chip, not just coloured text. */
   :not(pre) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    color: var(--text-strong);
-    font-weight: var(--font-weight-regular);
-    font-size: 0.88em;
-    padding: 0.12em 0.36em;
-    border-radius: 5px;
-    background: var(--surface-weak);
-    box-shadow: inset 0 0 0 1px var(--border-weaker-base);
+    color: var(--syntax-string);
+    font-weight: var(--font-weight-medium);
+    /* font-size: 13px; */
+
+    /* padding: 2px 2px; */
+    /* margin: 0 1.5px; */
+    /* border-radius: 2px; */
+    /* background: var(--surface-base); */
+    /* box-shadow: 0 0 0 0.5px var(--border-weak-base); */
   }
 
-  /* GFM task lists: drop the bullet, align the box, brand the tick. */
-  li:has(> input[type="checkbox"]) {
-    list-style: none;
-    margin-left: -1.25rem;
-  }
-  li > input[type="checkbox"] {
-    margin-right: 0.5em;
-    accent-color: var(--text-interactive-base);
-    vertical-align: -1px;
-  }
-
-  /* Tables — scroll wide matrices instead of breaking the layout, with a clear
-     header row and quiet cell borders so dense tables stay legible. */
+  /* Tables */
   table {
-    display: block;
-    max-width: 100%;
-    overflow-x: auto;
+    width: 100%;
     border-collapse: collapse;
     margin: 1.5rem 0;
-    font-size: calc(var(--font-size-base) - 1px);
-    scrollbar-width: thin;
+    font-size: var(--font-size-base);
   }
 
   th,
   td {
-    border: 1px solid var(--border-weaker-base);
-    padding: 0.5rem 0.75rem;
+    /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
+    border-bottom: 1px solid var(--border-weaker-base);
+    padding: 0.75rem 0.5rem;
     text-align: left;
     vertical-align: top;
   }
@@ -223,8 +195,7 @@
   th {
     color: var(--text-strong);
     font-weight: var(--font-weight-medium);
-    background: var(--surface-weak);
-    white-space: nowrap;
+    border-bottom: 1px solid var(--border-weak-base);
   }
 
   /* Images */
@@ -235,4 +206,14 @@
     margin: 1.5rem 0;
     display: block;
   }
+}
+
+/* Inline file-path code spans made clickable by the markdown post-processor. */
+[data-component="markdown"] code[data-file-link] {
+  cursor: pointer;
+}
+[data-component="markdown"] code[data-file-link]:hover {
+  color: var(--text-interactive-base);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

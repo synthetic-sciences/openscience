@@ -5,18 +5,6 @@
   inset: 0;
   z-index: 50;
   background-color: hsl(from var(--background-base) h s l / 0.2);
-  /* Start invisible so the very first paint matches the animation's
-     from-state — without this the overlay flashes at full opacity for one
-     frame before the animation rewinds it to 0. */
-  opacity: 0;
-  animation: overlayHide 120ms ease-in forwards;
-
-  &[data-expanded] {
-    /* `backwards` applies the from-keyframe before the animation starts,
-       so the element is invisible from the first paint and there's no
-       jump-then-fade flicker on mount. */
-    animation: overlayShow 180ms ease-out both;
-  }
 }
 
 [data-component="dialog"] {
@@ -88,7 +76,10 @@
 
       [data-slot="dialog-description"] {
         display: flex;
-        padding: 0 20px 16px;
+        padding: 16px;
+        padding-left: 24px;
+        padding-top: 0;
+        margin-top: -8px;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
@@ -96,9 +87,9 @@
 
         color: var(--text-base);
 
-        /* text-13-regular */
+        /* text-14-regular */
         font-family: var(--font-family-sans);
-        font-size: var(--font-size-base);
+        font-size: 14px;
         font-style: normal;
         font-weight: var(--font-weight-regular);
         line-height: var(--line-height-large); /* 142.857% */
@@ -145,13 +136,10 @@
 }
 
 [data-component="dialog"][data-transition] [data-slot="dialog-content"] {
-  /* Mirror the overlay treatment so the content respects its from-state
-     before the first paint and the dialog never flashes at full opacity. */
-  opacity: 0;
-  animation: contentHide 120ms ease-in forwards;
+  animation: contentHide 100ms ease-in forwards;
 
   &[data-expanded] {
-    animation: contentShow 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: contentShow 150ms ease-out;
   }
 }
 

@@ -5,14 +5,14 @@
   background-color: var(--surface-inset-base);
   border: 1px solid var(--border-weaker-base);
   transition: background-color 0.15s ease;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   padding: 6px 12px;
   overflow: clip;
 
   &[data-variant="error"] {
     background-color: var(--surface-critical-weak);
     border: 1px solid var(--border-critical-base);
-    color: var(--text-on-critical-weak);
+    color: rgba(218, 51, 25, 0.6);
 
     /* text-12-regular */
     font-family: var(--font-family-sans);
@@ -22,7 +22,7 @@
     line-height: var(--line-height-large); /* 166.667% */
     letter-spacing: var(--letter-spacing-normal);
 
-    & [data-component="icon"] {
+    &[data-component="icon"] {
       color: var(--icon-critical-active);
     }
   }

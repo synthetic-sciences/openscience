@@ -235,6 +235,31 @@ export function Markdown(
       },
     })
 
+    // Make inline file-path code spans clickable — dispatch an event the host
+    // (session page) turns into an openFile. Curated extensions only, so prose
+    // like `n/a` or an identifier `a/b` isn't hijacked.
+    container.querySelectorAll("code").forEach((el) => {
+      if (el.closest("pre")) return
+      const anchor = el as HTMLElement
+      if (anchor.dataset.fileLink) return
+      const text = (el.textContent ?? "").trim()
+      const isFile =
+        text.length > 2 &&
+        text.length < 260 &&
+        !/\s/.test(text) &&
+        /\.(md|mdx|json|jsonl|txt|py|ipynb|ts|tsx|js|jsx|csv|tsv|ya?ml|toml|tex|bib|pdf|png|jpe?g|gif|svg|sh|r|rmd|parquet|h5|hdf5|npy|npz|pkl|log|cfg|ini|xml|html?|css|sql|go|rs|java|db|sqlite)$/i.test(
+          text,
+        )
+      if (!isFile) return
+      anchor.dataset.fileLink = "1"
+      anchor.setAttribute("data-file-link", "true")
+      anchor.addEventListener("click", (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        document.dispatchEvent(new CustomEvent("openscience:open-file", { detail: { path: text } }))
+      })
+    })
+
     if (copySetupTimer) clearTimeout(copySetupTimer)
     copySetupTimer = setTimeout(() => {
       if (copyCleanup) copyCleanup()

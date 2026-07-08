@@ -64,7 +64,7 @@
     font-size: var(--font-size-small);
     font-weight: var(--font-weight-medium);
     border-radius: var(--radius-md);
-    cursor: default;
+    cursor: pointer;
     display: flex;
     flex-wrap: nowrap;
     gap: calc(var(--spacing) * 1);
@@ -95,7 +95,7 @@
 
   /* Hover state for unchecked, enabled items */
   [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled]) + [data-slot="radio-group-item-label"] {
-    cursor: default;
+    cursor: pointer;
     user-select: none;
   }
 

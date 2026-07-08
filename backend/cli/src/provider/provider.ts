@@ -1181,6 +1181,25 @@ export namespace Provider {
         continue
       }
 
+      // Under an EXPLICIT byok toggle, drop any provider whose effective
+      // credential is a managed Atlas (thk_) key. The managed sync writes
+      // OPENROUTER_BASE_URL + a thk_ OPENROUTER_API_KEY into the environment and
+      // those survive a managed→byok switch — so without this, byok silently
+      // keeps routing through the wallet proxy (and billing managed spend) on a
+      // credential the user never brought. BYOK must use the user's OWN keys
+      // only; auto-detect (billing unset) is left alone so a thk_ key can still
+      // resolve to managed there.
+      if (config.billing?.llm === "byok") {
+        const effective =
+          (typeof provider.options?.["apiKey"] === "string" ? (provider.options["apiKey"] as string) : undefined) ??
+          provider.key ??
+          provider.env.map((key) => Env.get(key)).find((value): value is string => !!value)
+        if (isAtlasApiKey(effective)) {
+          delete providers[providerID]
+          continue
+        }
+      }
+
       const configProvider = config.provider?.[providerID]
 
       for (const [modelID, model] of Object.entries(provider.models)) {

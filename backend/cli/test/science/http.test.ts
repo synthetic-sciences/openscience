@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { getJSON, getText, request, clearCache, resetRateLimits } from "../../src/science/connectors/http"
+import { getJSON, getText, request, clearCache, resetRateLimits, orFallback } from "../../src/science/connectors/http"
 
 // The shared http helper is the ONLY reliability layer under science/connectors,
 // yet had zero tests. These stub globalThis.fetch to exercise retry/backoff, the
@@ -137,5 +137,55 @@ describe("http per-host throttle", () => {
     ])
     // Two distinct hosts run concurrently — neither pays the other's interval.
     expect(Date.now() - t0).toBeLessThan(400)
+  })
+})
+
+describe("orFallback (abort-preserving fallback)", () => {
+  test("returns the fallback when the promise rejects and the signal is not aborted", async () => {
+    const result = await orFallback(
+      Promise.reject(new Error("source down")),
+      { hits: [] },
+      new AbortController().signal,
+    )
+    expect(result).toEqual({ hits: [] })
+  })
+
+  test("returns the resolved value on success, ignoring the fallback", async () => {
+    const result = await orFallback(Promise.resolve("real"), "fallback", new AbortController().signal)
+    expect(result).toBe("real")
+  })
+
+  test("rethrows (does NOT fall back) when the caller's signal is aborted", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const err = new DOMException("The operation was aborted.", "AbortError")
+    await expect(orFallback(Promise.reject(err), "fallback", controller.signal)).rejects.toThrow(/aborted/)
+  })
+
+  test("falls back when no signal is supplied", async () => {
+    const result = await orFallback(Promise.reject(new Error("nope")), 42)
+    expect(result).toBe(42)
+  })
+
+  test("a real search cancellation propagates through request() and orFallback", async () => {
+    const controller = new AbortController()
+    // Model real fetch: reject with an AbortError as soon as the signal is
+    // aborted — including when it is already aborted by the time fetch runs.
+    globalThis.fetch = ((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        const sig = init?.signal
+        const fail = () => reject(new DOMException("aborted", "AbortError"))
+        if (sig?.aborted) return fail()
+        sig?.addEventListener("abort", fail, { once: true })
+      })) as unknown as typeof fetch
+
+    const search = orFallback(
+      getJSON("https://slow.test/q", { signal: controller.signal }),
+      { hits: [] },
+      controller.signal,
+    )
+    controller.abort()
+    // The cancellation surfaces instead of being masked as an empty result.
+    await expect(search).rejects.toThrow()
   })
 })

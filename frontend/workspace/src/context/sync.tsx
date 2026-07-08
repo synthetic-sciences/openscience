@@ -323,6 +323,34 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
         },
+        rename: async (sessionID: string, title: string) => {
+          const directory = sdk.directory
+          const client = sdk.client
+          const [, setStore] = globalSync.child(directory)
+          // Optimistically retitle in place so the row renames instantly; if the
+          // backend rejects it we roll the title back so the UI stays honest.
+          let prev: string | undefined
+          setStore(
+            produce((draft) => {
+              const match = Binary.search(draft.session, sessionID, (s) => s.id)
+              if (match.found) {
+                prev = draft.session[match.index].title
+                draft.session[match.index].title = title
+              }
+            }),
+          )
+          try {
+            await client.session.update({ sessionID, title })
+          } catch (e) {
+            setStore(
+              produce((draft) => {
+                const match = Binary.search(draft.session, sessionID, (s) => s.id)
+                if (match.found && prev !== undefined) draft.session[match.index].title = prev
+              }),
+            )
+            throw e
+          }
+        },
         delete: async (sessionID: string) => {
           const directory = sdk.directory
           const client = sdk.client

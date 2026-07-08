@@ -150,9 +150,7 @@ export default function Wallet() {
                 {(t) => (
                   <Row>
                     <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-                      <span class="text-13-regular text-text-strong truncate" title={t.description || t.source}>
-                        {t.description || t.source}
-                      </span>
+                      <span class="text-13-regular text-text-strong truncate">{t.description || t.source}</span>
                       <span class="text-11-regular text-text-weak">{when(t.createdAt)}</span>
                     </div>
                     <span

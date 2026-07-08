@@ -26,7 +26,7 @@ const API_BASE = (
   process.env.SYNSC_API_BASE ||
   process.env.MANAGED_API_BASE ||
   process.env.ATLAS_BASE_URL ||
-  "https://api.syntheticsciences.ai"
+  "https://app.syntheticsciences.ai"
 ).replace(/\/+$/, "")
 
 const cache = new Map() // key -> { at: number, body: string, status: number }
@@ -239,7 +239,11 @@ async function handle(req, res) {
     } else if (method === "GET" && path === "health") {
       return send(res, 200, { ok: !!sessionToken() })
     } else {
-      return send(res, 404, { error: "unknown atlas route", path, method })
+      // Mirror the backend bridge's `.all("/*") → 200 {}`: quietly answer any
+      // other path the SPA probes (e.g. GET /project for a folder with no linked
+      // graph) with an empty object, so dev doesn't spam 404s where production
+      // returns 200. The graph list + per-graph tree above are the real routes.
+      return send(res, 200, {})
     }
 
     if (method === "GET") cache.set(cacheKey, { at: Date.now(), body, status: 200 })

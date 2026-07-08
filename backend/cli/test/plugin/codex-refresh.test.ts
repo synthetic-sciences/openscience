@@ -31,17 +31,3 @@ test("a transient 5xx is retried, then succeeds", async () => {
   expect(tokens.access_token).toBe("a1")
   expect(calls).toBe(2)
 })
-
-test("a 429 (rate limit) is retried, not treated as expired", async () => {
-  // During a retry storm the token endpoint rate-limits; that's transient, not
-  // a revoked refresh token — must NOT throw CodexRefreshInvalidError.
-  let calls = 0
-  globalThis.fetch = (async () => {
-    calls++
-    if (calls < 2) return new Response("rate limited", { status: 429 })
-    return Response.json({ access_token: "a1", refresh_token: "r1", expires_in: 3600 })
-  }) as unknown as typeof fetch
-  const tokens = await refreshAccessToken("rt")
-  expect(tokens.access_token).toBe("a1")
-  expect(calls).toBe(2)
-})

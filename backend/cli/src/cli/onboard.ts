@@ -6,6 +6,7 @@ import { OpenScience } from "../openscience"
 import { Auth } from "../auth"
 import { Config } from "../config/config"
 import { Provider } from "../provider/provider"
+import { Sandbox } from "../sandbox/sandbox"
 import { Global } from "../global"
 import { openUrl } from "../util/open-url"
 import { runAtlasLogin } from "./cmd/connect"
@@ -252,6 +253,20 @@ export const DoctorCommand = cmd({
         prompts.log.success(`Local models: ${locals.map(([id]) => id).join(", ")}  (run \`openscience local list\`)`)
       }
       prompts.log.info(`Default model: ${config.model ?? "auto (chosen from available providers)"}`)
+
+      const sandbox = Sandbox.describe()
+      const sandboxOn = (await Config.trustedSandbox())?.enabled === true
+      const sandboxLine = sandboxOn
+        ? sandbox.available
+          ? { level: "success" as const, msg: `Sandbox: on (${sandbox.backend})  (run \`openscience sandbox test\`)` }
+          : { level: "warn" as const, msg: `Sandbox: on but no backend here — ${sandbox.reason}` }
+        : {
+            level: "info" as const,
+            msg: sandbox.available
+              ? `Sandbox: off  (${sandbox.backend} available — \`openscience sandbox enable\`)`
+              : "Sandbox: off",
+          }
+      prompts.log[sandboxLine.level](sandboxLine.msg)
     } catch {}
 
     if (!(await isConfigured())) {

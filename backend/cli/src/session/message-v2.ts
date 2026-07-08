@@ -327,9 +327,6 @@ export namespace MessageV2 {
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
     tier: z.enum(["fast", "pro", "ultra"]).optional(),
-    // Real per-request "fast" API param — currently gpt-5.5 only, mapped to
-    // OpenAI service_tier:"priority" in llm.ts. Distinct from `tier` (billing).
-    fast: z.boolean().optional(),
   }).meta({
     ref: "UserMessage",
   })

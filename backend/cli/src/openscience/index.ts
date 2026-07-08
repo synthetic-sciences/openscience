@@ -1621,6 +1621,25 @@ export namespace OpenScience {
     lifetimeSpentCents: number
   }
 
+  /**
+   * The wallet balance the CLI can actually spend, in cents.
+   *
+   * Atlas `/api/credits` also returns `unified_balance_cents` — the sum of every
+   * pool: the CLI wallet + the Atlas-web wallet + the subscription cycle pool +
+   * gifted credits. But OpenScience managed mode debits ONLY the CLI wallet
+   * (Atlas `cli.py`: `category="cli"`; an Atlas plan grants BYOK + library quota,
+   * not CLI spending credits). Showing the unified pool made the wallet read
+   * e.g. $160 when the CLI could actually spend far less. Prefer the CLI wallet;
+   * fall back to the older aggregate fields only if a backend omits it.
+   */
+  export function cliSpendableCents(d: {
+    cli_balance_cents?: number
+    unified_balance_cents?: number
+    balance_cents?: number
+  }): number {
+    return d.cli_balance_cents ?? d.unified_balance_cents ?? d.balance_cents ?? 0
+  }
+
   export async function getCredits(): Promise<Credits | null> {
     const session = await getSession()
     if (!session) return null
@@ -1636,7 +1655,7 @@ export namespace OpenScience {
         cycle_credits_remaining_cents?: number
         lifetime_spent_cents?: number
       }
-      const cents = d.unified_balance_cents ?? d.balance_cents ?? 0
+      const cents = cliSpendableCents(d)
       return {
         balanceUsd: cents / 100,
         cliBalanceCents: d.cli_balance_cents ?? d.balance_cents ?? 0,

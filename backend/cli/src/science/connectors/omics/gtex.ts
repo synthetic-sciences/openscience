@@ -10,7 +10,7 @@
  * fetch(id) → gene record + /api/v2/expression/medianGeneExpression?gencodeId=...
  */
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 
 const BASE = "https://gtexportal.org/api/v2"
 
@@ -62,7 +62,7 @@ function toHit(g: GtexGene): ConnectorHit {
 
 async function lookupGene(geneId: string, limit: number, signal?: AbortSignal): Promise<GtexGene[]> {
   const url = `${BASE}/reference/gene?geneId=${encodeURIComponent(geneId)}&itemsPerPage=${limit}`
-  const data = await getJSON<GtexGeneResponse>(url, { signal }).catch(() => ({}) as GtexGeneResponse)
+  const data = await orFallback(getJSON<GtexGeneResponse>(url, { signal }), {} as GtexGeneResponse, signal)
   return data.data ?? []
 }
 
@@ -87,10 +87,14 @@ export const gtex: Connector = {
     const gene = isGencode ? (genes.find((g) => g.gencodeId?.startsWith(trimmed.split(".")[0])) ?? genes[0]) : genes[0]
     const gencodeId = gene?.gencodeId ?? (isGencode ? trimmed : undefined)
     if (!gencodeId) return { id: trimmed, found: false }
-    const median = await getJSON<GtexMedianResponse>(
-      `${BASE}/expression/medianGeneExpression?gencodeId=${encodeURIComponent(gencodeId)}&itemsPerPage=100`,
-      { signal: opts?.signal },
-    ).catch(() => ({}) as GtexMedianResponse)
+    const median = await orFallback(
+      getJSON<GtexMedianResponse>(
+        `${BASE}/expression/medianGeneExpression?gencodeId=${encodeURIComponent(gencodeId)}&itemsPerPage=100`,
+        { signal: opts?.signal },
+      ),
+      {} as GtexMedianResponse,
+      opts?.signal,
+    )
     return { gene: gene ?? { gencodeId }, medianExpression: median.data ?? [] }
   },
 }

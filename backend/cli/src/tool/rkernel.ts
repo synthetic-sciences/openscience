@@ -6,6 +6,8 @@ import os from "os"
 import { unlinkSync } from "fs"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
+import { Config } from "@/config/config"
+import { Sandbox } from "@/sandbox/sandbox"
 import type {
   Kernel,
   KernelManager,
@@ -219,7 +221,17 @@ class RKernel implements Kernel {
     await Bun.write(scriptPath, KERNEL_SCRIPT)
     this.scriptPath = scriptPath
 
-    const proc = spawn(bin, ["--vanilla", scriptPath], {
+    // Confine the kernel to the workspace when the execution sandbox is on: the R
+    // kernel runs arbitrary agent-authored code — the same threat model as the
+    // bash tool — so it must respect the same boundary.
+    const sandboxed = Sandbox.wrapArgv({
+      file: bin,
+      args: ["--vanilla", scriptPath],
+      workspace: [Instance.directory, Instance.worktree],
+      extraWritable: [scriptPath],
+      options: await Config.trustedSandbox(),
+    })
+    const proc = spawn(sandboxed.file, sandboxed.args, {
       cwd: opts?.cwd ?? Instance.directory,
       env: { ...(await OpenScience.subprocessEnv(process.env)), ...(opts?.env ?? {}) },
       stdio: ["pipe", "pipe", "pipe"],

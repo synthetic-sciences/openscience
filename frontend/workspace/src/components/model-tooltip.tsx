@@ -1,6 +1,5 @@
 import { Show, type Component } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { pricingLines, type ModelCost } from "@/utils/model-cost"
 
 type InputKey = "text" | "image" | "audio" | "video" | "pdf"
 type InputMap = Record<InputKey, boolean>
@@ -19,7 +18,6 @@ type ModelInfo = {
     input: Array<string>
   }
   reasoning?: boolean
-  cost?: ModelCost
   limit: {
     context: number
   }
@@ -75,7 +73,6 @@ export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?
       : language.t("model.tooltip.reasoning.none")
   }
   const context = () => language.t("model.tooltip.context", { limit: props.model.limit.context.toLocaleString() })
-  const pricing = () => pricingLines(props.model.cost)
 
   return (
     <div class="flex flex-col gap-1 py-1">
@@ -89,21 +86,6 @@ export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?
       </Show>
       <div class="text-12-regular text-text-invert-base">{reasoning()}</div>
       <div class="text-12-regular text-text-invert-base">{context()}</div>
-      <Show
-        when={!pricing().free}
-        fallback={<div class="text-12-regular text-text-invert-base">{language.t("model.tooltip.pricing.free")}</div>}
-      >
-        <div class="text-12-regular text-text-invert-base">
-          {language.t("model.tooltip.pricing.io", { input: pricing().input!, output: pricing().output! })}
-        </div>
-        <Show when={pricing().cache}>
-          {(cache) => (
-            <div class="text-12-regular text-text-invert-base">
-              {language.t("model.tooltip.pricing.cache", { cache: cache() })}
-            </div>
-          )}
-        </Show>
-      </Show>
     </div>
   )
 }

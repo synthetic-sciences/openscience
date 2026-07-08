@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 import { asRecord, asText, clampLimit, snippet } from "./util"
 
 /** A single interaction record from the BioGRID webservice (JSON format). */
@@ -69,7 +69,7 @@ export const biogrid: Connector = {
     const taxon = asText(opts?.organism)
     if (taxon) params.set("taxId", taxon)
     const url = `${WS}/interactions/?${params.toString()}`
-    const data = await getJSON<unknown>(url, { signal: opts?.signal }).catch(() => null)
+    const data = await orFallback(getJSON<unknown>(url, { signal: opts?.signal }), null, opts?.signal)
     const rec = asRecord(data)
     // BioGRID reports auth/other failures as `{ STATUS: "ERROR", ... }`.
     if (typeof rec["STATUS"] === "string") return []
@@ -90,7 +90,7 @@ export const biogrid: Connector = {
     }
     const params = new URLSearchParams({ accessKey: key, interactionList: id, format: "json" })
     const url = `${WS}/interactions/?${params.toString()}`
-    const data = await getJSON<unknown>(url, { signal: opts?.signal }).catch(() => null)
+    const data = await orFallback(getJSON<unknown>(url, { signal: opts?.signal }), null, opts?.signal)
     const rec = asRecord(data)
     if (typeof rec["STATUS"] === "string") return { id, error: "BioGRID request failed" }
     return rec[id] ?? data

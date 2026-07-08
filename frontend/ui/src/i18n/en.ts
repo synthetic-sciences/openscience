@@ -61,7 +61,7 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.shell": "Shell",
-  "ui.tool.patch": "Patch",
+  "ui.tool.patch": "Files",
   "ui.tool.todos": "To-dos",
   "ui.tool.todos.read": "Read to-dos",
   "ui.tool.questions": "Questions",
@@ -94,7 +94,7 @@ export const dict = {
   "ui.patch.action.deleted": "Deleted",
   "ui.patch.action.created": "Created",
   "ui.patch.action.moved": "Moved",
-  "ui.patch.action.patched": "Patched",
+  "ui.patch.action.patched": "Updated",
 
   "ui.question.subtitle.answered": "{{count}} answered",
   "ui.question.answer.none": "(no answer)",

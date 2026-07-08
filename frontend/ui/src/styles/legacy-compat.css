@@ -1,0 +1,38 @@
+/* Legacy (v1.1.116) token aliases -> current theme tokens.
+ *
+ * The adopted v1.1.116 chat component CSS references an older, flatter token
+ * vocabulary than the current theme. Rather than clobber the current tokens
+ * (newer screens and the right pane depend on them), alias the handful of
+ * legacy names onto their current equivalents so the reskin renders in the
+ * current palette instead of falling back to unset values.
+ *
+ * Purely additive: no current token is redefined here. `var()` resolves live,
+ * so these forward to whatever the active theme sets on :root at runtime. */
+:root {
+  /* Backgrounds / surfaces */
+  --bg-base: var(--background-base);
+  --bg-surface: var(--surface-base);
+  --bg-surface-hover: var(--surface-base-hover);
+
+  /* Borders */
+  --border-default: var(--border-weak-base);
+  --border-warning-strong: var(--border-warning-base);
+
+  /* Semantic accents (legacy called danger/info/positive; current: critical/info/success) */
+  --color-semantic-danger: var(--icon-critical-base);
+  --color-semantic-info: var(--icon-info-base);
+  --color-semantic-positive: var(--icon-success-base);
+
+  /* Semantic foreground text (no dedicated current text-* token; the icon-* hue matches) */
+  --text-critical-base: var(--icon-critical-base);
+  --text-success-base: var(--icon-success-base);
+  --text-warning-base: var(--icon-warning-base);
+
+  /* Misc */
+  --icon-weak: var(--icon-weak-base);
+  --font-size-xs: 0.6875rem; /* 11px — keybind glyphs */
+
+  /* Layout fallbacks for tokens components set per-instance at runtime */
+  --list-divider-inset: 0px;
+  --line-comment-open-z: 5;
+}

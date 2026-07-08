@@ -5,7 +5,7 @@
  * search + entry endpoints and normalize into ConnectorHit.
  */
 import type { Connector, ConnectorHit, FetchOptions, SearchOptions } from "../types"
-import { getJSON, getText } from "../http"
+import { getJSON, getText, orFallback } from "../http"
 import { asArray, clampLimit, firstString, toRaw } from "./util"
 
 interface UValue {
@@ -71,7 +71,7 @@ export const uniprot: Connector = {
     const org = opts?.organism ? ` AND organism_id:${encodeURIComponent(opts.organism)}` : ""
     const url =
       `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(query)}${org}` + `&format=json&size=${size}`
-    const data = await getJSON<USearch>(url, { signal: opts?.signal }).catch(() => ({}) as USearch)
+    const data = await orFallback(getJSON<USearch>(url, { signal: opts?.signal }), {} as USearch, opts?.signal)
     return asArray<UEntry>(data.results).map<ConnectorHit>((e) => {
       const id = e.primaryAccession ?? e.uniProtkbId ?? "unknown"
       return {

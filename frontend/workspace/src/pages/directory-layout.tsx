@@ -10,6 +10,7 @@ import type { QuestionAnswer } from "@synsci/sdk/v2"
 import { decode64 } from "@/utils/base64"
 import { showToast } from "@synsci/ui/toast"
 import { useLanguage } from "@/context/language"
+import { centerTabs } from "@/thesis/store/centerTabs"
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
@@ -51,6 +52,16 @@ export default function Layout(props: ParentProps) {
               navigate(`/${params.dir}/session/${sessionID}`)
             }
 
+            // Open a file referenced in the chat (tool cards, diffs) as a
+            // center-tab document — same surface the Files tab / explorer use.
+            // Tool filePaths are usually absolute; FileView wants a path relative
+            // to the re-rooted directory, so strip the project prefix here.
+            const openFile = (path: string) => {
+              const dir = directory()
+              const rel = dir && path.startsWith(dir + "/") ? path.slice(dir.length + 1) : path
+              centerTabs.openFile(dir, rel)
+            }
+
             return (
               <DataProvider
                 data={sync.data}
@@ -59,6 +70,7 @@ export default function Layout(props: ParentProps) {
                 onQuestionReply={replyToQuestion}
                 onQuestionReject={rejectQuestion}
                 onNavigateToSession={navigateToSession}
+                onOpenFile={openFile}
               >
                 <LocalProvider>{props.children}</LocalProvider>
               </DataProvider>

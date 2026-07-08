@@ -304,7 +304,9 @@ export function ThesisCanvas(): JSX.Element {
 
   const [viewMode, setViewModeRaw] = createSignal<ViewMode>(readViewMode())
   const [graphStyle, setGraphStyleRaw] = createSignal<GraphStyle>(readGraphStyle())
-  const mode = createMemo<Mode>(() => (viewMode() === "timeline" ? "timeline" : graphStyle()))
+  // Orbit is the one and only graph view — cards and timeline are retired.
+  // Pinned here so any previously-saved dashboard.viewMode/graphStyle is ignored.
+  const mode = createMemo<Mode>(() => "orbit")
   const setViewMode = (m: ViewMode) => {
     try {
       localStorage.setItem(VIEW_MODE_KEY, m)
@@ -789,26 +791,6 @@ export function ThesisCanvas(): JSX.Element {
           <Show when={loading() && nodes().length > 0}>
             <AsciiSpinner size={10} color="var(--color-text-faint)" />
           </Show>
-        </div>
-
-        {/* Mode segmented control */}
-        <div
-          style={{
-            display: "inline-flex",
-            "align-items": "center",
-            gap: "2px",
-            padding: "2px",
-            "border-radius": "4px",
-            border: "1px solid var(--color-border)",
-            background: "var(--color-bg-subtle)",
-            "flex-shrink": 0,
-          }}
-        >
-          <For each={MODES}>
-            {(opt) => (
-              <ModeSeg active={mode() === opt.k} Icon={opt.Icon} label={opt.label} onClick={() => setMode(opt.k)} />
-            )}
-          </For>
         </div>
 
         {/* Actions */}

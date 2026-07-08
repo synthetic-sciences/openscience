@@ -261,6 +261,26 @@ export async function getText(url: string, opts?: HttpOptions): Promise<string> 
   return res.text()
 }
 
+/**
+ * Await `p`, but on failure return `fallback` instead — UNLESS the caller's
+ * `signal` was aborted, in which case rethrow so cancellation propagates.
+ *
+ * Connectors use this instead of a blanket `.catch(() => fallback)`: that
+ * pattern swallows the AbortError `request()` deliberately rethrows on caller
+ * abort, so a cancelled `science_search` looked like "no results" instead of a
+ * clean cancellation. An internal request timeout still falls back (the caller
+ * didn't cancel), which is the intended behavior — one slow source shouldn't
+ * fail the whole search.
+ */
+export async function orFallback<T>(p: Promise<T>, fallback: T, signal?: AbortSignal): Promise<T> {
+  try {
+    return await p
+  } catch (err) {
+    if (signal?.aborted) throw err
+    return fallback
+  }
+}
+
 /** Clear the in-memory cache (test/debug helper). */
 export function clearCache(): void {
   cache.clear()

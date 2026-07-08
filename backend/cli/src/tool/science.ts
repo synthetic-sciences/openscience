@@ -123,6 +123,11 @@ export const ScienceSearchTool = Tool.define("science_search", {
     const rows = hits.map((h) => {
       const lines = [`## ${h.title}`, `**id**: ${h.id}${h.score !== undefined ? ` · score: ${h.score}` : ""}`]
       if (h.url) lines.push(`**url**: ${h.url}`)
+      // Surface a direct PDF link when a connector extracted one (e.g. arXiv
+      // parses its self-closing `title="pdf"` link into extra.pdf) — otherwise
+      // the agent sees the record but not the full-text URL already in hand.
+      const pdf = typeof h.extra?.pdf === "string" ? h.extra.pdf : undefined
+      if (pdf) lines.push(`**pdf**: ${pdf}`)
       if (h.summary) lines.push(h.summary)
       return lines.join("\n")
     })

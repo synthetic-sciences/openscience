@@ -17,18 +17,21 @@ import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { useLayout } from "@/context/layout"
 import { useTheme } from "@synsci/ui/theme"
-import { Composer } from "@/thesis/Composer"
+import { PromptInput } from "@/components/prompt-input"
+import { NewSessionView } from "@/components/session/session-new-view"
 import { Wordmark } from "@/thesis/Wordmark"
 import { AppHeader, HeaderIconButton, HeaderDivider } from "@/thesis/AppHeader"
 import { RightPane } from "@/thesis/RightPane"
 import { FileExplorer } from "@/thesis/FileExplorer"
 import { FileView } from "@/thesis/FilePreview"
 import { centerTabs } from "@/thesis/store/centerTabs"
-import { FONT_MONO, FONT_SANS, FONT_SERIF, sectionTitle } from "@/styles/tokens"
+import { FONT_MONO, FONT_SANS, FONT_SERIF } from "@/styles/tokens"
 import { uiStore } from "@/thesis/store/ui"
 import { useGlobalKeys } from "@/thesis/useGlobalKeys"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useModels } from "@/context/models"
+import { useCommand, type CommandOption } from "@/context/command"
+import { useLanguage } from "@/context/language"
 import { openSetupDialog } from "@/thesis/SetupDialog"
 import { confirmDialog } from "@/thesis/dialogs"
 import { DialogSettings } from "@/components/dialog-settings"
@@ -110,6 +113,17 @@ export default function Page(): JSX.Element {
     }
   }
 
+  async function renameSession(sessionID: string, title: string) {
+    const trimmed = title.trim()
+    if (!trimmed) return
+    try {
+      await sync.session.rename(sessionID, trimmed)
+    } catch (e: any) {
+      console.error("session.rename failed", e)
+      toast.error("could not rename", e?.message ?? String(e))
+    }
+  }
+
   // Force-load the session list into the sync store every time we land
   // on a project. sync.session.fetch() calls session.list AND reconciles
   // the result into the per-directory store; the raw SDK call alone
@@ -146,8 +160,8 @@ export default function Page(): JSX.Element {
   )
 
   // Hydrate child (sub-agent) sessions of the active session regardless of
-  // which right-pane tab is open, so the Agents view and inline turn status
-  // populate immediately and survive a reload.
+  // which right-pane tab is open, so the inline turn status and back-to-parent
+  // navigation populate immediately and survive a reload.
   const hydratedChildren = new Set<string>()
   createEffect(() => {
     const id = params.id
@@ -186,6 +200,38 @@ export default function Page(): JSX.Element {
   // makes the revert permanent server-side).
   const activeSession = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const revertInfo = createMemo(() => activeSession()?.revert)
+  // New-session worktree selection, shared between the empty-state view and the
+  // composer (matches the v1.1.116 new-session flow).
+  const [newSessionWorktree, setNewSessionWorktree] = createSignal("main")
+
+  // A `path.md` mentioned in an assistant message dispatches this; open it as a
+  // document tab (same surface as the Files tab / a tool-card filename click).
+  onMount(() => {
+    const onOpenFile = (e: Event) => {
+      const path = (e as CustomEvent).detail?.path
+      if (typeof path !== "string" || !path) return
+      const dir = projectPath()
+      const rel = dir && path.startsWith(dir + "/") ? path.slice(dir.length + 1) : path
+      centerTabs.openFile(dir, rel)
+    }
+    document.addEventListener("openscience:open-file", onOpenFile)
+    onCleanup(() => document.removeEventListener("openscience:open-file", onOpenFile))
+
+    // "Open in Shell tab" on a bash tool card → reveal the right pane's terminal
+    // and re-run the command there (the RightPane picks up terminalCommand).
+    const onShell = (e: Event) => {
+      const command = (e as CustomEvent).detail?.command
+      if (typeof command !== "string" || !command) return
+      uiStore.setRightPaneOpen(true)
+      uiStore.setTerminalCommand({
+        command: "bash",
+        args: ["-lc", command],
+        title: command.length > 24 ? command.slice(0, 24) + "…" : command,
+      })
+    }
+    document.addEventListener("open-shell-tab", onShell)
+    onCleanup(() => document.removeEventListener("open-shell-tab", onShell))
+  })
   const turnMessages = createMemo(() => {
     const revertID = revertInfo()?.messageID
     return messages().filter((m) => m.role === "user" && (!revertID || m.id < revertID))
@@ -225,6 +271,40 @@ export default function Page(): JSX.Element {
       toast.error("restore failed", e?.message ?? String(e))
     }
   }
+
+  // Undo/redo were orphaned when the chat surface was reskinned — revertTo()
+  // had no trigger. Re-expose them as first-class commands (palette + /undo,
+  // /redo slash) so undo works again. Undo reverts the last turn; redo restores
+  // a pending revert until the next message makes it permanent.
+  const commands = useCommand()
+  const language = useLanguage()
+  commands.register(() => {
+    const id = params.id
+    if (!id || id === "new") return []
+    const list: CommandOption[] = []
+    const last = lastUserMessage()
+    if (last && !revertInfo()) {
+      list.push({
+        id: "session.undo",
+        title: language.t("command.session.undo"),
+        description: language.t("command.session.undo.description"),
+        category: language.t("command.category.session"),
+        slash: "undo",
+        onSelect: () => void revertTo(last.id),
+      })
+    }
+    if (revertInfo()) {
+      list.push({
+        id: "session.redo",
+        title: language.t("command.session.redo"),
+        description: language.t("command.session.redo.description"),
+        category: language.t("command.category.session"),
+        slash: "redo",
+        onSelect: () => void restoreRevert(),
+      })
+    }
+    return list
+  })
 
   const [stepsExpanded, setStepsExpanded] = createSignal<Record<string, boolean>>({})
   const toggleSteps = (id: string) => setStepsExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -364,6 +444,7 @@ export default function Page(): JSX.Element {
           onNew={() => void newSession()}
           onSelect={(id) => navigate(`/${params.dir}/session/${id}`)}
           onDelete={(id) => void deleteSession(id)}
+          onRename={(id, title) => void renameSession(id, title)}
         />
 
         <div
@@ -396,100 +477,129 @@ export default function Page(): JSX.Element {
                 flex: 1,
                 "min-height": 0,
                 "flex-direction": "column",
+                position: "relative",
               }}
             >
               <Switch>
                 <Match when={params.id && messages().length > 0}>
                   <div
                     ref={attachScroll}
-                    class="thesis-scroll thesis-chat-scroll"
+                    class="thesis-scroll thesis-chat-scroll session-scroller"
                     style={{
                       flex: 1,
                       "min-height": 0,
                       "overflow-y": "auto",
                       "overflow-x": "hidden",
-                      "padding-top": "12px",
+                      position: "relative",
                     }}
                   >
-                    <For each={turnMessages()}>
-                      {(message, index) => (
-                        <div
-                          data-message-id={message.id}
-                          style={{
-                            "min-width": 0,
-                            width: "100%",
-                            "max-width": "100%",
-                          }}
-                        >
-                          <SessionTurn
-                            sessionID={params.id!}
-                            messageID={message.id}
-                            lastUserMessageID={lastUserMessage()?.id}
-                            stepsExpanded={stepsExpanded()[message.id] ?? false}
-                            onStepsExpandedToggle={() => toggleSteps(message.id)}
-                            onRevertMessage={(id) => void revertTo(id)}
-                            hideTools={["task"]}
-                            classes={{
-                              root: "min-w-0 w-full relative",
-                              content: "flex flex-col justify-between !overflow-visible",
-                              container: "w-full px-4 md:px-8",
-                            }}
-                          />
-                          {/* Space, not a rule — the bubbles already separate turns. */}
-                          <Show when={index() < turnMessages().length - 1}>
-                            <div style={{ height: "22px" }} />
-                          </Show>
+                    {/* Sticky title + back-to-parent (sub-agent) header */}
+                    <Show when={activeSession()?.title || activeSession()?.parentID}>
+                      <div class="sticky top-0 z-30 bg-background-stronger w-full">
+                        <div class="w-full px-4 md:px-6 md:max-w-200 md:mx-auto">
+                          <div class="h-10 flex items-center gap-1.5">
+                            <Show when={activeSession()?.parentID}>
+                              <button
+                                type="button"
+                                class="flex items-center justify-center size-7 shrink-0 rounded-md text-text-weak hover:text-text-base hover:bg-surface-base-hover transition-colors"
+                                aria-label="Back to parent session"
+                                onClick={() => navigate(`/${params.dir}/session/${activeSession()!.parentID}`)}
+                              >
+                                <IconChevronLeft />
+                              </button>
+                            </Show>
+                            <Show when={activeSession()?.title}>
+                              <EditableTitle
+                                title={activeSession()!.title!}
+                                onRename={(t) => void renameSession(activeSession()!.id, t)}
+                              />
+                            </Show>
+                          </div>
                         </div>
-                      )}
-                    </For>
+                      </div>
+                    </Show>
+
+                    {/* Centered conversation column with 2px between-turn divider */}
+                    <div class="w-full md:max-w-200 md:mx-auto flex flex-col items-start justify-start pt-3 pb-[calc(10rem+64px)]">
+                      <For each={turnMessages()}>
+                        {(message, index) => (
+                          <div data-message-id={message.id} class="min-w-0 w-full max-w-full">
+                            <SessionTurn
+                              sessionID={params.id!}
+                              messageID={message.id}
+                              lastUserMessageID={lastUserMessage()?.id}
+                              stepsExpanded={stepsExpanded()[message.id] ?? false}
+                              onStepsExpandedToggle={() => toggleSteps(message.id)}
+                              classes={{
+                                root: "min-w-0 w-full relative",
+                                content: "flex flex-col justify-between !overflow-visible",
+                                container: "w-full px-4 md:px-6",
+                              }}
+                            />
+                            {/* The v1.1.116 between-turns rule */}
+                            <Show when={index() < turnMessages().length - 1}>
+                              <div class="w-full px-4 md:px-6 pt-2 pb-1">
+                                <div class="h-[2px] bg-border-weak-base rounded-full" />
+                              </div>
+                            </Show>
+                          </div>
+                        )}
+                      </For>
+                    </div>
                   </div>
                 </Match>
                 <Match when={true}>
-                  <ChatWelcome />
+                  <NewSessionView worktree={newSessionWorktree()} onWorktreeChange={setNewSessionWorktree} />
                 </Match>
               </Switch>
 
-              <Show when={revertInfo()}>
-                <div style={{ padding: "8px 16px 0" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      "align-items": "center",
-                      gap: "12px",
-                      padding: "8px 12px",
-                      border: "1px solid var(--color-border)",
-                      "border-radius": "4px",
-                      "font-size": "12px",
-                      "font-family": FONT_SANS,
-                      color: "var(--color-text-muted)",
-                      background: "var(--color-bg)",
-                    }}
-                  >
-                    <span style={{ flex: 1, "min-width": 0 }}>
-                      Conversation reverted. {revertedCount()} turn{revertedCount() === 1 ? "" : "s"} hidden and file
-                      changes rolled back. Sending a new message makes this permanent.
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void restoreRevert()}
+              {/* Prompt dock — gradient fade + centered PromptInput (v1.1.116) */}
+              <div class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-base via-background-base to-transparent pointer-events-none">
+                <div class="w-full px-4 pointer-events-auto md:max-w-200 md:mx-auto">
+                  <Show when={revertInfo()}>
+                    <div
+                      class="mb-3"
                       style={{
+                        display: "flex",
+                        "align-items": "center",
+                        gap: "12px",
+                        padding: "8px 12px",
                         border: "1px solid var(--color-border)",
-                        background: "transparent",
-                        color: "inherit",
-                        padding: "4px 10px",
-                        "border-radius": "4px",
+                        "border-radius": "8px",
                         "font-size": "12px",
-                        cursor: "pointer",
-                        "white-space": "nowrap",
+                        "font-family": FONT_SANS,
+                        color: "var(--color-text-muted)",
+                        background: "var(--color-bg)",
                       }}
                     >
-                      restore
-                    </button>
-                  </div>
+                      <span style={{ flex: 1, "min-width": 0 }}>
+                        Conversation reverted. {revertedCount()} turn{revertedCount() === 1 ? "" : "s"} hidden and file
+                        changes rolled back. Sending a new message makes this permanent.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void restoreRevert()}
+                        style={{
+                          border: "1px solid var(--color-border)",
+                          background: "transparent",
+                          color: "inherit",
+                          padding: "4px 10px",
+                          "border-radius": "8px",
+                          "font-size": "12px",
+                          cursor: "pointer",
+                          "white-space": "nowrap",
+                        }}
+                      >
+                        restore
+                      </button>
+                    </div>
+                  </Show>
+                  <PromptInput
+                    newSessionWorktree={newSessionWorktree()}
+                    onNewSessionWorktreeReset={() => setNewSessionWorktree("main")}
+                  />
                 </div>
-              </Show>
-
-              <Composer />
+              </div>
             </div>
 
             {/* files — the host explorer, mounted on first visit */}
@@ -734,6 +844,76 @@ function Header(props: {
   )
 }
 
+// The conversation title in the sticky chat header — double-click to rename,
+// mirroring the sidebar's SessionRow. Enter/blur commits, Esc cancels.
+function EditableTitle(props: { title: string; onRename: (t: string) => void }): JSX.Element {
+  const [editing, setEditing] = createSignal(false)
+  const [draft, setDraft] = createSignal("")
+  const start = () => {
+    setDraft(props.title)
+    setEditing(true)
+  }
+  const commit = () => {
+    if (!editing()) return
+    const next = draft().trim()
+    setEditing(false)
+    if (next && next !== props.title) props.onRename(next)
+  }
+  return (
+    <Show
+      when={editing()}
+      fallback={
+        <h1
+          class="text-14-medium text-text-strong truncate"
+          style={{ cursor: "text" }}
+          title="Double-click to rename"
+          onDblClick={start}
+        >
+          {props.title}
+        </h1>
+      }
+    >
+      <input
+        ref={(el) =>
+          queueMicrotask(() => {
+            el.focus()
+            el.select()
+          })
+        }
+        class="text-14-medium text-text-strong truncate"
+        value={draft()}
+        onInput={(e) => setDraft(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === "Enter") {
+            e.preventDefault()
+            commit()
+          } else if (e.key === "Escape") {
+            e.preventDefault()
+            setEditing(false)
+          }
+        }}
+        onBlur={commit}
+        spellcheck={false}
+        autocomplete="off"
+        style={{
+          all: "unset",
+          "box-sizing": "border-box",
+          flex: 1,
+          "min-width": 0,
+          "font-family": FONT_SANS,
+          background: "var(--color-surface-solid)",
+          "box-shadow": "inset 0 0 0 1px var(--color-border-strong)",
+          "border-radius": "6px",
+          padding: "1px 6px",
+          margin: "0 -6px",
+          color: "var(--color-text-strong, var(--color-text))",
+        }}
+      />
+    </Show>
+  )
+}
+
 function SessionsSidebar(props: {
   sessions: SyncSession[]
   activeId: string | undefined
@@ -742,7 +922,15 @@ function SessionsSidebar(props: {
   onNew: () => void
   onSelect: (id: string) => void
   onDelete: (id: string) => void
+  onRename: (id: string, title: string) => void
 }): JSX.Element {
+  const [query, setQuery] = createSignal("")
+  const searching = () => query().trim().length > 0
+  const filtered = createMemo(() => {
+    const q = query().trim().toLowerCase()
+    if (!q) return props.sessions
+    return props.sessions.filter((s) => (s.title || "session").toLowerCase().includes(q))
+  })
   return (
     <aside
       class="thesis-scroll"
@@ -758,7 +946,7 @@ function SessionsSidebar(props: {
     >
       <div
         style={{
-          padding: "12px 14px 8px",
+          padding: "12px 12px 8px",
           display: "flex",
           "flex-direction": "column",
           gap: "8px",
@@ -772,9 +960,10 @@ function SessionsSidebar(props: {
             cursor: "pointer",
             display: "flex",
             "align-items": "center",
+            "justify-content": "center",
             gap: "6px",
             padding: "7px 12px",
-            "border-radius": "4px",
+            "border-radius": "8px",
             background: "var(--color-surface-solid)",
             border: "1px solid var(--color-border-strong)",
             "font-family": FONT_MONO,
@@ -788,26 +977,108 @@ function SessionsSidebar(props: {
           onFocusIn={(e) => (e.currentTarget.style.background = "var(--color-bg-elevated)")}
           onFocusOut={(e) => (e.currentTarget.style.background = "var(--color-surface-solid)")}
         >
-          <IconPlus size={11} strokeWidth={2} />
-          {props.creating ? "creating…" : "new session"}
+          <IconPlus size={12} strokeWidth={2} />
+          {props.creating ? "creating…" : "New session"}
         </button>
+
+        {/* Search — filters the loaded list live; Esc clears. */}
+        <div style={{ position: "relative", display: "flex", "align-items": "center" }}>
+          <span
+            style={{
+              position: "absolute",
+              left: "10px",
+              display: "inline-flex",
+              "align-items": "center",
+              color: "var(--color-text-faint)",
+              "pointer-events": "none",
+            }}
+          >
+            <IconSearch size={13} strokeWidth={1.6} />
+          </span>
+          <input
+            value={query()}
+            onInput={(e) => setQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault()
+                setQuery("")
+                e.currentTarget.blur()
+              }
+            }}
+            placeholder="Search sessions"
+            spellcheck={false}
+            autocomplete="off"
+            style={{
+              all: "unset",
+              "box-sizing": "border-box",
+              width: "100%",
+              padding: "8px 28px 8px 30px",
+              "border-radius": "8px",
+              background: "var(--color-surface-solid)",
+              border: "1px solid var(--color-border)",
+              "font-family": FONT_MONO,
+              "font-size": "12.5px",
+              color: "var(--color-text)",
+              transition: "border-color 120ms ease",
+            }}
+            onFocusIn={(e) => (e.currentTarget.style.borderColor = "var(--color-border-strong)")}
+            onFocusOut={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
+          />
+          <Show when={searching()}>
+            <button
+              type="button"
+              title="clear search"
+              aria-label="clear search"
+              onClick={() => setQuery("")}
+              style={{
+                all: "unset",
+                position: "absolute",
+                right: "8px",
+                cursor: "pointer",
+                display: "inline-flex",
+                "align-items": "center",
+                "justify-content": "center",
+                width: "18px",
+                height: "18px",
+                "border-radius": "5px",
+                color: "var(--color-text-faint)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-text)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-faint)")}
+            >
+              <IconX size={12} strokeWidth={1.8} />
+            </button>
+          </Show>
+        </div>
       </div>
+
+      {/* Quiet section label — sentence case, no shouty uppercase. */}
       <div
         style={{
-          ...sectionTitle,
-          padding: "0 14px 6px",
+          display: "flex",
+          "align-items": "baseline",
+          "justify-content": "space-between",
+          padding: "2px 14px 6px",
+          "font-family": FONT_MONO,
+          "font-size": "11px",
+          color: "var(--color-text-faint)",
         }}
       >
-        sessions · {props.sessions.length}
+        <span>{searching() ? "Results" : "Sessions"}</span>
+        <span style={{ "font-variant-numeric": "tabular-nums" }}>
+          {searching() ? `${filtered().length} of ${props.sessions.length}` : props.sessions.length}
+        </span>
       </div>
-      <div style={{ display: "flex", "flex-direction": "column", gap: "1px", padding: "0 8px" }}>
-        <For each={props.sessions}>
+
+      <div style={{ display: "flex", "flex-direction": "column", gap: "1px", padding: "0 8px 10px" }}>
+        <For each={filtered()}>
           {(s) => (
             <SessionRow
               session={s}
               active={props.activeId === s.id}
               onSelect={() => props.onSelect(s.id)}
               onDelete={() => props.onDelete(s.id)}
+              onRename={(title) => props.onRename(s.id, title)}
             />
           )}
         </For>
@@ -821,7 +1092,20 @@ function SessionsSidebar(props: {
               "line-height": 1.55,
             }}
           >
-            no sessions yet · click <span style={{ color: "var(--color-text-muted)" }}>+ new session</span> above
+            No sessions yet — click <span style={{ color: "var(--color-text-muted)" }}>New session</span> above.
+          </div>
+        </Show>
+        <Show when={props.sessions.length > 0 && filtered().length === 0}>
+          <div
+            style={{
+              padding: "12px 10px",
+              "font-family": FONT_MONO,
+              "font-size": "11px",
+              color: "var(--color-text-faint)",
+              "line-height": 1.55,
+            }}
+          >
+            No sessions match “{query().trim()}”.
           </div>
         </Show>
       </div>
@@ -834,14 +1118,39 @@ function SessionRow(props: {
   active: boolean
   onSelect: () => void
   onDelete: () => void
+  onRename: (title: string) => void
 }): JSX.Element {
   const [hover, setHover] = createSignal(false)
+  const [editing, setEditing] = createSignal(false)
+  const [draft, setDraft] = createSignal("")
+  const startEdit = () => {
+    setDraft(props.session.title || "")
+    setEditing(true)
+  }
+  const commit = () => {
+    if (!editing()) return
+    const next = draft().trim()
+    setEditing(false)
+    if (next && next !== (props.session.title || "")) props.onRename(next)
+  }
+  const cancel = () => {
+    setEditing(false)
+    setDraft("")
+  }
   return (
     <div
       role="button"
       tabindex="0"
-      onClick={props.onSelect}
+      onClick={() => {
+        if (editing()) return
+        props.onSelect()
+      }}
+      onDblClick={(e) => {
+        e.stopPropagation()
+        startEdit()
+      }}
       onKeyDown={(e) => {
+        if (editing()) return
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()
           props.onSelect()
@@ -854,13 +1163,13 @@ function SessionRow(props: {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHover(false)
       }}
       style={{
-        cursor: "pointer",
+        cursor: editing() ? "text" : "pointer",
         display: "flex",
         "flex-direction": "column",
-        gap: "2px",
-        padding: "6px 10px",
-        "padding-right": hover() ? "32px" : "10px",
-        "border-radius": "4px",
+        gap: "3px",
+        padding: "8px 12px",
+        "padding-right": hover() && !editing() ? "34px" : "12px",
+        "border-radius": "8px",
         background: props.active ? "var(--color-bg-elevated)" : hover() ? "var(--color-accent-subtle)" : "transparent",
         transition: "background 120ms ease, padding 120ms ease",
         position: "relative",
@@ -868,25 +1177,71 @@ function SessionRow(props: {
     >
       <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
         <StatusDot status={props.active ? "active" : "muted"} size={9} />
-        <span
-          style={{
-            "font-family": FONT_MONO,
-            "font-size": "12px",
-            color: props.active ? "var(--color-text)" : "var(--color-text-muted)",
-            "font-weight": 400,
-            flex: 1,
-            overflow: "hidden",
-            "text-overflow": "ellipsis",
-            "white-space": "nowrap",
-          }}
+        <Show
+          when={editing()}
+          fallback={
+            <span
+              title="Double-click to rename"
+              style={{
+                "font-family": FONT_MONO,
+                "font-size": "12.5px",
+                color: props.active ? "var(--color-text)" : "var(--color-text-muted)",
+                "font-weight": 400,
+                flex: 1,
+                overflow: "hidden",
+                "text-overflow": "ellipsis",
+                "white-space": "nowrap",
+              }}
+            >
+              {props.session.title || "session"}
+            </span>
+          }
         >
-          {props.session.title || "session"}
-        </span>
+          <input
+            ref={(el) =>
+              queueMicrotask(() => {
+                el.focus()
+                el.select()
+              })
+            }
+            value={draft()}
+            onInput={(e) => setDraft(e.currentTarget.value)}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key === "Enter") {
+                e.preventDefault()
+                commit()
+              } else if (e.key === "Escape") {
+                e.preventDefault()
+                cancel()
+              }
+            }}
+            onBlur={commit}
+            spellcheck={false}
+            autocomplete="off"
+            style={{
+              all: "unset",
+              "box-sizing": "border-box",
+              flex: 1,
+              "min-width": 0,
+              padding: "1px 5px",
+              "margin-left": "-5px",
+              "border-radius": "5px",
+              background: "var(--color-surface-solid)",
+              "box-shadow": "inset 0 0 0 1px var(--color-border-strong)",
+              "font-family": FONT_MONO,
+              "font-size": "12.5px",
+              color: "var(--color-text)",
+            }}
+          />
+        </Show>
       </div>
       <div
         style={{
           "font-family": FONT_MONO,
-          "font-size": "10px",
+          "font-size": "10.5px",
           color: "var(--color-text-faint)",
           "letter-spacing": "0.04em",
           "padding-left": "17px",
@@ -894,7 +1249,7 @@ function SessionRow(props: {
       >
         {props.session.time?.updated ? DateTime.fromMillis(props.session.time.updated).toRelative() : "—"}
       </div>
-      <Show when={hover()}>
+      <Show when={hover() && !editing()}>
         <button
           type="button"
           title="delete session"

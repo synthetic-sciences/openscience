@@ -4,7 +4,6 @@ import {
   Message as MessageType,
   Part as PartType,
   type PermissionRequest,
-  type QuestionRequest,
   TextPart,
   ToolPart,
 } from "@synsci/sdk/v2/client"
@@ -93,7 +92,6 @@ function AssistantMessageItem(props: {
   responsePartId: string | undefined
   hideResponsePart: boolean
   hideReasoning: boolean
-  hideTools?: string[]
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -112,11 +110,6 @@ function AssistantMessageItem(props: {
 
     if (props.hideReasoning) {
       parts = parts.filter((part) => part?.type !== "reasoning")
-    }
-
-    if (props.hideTools && props.hideTools.length > 0) {
-      const skip = new Set(props.hideTools)
-      parts = parts.filter((part) => !(part?.type === "tool" && skip.has((part as ToolPart).tool)))
     }
 
     if (!props.hideResponsePart) return parts
@@ -140,8 +133,6 @@ export function SessionTurn(
     stepsExpanded?: boolean
     onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
-    onRevertMessage?: (messageID: string) => void
-    hideTools?: string[]
     classes?: {
       root?: string
       content?: string
@@ -158,8 +149,7 @@ export function SessionTurn(
   const emptyFiles: FilePart[] = []
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
-  const emptyQuestions: QuestionRequest[] = []
-  const emptyPromptParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
@@ -272,41 +262,23 @@ export function SessionTurn(
   const permissionCount = createMemo(() => permissions().length)
   const nextPermission = createMemo(() => permissions()[0])
 
-  const questions = createMemo(() => data.store.question?.[props.sessionID] ?? emptyQuestions)
-  const questionCount = createMemo(() => questions().length)
-  const nextQuestion = createMemo(() => questions()[0])
+  const permissionParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyPermissionParts
 
-  const findPromptPart = (request: PermissionRequest | QuestionRequest | undefined) => {
-    if (!request?.tool) return undefined
+    const next = nextPermission()
+    if (!next || !next.tool) return emptyPermissionParts
 
-    const message = findLast(assistantMessages(), (m) => m.id === request.tool!.messageID)
-    if (!message) return undefined
+    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
+    if (!message) return emptyPermissionParts
 
     const parts = data.store.part[message.id] ?? emptyParts
     for (const part of parts) {
       if (part?.type !== "tool") continue
       const tool = part as ToolPart
-      if (tool.callID === request.tool!.callID) return { part: tool, message }
+      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
     }
 
-    return undefined
-  }
-
-  // Pending permission and question prompts render inside their tool part,
-  // which is hidden while steps are collapsed — surface those parts below
-  // the trigger so the user can respond without expanding steps.
-  const promptParts = createMemo(() => {
-    if (props.stepsExpanded) return emptyPromptParts
-
-    const result: { part: ToolPart; message: AssistantMessage }[] = []
-    const permission = findPromptPart(nextPermission())
-    if (permission) result.push(permission)
-
-    const question = findPromptPart(nextQuestion())
-    if (question && question.part.id !== permission?.part.id) result.push(question)
-
-    if (result.length === 0) return emptyPromptParts
-    return result
+    return emptyPermissionParts
   })
 
   const shellModePart = createMemo(() => {
@@ -387,10 +359,7 @@ export function SessionTurn(
   const responsePartId = createMemo(() => lastTextPart()?.id)
   const messageDiffs = createMemo(() => message()?.summary?.diffs ?? emptyDiffs)
   const hasDiffs = createMemo(() => messageDiffs().length > 0)
-  // Relocate the answer text out of the collapsed steps and into the top-level
-  // Response block ALWAYS (not just after finishing), so it streams live like a
-  // chat message instead of appearing only once the turn completes.
-  const hideResponsePart = createMemo(() => !!responsePartId())
+  const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
   const [copied, setCopied] = createSignal(false)
 
@@ -507,14 +476,11 @@ export function SessionTurn(
   })
 
   createEffect(
-    on(
-      () => permissionCount() + questionCount(),
-      (count, prev) => {
-        if (!count) return
-        if (prev !== undefined && count <= prev) return
-        autoScroll.forceScrollToBottom()
-      },
-    ),
+    on(permissionCount, (count, prev) => {
+      if (!count) return
+      if (prev !== undefined && count <= prev) return
+      autoScroll.forceScrollToBottom()
+    }),
   )
 
   let lastStatusChange = Date.now()
@@ -576,11 +542,7 @@ export function SessionTurn(
                     <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
                       <div data-slot="session-turn-message-content" aria-live="off">
-                        <Message
-                          message={msg()}
-                          parts={stickyParts()}
-                          onRevert={props.onRevertMessage ? () => props.onRevertMessage?.(msg().id) : undefined}
-                        />
+                        <Message message={msg()} parts={stickyParts()} />
                       </div>
 
                       {/* Trigger (sticky) */}
@@ -606,6 +568,10 @@ export function SessionTurn(
                                   fill="none"
                                   xmlns="http://www.w3.org/2000/svg"
                                   data-slot="session-turn-trigger-icon"
+                                  style={{
+                                    transform: props.stepsExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                                    transition: "transform 0.15s ease",
+                                  }}
                                 >
                                   <path
                                     d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
@@ -653,7 +619,7 @@ export function SessionTurn(
                     </div>
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                      <div data-slot="session-turn-collapsible-content-inner" aria-live="off">
+                      <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
                         <For each={assistantMessages()}>
                           {(assistantMessage) => (
                             <AssistantMessageItem
@@ -661,7 +627,6 @@ export function SessionTurn(
                               responsePartId={responsePartId()}
                               hideResponsePart={hideResponsePart()}
                               hideReasoning={false}
-                              hideTools={props.hideTools}
                             />
                           )}
                         </For>
@@ -672,17 +637,19 @@ export function SessionTurn(
                         </Show>
                       </div>
                     </Show>
-                    <Show when={!props.stepsExpanded && promptParts().length > 0}>
+                    <Show when={!props.stepsExpanded && permissionParts().length > 0}>
                       <div data-slot="session-turn-permission-parts">
-                        <For each={promptParts()}>{({ part, message }) => <Part part={part} message={message} />}</For>
+                        <For each={permissionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
                       </div>
                     </Show>
                     {/* Response */}
                     <div class="sr-only" aria-live="polite">
                       {!working() && response() ? response() : ""}
                     </div>
-                    <Show when={response() || hasDiffs()}>
-                      <div data-slot="session-turn-summary-section" data-streaming={working() && !!response()}>
+                    <Show when={!working() && (response() || hasDiffs())}>
+                      <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
                           <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
                           <div data-slot="session-turn-response">

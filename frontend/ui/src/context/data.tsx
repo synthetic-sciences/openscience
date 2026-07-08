@@ -57,6 +57,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     onQuestionReply?: QuestionReplyFn
     onQuestionReject?: QuestionRejectFn
     onNavigateToSession?: NavigateToSessionFn
+    onOpenFile?: (path: string) => void
   }) => {
     return {
       get store() {
@@ -69,6 +70,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       replyToQuestion: props.onQuestionReply,
       rejectQuestion: props.onQuestionReject,
       navigateToSession: props.onNavigateToSession,
+      openFile: props.onOpenFile,
     }
   },
 })
