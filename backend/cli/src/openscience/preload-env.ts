@@ -18,6 +18,7 @@
 import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
+import { isSyncedEnvAllowed } from "./synced-env-policy"
 
 function syncedEnvPath(): string {
   const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")
@@ -42,6 +43,9 @@ function syncedEnvPath(): string {
   }
   if (!env || typeof env !== "object" || Array.isArray(env)) return
   for (const [k, v] of Object.entries(env as Record<string, unknown>)) {
+    // Drop per-provider LLM credentials that are BYOK-local-only now — a stale
+    // synced key must never shadow the user's own (see synced-env-policy.ts).
+    if (!isSyncedEnvAllowed(k)) continue
     // Don't clobber values already set in the parent environment —
     // explicit shell exports win over persisted sync state.
     if (typeof v === "string" && !process.env[k]) {

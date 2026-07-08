@@ -112,10 +112,7 @@ export namespace Provider {
     // sit unused in env while an auth.json key wins resolution; demanding
     // proxy routing for it hard-failed every call with advice (`connect
     // sync`) that re-delivers the same env and can never fix it.
-    const effective =
-      (typeof options["apiKey"] === "string" ? (options["apiKey"] as string) : undefined) ??
-      provider.key ??
-      provider.env.map((key) => Env.get(key)).find((value): value is string => !!value)
+    const effective = effectiveKey(provider, options)
     if (!isAtlasApiKey(effective)) return
     if (isAtlasProxyBaseURL(options["baseURL"])) return
     throw new Error(
@@ -128,6 +125,17 @@ export namespace Provider {
    *  "public" sentinel used for the zero-cost openscience demo models. */
   function isByokKey(key: unknown): key is string {
     return typeof key === "string" && key.length > 0 && key !== "public" && !isAtlasApiKey(key)
+  }
+
+  /** The credential that actually authenticates a provider: an explicit apiKey
+   *  (from a loader / config / getSDK options), the resolved provider key, or
+   *  the first of its env vars that is set — undefined when it has none. Shared
+   *  by the routing-label display and the managed/BYOK proxy guards so all read
+   *  the credential the same way. `options` defaults to the provider's own; the
+   *  proxy guards pass the mutable getSDK options instead. */
+  export function effectiveKey(provider: Info, options: Record<string, unknown> = provider.options ?? {}): string | undefined {
+    const optionKey = typeof options["apiKey"] === "string" ? (options["apiKey"] as string) : undefined
+    return optionKey ?? provider.key ?? (provider.env ?? []).map((name) => Env.get(name)).find((value): value is string => !!value)
   }
 
   /** Managed wallet ⇒ OpenRouter-only routing.
@@ -174,13 +182,10 @@ export namespace Provider {
    * provider's public endpoint and drop the managed routing.
    */
   function pinByokToPublicEndpoint(provider: Info, options: Record<string, any>, publicURL: string) {
-    const effectiveKey =
-      (typeof options["apiKey"] === "string" ? (options["apiKey"] as string) : undefined) ??
-      provider.key ??
-      provider.env.map((key) => Env.get(key)).find((value): value is string => !!value)
+    const effective = effectiveKey(provider, options)
     // Managed (thk_*) keys must keep their Atlas proxy routing.
-    if (isAtlasApiKey(effectiveKey)) return
-    if (!isByokKey(effectiveKey)) return
+    if (isAtlasApiKey(effective)) return
+    if (!isByokKey(effective)) return
     if (isAtlasProxyBaseURL(options["baseURL"])) {
       log.warn("refusing to route BYOK key through Atlas proxy — pinning to public endpoint", {
         provider: provider.id,
@@ -439,25 +444,43 @@ export namespace Provider {
       }
     },
     openrouter: async () => {
-      // @openrouter/ai-sdk-provider auto-loads OPENROUTER_API_KEY from
-      // env but NOT OPENROUTER_BASE_URL (unlike @ai-sdk/openai +
-      // @ai-sdk/anthropic which both auto-load their *_BASE_URL).
-      // Forward OPENROUTER_BASE_URL explicitly so the SDK targets the
-      // Atlas managed proxy when sync sets it. Without this, the SDK
-      // falls back to https://openrouter.ai/api/v1 and tries to use
-      // our thk_* token as a direct OR key (OR rejects with
-      // "Missing Authentication header").
-      const baseURL = Env.get("OPENROUTER_BASE_URL")
-      return {
-        autoload: false,
-        options: {
-          ...(baseURL ? { baseURL, ...(await managedProxyKey("openrouter", baseURL)) } : {}),
-          headers: {
-            "HTTP-Referer": "https://syntheticsciences.ai/",
-            "X-Title": "synsci",
-          },
-        },
+      const headers = {
+        "HTTP-Referer": "https://syntheticsciences.ai/",
+        "X-Title": "synsci",
       }
+      // OpenRouter is the ONE provider with both a managed and a BYOK route, and
+      // resolution is deterministic by key presence (mirrors the Atlas server's
+      // BYOK-first rule): the user's OWN OpenRouter key wins and hits public
+      // OpenRouter directly; with no own key, a logged-in session falls back to
+      // the Atlas managed proxy (thk_* token → wallet-billed). Deleting the own
+      // key restores the managed route automatically — nothing is latched.
+      const auth = await Auth.get("openrouter").catch(() => undefined)
+      const authKey = auth?.type === "api" ? auth.key : undefined
+      const envKey = Env.get("OPENROUTER_API_KEY")
+      const ownKey = isByokKey(authKey) ? authKey : isByokKey(envKey) ? envKey : undefined
+      if (ownKey) {
+        // Honour a user's own OpenRouter-compatible gateway (custom
+        // OPENROUTER_BASE_URL); only the Atlas proxy is swapped for the public
+        // endpoint, since a BYOK key must never be sent to the managed proxy.
+        const envBase = Env.get("OPENROUTER_BASE_URL")
+        const baseURL = envBase && !isAtlasProxyBaseURL(envBase) ? envBase : "https://openrouter.ai/api/v1"
+        return { autoload: false, options: { apiKey: ownKey, baseURL, headers } }
+      }
+
+      // No own key: fall back to the Atlas managed proxy when it's configured.
+      // The @openrouter SDK auto-loads OPENROUTER_API_KEY but NOT
+      // OPENROUTER_BASE_URL, so forward the proxy URL explicitly and attach the
+      // managed token — the live session, or the synced thk_* already in env if
+      // the session file is momentarily unreadable.
+      const proxyBase = Env.get("OPENROUTER_BASE_URL")
+      if (isAtlasProxyBaseURL(proxyBase)) {
+        const session = await OpenScience.getSession().catch(() => null)
+        const managedKey = session?.api_key ?? (isAtlasApiKey(envKey) ? envKey : undefined)
+        if (managedKey) return { autoload: false, options: { apiKey: managedKey, baseURL: proxyBase, headers } }
+      }
+
+      // Neither an own key nor a managed route — nothing to route with.
+      return { autoload: false, options: { headers } }
     },
     vercel: async () => {
       return {
@@ -1189,18 +1212,18 @@ export namespace Provider {
       // credential the user never brought. BYOK must use the user's OWN keys
       // only; auto-detect (billing unset) is left alone so a thk_ key can still
       // resolve to managed there.
-      if (config.billing?.llm === "byok") {
-        const effective =
-          (typeof provider.options?.["apiKey"] === "string" ? (provider.options["apiKey"] as string) : undefined) ??
-          provider.key ??
-          provider.env.map((key) => Env.get(key)).find((value): value is string => !!value)
-        if (isAtlasApiKey(effective)) {
-          delete providers[providerID]
-          continue
-        }
+      if (config.billing?.llm === "byok" && isAtlasApiKey(effectiveKey(provider))) {
+        delete providers[providerID]
+        continue
       }
 
       const configProvider = config.provider?.[providerID]
+
+      // The synced OpenRouter whitelist curates the MANAGED catalog only. When
+      // OpenRouter resolves to the user's OWN key (BYOK — the resolver above
+      // attaches a non-thk_ apiKey), it's their account: show the full local
+      // models.dev OpenRouter catalog instead of the managed subset.
+      const openrouterByok = providerID === "openrouter" && isByokKey(provider.options?.["apiKey"])
 
       for (const [modelID, model] of Object.entries(provider.models)) {
         model.api.id = model.api.id ?? model.id ?? modelID
@@ -1210,7 +1233,7 @@ export namespace Provider {
         if (model.status === "deprecated") delete provider.models[modelID]
         if (
           (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
-          (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
+          (!openrouterByok && configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
         )
           delete provider.models[modelID]
 
@@ -1227,14 +1250,13 @@ export namespace Provider {
         }
       }
 
-      // OpenRouter aggregates models from many upstreams; the
-      // models.dev catalog only registers a small subset (deepseek-r1
-      // + 3 grok variants as of 2026-05). Any whitelisted OR model
-      // missing from the registry gets synthesized so the picker
-      // accepts it. Safe because OR is OpenAI-compat for every
-      // upstream + managed billing uses usage.cost from the response,
-      // not a local price table.
-      if (providerID === "openrouter" && configProvider?.whitelist) {
+      // OpenRouter aggregates models from many upstreams; a whitelisted managed
+      // model id occasionally missing from the models.dev registry gets
+      // synthesized so the picker still accepts it. Safe because OR is
+      // OpenAI-compat for every upstream + managed billing uses usage.cost from
+      // the response, not a local price table. Skipped on a BYOK key — that path
+      // shows the full local catalog and isn't bound to the managed whitelist.
+      if (!openrouterByok && providerID === "openrouter" && configProvider?.whitelist) {
         for (const wlid of configProvider.whitelist) {
           if (!(wlid in provider.models)) {
             provider.models[wlid] = _syntheticOpenRouterModel(wlid)

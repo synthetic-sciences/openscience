@@ -4,13 +4,18 @@ import { OpenScience } from "../../src/openscience"
 import { Global } from "../../src/global"
 
 // syncServices must respect credential precedence: a user's own shell-exported
-// (or BYOK) provider key must survive a background sync — never be overwritten
+// (or BYOK) OpenRouter key must survive a background sync — never be overwritten
 // with a managed thk_ value, which would silently turn a free BYOK call into a
 // billed managed one (the "billing flip" bug).
+//
+// OpenRouter is the ONE provider Atlas sync may deliver a credential for; every
+// other model provider is BYOK-local-only, so its synced credential is dropped
+// (see synced-env-policy.ts) — Atlas still emits them for the hosted web agents.
 
 const realFetch = globalThis.fetch
 afterEach(() => {
   globalThis.fetch = realFetch
+  delete process.env["OPENROUTER_API_KEY"]
   delete process.env["ANTHROPIC_API_KEY"]
 })
 
@@ -21,30 +26,41 @@ async function seedSession() {
   )
 }
 
-function stubSync(env: Record<string, string>) {
+function stubSync(services: Record<string, Record<string, string>>) {
   globalThis.fetch = (async (url: string | URL) => {
     if (String(url).includes("/api/cli/sync")) {
-      return Response.json({ user: {}, services: { anthropic: { connected: true, env } }, config: null })
+      const svc = Object.fromEntries(Object.entries(services).map(([id, env]) => [id, { connected: true, env }]))
+      return Response.json({ user: {}, services: svc, config: null })
     }
     return new Response("{}", { status: 200 })
   }) as unknown as typeof fetch
 }
 
-test("a user's exported provider key is NOT clobbered by a synced managed key", async () => {
+test("a user's exported OpenRouter key is NOT clobbered by a synced managed key", async () => {
   await seedSession()
-  process.env["ANTHROPIC_API_KEY"] = "sk-user-own-key"
+  process.env["OPENROUTER_API_KEY"] = "sk-or-user-own-key"
   stubSync({
-    ANTHROPIC_API_KEY: "thk_managed.value",
-    ANTHROPIC_BASE_URL: "https://app.syntheticsciences.ai/api/llm/proxy/anthropic",
+    openrouter: {
+      OPENROUTER_API_KEY: "thk_managed.value",
+      OPENROUTER_BASE_URL: "https://app.syntheticsciences.ai/api/llm/proxy/openrouter/v1",
+    },
   })
   await OpenScience.syncServices()
-  expect(process.env["ANTHROPIC_API_KEY"]).toBe("sk-user-own-key")
+  expect(process.env["OPENROUTER_API_KEY"]).toBe("sk-or-user-own-key")
 })
 
-test("a synced managed key IS applied when the slot is empty", async () => {
+test("a synced managed OpenRouter key IS applied when the slot is empty", async () => {
+  await seedSession()
+  delete process.env["OPENROUTER_API_KEY"]
+  stubSync({ openrouter: { OPENROUTER_API_KEY: "thk_managed.value" } })
+  await OpenScience.syncServices()
+  expect(process.env["OPENROUTER_API_KEY"]).toBe("thk_managed.value")
+})
+
+test("a synced non-OpenRouter LLM key is dropped — those providers are BYOK-local-only", async () => {
   await seedSession()
   delete process.env["ANTHROPIC_API_KEY"]
-  stubSync({ ANTHROPIC_API_KEY: "thk_managed.value" })
+  stubSync({ anthropic: { ANTHROPIC_API_KEY: "thk_managed.value" } })
   await OpenScience.syncServices()
-  expect(process.env["ANTHROPIC_API_KEY"]).toBe("thk_managed.value")
+  expect(process.env["ANTHROPIC_API_KEY"]).toBeUndefined()
 })

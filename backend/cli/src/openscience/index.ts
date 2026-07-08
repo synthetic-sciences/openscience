@@ -10,6 +10,7 @@ import { Log } from "../util/log"
 import { Lock } from "../util/lock"
 import { Env } from "../env"
 import { Auth } from "../auth"
+import { isSyncedEnvAllowed, BYOK_LLM_ENV_KEYS } from "./synced-env-policy"
 import { DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 
 const log = Log.create({ service: "openscience" })
@@ -837,7 +838,6 @@ export namespace OpenScience {
       // Many providers broadcast the same managed thk_* under several env-var
       // names (ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY / ...) —
       // those are one credential, not four.
-      const credentialValues = new Set<string>()
 
       // Rebuild the synced snapshot from THIS response only. Accumulating
       // across syncs meant a provider disconnected (or a key rotated) on the
@@ -846,14 +846,27 @@ export namespace OpenScience {
       for (const [, svc] of Object.entries(data.services)) {
         if (svc.connected && svc.env) {
           for (const [key, value] of Object.entries(svc.env)) {
-            if (value) {
-              fresh.set(key, value)
-              if (!key.endsWith("_BASE_URL")) credentialValues.add(value)
-            }
+            if (value) fresh.set(key, value)
           }
         }
       }
-      const credentials = credentialValues.size
+
+      // OpenScience honours only OpenRouter (the sole managed LLM route) plus
+      // compute / ML-service credentials from Atlas sync; every other model
+      // provider is BYOK-local-only. Drop the rest before they are applied or
+      // persisted — and the unset pass below removes any a previous sync wrote,
+      // so this doubles as the migration for existing installs. See
+      // synced-env-policy.ts.
+      for (const key of [...fresh.keys()]) {
+        if (!isSyncedEnvAllowed(key)) fresh.delete(key)
+      }
+
+      // Count distinct APPLIED credential values (post-filter, ignoring routing
+      // *_BASE_URL vars) so the returned total reflects what the CLI honours —
+      // never the credentials that were dropped above.
+      const credentials = new Set(
+        [...fresh.entries()].filter(([key]) => !key.endsWith("_BASE_URL")).map(([, value]) => value),
+      ).size
 
       // Unset previously-synced vars that are absent from the new response —
       // mirrors the ownedKeys cleanup in server/routes/settings/credentials.ts.
@@ -948,22 +961,10 @@ export namespace OpenScience {
   }
 
   /** Provider env var names whose values are user-owned secrets worth masking
-   *  when they leak into command output. Mirrors the BYOK provider set so a
-   *  key the user exported in their shell is redacted the same as a synced one. */
-  const BYOK_ENV_KEYS = [
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "GOOGLE_GENERATIVE_AI_API_KEY",
-    "GEMINI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "TOGETHER_API_KEY",
-    "GROQ_API_KEY",
-    "FIREWORKS_API_KEY",
-    "XAI_API_KEY",
-    "MISTRAL_API_KEY",
-    "DEEPSEEK_API_KEY",
-    "CEREBRAS_API_KEY",
-  ]
+   *  when they leak into command output. Shares the single BYOK-provider source
+   *  of truth with the sync blocklist (synced-env-policy.ts) so a key the user
+   *  exported in their shell is redacted the same as a synced one. */
+  const BYOK_ENV_KEYS = BYOK_LLM_ENV_KEYS
 
   /** Populate the BYOK secret cache from auth.json (api-type keys) and the
    *  user's provider env vars. Best-effort + idempotent; safe to call often.

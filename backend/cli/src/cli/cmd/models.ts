@@ -26,14 +26,20 @@ const PROVIDER_LABELS: Record<string, string> = {
  */
 function routingLabel(providerID: string, provider: Provider.Info): string {
   if (providerID === "openai-codex") return "Signed in with Codex"
-  const key = (provider.key ?? "").toLowerCase()
-  if (key.startsWith("thk_")) return "managed"
+  // Read the EFFECTIVE credential, not just provider.key: a custom loader stores
+  // its key under options.apiKey (e.g. openrouter), and a multi-env provider
+  // (google's GEMINI_API_KEY + GOOGLE_GENERATIVE_AI_API_KEY) leaves provider.key
+  // unset — its key lives only in the env. Keying off provider.key alone
+  // mislabels both as "unconfigured" while their models list fine. The "public"
+  // demo sentinel is not a real credential.
+  const effective = Provider.effectiveKey(provider)
   const baseURL = (provider.options?.baseURL as string | undefined) ?? ""
+  if ((effective ?? "").toLowerCase().startsWith("thk_")) return "managed"
   if (baseURL.includes("/api/llm/proxy/")) return "managed"
   // A config-registered local endpoint stores its key under options.apiKey (not
   // provider.key), so it would otherwise read as "unconfigured".
   if (Provider.isLocalBaseURL(baseURL)) return "local"
-  if (provider.key) return "your key"
+  if (effective && effective !== "public") return "your key"
   return "unconfigured"
 }
 

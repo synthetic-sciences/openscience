@@ -192,20 +192,20 @@ export namespace Config {
     // corruption or a file written by an older, non-atomic version.
     const syncedConfig = path.join(Global.Path.config, "openscience-synced.json")
     try {
+      // Atlas writes model-lockdown config (enabled_providers, per-provider
+      // whitelists, default model) for the hosted web agents, but on the CLI the
+      // only *managed* route is OpenRouter. Honour the OpenRouter managed catalog
+      // and the recommended default model; drop the rest UNCONDITIONALLY — the
+      // synced enabled_providers must never hide a locally-configured BYOK
+      // provider, regardless of the billing toggle. An open-source CLI shouldn't
+      // let a dashboard allowlist govern the user's own keys; enterprise lockdown
+      // stays available via admin-controlled managed config + disabled_providers.
+      // (A user's OWN enabled_providers in their config file still gates normally.)
       const synced = await loadFile(syncedConfig)
-      // The dashboard sync is a MANAGED artifact: it pins `enabled_providers` to
-      // the wallet's OpenRouter route so a managed session can only reach the
-      // sanctioned catalog. Under an EXPLICIT byok toggle the user wants their
-      // OWN keys — so drop that managed-only whitelist before merging. Without
-      // this, a lingering managed sync (from a prior `openscience login`)
-      // whitelists away every byok provider the user has or later adds, so byok
-      // shows nothing but the leftover OpenRouter. Auto-detect (billing unset) is
-      // left alone. The managed openrouter *credential* is separately dropped in
-      // provider.ts under byok, so this only frees the catalog.
-      if (synced && (result as { billing?: { llm?: string } }).billing?.llm === "byok") {
-        delete (synced as { enabled_providers?: unknown }).enabled_providers
-      }
-      result = mergeConfigConcatArrays(result, synced)
+      const scoped: Partial<Config.Info> = {}
+      if (synced?.provider?.openrouter) scoped.provider = { openrouter: synced.provider.openrouter }
+      if (synced?.model) scoped.model = synced.model
+      result = mergeConfigConcatArrays(result, scoped)
     } catch {
       // treat an unreadable synced config as absent
     }
