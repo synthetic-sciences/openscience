@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 import { asText, clampLimit, snippet } from "./util"
 
 /** One pathway entry from the WikiPathways JSON catalog. */
@@ -23,7 +23,7 @@ interface WpResponse {
 const CATALOG = "https://www.wikipathways.org/json/findPathwaysByText.json"
 
 async function catalog(signal?: AbortSignal): Promise<WpPathway[]> {
-  const data = await getJSON<WpResponse>(CATALOG, { signal }).catch(() => ({}) as WpResponse)
+  const data = await orFallback(getJSON<WpResponse>(CATALOG, { signal }), {} as WpResponse, signal)
   return Array.isArray(data.pathwayInfo) ? data.pathwayInfo : []
 }
 

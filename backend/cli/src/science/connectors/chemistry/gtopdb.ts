@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 
 /**
  * Guide to PHARMACOLOGY (GtoPdb) — IUPHAR/BPS ligand & target pharmacology.
@@ -45,7 +45,7 @@ export const gtopdb: Connector = {
   async search(query, opts) {
     const limit = Math.min(opts?.limit ?? 10, 25)
     const url = `${BASE}/ligands?name=${encodeURIComponent(query)}`
-    const data = await getJSON<Ligand[]>(url, { signal: opts?.signal }).catch(() => [])
+    const data = await orFallback(getJSON<Ligand[]>(url, { signal: opts?.signal }), [], opts?.signal)
     const ligands = Array.isArray(data) ? data : []
     return ligands.slice(0, limit).map<ConnectorHit>((l) => {
       const id = l.ligandId != null ? String(l.ligandId) : ""
@@ -62,8 +62,8 @@ export const gtopdb: Connector = {
   async fetch(id, opts) {
     const base = `${BASE}/ligands/${encodeURIComponent(id)}`
     const [ligand, structure] = await Promise.all([
-      getJSON<Ligand>(base, { signal: opts?.signal }).catch(() => ({}) as Ligand),
-      getJSON<Structure>(`${base}/structure`, { signal: opts?.signal }).catch(() => ({}) as Structure),
+      orFallback(getJSON<Ligand>(base, { signal: opts?.signal }), {} as Ligand, opts?.signal),
+      orFallback(getJSON<Structure>(`${base}/structure`, { signal: opts?.signal }), {} as Structure, opts?.signal),
     ])
     return { ...ligand, ...structure }
   },

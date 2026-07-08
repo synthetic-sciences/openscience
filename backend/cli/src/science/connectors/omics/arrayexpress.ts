@@ -9,7 +9,7 @@
  * fetch(id) → /biostudies/api/v1/studies/{accession}  (full study JSON)
  */
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 
 const BASE = "https://www.ebi.ac.uk/biostudies/api/v1"
 
@@ -57,14 +57,22 @@ export const arrayexpress: Connector = {
   async search(query, opts) {
     const size = Math.min(Math.max(opts?.limit ?? 10, 1), 25)
     const url = `${BASE}/arrayexpress/search?query=${encodeURIComponent(query)}&pageSize=${size}`
-    const data = await getJSON<BioStudiesSearch>(url, { signal: opts?.signal }).catch(() => ({}) as BioStudiesSearch)
+    const data = await orFallback(
+      getJSON<BioStudiesSearch>(url, { signal: opts?.signal }),
+      {} as BioStudiesSearch,
+      opts?.signal,
+    )
     return (data.hits ?? []).map(toHit)
   },
 
   async fetch(id, opts) {
     const accession = id.trim()
-    return getJSON(`${BASE}/studies/${encodeURIComponent(accession)}`, {
-      signal: opts?.signal,
-    }).catch(() => ({ accession, found: false }))
+    return orFallback(
+      getJSON(`${BASE}/studies/${encodeURIComponent(accession)}`, {
+        signal: opts?.signal,
+      }),
+      { accession, found: false },
+      opts?.signal,
+    )
   },
 }

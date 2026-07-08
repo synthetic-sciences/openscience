@@ -14,7 +14,7 @@
  * fetch(id) → catalogue file whose name/url matches {id}
  */
 import type { Connector, ConnectorHit } from "../types"
-import { getText } from "../http"
+import { getText, orFallback } from "../http"
 
 const PORTAL = "https://depmap.org/portal"
 const FILES_API = `${PORTAL}/api/download/files`
@@ -78,7 +78,7 @@ function toHit(f: DepmapFile): ConnectorHit {
 }
 
 async function catalogue(signal?: AbortSignal): Promise<DepmapCatalogue | undefined> {
-  const body = await getText(FILES_API, { signal }).catch(() => "")
+  const body = await orFallback(getText(FILES_API, { signal }), "", signal)
   return safeParse(body)
 }
 

@@ -8,7 +8,7 @@
  * and cross-references.
  */
 import type { Connector, ConnectorHit, FetchOptions, SearchOptions } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 import { asArray, clampLimit, firstString, toRaw } from "./util"
 
 interface SolrDoc {
@@ -41,7 +41,11 @@ export const pdbe: Connector = {
     const url =
       `https://www.ebi.ac.uk/pdbe/search/pdb/select?q=${encodeURIComponent(query)}` +
       `&wt=json&rows=${rows}&fl=${encodeURIComponent(fl)}`
-    const data = await getJSON<SolrResponse>(url, { signal: opts?.signal }).catch(() => ({}) as SolrResponse)
+    const data = await orFallback(
+      getJSON<SolrResponse>(url, { signal: opts?.signal }),
+      {} as SolrResponse,
+      opts?.signal,
+    )
     const seen = new Set<string>()
     const hits: ConnectorHit[] = []
     for (const d of asArray<SolrDoc>(data.response?.docs)) {
@@ -61,10 +65,13 @@ export const pdbe: Connector = {
 
   async fetch(id, opts?: FetchOptions): Promise<unknown> {
     const key = id.toLowerCase()
-    const data = await getJSON<Record<string, unknown>>(
-      `https://www.ebi.ac.uk/pdbe/api/pdb/entry/summary/${encodeURIComponent(key)}`,
-      { signal: opts?.signal },
-    ).catch(() => ({}) as Record<string, unknown>)
+    const data = await orFallback(
+      getJSON<Record<string, unknown>>(`https://www.ebi.ac.uk/pdbe/api/pdb/entry/summary/${encodeURIComponent(key)}`, {
+        signal: opts?.signal,
+      }),
+      {} as Record<string, unknown>,
+      opts?.signal,
+    )
     // PDBe wraps records as { "<pdbid>": [ {...} ] } — unwrap when present.
     const entry = asArray(data[key])[0]
     return entry ?? data

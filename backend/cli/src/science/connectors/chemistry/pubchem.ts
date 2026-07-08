@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import { getJSON, orFallback } from "../http"
 
 /**
  * PubChem — NCBI's public chemical database (PUG REST). No key required.
@@ -42,16 +42,24 @@ export const pubchem: Connector = {
   async search(query, opts) {
     const limit = Math.min(opts?.limit ?? 10, 25)
     const cidUrl = `${BASE}/compound/name/${encodeURIComponent(query)}/cids/JSON?name_type=word`
-    const cidData = await getJSON<{ IdentifierList?: { CID?: number[] } }>(cidUrl, {
-      signal: opts?.signal,
-    }).catch(() => ({}) as { IdentifierList?: { CID?: number[] } })
+    const cidData = await orFallback(
+      getJSON<{ IdentifierList?: { CID?: number[] } }>(cidUrl, {
+        signal: opts?.signal,
+      }),
+      {} as { IdentifierList?: { CID?: number[] } },
+      opts?.signal,
+    )
     const cids = (cidData.IdentifierList?.CID ?? []).slice(0, limit)
     if (!cids.length) return []
 
     const propUrl = `${BASE}/compound/cid/${cids.join(",")}/property/${FIELDS}/JSON`
-    const propData = await getJSON<{ PropertyTable?: { Properties?: Property[] } }>(propUrl, {
-      signal: opts?.signal,
-    }).catch(() => ({}) as { PropertyTable?: { Properties?: Property[] } })
+    const propData = await orFallback(
+      getJSON<{ PropertyTable?: { Properties?: Property[] } }>(propUrl, {
+        signal: opts?.signal,
+      }),
+      {} as { PropertyTable?: { Properties?: Property[] } },
+      opts?.signal,
+    )
     const props = propData.PropertyTable?.Properties ?? []
 
     return props.map<ConnectorHit>((p) => {
