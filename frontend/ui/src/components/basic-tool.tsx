@@ -1,6 +1,8 @@
 import { createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
 import { Icon, IconProps } from "./icon"
+import { Markdown } from "./markdown"
+import { humanizeToolName } from "./tool-display"
 
 export type TriggerTitle = {
   title: string
@@ -113,6 +115,39 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-export function GenericTool(props: { tool: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+export function GenericTool(props: {
+  tool: string
+  input?: Record<string, any>
+  metadata?: Record<string, any>
+  output?: string
+  status?: string
+  hideDetails?: boolean
+  defaultOpen?: boolean
+  forceOpen?: boolean
+  locked?: boolean
+}) {
+  const glyph = () => (props.status === "error" ? "✗" : props.status === "completed" ? "✓" : "…")
+  const subtitle = () => {
+    const input = props.input ?? {}
+    const first = input.command ?? input.description ?? input.query ?? input.path ?? input.pattern
+    return typeof first === "string" ? first : undefined
+  }
+  return (
+    <BasicTool
+      icon="mcp"
+      hideDetails={props.hideDetails}
+      defaultOpen={props.defaultOpen}
+      forceOpen={props.forceOpen}
+      locked={props.locked}
+      trigger={{ title: humanizeToolName(props.tool), subtitle: subtitle(), args: [glyph()] }}
+    >
+      <Show when={props.output}>
+        {(output) => (
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={"```\n" + output() + "\n```"} />
+          </div>
+        )}
+      </Show>
+    </BasicTool>
+  )
 }
