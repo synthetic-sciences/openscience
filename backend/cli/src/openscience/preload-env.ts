@@ -19,11 +19,24 @@ import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
 import { isSyncedEnvAllowed } from "./synced-env-policy"
+import { loadProjectDotenv } from "./dotenv"
 
 function syncedEnvPath(): string {
   const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")
   return path.join(xdg, "openscience", "synced-env.json")
 }
+
+// The shipped binary disables Bun's ambient .env auto-load (autoloadDotenv:false)
+// so it never ingests a stray .env; load the user's own project .env explicitly
+// instead. FIRST, so a shell export still wins over it AND a .env key wins over
+// the managed synced value replayed below (BYOK beats the managed wallet).
+;(function loadDotenv() {
+  try {
+    loadProjectDotenv(process.cwd(), process.env)
+  } catch {
+    // never let a malformed .env break boot
+  }
+})()
 
 // IIFE so the side effect runs the moment this module is imported.
 ;(function loadSyncedEnv() {
