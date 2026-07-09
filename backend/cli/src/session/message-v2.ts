@@ -731,7 +731,14 @@ export namespace MessageV2 {
   // against churning on trivially-small outputs (the back-ref itself costs a line), and
   // parts with attachments are left alone (identical text ≠ identical media).
   export const DEDUPE_MIN_CHARS = 200
-  export const DUPLICATE_OUTPUT = "[Duplicate tool output — see the more recent identical call]"
+  // Leads with an explicit "unchanged" assertion, not just "duplicate". Because we keep the
+  // NEWEST copy and stub the OLDER one, the model sees "first read = stub, later read = full
+  // body"; without saying the content is UNCHANGED it can misread that as the file mutating
+  // between reads (observed live, and amplified through the compaction summary). claude-code's
+  // read-time FILE_UNCHANGED_STUB solves this structurally (keep older, point backward) — that
+  // is the P5.1 target; here we get the wording clarity cheaply on the keep-newest render pass.
+  export const DUPLICATE_OUTPUT =
+    "[Duplicate output omitted — byte-for-byte identical to a more recent call of the same tool; the content is UNCHANGED. Refer to that newer copy.]"
 
   // Returns the ids of completed tool parts whose output is byte-identical to a LATER
   // (more recent) call's output — i.e. the ones safe to replace with a back-reference.

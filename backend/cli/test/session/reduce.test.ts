@@ -183,7 +183,11 @@ describe("session.message-v2.toModelMessages — duplicate output back-reference
     ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s.split(big).length - 1).toBe(1) // full body shipped exactly once (the newest)
-    expect(s).toContain("Duplicate tool output")
+    // The stub must explicitly tell the model the content is UNCHANGED — otherwise it can
+    // misread "first read = stub, second = full body" as the file having mutated between
+    // reads (observed live; claude-code's FILE_UNCHANGED_STUB avoids it this way).
+    expect(s).toContain("UNCHANGED")
+    expect(s).toContain("identical")
   })
 })
 
