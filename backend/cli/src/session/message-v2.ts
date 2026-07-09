@@ -444,6 +444,16 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
+  // Finish reasons that mean the agent is NOT done — it will call more tools, or the reason
+  // is ambiguous ("unknown") and the loop treats it as "keep going". Everything else ("stop",
+  // "length", …) is a completed turn. The loop uses this to decide whether to keep iterating,
+  // and compaction uses it to decide whether to compact mid-task vs yield after a finished
+  // answer — sharing one predicate so the two can't drift apart.
+  export const CONTINUING_FINISH = ["tool-calls", "unknown"]
+  export function isContinuing(finish?: string): boolean {
+    return !!finish && CONTINUING_FINISH.includes(finish)
+  }
+
   export function toModelMessages(
     input: WithParts[],
     model: Provider.Model,

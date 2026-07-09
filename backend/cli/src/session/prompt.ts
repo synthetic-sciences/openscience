@@ -387,7 +387,7 @@ export namespace SessionPrompt {
       const bareMode = lastUser.tools?.["*"] === false
       if (
         lastAssistant?.finish &&
-        (!["tool-calls", "unknown"].includes(lastAssistant.finish) || bareMode) &&
+        (!MessageV2.isContinuing(lastAssistant.finish) || bareMode) &&
         lastUser.id < lastAssistant.id
       ) {
         log.info("exiting loop", { sessionID, bareMode })

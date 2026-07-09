@@ -366,12 +366,16 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
-                  // Skip the summary turn itself: its input IS the over-threshold
-                  // history being compacted, so it would always trip isOverflow and
-                  // return "compact" — which skips the auto-resume Continue injection
-                  // in compaction.process and strands the task after compacting.
+                  // Only compact MID-TASK — when the agent is still going (more tool calls).
+                  // On a completed answer (finish "stop"/"length"/…) we must NOT compact here:
+                  // that would auto-resume a finished request and make the agent invent
+                  // unrequested work. Instead the turn just ends and yields; the NEXT user
+                  // message trips the proactive start-of-turn check (claude-code's model).
+                  // Also skip the summary turn itself: its input IS the over-threshold history
+                  // being compacted, so it would always trip isOverflow.
                   if (
                     !input.assistantMessage.summary &&
+                    MessageV2.isContinuing(value.finishReason) &&
                     (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
                   ) {
                     needsCompaction = true

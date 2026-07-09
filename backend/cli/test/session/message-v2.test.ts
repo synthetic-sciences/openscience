@@ -102,6 +102,24 @@ function basePart(messageID: string, id: string) {
   }
 }
 
+describe("session.message-v2.isContinuing", () => {
+  test("tool-calls and unknown mean the agent will keep working", () => {
+    expect(MessageV2.isContinuing("tool-calls")).toBe(true)
+    expect(MessageV2.isContinuing("unknown")).toBe(true)
+  })
+
+  test("stop / length / other finish reasons are a completed turn", () => {
+    expect(MessageV2.isContinuing("stop")).toBe(false)
+    expect(MessageV2.isContinuing("length")).toBe(false)
+    expect(MessageV2.isContinuing("content-filter")).toBe(false)
+  })
+
+  test("a missing finish reason is not a continuation", () => {
+    expect(MessageV2.isContinuing(undefined)).toBe(false)
+    expect(MessageV2.isContinuing("")).toBe(false)
+  })
+})
+
 describe("session.message-v2.toModelMessage — media budgeting", () => {
   const imagePart = (id: string, name: string) => ({
     ...basePart("m-imgs", id),
