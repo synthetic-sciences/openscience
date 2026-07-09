@@ -219,7 +219,7 @@ export namespace SessionCompaction {
 Output exactly this Markdown structure, keeping every section (write "(none)" when a section is empty). Preserve exact file paths, commands, identifiers, error strings, and numeric results verbatim. Use terse bullets, not prose.
 
 ## Objective
-- [what the user is ultimately trying to accomplish, in 1-2 sentences]
+- [the user's EXPLICIT request — what THEY actually asked for, verbatim if short. NOT tangents, hunches, anomalies you noticed, or follow-up ideas you had while working]
 
 ## Constraints & Decisions
 - [rules/preferences that must hold, decisions made and WHY, key assumptions — the things a fresh agent would otherwise get wrong]
@@ -233,13 +233,13 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
 - [blockers, failing checks, unresolved questions]
 
 ## Next Move
-1. [the exact next action to take right now]
-2. [the action after that, if known]
+1. [the next action REQUIRED to fulfill the Objective — nothing else. Do NOT introduce new goals, investigations, files, or analyses the user did not explicitly ask for. If the Objective is already satisfied, write exactly: "Objective complete — report the result to the user and stop."]
+2. [the action after that, only if it too is required by the Objective]
 
 ## Key Files & Artifacts
 - [path — what it holds and why it matters; read it ONLY if the Next Move needs it]
 
-Do not mention that context was compacted or that you are summarizing. Do not ask questions.`
+Do not mention that context was compacted or that you are summarizing. Do not ask questions. Do NOT invent work the user did not request — a handoff that adds goals beyond the Objective sends the next agent off-task.`
     const focusLine = input.focus?.trim()
       ? `\n\nThe next session will focus on: ${input.focus.trim()}. Tailor the summary toward that.`
       : ""
@@ -334,7 +334,7 @@ Do not mention that context was compacted or that you are summarizing. Do not as
         sessionID: input.sessionID,
         type: "text",
         synthetic: true,
-        text: "Continue from the 'Next Move' in the handoff above. Trust it as an accurate record — do not re-read files or re-verify completed work unless the immediate step actually requires it.",
+        text: "Continue from the 'Next Move' in the handoff above. Trust it as an accurate record — do not re-read files or re-verify completed work unless the immediate step actually requires it. If the Objective is already complete, give the user your result and stop; do NOT start new work, investigations, or analyses they did not ask for.",
         time: {
           start: Date.now(),
           end: Date.now(),
