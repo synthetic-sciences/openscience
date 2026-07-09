@@ -344,17 +344,31 @@ export default function Page(): JSX.Element {
     bottomThreshold: 120,
   })
 
-  // Re-pin when the user switches sessions.
+  // Re-pin when the user switches sessions, and on initial mount once
+  // messages populate (covers direct URL / bookmark / refresh into a long,
+  // idle session, where createAutoScroll's settling window would otherwise
+  // expire before async-loaded messages render).
   createEffect(
     on(
-      () => params.id,
-      () => chatScroll.forceScrollToBottom(),
-      { defer: true },
+      () => [params.id, messages().length > 0] as const,
+      ([, hasMessages]) => {
+        if (hasMessages) chatScroll.forceScrollToBottom()
+      },
     ),
   )
 
   createEffect(() => {
     if (project()) layout.projects.open(project()!.worktree)
+  })
+
+  // Re-anchor a bottom-following view on viewport-height changes with no new
+  // content (window resize, right-pane toggle, mobile virtual keyboard).
+  onMount(() => {
+    const onResize = () => {
+      if (!chatScroll.userScrolled()) chatScroll.forceScrollToBottom()
+    }
+    window.addEventListener("resize", onResize)
+    onCleanup(() => window.removeEventListener("resize", onResize))
   })
 
   return (
