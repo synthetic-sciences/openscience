@@ -397,6 +397,10 @@ export namespace MessageV2 {
       }),
     }),
     finish: z.string().optional(),
+    // P3.2: the id of the user message where the verbatim recent tail begins, for the
+    // summary message. filterCompacted keeps [tailStartId..boundary] verbatim after the
+    // summary instead of dropping it.
+    tailStartId: z.string().optional(),
   }).meta({
     ref: "AssistantMessage",
   })
@@ -983,18 +987,48 @@ export namespace MessageV2 {
 
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
-    const completed = new Set<string>()
+    const completed = new Set<string>() // carrier ids (parentIDs of completed summaries)
+    let tailStartId: string | undefined // from the newest completed summary
+    let retain: string | undefined // once set, keep reading (to collect the tail) until this id, then stop
     for await (const msg of stream) {
+      // stream yields NEWEST-first
       result.push(msg)
-      if (
-        msg.info.role === "user" &&
-        completed.has(msg.info.id) &&
-        msg.parts.some((part) => part.type === "compaction")
-      )
-        break
-      if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish) completed.add(msg.info.parentID)
+      if (retain) {
+        if (msg.info.id === retain) break
+        continue
+      }
+      if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish) {
+        completed.add(msg.info.parentID)
+        if (tailStartId === undefined) tailStartId = (msg.info as MessageV2.Assistant).tailStartId
+      }
+      if (msg.info.role === "user" && completed.has(msg.info.id) && msg.parts.some((p) => p.type === "compaction")) {
+        if (!tailStartId) break
+        retain = tailStartId
+        if (msg.info.id === retain) break
+      }
     }
-    result.reverse()
+    result.reverse() // now OLDEST-first
+    if (!tailStartId) return result
+    const carrierIdx = result.findLastIndex(
+      (m) => m.info.role === "user" && completed.has(m.info.id) && m.parts.some((p) => p.type === "compaction"),
+    )
+    const summaryIdx =
+      carrierIdx === -1
+        ? -1
+        : result.findIndex(
+            (m, i) =>
+              i > carrierIdx &&
+              m.info.role === "assistant" &&
+              m.info.summary === true &&
+              m.info.parentID === result[carrierIdx].info.id,
+          )
+    const tailIdx = result.findIndex((m) => m.info.id === tailStartId)
+    if (tailIdx >= 0 && tailIdx < carrierIdx && summaryIdx > carrierIdx)
+      return [
+        ...result.slice(carrierIdx, summaryIdx + 1), // [carrier, summary]
+        ...result.slice(tailIdx, carrierIdx), // verbatim tail
+        ...result.slice(summaryIdx + 1), // continuation
+      ]
     return result
   }
 

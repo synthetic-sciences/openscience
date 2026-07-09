@@ -839,3 +839,65 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 })
+
+describe("session.message-v2.filterCompacted — verbatim tail (P3.2)", () => {
+  async function* streamOf(msgs: MessageV2.WithParts[]) {
+    for (const m of msgs) yield m
+  }
+  const mk = (id: string, role: "user" | "assistant", parts: any[], extra: any = {}): MessageV2.WithParts => ({
+    info: {
+      id,
+      sessionID: "s",
+      role,
+      time: { created: 0 },
+      ...(role === "user"
+        ? { agent: "a", model: { providerID: "p", modelID: "m" } }
+        : {
+            parentID: "p",
+            modelID: "m",
+            providerID: "p",
+            mode: "",
+            agent: "a",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          }),
+      ...extra,
+    } as unknown as MessageV2.WithParts["info"],
+    parts: parts as unknown as MessageV2.Part[],
+  })
+  const txt = (mid: string, t: string) => ({ id: `${mid}t`, sessionID: "s", messageID: mid, type: "text", text: t })
+  const compactionCarrier = (id: string) =>
+    mk(id, "user", [{ id: `${id}c`, sessionID: "s", messageID: id, type: "compaction", auto: true }])
+
+  test("keeps the tail messages verbatim after the summary", async () => {
+    // history: [old1 old2] [tail: u-tail a-tail] [compaction carrier] [summary(tailStartId=u-tail)] [continuation]
+    // fixtures are NEWEST-first because MessageV2.stream (the real caller's input) yields newest-first.
+    const msgs: MessageV2.WithParts[] = [
+      mk("cont", "assistant", [txt("cont", "continuing")], { finish: "stop", parentID: "cc" }),
+      mk("sum", "assistant", [txt("sum", "HANDOFF")], { summary: true, finish: "stop", parentID: "cc", tailStartId: "utail" }),
+      compactionCarrier("cc"),
+      mk("atail", "assistant", [txt("atail", "recent work")]),
+      mk("utail", "user", [txt("utail", "current request")]),
+      mk("old2", "assistant", [txt("old2", "old a")]),
+      mk("old1", "user", [txt("old1", "old q")]),
+    ]
+    const out = await MessageV2.filterCompacted(streamOf(msgs))
+    const ids = out.map((m) => m.info.id)
+    expect(ids).not.toContain("old1")
+    expect(ids).not.toContain("old2")
+    // tail preserved verbatim, ordered after the summary
+    expect(ids).toEqual(["cc", "sum", "utail", "atail", "cont"])
+  })
+
+  test("without tailStartId, behavior is unchanged (drops everything before the boundary)", async () => {
+    // NEWEST-first, matching MessageV2.stream.
+    const msgs: MessageV2.WithParts[] = [
+      mk("cont", "assistant", [txt("cont", "go")], { finish: "stop", parentID: "cc" }),
+      mk("sum", "assistant", [txt("sum", "HANDOFF")], { summary: true, finish: "stop", parentID: "cc" }),
+      compactionCarrier("cc"),
+      mk("old1", "user", [txt("old1", "old")]),
+    ]
+    const out = await MessageV2.filterCompacted(streamOf(msgs))
+    expect(out.map((m) => m.info.id)).toEqual(["cc", "sum", "cont"])
+  })
+})
