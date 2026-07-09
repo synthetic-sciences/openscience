@@ -571,4 +571,15 @@ describe("session.compaction.selectTail", () => {
   test("messageTokens counts text + tool output", () => {
     expect(SessionCompaction.messageTokens(a("a1", "x".repeat(40)))).toBe(10)
   })
+
+  test("keeps the last REAL turn verbatim even when a trailing empty compaction carrier is the newest 'turn'", () => {
+    const carrier = {
+      info: { id: "cc", sessionID: "s", role: "user", time: { created: 0 }, agent: "a", model: { providerID: "p", modelID: "m" } },
+      parts: [{ id: "ccp", sessionID: "s", messageID: "cc", type: "compaction", auto: true }],
+    } as unknown as MessageV2.WithParts
+    const big = "z".repeat(40000)
+    const msgs = [u("u1"), a("a1", "x"), u("u2"), a("a2", big), carrier]
+    const { tailStartId } = SessionCompaction.selectTail(msgs, { tailTurns: 1, tailTokens: 4000 })
+    expect(tailStartId).toBe("u2") // the last REAL turn, not the empty carrier
+  })
 })

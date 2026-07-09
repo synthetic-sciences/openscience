@@ -211,15 +211,18 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     }
     let tokens = 0
     let cut = messages.length // start index of the oldest kept turn
+    let content = 0 // turns with real content kept so far (a bare compaction carrier scores 0)
     for (let t = turnStarts.length - 1; t >= 0; t--) {
       const start = turnStarts[t]
       const end = t + 1 < turnStarts.length ? turnStarts[t + 1] : messages.length
       const size = turnSize(start, end)
-      const keptTurns = turnStarts.length - t - 1
-      // always keep the newest turn; then keep more only within budget and up to tailTurns
-      if (keptTurns >= 1 && (keptTurns >= opts.tailTurns || tokens + size > opts.tailTokens)) break
+      // Keep at least one CONTENT turn — an empty compaction carrier must not consume the
+      // exemption, or a large last real turn would be summarized away. Then keep more only
+      // within budget and up to tailTurns.
+      if (content >= 1 && (content >= opts.tailTurns || tokens + size > opts.tailTokens)) break
       tokens += size
       cut = start
+      if (size > 0) content++
     }
     if (cut <= 0 || cut >= messages.length) return {} // tail covers everything / nothing kept
     return { tailStartId: messages[cut].info.id }
@@ -359,7 +362,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     const promptText =
       compacting.prompt ??
       [
-        SessionCompaction.buildHandoffPrompt({ previousSummary: previousSummary(input.messages), focus: input.focus }),
+        buildHandoffPrompt({ previousSummary: previousSummary(input.messages), focus: input.focus }),
         ...compacting.context,
       ].join("\n\n")
     const result = await processor.process({
@@ -409,9 +412,12 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
         // Summary telemetry: `before` is the size of the history being compressed, `after`
         // the size of the summary that replaces it. Attributes the expensive LLM-summary
         // reclamation (level 4) separately from the cheap prune (level 3).
+        const summaryTokens = Token.estimate(summaryText)
         const before = MessageV2.composition(input.messages).total
-        const after = Token.estimate(summaryText)
-        const reclaimed = Math.max(0, before - after)
+        // P3.2 keeps the tail verbatim — only `head` is replaced by the summary, so reclaimed
+        // is head−summary (not full−summary), keeping the P2.5 breaker + telemetry honest.
+        const reclaimed = Math.max(0, MessageV2.composition(head).total - summaryTokens)
+        const after = before - reclaimed
         SessionTelemetry.recordCompaction({
           sessionID: input.sessionID,
           trigger: input.trigger ?? "manual",

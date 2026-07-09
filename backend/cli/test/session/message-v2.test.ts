@@ -844,7 +844,12 @@ describe("session.message-v2.filterCompacted — verbatim tail (P3.2)", () => {
   async function* streamOf(msgs: MessageV2.WithParts[]) {
     for (const m of msgs) yield m
   }
-  const mk = (id: string, role: "user" | "assistant", parts: any[], extra: any = {}): MessageV2.WithParts => ({
+  const mk = (
+    id: string,
+    role: "user" | "assistant",
+    parts: MessageV2.Part[],
+    extra: Record<string, unknown> = {},
+  ): MessageV2.WithParts => ({
     info: {
       id,
       sessionID: "s",
@@ -865,9 +870,12 @@ describe("session.message-v2.filterCompacted — verbatim tail (P3.2)", () => {
     } as unknown as MessageV2.WithParts["info"],
     parts: parts as unknown as MessageV2.Part[],
   })
-  const txt = (mid: string, t: string) => ({ id: `${mid}t`, sessionID: "s", messageID: mid, type: "text", text: t })
+  const txt = (mid: string, t: string) =>
+    ({ id: `${mid}t`, sessionID: "s", messageID: mid, type: "text", text: t }) as unknown as MessageV2.Part
   const compactionCarrier = (id: string) =>
-    mk(id, "user", [{ id: `${id}c`, sessionID: "s", messageID: id, type: "compaction", auto: true }])
+    mk(id, "user", [
+      { id: `${id}c`, sessionID: "s", messageID: id, type: "compaction", auto: true } as unknown as MessageV2.Part,
+    ])
 
   test("keeps the tail messages verbatim after the summary", async () => {
     // history: [old1 old2] [tail: u-tail a-tail] [compaction carrier] [summary(tailStartId=u-tail)] [continuation]
