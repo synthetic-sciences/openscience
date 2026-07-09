@@ -471,12 +471,17 @@ export namespace MessageV2 {
     }
     let imagesSeen = 0
     // Returns a placeholder string when this image occurrence should be dropped, else undefined.
-    const dropImage = (mime: string, filename?: string): string | undefined => {
+    const dropImage = (mime: string, url: string, filename?: string): string | undefined => {
       if (!isImage(mime)) return undefined
       if (options?.stripMedia) return `[image omitted${filename ? `: ${filename}` : ""}]`
-      if (options?.keepRecentImages === undefined) return undefined
+      // Oversized guard (P2.4): a too-large image is replaced by an actionable resize
+      // nudge even when it is a recent image we would otherwise keep — shipping it would
+      // 400 the request. Independent of the recency budget below.
+      const oversized = oversizedImageNudge(url, filename)
+      if (options?.keepRecentImages === undefined) return oversized
       const drop = imagesSeen < totalImages - options.keepRecentImages
       imagesSeen++
+      if (oversized) return oversized
       return drop
         ? `[older image omitted to save context${filename ? `: ${filename}` : ""} — read it again if you need it]`
         : undefined
@@ -535,7 +540,7 @@ export namespace MessageV2 {
             })
           // text/plain and directory files are converted into text parts, ignore them
           if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
-            const dropped = dropImage(part.mime, part.filename)
+            const dropped = dropImage(part.mime, part.url, part.filename)
             if (dropped) {
               userMessage.parts.push({ type: "text", text: dropped })
             } else {
@@ -605,7 +610,7 @@ export namespace MessageV2 {
               const rawAttachments = part.state.time.compacted || isDuplicate ? [] : (part.state.attachments ?? [])
               let droppedNote = ""
               const attachments = rawAttachments.filter((a) => {
-                const dropped = dropImage(a.mime, a.filename)
+                const dropped = dropImage(a.mime, a.url, a.filename)
                 if (dropped) droppedNote += `\n${dropped}`
                 return !dropped
               })
@@ -683,6 +688,37 @@ export namespace MessageV2 {
   // opencode 2000, hermes 1500). Single source of truth — SessionCompaction re-exports
   // it as IMAGE_TOKEN_ESTIMATE (it can't import here without a cycle).
   export const IMAGE_TOKENS = 1600
+
+  // Anthropic (and most providers) reject a single image over 5 MB with an HTTP 400.
+  // P1's flat token estimate neither counts an oversized image accurately nor prevents
+  // that error, so a single big figure can hard-fail the turn. P2.4 guards it WITHOUT an
+  // image codec in the binary: when an image is too large to send, the harness never
+  // ships the base64 — it substitutes an actionable nudge telling the agent to resize the
+  // source file (which it can see in the preceding read/attach) and re-read the smaller
+  // copy. The resize runs in the agent's own tool sandbox (bash/python), mirroring
+  // hermes' runtime-Pillow model without baking a native dep into the compiled binary.
+  export const IMAGE_MAX_BYTES = 5 * 1024 * 1024
+
+  // v1 triggers on byte size — the dominant cause of the 400. Pixel-dimension oversize
+  // (a tall thin screenshot under 5 MB but over the 8000px per-side cap) is a documented
+  // follow-up; `readImageDimensions` in util/image is the primitive it would build on.
+  export function oversizedImageNudge(url: string, filename?: string, maxBytes = IMAGE_MAX_BYTES): string | undefined {
+    if (!url.startsWith("data:")) return undefined // only measurable for inline base64
+    const comma = url.indexOf(",")
+    if (comma === -1) return undefined
+    const bytes = Math.floor(((url.length - comma - 1) * 3) / 4) // base64 → decoded size
+    if (bytes <= maxBytes) return undefined
+    const mb = (bytes / (1024 * 1024)).toFixed(1)
+    const limit = Math.round(maxBytes / (1024 * 1024))
+    const name = filename ? ` ${filename}` : ""
+    return (
+      `[Image${name} omitted — too large to send (~${mb} MB, ${limit} MB limit). ` +
+      `To view it, resize the source file to ≤2000px and read the smaller copy, e.g.: ` +
+      `python3 -c "from PIL import Image; im=Image.open(SRC); im.thumbnail((2000,2000)); im.save(OUT)" ` +
+      `(SRC = the file named in the read/attachment just above; OUT = a new path), then read OUT. ` +
+      `If it was rendered by a script, re-run it at a lower dpi/figsize.]`
+    )
+  }
 
   // Skill/artifact invocations are bucketed separately from generic tool traffic so the
   // telemetry can attribute their cost. NOTE: the skill *catalog* (the bulk of skill
@@ -789,7 +825,11 @@ export namespace MessageV2 {
           continue
         }
         if (part.type === "file") {
-          if (part.mime.startsWith("image/")) addImages(1)
+          if (part.mime.startsWith("image/")) {
+            const nudge = oversizedImageNudge(part.url, part.filename)
+            if (nudge) out.text += Token.estimate(nudge)
+            else addImages(1)
+          }
           continue
         }
         if (part.type === "tool") {
@@ -804,7 +844,12 @@ export namespace MessageV2 {
                 : part.state.output
             out[bucket] += Token.estimate(body)
             if (!compacted && !superseded.has(part.id))
-              addImages((part.state.attachments ?? []).filter((a) => a.mime.startsWith("image/")).length)
+              for (const a of part.state.attachments ?? [])
+                if (a.mime.startsWith("image/")) {
+                  const nudge = oversizedImageNudge(a.url, a.filename)
+                  if (nudge) out[bucket] += Token.estimate(nudge)
+                  else addImages(1)
+                }
           }
           if (part.state.status === "error") out[bucket] += Token.estimate(part.state.error)
         }

@@ -24,6 +24,19 @@ const model = {
   options: {},
 } as unknown as Provider.Model
 
+function userInfo(id: string): MessageV2.User {
+  return {
+    id,
+    sessionID,
+    role: "user",
+    time: { created: 0 },
+    agent: "user",
+    model: { providerID: "test", modelID: "test" },
+    tools: {},
+    mode: "",
+  } as unknown as MessageV2.User
+}
+
 function assistantInfo(id: string, parentID: string): MessageV2.Assistant {
   return {
     id,
@@ -174,6 +187,47 @@ describe("session.message-v2.toModelMessages — duplicate output back-reference
   })
 })
 
+describe("session.message-v2.oversizedImageNudge (P2.4)", () => {
+  test("returns an actionable resize nudge when the image exceeds the byte cap", () => {
+    const url = "data:image/png;base64," + "A".repeat(1000)
+    const nudge = MessageV2.oversizedImageNudge(url, "fig.png", 100) // cap 100 bytes → oversized
+    expect(nudge).toContain("too large to send")
+    expect(nudge).toContain("fig.png")
+    expect(nudge).toContain("resize") // tells the agent what to do
+  })
+
+  test("returns undefined for an image within the cap", () => {
+    const url = "data:image/png;base64," + "A".repeat(40)
+    expect(MessageV2.oversizedImageNudge(url, "fig.png", 1_000_000)).toBeUndefined()
+  })
+
+  test("returns undefined for a non-data URL (nothing to measure)", () => {
+    expect(MessageV2.oversizedImageNudge("file:///x.png", "x.png", 1)).toBeUndefined()
+  })
+})
+
+describe("session.message-v2.toModelMessages — oversized image guard (P2.4)", () => {
+  const bigUrl = "data:image/png;base64," + "A".repeat(7_000_000) // ~5.25 MB decoded > 5 MB cap
+
+  test("replaces an oversized tool-attachment image with the nudge; base64 never ships", () => {
+    const att = [{ id: "att", sessionID, messageID: "a1", type: "file", mime: "image/png", filename: "big.png", url: bigUrl }] as unknown as MessageV2.FilePart[]
+    const state = completedTool("read", { filePath: "/big.png" }, "read ok", { attachments: att })
+    const input: MessageV2.WithParts[] = [{ info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", state)] }]
+    const s = JSON.stringify(MessageV2.toModelMessages(input, model))
+    expect(s).not.toContain("AAAA") // the base64 is not sent
+    expect(s).toContain("too large to send")
+  })
+
+  test("replaces an oversized user file-part image with the nudge", () => {
+    const input: MessageV2.WithParts[] = [
+      { info: userInfo("u1"), parts: [{ id: "f1", sessionID, messageID: "u1", type: "file", mime: "image/png", filename: "huge.png", url: bigUrl } as unknown as MessageV2.Part] },
+    ]
+    const s = JSON.stringify(MessageV2.toModelMessages(input, model))
+    expect(s).not.toContain("AAAA")
+    expect(s).toContain("too large to send")
+  })
+})
+
 describe("session.message-v2.composition — stays in sync with compacted rendering", () => {
   test("a compacted tool counts the summary length, matching what is actually sent", () => {
     const state = completedTool("bash", { command: "npm test" }, "a\nb\nc", { title: "npm test", compacted: true })
@@ -181,5 +235,16 @@ describe("session.message-v2.composition — stays in sync with compacted render
     const summary = MessageV2.toolSummary("bash", state)
     const expected = Token.estimate(JSON.stringify(state.input)) + Token.estimate(summary)
     expect(MessageV2.composition(input).tool).toBe(expected)
+  })
+
+  test("an oversized image counts as its nudge text, not a flat image estimate", () => {
+    const bigUrl = "data:image/png;base64," + "A".repeat(7_000_000)
+    const input: MessageV2.WithParts[] = [
+      { info: userInfo("u1"), parts: [{ id: "f1", sessionID, messageID: "u1", type: "file", mime: "image/png", filename: "huge.png", url: bigUrl } as unknown as MessageV2.Part] },
+    ]
+    const c = MessageV2.composition(input)
+    expect(c.images).toBe(0) // not counted as a shipped image
+    expect(c.image).toBe(0)
+    expect(c.text).toBe(Token.estimate(MessageV2.oversizedImageNudge(bigUrl, "huge.png")!))
   })
 })
