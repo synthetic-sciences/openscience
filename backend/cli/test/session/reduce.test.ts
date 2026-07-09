@@ -151,10 +151,13 @@ describe("session.message-v2.supersededOutputs (P2.1)", () => {
     { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "read", completedTool("read", { p: "x" }, o2))] },
   ]
 
-  test("marks the older of two identical outputs as superseded, keeps the newest", () => {
+  test("keeps the EARLIEST identical output full and supersedes the later one", () => {
+    // Keep-older (not keep-newest): the model's FIRST read stays full and the re-read is
+    // the stub — so it never perceives "first read = stub, second = full" as the file
+    // having changed. Mirrors claude-code's read-time FILE_UNCHANGED_STUB.
     const set = MessageV2.supersededOutputs(two("y".repeat(300), "y".repeat(300)), 200)
-    expect(set.has("t1")).toBe(true)
-    expect(set.has("t2")).toBe(false)
+    expect(set.has("t1")).toBe(false) // earliest kept full
+    expect(set.has("t2")).toBe(true) // later copy superseded → back-ref
   })
 
   test("does not dedupe distinct outputs", () => {
@@ -175,19 +178,22 @@ describe("session.message-v2.supersededOutputs (P2.1)", () => {
 })
 
 describe("session.message-v2.toModelMessages — duplicate output back-reference (P2.1)", () => {
-  test("the older identical output becomes a back-reference; the newest keeps the full body", () => {
+  test("the LATER identical read becomes the back-reference; the earliest keeps the full body", () => {
     const big = "y".repeat(300)
     const input: MessageV2.WithParts[] = [
       { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "x" }, big))] },
       { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "read", completedTool("read", { p: "x" }, big))] },
     ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
-    expect(s.split(big).length - 1).toBe(1) // full body shipped exactly once (the newest)
-    // The stub must explicitly tell the model the content is UNCHANGED — otherwise it can
-    // misread "first read = stub, second = full body" as the file having mutated between
-    // reads (observed live; claude-code's FILE_UNCHANGED_STUB avoids it this way).
+    expect(s.split(big).length - 1).toBe(1) // full body shipped exactly once (the earliest)
+    // The full body must come BEFORE the stub — i.e. the first read is full and the re-read
+    // is the stub. That ordering is what stops the model perceiving the two reads as
+    // different (it saw the content first, then a "same as earlier" note).
+    expect(s.indexOf(big)).toBeLessThan(s.indexOf("UNCHANGED"))
+    // The stub asserts the content is UNCHANGED and points BACKWARD to the earlier read.
     expect(s).toContain("UNCHANGED")
-    expect(s).toContain("identical")
+    expect(s).toContain("earlier")
+    expect(s).not.toContain("more recent") // never point the first read at a future call
   })
 })
 

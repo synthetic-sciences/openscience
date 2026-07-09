@@ -731,20 +731,25 @@ export namespace MessageV2 {
   // against churning on trivially-small outputs (the back-ref itself costs a line), and
   // parts with attachments are left alone (identical text ≠ identical media).
   export const DEDUPE_MIN_CHARS = 200
-  // Leads with an explicit "unchanged" assertion, not just "duplicate". Because we keep the
-  // NEWEST copy and stub the OLDER one, the model sees "first read = stub, later read = full
-  // body"; without saying the content is UNCHANGED it can misread that as the file mutating
-  // between reads (observed live, and amplified through the compaction summary). claude-code's
-  // read-time FILE_UNCHANGED_STUB solves this structurally (keep older, point backward) — that
-  // is the P5.1 target; here we get the wording clarity cheaply on the keep-newest render pass.
+  // Stubs a LATER re-read that is byte-identical to an earlier one (keep-older; see
+  // supersededOutputs). Points BACKWARD to the earlier full copy and leads with an explicit
+  // "unchanged" assertion, so the model reads it as "I already have this, it didn't change"
+  // rather than "this read differs from my earlier one." Wording clarity is secondary to the
+  // keep-older structure — but both matter (the model still parses this line).
   export const DUPLICATE_OUTPUT =
-    "[Duplicate output omitted — byte-for-byte identical to a more recent call of the same tool; the content is UNCHANGED. Refer to that newer copy.]"
+    "[Duplicate read omitted — byte-for-byte identical to an earlier read of the same tool in this conversation; the content is UNCHANGED. Refer to that earlier copy.]"
 
-  // Returns the ids of completed tool parts whose output is byte-identical to a LATER
-  // (more recent) call's output — i.e. the ones safe to replace with a back-reference.
+  // Returns the ids of completed tool parts whose output is byte-identical to an EARLIER
+  // call's output — i.e. the later re-reads, safe to replace with a back-reference to the
+  // first full copy. Keep-OLDER (not keep-newer) is deliberate: the model's first read
+  // stays full and the re-read becomes the stub, so it never perceives "first read = stub,
+  // later read = full body" as the content having changed (a real failure we hit live;
+  // claude-code's read-time FILE_UNCHANGED_STUB keeps the older copy for the same reason).
+  // Self-healing under pruning: compacted parts are skipped, so once the kept first copy is
+  // pruned, the next occurrence stops being superseded and renders full again.
   export function supersededOutputs(input: WithParts[], min = DEDUPE_MIN_CHARS): Set<string> {
-    const newest = new Map<string, string>() // output text -> id of its newest occurrence
-    const eligible: { id: string; output: string }[] = []
+    const firstSeen = new Map<string, string>() // output text -> id of its EARLIEST occurrence
+    const superseded = new Set<string>()
     for (const msg of input)
       for (const part of msg.parts) {
         if (part.type !== "tool" || part.state.status !== "completed") continue
@@ -752,11 +757,9 @@ export namespace MessageV2 {
         if ((part.state.attachments ?? []).length) continue
         const output = part.state.output ?? ""
         if (output.length < min) continue
-        eligible.push({ id: part.id, output })
-        newest.set(output, part.id) // forward iteration → newest wins
+        if (firstSeen.has(output)) superseded.add(part.id) // a later identical copy
+        else firstSeen.set(output, part.id) // the first full copy — keep it
       }
-    const superseded = new Set<string>()
-    for (const e of eligible) if (newest.get(e.output) !== e.id) superseded.add(e.id)
     return superseded
   }
 
