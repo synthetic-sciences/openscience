@@ -38,3 +38,5 @@ __pycache__/
 .openscience/node_modules/
 .openscience/bun.lock
 .superpowers/
+# Internal planning docs (specs/plans) stay local, not in the repo
+docs/superpowers/
