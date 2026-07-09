@@ -296,6 +296,20 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     const model = agent.model
       ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
       : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+    // Split the transcript into a verbatim recent tail + a head to summarize (P3.2). The
+    // budget math mirrors isOverflow's usable-context computation so the tail is sized
+    // against the same window the model actually sees.
+    const cfg = await Config.get()
+    const context = model.limit.context || cfg.compaction?.fallbackContext || FALLBACK_CONTEXT
+    const cap = Math.min(model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
+    const output = Math.min(cap, Math.floor(context / 2))
+    const usable = model.limit.input || context - output
+    const tailTurns = cfg.compaction?.tailTurns ?? TAIL_TURNS
+    const tailTokens =
+      cfg.compaction?.tailTokens ?? Math.min(TAIL_TOKENS_MAX, Math.max(TAIL_TOKENS_MIN, Math.floor(usable * 0.2)))
+    const { tailStartId } = selectTail(input.messages, { tailTurns, tailTokens })
+    const tailIdx = tailStartId ? input.messages.findIndex((m) => m.info.id === tailStartId) : -1
+    const head = tailIdx > 0 ? input.messages.slice(0, tailIdx) : input.messages
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
@@ -304,6 +318,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       mode: "compaction",
       agent: "compaction",
       summary: true,
+      ...(tailStartId ? { tailStartId } : {}),
       path: {
         cwd: Instance.directory,
         root: Instance.worktree,
@@ -356,8 +371,10 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       system: [],
       messages: [
         // Strip ALL media from the summary request — the summarizer never needs the
-        // images and re-ingesting base64 can blow the summary call's own budget.
-        ...MessageV2.toModelMessages(input.messages, model, { stripMedia: true }),
+        // images and re-ingesting base64 can blow the summary call's own budget. Summarize
+        // only the head (P3.2) — the tail is kept verbatim in the transcript and re-spliced
+        // back in after the summary via tailStartId/filterCompacted.
+        ...MessageV2.toModelMessages(head, model, { stripMedia: true }),
         {
           role: "user",
           content: [
