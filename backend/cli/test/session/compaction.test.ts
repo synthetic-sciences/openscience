@@ -7,6 +7,7 @@ import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
 import type { Provider } from "../../src/provider/provider"
+import { MessageV2 } from "../../src/session/message-v2"
 
 Log.init({ print: false })
 
@@ -439,5 +440,67 @@ describe("session.getUsage", () => {
     })
 
     expect(result.cost).toBe(3 + 1.5)
+  })
+})
+
+describe("session.compaction.previousSummary", () => {
+  const asstSummary = (id: string, text: string): MessageV2.WithParts =>
+    ({
+      info: {
+        id,
+        sessionID: "s",
+        role: "assistant",
+        summary: true,
+        finish: "stop",
+        parentID: "p",
+        modelID: "m",
+        providerID: "p",
+        mode: "",
+        agent: "compaction",
+        path: { cwd: "/", root: "/" },
+        cost: 0,
+        time: { created: 0 },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+      parts: [{ id: "t", sessionID: "s", messageID: id, type: "text", text } as unknown as MessageV2.Part],
+    }) as unknown as MessageV2.WithParts
+  const userMsg = (id: string): MessageV2.WithParts =>
+    ({
+      info: {
+        id,
+        sessionID: "s",
+        role: "user",
+        time: { created: 0 },
+        agent: "a",
+        model: { providerID: "p", modelID: "m" },
+      },
+      parts: [{ id: "u", sessionID: "s", messageID: id, type: "text", text: "hi" } as unknown as MessageV2.Part],
+    }) as unknown as MessageV2.WithParts
+
+  test("returns the newest summary message's text", () => {
+    const msgs = [asstSummary("a1", "OLD HANDOFF"), userMsg("u1"), asstSummary("a2", "NEW HANDOFF")]
+    expect(SessionCompaction.previousSummary(msgs)).toBe("NEW HANDOFF")
+  })
+  test("returns undefined when there is no prior summary", () => {
+    expect(SessionCompaction.previousSummary([userMsg("u1")])).toBeUndefined()
+  })
+})
+
+describe("session.compaction.buildHandoffPrompt", () => {
+  test("no prior summary → create prompt with the section structure", () => {
+    const p = SessionCompaction.buildHandoffPrompt({})
+    expect(p).toContain("## Objective")
+    expect(p).not.toContain("<previous-summary>")
+  })
+  test("prior summary → update prompt embeds it and says update-not-regenerate", () => {
+    const p = SessionCompaction.buildHandoffPrompt({ previousSummary: "PRIOR TEXT" })
+    expect(p).toContain("<previous-summary>")
+    expect(p).toContain("PRIOR TEXT")
+    expect(p.toLowerCase()).toContain("update")
+    expect(p).toContain("## Objective")
+  })
+  test("focus is appended in both branches", () => {
+    expect(SessionCompaction.buildHandoffPrompt({ focus: "the deploy" })).toContain("the deploy")
+    expect(SessionCompaction.buildHandoffPrompt({ previousSummary: "x", focus: "the deploy" })).toContain("the deploy")
   })
 })

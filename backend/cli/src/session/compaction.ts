@@ -100,6 +100,70 @@ export namespace SessionCompaction {
     delete breakerState()[sessionID]
   }
 
+  // Newest prior handoff text in the transcript, or undefined if this session has never
+  // been compacted before. Walking backwards finds the most recent summary message without
+  // scanning the whole (potentially long) history once one is found.
+  export function previousSummary(messages: MessageV2.WithParts[]): string | undefined {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const info = messages[i].info
+      if (info.role === "assistant" && info.summary) {
+        const text = messages[i].parts
+          .filter((p) => p.type === "text")
+          .map((p) => (p.type === "text" ? p.text : ""))
+          .join("")
+          .trim()
+        if (text) return text
+      }
+    }
+    return undefined
+  }
+
+  const HANDOFF_STRUCTURE = `## Objective
+- [the user's EXPLICIT request — what THEY actually asked for, verbatim if short. NOT tangents, hunches, anomalies you noticed, or follow-up ideas you had while working]
+
+## Constraints & Decisions
+- [rules/preferences that must hold, decisions made and WHY, key assumptions — the things a fresh agent would otherwise get wrong]
+
+## Work State
+### Done (verified)
+- [completed & verified work with the concrete result, so it need not be re-checked]
+### In progress
+- [what is partially done and exactly where it stands]
+### Blocked / open
+- [blockers, failing checks, unresolved questions]
+
+## Next Move
+1. [the next action REQUIRED to fulfill the Objective — nothing else. Do NOT introduce new goals, investigations, files, or analyses the user did not explicitly ask for. If the Objective is already satisfied, write exactly: "Objective complete — report the result to the user and stop."]
+2. [the action after that, only if it too is required by the Objective]
+
+## Key Files & Artifacts
+- [path — what it holds and why it matters; read it ONLY if the Next Move needs it]`
+
+  const HANDOFF_RULES = `Preserve exact file paths, commands, identifiers, error strings, and numeric results verbatim. Use terse bullets, not prose. Do not mention that context was compacted or that you are summarizing. Do not ask questions. Do NOT invent work the user did not request — a handoff that adds goals beyond the Objective sends the next agent off-task.`
+
+  // The summary IS a handoff: it becomes the ONLY context the resumed (or a fresh) agent
+  // has. When a prior handoff already exists (this session has been compacted before), we
+  // UPDATE it rather than regenerate from scratch — regenerating from the full transcript
+  // every time lets still-true facts drift or get dropped, and costs a full re-summarization
+  // pass. Anchoring on the previous handoff keeps it stable across repeated compactions.
+  export function buildHandoffPrompt(opts: { previousSummary?: string; focus?: string }): string {
+    const focus = opts.focus?.trim()
+      ? `\n\nThe next session will focus on: ${opts.focus.trim()}. Tailor the handoff toward that.`
+      : ""
+    const head = opts.previousSummary
+      ? `You are UPDATING an existing handoff, not writing a new one. New conversation turns have happened since it was written; fold them in.
+
+Update the handoff below. PRESERVE still-true items verbatim; move \`In progress\` items to \`Done (verified)\` once completed; move resolved blockers out of \`Blocked / open\`; drop stale detail; append genuinely new facts. Keep the Objective bound to the user's EXPLICIT request — do not broaden it. Re-emit the exact same Markdown structure below (keep every section; write "(none)" when empty).
+
+<previous-summary>
+${opts.previousSummary}
+</previous-summary>`
+      : `Write a self-contained handoff so another agent can continue this work WITHOUT re-reading the files or re-deriving state. This handoff is the ONLY context that agent will have — capture everything needed to act, and nothing more.
+
+Output exactly this Markdown structure, keeping every section (write "(none)" when a section is empty).`
+    return `${head}\n\n${HANDOFF_STRUCTURE}\n\n${HANDOFF_RULES}${focus}`
+  }
+
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
 
@@ -213,37 +277,15 @@ export namespace SessionCompaction {
     // agent has. It must be self-contained enough to CONTINUE from without re-reading
     // files or re-deriving state — otherwise the agent burns its whole fresh window
     // catching up and immediately overflows again. A concrete "Next Move" and inline
-    // verified results are what let it act instead of re-exploring.
-    const defaultPrompt = `Write a self-contained handoff so another agent can continue this work WITHOUT re-reading the files or re-deriving state. This handoff is the ONLY context that agent will have — capture everything needed to act, and nothing more.
-
-Output exactly this Markdown structure, keeping every section (write "(none)" when a section is empty). Preserve exact file paths, commands, identifiers, error strings, and numeric results verbatim. Use terse bullets, not prose.
-
-## Objective
-- [the user's EXPLICIT request — what THEY actually asked for, verbatim if short. NOT tangents, hunches, anomalies you noticed, or follow-up ideas you had while working]
-
-## Constraints & Decisions
-- [rules/preferences that must hold, decisions made and WHY, key assumptions — the things a fresh agent would otherwise get wrong]
-
-## Work State
-### Done (verified)
-- [completed & verified work with the concrete result, so it need not be re-checked]
-### In progress
-- [what is partially done and exactly where it stands]
-### Blocked / open
-- [blockers, failing checks, unresolved questions]
-
-## Next Move
-1. [the next action REQUIRED to fulfill the Objective — nothing else. Do NOT introduce new goals, investigations, files, or analyses the user did not explicitly ask for. If the Objective is already satisfied, write exactly: "Objective complete — report the result to the user and stop."]
-2. [the action after that, only if it too is required by the Objective]
-
-## Key Files & Artifacts
-- [path — what it holds and why it matters; read it ONLY if the Next Move needs it]
-
-Do not mention that context was compacted or that you are summarizing. Do not ask questions. Do NOT invent work the user did not request — a handoff that adds goals beyond the Objective sends the next agent off-task.`
-    const focusLine = input.focus?.trim()
-      ? `\n\nThe next session will focus on: ${input.focus.trim()}. Tailor the summary toward that.`
-      : ""
-    const promptText = compacting.prompt ?? [defaultPrompt + focusLine, ...compacting.context].join("\n\n")
+    // verified results are what let it act instead of re-exploring. When this session has
+    // been compacted before, anchor on that prior handoff (update it) instead of
+    // regenerating from scratch every time (P3.1).
+    const promptText =
+      compacting.prompt ??
+      [
+        SessionCompaction.buildHandoffPrompt({ previousSummary: previousSummary(input.messages), focus: input.focus }),
+        ...compacting.context,
+      ].join("\n\n")
     const result = await processor.process({
       user: userMessage,
       agent,
