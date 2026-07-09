@@ -34,6 +34,7 @@ export function createTypewriter(getText: () => string): () => string {
   let revealed = getText().length
   let raf = 0
   let prev = 0
+  let lastEmit = 0
 
   const tick = (now: number) => {
     const target = getText()
@@ -41,9 +42,18 @@ export function createTypewriter(getText: () => string): () => string {
     prev = now
     if (target.length < revealed) revealed = target.length // source reset/shrink → snap
     revealed = revealStep(revealed, target.length, elapsed)
-    setShown(target.slice(0, boundary(target, revealed)))
+    // Advance the reveal position every frame, but throttle the setShown emit
+    // (and thus the Markdown reparse it triggers) to ~30fps — always emitting on
+    // completion so the final state lands exactly on the target.
+    if (now - lastEmit >= 33 || revealed >= target.length) {
+      setShown(target.slice(0, boundary(target, revealed)))
+      lastEmit = now
+    }
     raf = revealed < target.length ? requestAnimationFrame(tick) : 0
-    if (!raf) prev = 0
+    if (!raf) {
+      prev = 0
+      lastEmit = 0
+    }
   }
 
   // Kick the loop whenever the source grows past what's revealed; snap on shrink.

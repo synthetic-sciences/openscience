@@ -114,10 +114,12 @@ export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
 // import resolves against the v1.1.116 message-part.
 export const ARTIFACT_TOOL = "__artifact__"
 
-// A file-mutation tool (write/edit/apply_patch) has no diff/content until it
-// finishes, so main renders a title-only card mid-run that reads as "done but
-// blank". Show a compact spinner + label while it runs, then reveal the full
-// card on completion — a clear in-progress cue and a clean, jank-free reveal.
+// A file-mutation tool (write/edit/apply_patch) has no diff/content for a brief
+// window right after it starts, which would otherwise render a title-only card
+// that reads as "done but blank". Show a compact spinner + label during that
+// genuinely-blank window only; each renderer's <Show> also opens as soon as its
+// body content is available (e.g. the diff/content used during permission
+// approval, which happens before the tool finishes), not just on completion.
 function isToolDone(status?: string) {
   return status === "completed" || status === "error"
 }
@@ -530,6 +532,7 @@ export interface ToolProps {
   output?: string
   status?: string
   partID?: string
+  title?: string
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
@@ -628,6 +631,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     if (perm?.metadata) return { ...perm.metadata, ...partMetadata() }
     return partMetadata()
   }
+  // @ts-expect-error - title only exists on the running/completed state variants
+  const title = () => part.state?.title as string | undefined
 
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
@@ -668,6 +673,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             output={part.state.output}
             status={part.state.status}
             partID={part.id}
+            title={title()}
             hideDetails={props.hideDetails}
             forceOpen={forceOpen()}
             locked={showPermission() || showQuestion()}
@@ -801,7 +807,7 @@ ToolRegistry.register({
   name: "skill",
   render(props) {
     const i18n = useI18n()
-    const name = skillName({ metadata: props.metadata, input: props.input, title: props.metadata?.title })
+    const name = skillName({ metadata: props.metadata, input: props.input, title: props.title })
     return (
       <BasicTool {...props} icon="mcp" trigger={{ title: i18n.t("ui.tool.skill", { name }) }}>
         <Show when={props.output}>
@@ -1128,9 +1134,10 @@ ToolRegistry.register({
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const filename = () => getFilename(props.input.filePath ?? "")
     const canOpen = () => !!(data.openFile && props.input.filePath)
+    const bodyReady = () => !!(props.metadata.filediff?.path || props.input.filePath)
     return (
       <Show
-        when={isToolDone(props.status)}
+        when={isToolDone(props.status) || bodyReady()}
         fallback={<ToolProgress label={i18n.t("ui.messagePart.title.edit")} subtitle={filename()} />}
       >
         <BasicTool
@@ -1199,6 +1206,7 @@ ToolRegistry.register({
     const filename = () => getFilename(props.input.filePath ?? "")
     const canOpen = () => !!(data.openFile && props.input.filePath)
     const isNotebook = () => (props.input.filePath ?? "").endsWith(".ipynb")
+    const bodyReady = () => !!props.input.content
 
     const notebookCells = createMemo((): NotebookCellProps[] => {
       if (!isNotebook() || !props.input.content) return []
@@ -1227,7 +1235,7 @@ ToolRegistry.register({
 
     return (
       <Show
-        when={isToolDone(props.status)}
+        when={isToolDone(props.status) || bodyReady()}
         fallback={<ToolProgress label={i18n.t("ui.messagePart.title.write")} subtitle={filename()} />}
       >
         <BasicTool
@@ -1316,7 +1324,7 @@ ToolRegistry.register({
 
     return (
       <Show
-        when={isToolDone(props.status)}
+        when={isToolDone(props.status) || files().length > 0}
         fallback={<ToolProgress label={i18n.t("ui.tool.patch")} subtitle={subtitle()} />}
       >
         <BasicTool

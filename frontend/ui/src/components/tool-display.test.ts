@@ -6,8 +6,8 @@ describe("humanizeToolName", () => {
     expect(humanizeToolName("websearch")).toBe("Websearch")
     expect(humanizeToolName("multi_edit")).toBe("Multi Edit")
   })
-  test("splits an mcp namespace_tool id", () => {
-    expect(humanizeToolName("playwright_browser_click")).toBe("playwright · browser click")
+  test("titlecases a multi-word namespace_tool id", () => {
+    expect(humanizeToolName("playwright_browser_click")).toBe("Playwright Browser Click")
   })
 })
 

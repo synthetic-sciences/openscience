@@ -5,14 +5,9 @@ const titlecase = (s: string) =>
     .map((w) => w[0].toUpperCase() + w.slice(1))
     .join(" ")
 
-// Known first-party MCP-style namespaces produce "ns · rest"; a bare id titlecases.
+// There's no reliable signal to distinguish a first-party multi-word tool id
+// (e.g. "science_list_dbs") from an MCP "namespace_tool" id, so titlecase both.
 export function humanizeToolName(tool: string): string {
-  const parts = tool.split("_")
-  if (parts.length > 2) {
-    const ns = parts[0]
-    const rest = parts.slice(1).join(" ")
-    return `${ns} · ${rest}`
-  }
   return titlecase(tool)
 }
 
