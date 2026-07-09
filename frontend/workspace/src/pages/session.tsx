@@ -24,6 +24,7 @@ import { AppHeader, HeaderIconButton, HeaderDivider } from "@/thesis/AppHeader"
 import { RightPane } from "@/thesis/RightPane"
 import { FileExplorer } from "@/thesis/FileExplorer"
 import { FileView } from "@/thesis/FilePreview"
+import SkillsPage from "@/thesis/SkillsPage"
 import { centerTabs } from "@/thesis/store/centerTabs"
 import { FONT_MONO, FONT_SANS, FONT_SERIF } from "@/styles/tokens"
 import { uiStore } from "@/thesis/store/ui"
@@ -50,6 +51,7 @@ import {
   IconMessageSquare,
   IconFolderTree,
   IconFile,
+  IconBrain,
   IconX,
 } from "@/thesis/shared/Icon"
 import { StatusDot } from "@/thesis/shared/StatusDot"
@@ -322,6 +324,10 @@ export default function Page(): JSX.Element {
   const [visitedFiles, setVisitedFiles] = createSignal(false)
   createEffect(() => {
     if (centerTabs.active() === "files") setVisitedFiles(true)
+  })
+  const [visitedSkills, setVisitedSkills] = createSignal(false)
+  createEffect(() => {
+    if (centerTabs.active() === "skills") setVisitedSkills(true)
   })
 
   // Chat scroll. The container resizes whenever the right pane opens/closes
@@ -616,6 +622,20 @@ export default function Page(): JSX.Element {
               </div>
             </Show>
 
+            {/* skills — the global capability catalog, mounted on first visit */}
+            <Show when={visitedSkills()}>
+              <div
+                style={{
+                  display: centerTabs.active() === "skills" ? "flex" : "none",
+                  flex: 1,
+                  "min-height": 0,
+                  "flex-direction": "column",
+                }}
+              >
+                <SkillsPage />
+              </div>
+            </Show>
+
             {/* document tabs — one inline FileView per opened file */}
             <For each={centerTabs.docs()}>
               {(doc) => (
@@ -666,6 +686,9 @@ function CenterTabStrip(props: { chatTitle: string }): JSX.Element {
       </CenterTab>
       <CenterTab active={active() === "files"} label="Files" onClick={() => centerTabs.setActive("files")}>
         <IconFolderTree size={12} strokeWidth={1.6} />
+      </CenterTab>
+      <CenterTab active={active() === "skills"} label="Skills" onClick={() => centerTabs.setActive("skills")}>
+        <IconBrain size={12} strokeWidth={1.6} />
       </CenterTab>
       <For each={centerTabs.docs()}>
         {(doc) => (

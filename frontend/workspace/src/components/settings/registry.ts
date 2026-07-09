@@ -23,7 +23,6 @@ import type { IconProps } from "@synsci/ui/icon"
 export type SettingsSection = "capabilities" | "workspace"
 
 export type SettingsPanelId =
-  | "skills"
   | "connectors"
   | "specialists"
   | "memory"
@@ -55,7 +54,8 @@ export interface SettingsPanel {
 // Order here is the render order in the rail (top→bottom within each section).
 export const SETTINGS_PANELS: SettingsPanel[] = [
   // ── Capabilities ──
-  { id: "skills", title: "Skills", icon: "brain", section: "capabilities", component: lazy(() => import("./Skills")) },
+  // Skills moved to a dedicated center-pane tab (thesis/SkillsPage) — it's a
+  // first-class catalog now, not a settings row.
   {
     id: "connectors",
     title: "Connectors",
@@ -142,4 +142,4 @@ export function findPanel(id: SettingsPanelId): SettingsPanel {
   return SETTINGS_PANELS.find((p) => p.id === id) ?? SETTINGS_PANELS[0]
 }
 
-export const DEFAULT_PANEL: SettingsPanelId = "skills"
+export const DEFAULT_PANEL: SettingsPanelId = "connectors"
