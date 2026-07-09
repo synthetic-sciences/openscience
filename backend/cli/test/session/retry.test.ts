@@ -196,9 +196,12 @@ describe("SessionRetry.isContextOverflow", () => {
     expect(SessionRetry.isContextOverflow(err)).toBe(true)
   })
 
-  test("true for string_above_max_length code", () => {
+  test("false for string_above_max_length alone — an oversized single field is not total-context overflow", () => {
+    // string_above_max_length fires when ONE string parameter exceeds its per-field limit,
+    // which compaction can't fix. Only classify it as overflow if the message ALSO describes
+    // a context-window condition (caught by the patterns), not on the code alone.
     const err = api({ statusCode: 400, responseBody: JSON.stringify({ error: { code: "string_above_max_length", message: "too long" } }) })
-    expect(SessionRetry.isContextOverflow(err)).toBe(true)
+    expect(SessionRetry.isContextOverflow(err)).toBe(false)
   })
 
   test("true for Anthropic-style 'prompt is too long' message (no code)", () => {

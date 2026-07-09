@@ -646,7 +646,9 @@ export namespace MessageV2 {
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
                 toolCallId: part.callID,
-                input: part.state.time.compacted ? truncateArgs(part.state.input) : part.state.input,
+                // A superseded call's output is stubbed to a back-ref, so its (possibly huge)
+                // input args are dead weight too — truncate them, same as a compacted call.
+                input: part.state.time.compacted || isDuplicate ? truncateArgs(part.state.input) : part.state.input,
                 output,
                 ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
@@ -762,7 +764,7 @@ export namespace MessageV2 {
   // Self-healing under pruning: compacted parts are skipped, so once the kept first copy is
   // pruned, the next occurrence stops being superseded and renders full again.
   export function supersededOutputs(input: WithParts[], min = DEDUPE_MIN_CHARS): Set<string> {
-    const firstSeen = new Map<string, string>() // output text -> id of its EARLIEST occurrence
+    const firstSeen = new Map<string, string>() // dedupe key -> id of its EARLIEST occurrence
     const superseded = new Set<string>()
     for (const msg of input)
       for (const part of msg.parts) {
@@ -771,8 +773,13 @@ export namespace MessageV2 {
         if ((part.state.attachments ?? []).length) continue
         const output = part.state.output ?? ""
         if (output.length < min) continue
-        if (firstSeen.has(output)) superseded.add(part.id) // a later identical copy
-        else firstSeen.set(output, part.id) // the first full copy — keep it
+        // Key on tool + input + output, not output alone: a byte-identical output from a
+        // DIFFERENT tool or a different target (two reads of different files that happen to
+        // match) is not a re-read, and the back-ref explicitly claims "the same tool" — so
+        // keying on output alone would tell the model an untrue thing about unrelated calls.
+        const key = `${part.tool} ${JSON.stringify(part.state.input ?? {})} ${output}`
+        if (firstSeen.has(key)) superseded.add(part.id) // a later identical copy
+        else firstSeen.set(key, part.id) // the first full copy — keep it
       }
     return superseded
   }
@@ -783,8 +790,8 @@ export namespace MessageV2 {
   // the small identifying args (paths, flags) intact so the call still reads correctly.
   export const ARG_TRUNCATE_CHARS = 200
 
-  export function truncateArgs(input: Record<string, any>, cap = ARG_TRUNCATE_CHARS): Record<string, any> {
-    const out: Record<string, any> = {}
+  export function truncateArgs(input: Record<string, unknown>, cap = ARG_TRUNCATE_CHARS): Record<string, unknown> {
+    const out: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(input ?? {}))
       out[k] = typeof v === "string" && v.length > cap ? v.slice(0, cap) + `…[+${v.length - cap} chars]` : v
     return out
@@ -859,7 +866,10 @@ export namespace MessageV2 {
         if (part.type === "tool") {
           const bucket = SKILL_TOOLS.has(part.tool) ? "skills" : "tool"
           const compacted = part.state.status === "completed" && !!part.state.time.compacted
-          out[bucket] += Token.estimate(JSON.stringify((compacted ? truncateArgs(part.state.input) : part.state.input) ?? {}))
+          // Mirror toModelMessages: a compacted OR superseded call's args are truncated in
+          // the render, so count them truncated here too — otherwise the breakdown over-counts.
+          const reducedArgs = compacted || superseded.has(part.id)
+          out[bucket] += Token.estimate(JSON.stringify((reducedArgs ? truncateArgs(part.state.input) : part.state.input) ?? {}))
           if (part.state.status === "completed") {
             const body = superseded.has(part.id)
               ? DUPLICATE_OUTPUT
@@ -997,7 +1007,16 @@ export namespace MessageV2 {
         if (msg.info.id === retain) break
         continue
       }
-      if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish) {
+      // A summary is only a real compaction boundary if it actually produced handoff
+      // text. A summarization whose own request overflowed is left marked summary:true +
+      // finish but with NO text; treating that as a boundary would drop the entire history
+      // and replace it with an empty summary (data loss). Require text to gate on it.
+      if (
+        msg.info.role === "assistant" &&
+        msg.info.summary &&
+        msg.info.finish &&
+        msg.parts.some((p) => p.type === "text" && p.text.trim())
+      ) {
         completed.add(msg.info.parentID)
         if (tailStartId === undefined) tailStartId = (msg.info as MessageV2.Assistant).tailStartId
       }
@@ -1029,7 +1048,10 @@ export namespace MessageV2 {
         ...result.slice(tailIdx, carrierIdx), // verbatim tail
         ...result.slice(summaryIdx + 1), // continuation
       ]
-    return result
+    // tailStartId was set but its message is gone (reverted/migrated) or the layout is
+    // malformed. Fall back to the no-tail behavior — drop everything before the carrier —
+    // rather than returning the whole (unbounded) history the retain scan just collected.
+    return carrierIdx >= 0 ? result.slice(carrierIdx) : result
   }
 
   const isOpenAiErrorRetryable = (e: APICallError) => {

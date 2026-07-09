@@ -53,18 +53,25 @@ export namespace SessionCompaction {
   // with context-composition telemetry); re-exported here for the prune math.
   export const IMAGE_TOKEN_ESTIMATE = MessageV2.IMAGE_TOKENS
 
+  // Usable context window for a model: total context minus the output reserve. Single
+  // source of truth for both the overflow trigger (isOverflow) and the tail budget
+  // (process) so the two can never drift. Never reserve more than half the window for
+  // output — on a small model (or a small fallbackContext like the 8k the config text
+  // recommends) the 32k default output cap exceeds the whole context, so `context - output`
+  // goes negative and `count > usable*threshold` is true for ANY count (compact every turn).
+  export function usableContext(model: Provider.Model, config: Config.Info): { context: number; usable: number } {
+    const context = model.limit.context || config.compaction?.fallbackContext || FALLBACK_CONTEXT
+    const cap = Math.min(model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
+    const output = Math.min(cap, Math.floor(context / 2))
+    const usable = model.limit.input || context - output
+    return { context, usable }
+  }
+
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
-    const context = input.model.limit.context || config.compaction?.fallbackContext || FALLBACK_CONTEXT
+    const { usable } = usableContext(input.model, config)
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    const cap = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    // Never reserve more than half the window for output. On a small model (or a
-    // small fallbackContext like the 8k the config text recommends) the 32k default
-    // output cap exceeds the whole context, so `context - output` goes negative and
-    // `count > usable*threshold` is true for ANY count — compacting every single turn.
-    const output = Math.min(cap, Math.floor(context / 2))
-    const usable = input.model.limit.input || context - output
     const threshold = config.compaction?.threshold ?? DEFAULT_THRESHOLD
     return count > usable * threshold
   }
@@ -172,23 +179,43 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
   export const TAIL_TOKENS_MIN = 8_000
   export const TAIL_TOKENS_MAX = 32_000
 
-  // Flat token estimate for one message: text/reasoning parts plus tool input/output
-  // (and IMAGE_TOKEN_ESTIMATE per completed-tool image attachment). Used by selectTail
-  // to size the verbatim tail against its token budget.
+  // Token estimate for one message, mirroring what toModelMessages actually SHIPS so
+  // selectTail sizes the verbatim tail against reality: a compacted tool call counts its
+  // 1-line summary + truncated args (not the cleared body), images are the flat estimate,
+  // and NON-image file/attachment payloads (a PDF's base64) are counted by size instead of
+  // silently 0 — a huge PDF turn must not look tiny to the tail budget. (Superseded/dedupe
+  // is cross-message state selectTail doesn't have; the tail is recent, where a part is the
+  // kept first copy, not a later duplicate — so ignoring it only rarely over-counts.)
   export function messageTokens(msg: MessageV2.WithParts): number {
     let total = 0
     for (const part of msg.parts) {
-      if (part.type === "text" || part.type === "reasoning") total += Token.estimate(part.text)
+      if (part.type === "text") {
+        if (!part.ignored) total += Token.estimate(part.text)
+        continue
+      }
+      if (part.type === "reasoning") {
+        total += Token.estimate(part.text)
+        continue
+      }
+      if (part.type === "file") {
+        // text/plain + directory files are folded into text upstream, not shipped as files.
+        if (part.mime === "text/plain" || part.mime === "application/x-directory") continue
+        total += part.mime.startsWith("image/") ? IMAGE_TOKEN_ESTIMATE : Token.estimate(part.url)
+        continue
+      }
       if (part.type === "tool") {
-        total += Token.estimate(JSON.stringify(part.state.input ?? {}))
+        const compacted = part.state.status === "completed" && !!part.state.time.compacted
+        total += Token.estimate(
+          JSON.stringify((compacted ? MessageV2.truncateArgs(part.state.input) : part.state.input) ?? {}),
+        )
         if (part.state.status === "completed") {
-          total += Token.estimate(part.state.output)
-          total +=
-            (part.state.attachments ?? []).filter((x) => x.mime.startsWith("image/")).length * IMAGE_TOKEN_ESTIMATE
+          total += Token.estimate(compacted ? MessageV2.toolSummary(part.tool, part.state) : part.state.output)
+          if (!compacted)
+            for (const a of part.state.attachments ?? [])
+              total += a.mime.startsWith("image/") ? IMAGE_TOKEN_ESTIMATE : Token.estimate(a.url)
         }
         if (part.state.status === "error") total += Token.estimate(part.state.error)
       }
-      if (part.type === "file" && part.mime.startsWith("image/")) total += IMAGE_TOKEN_ESTIMATE
     }
     return total
   }
@@ -300,13 +327,15 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
       : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
     // Split the transcript into a verbatim recent tail + a head to summarize (P3.2). The
-    // budget math mirrors isOverflow's usable-context computation so the tail is sized
-    // against the same window the model actually sees.
+    // tail is kept in the CONVERSATION and re-rendered to the conversation's model on the
+    // next turn — so size it against THAT model's window, not the compaction agent's (which
+    // may be a different, distinctly-configured model). They coincide unless a custom
+    // compaction agent.model is set.
     const cfg = await Config.get()
-    const context = model.limit.context || cfg.compaction?.fallbackContext || FALLBACK_CONTEXT
-    const cap = Math.min(model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    const output = Math.min(cap, Math.floor(context / 2))
-    const usable = model.limit.input || context - output
+    const convModel = agent.model
+      ? await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+      : model
+    const { usable } = usableContext(convModel, cfg)
     const tailTurns = cfg.compaction?.tailTurns ?? TAIL_TURNS
     const tailTokens =
       cfg.compaction?.tailTokens ?? Math.min(TAIL_TOKENS_MAX, Math.max(TAIL_TOKENS_MIN, Math.floor(usable * 0.2)))
@@ -426,8 +455,11 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
           after,
           reclaimed,
         })
-        // Feed the circuit breaker: repeated low-yield summaries trip it (P2.5).
-        noteCompaction({ sessionID: input.sessionID, before, reclaimed })
+        // Feed the circuit breaker: repeated low-yield summaries trip it (P2.5). Only
+        // AUTOMATIC compactions count — a manual /compact reclaiming little (fixed overhead
+        // dominates) must not trip the breaker that gates PROACTIVE auto-compaction, or a
+        // few manual runs would silently disable auto-compaction for the session.
+        if ((input.trigger ?? "manual") !== "manual") noteCompaction({ sessionID: input.sessionID, before, reclaimed })
         const root = path.resolve(Instance.worktree)
         const custom = input.handoffFile?.trim()
         const defaultTarget = path.resolve(root, ".openscience", "handoffs", `${input.sessionID}.md`)

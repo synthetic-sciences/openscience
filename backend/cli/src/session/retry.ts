@@ -58,9 +58,12 @@ export namespace SessionRetry {
     return Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS)
   }
 
-  // Codes that unambiguously mean "input too big". Deliberately small — never
-  // generic buckets like `invalid_request_error`, which also cover bad params.
-  const OVERFLOW_CODES = new Set(["context_length_exceeded", "string_above_max_length"])
+  // Codes that unambiguously mean "TOTAL input too big". Deliberately small — never
+  // generic buckets like `invalid_request_error`, which also cover bad params. Excludes
+  // OpenAI's `string_above_max_length`: it fires when a SINGLE string field exceeds its
+  // per-field limit — an oversized arg, not total-context overflow — which compaction can't
+  // fix. Such an error is only treated as overflow if its message also matches a pattern.
+  const OVERFLOW_CODES = new Set(["context_length_exceeded"])
 
   // Substrings from the human-readable message of a context-window rejection.
   // Cross-provider fallback: Anthropic has no dedicated code, Gemini uses the

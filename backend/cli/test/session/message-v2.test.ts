@@ -908,4 +908,42 @@ describe("session.message-v2.filterCompacted — verbatim tail (P3.2)", () => {
     const out = await MessageV2.filterCompacted(streamOf(msgs))
     expect(out.map((m) => m.info.id)).toEqual(["cc", "sum", "cont"])
   })
+
+  test("an empty (failed-overflow) summary is NOT a boundary — history is preserved, not dropped", async () => {
+    // A compaction whose own summary request overflowed: the summary message is left
+    // marked summary:true + finish (here "compact") but carries NO text. It must not be
+    // treated as a real compaction boundary — doing so would drop the entire history and
+    // replace it with an empty summary (the P0 data-loss bug).
+    const msgs: MessageV2.WithParts[] = [
+      mk("sum", "assistant", [], { summary: true, finish: "compact", parentID: "cc" }),
+      compactionCarrier("cc"),
+      mk("a1", "assistant", [txt("a1", "real work")], { finish: "stop", parentID: "u1" }),
+      mk("u1", "user", [txt("u1", "real request")]),
+    ]
+    const out = await MessageV2.filterCompacted(streamOf(msgs))
+    const ids = out.map((m) => m.info.id)
+    expect(ids).toContain("u1")
+    expect(ids).toContain("a1")
+  })
+
+  test("a missing tailStartId falls back to [carrier, summary, continuation] — never the whole history", async () => {
+    // The summary references a tail anchor that is no longer in the stream (e.g. the tail
+    // messages were reverted/migrated away). The retain scan can't find it; the re-splice
+    // must still honour the compaction boundary and drop pre-carrier history, not return
+    // the entire un-truncated history.
+    const msgs: MessageV2.WithParts[] = [
+      mk("cont", "assistant", [txt("cont", "go")], { finish: "stop", parentID: "cc" }),
+      mk("sum", "assistant", [txt("sum", "HANDOFF")], {
+        summary: true,
+        finish: "stop",
+        parentID: "cc",
+        tailStartId: "gone",
+      }),
+      compactionCarrier("cc"),
+      mk("old2", "assistant", [txt("old2", "old a")]),
+      mk("old1", "user", [txt("old1", "old q")]),
+    ]
+    const out = await MessageV2.filterCompacted(streamOf(msgs))
+    expect(out.map((m) => m.info.id)).toEqual(["cc", "sum", "cont"])
+  })
 })

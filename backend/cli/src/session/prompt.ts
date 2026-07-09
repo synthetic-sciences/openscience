@@ -640,6 +640,22 @@ export namespace SessionPrompt {
         continue
       }
 
+      // After a compaction, filterCompacted re-splices the verbatim tail AFTER the summary,
+      // so the position-based lastFinished above can resolve to a tail assistant carrying
+      // its stale PRE-compaction token count. If a summary is newer (higher id) than
+      // lastFinished we just compacted — the real post-compaction size isn't measurable
+      // until the next model turn, so skip proactive-compaction work this turn (avoiding a
+      // wasted prune + a misleading "did not bring under threshold" warning). The
+      // compactionArmed latch, left as the compaction set it, still governs re-firing.
+      const freshlyCompacted =
+        !!lastFinished &&
+        msgs.some(
+          (m) =>
+            m.info.role === "assistant" &&
+            (m.info as MessageV2.Assistant).summary === true &&
+            !!(m.info as MessageV2.Assistant).finish &&
+            m.info.id > lastFinished!.id,
+        )
       // context overflow, needs compaction (proactive, at the 0.75 threshold)
       const overThreshold =
         !!lastFinished &&
@@ -649,15 +665,20 @@ export namespace SessionPrompt {
       // session (fixed overhead already exceeds the threshold), stop proactively
       // compacting — it only burns tokens/latency. The reactive overflow-error path is
       // the sole remaining backstop for a genuine hard overflow.
-      if (overThreshold && SessionCompaction.breakerTripped(sessionID)) {
+      if (overThreshold && !freshlyCompacted && SessionCompaction.breakerTripped(sessionID)) {
         log.warn("compaction circuit breaker tripped; proceeding without compacting", { sessionID })
-      } else if (overThreshold) {
+      } else if (overThreshold && !freshlyCompacted) {
         // Cheapest first: clear stale tool outputs / older images. If that reclaims a
         // meaningful chunk, skip the expensive LLM compaction this turn — the next turn
         // re-checks on real token usage. Only summarize when clearing can't hold budget.
         const reclaimed = await SessionCompaction.prune({ sessionID })
         if (reclaimed > 0) {
           log.info("prune reclaimed context; deferring compaction", { sessionID, reclaimed })
+          // Re-read the stream so THIS turn's request reflects the prune. prune() persists
+          // time.compacted on the cleared parts, but the `msgs` fetched at the loop top (and
+          // the sessionMessages clone below) still hold the pre-prune bodies — without this
+          // the "deferring compaction" turn would ship the full un-pruned context anyway.
+          msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
           // `before` is the last finished turn's real token usage (the reason we tripped
           // the threshold); prune's return value is the estimated reclaim.
           const before = lastFinished!.tokens.input + lastFinished!.tokens.cache.read + lastFinished!.tokens.output

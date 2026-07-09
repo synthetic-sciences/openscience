@@ -572,6 +572,26 @@ describe("session.compaction.selectTail", () => {
     expect(SessionCompaction.messageTokens(a("a1", "x".repeat(40)))).toBe(10)
   })
 
+  test("messageTokens counts a non-image file (PDF) by payload size, not 0", () => {
+    // toModelMessages ships the full base64; the tail budget must not see a big PDF as ~0.
+    const url = "data:application/pdf;base64," + "A".repeat(4000)
+    const pdf = {
+      info: { id: "u1", sessionID: "s", role: "user", time: { created: 0 }, agent: "a", model: { providerID: "p", modelID: "m" } },
+      parts: [{ id: "u1f", sessionID: "s", messageID: "u1", type: "file", mime: "application/pdf", filename: "x.pdf", url }],
+    } as unknown as MessageV2.WithParts
+    expect(SessionCompaction.messageTokens(pdf)).toBeGreaterThan(900)
+  })
+
+  test("messageTokens scores a compacted tool call as its 1-line summary, not the cleared body", () => {
+    const tool = (compacted: boolean) =>
+      ({
+        info: { id: "a1", sessionID: "s", role: "assistant", parentID: "u", modelID: "m", providerID: "p", mode: "", agent: "a", summary: false, finish: "stop", cost: 0, time: { created: 0 }, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
+        parts: [{ id: "a1t", sessionID: "s", messageID: "a1", type: "tool", tool: "bash", callID: "c1", state: { status: "completed", input: { command: "ls" }, output: "z".repeat(40000), title: "ls", metadata: {}, time: { start: 0, end: 1, ...(compacted ? { compacted: 2 } : {}) } } }],
+      }) as unknown as MessageV2.WithParts
+    expect(SessionCompaction.messageTokens(tool(true))).toBeLessThan(SessionCompaction.messageTokens(tool(false)))
+    expect(SessionCompaction.messageTokens(tool(true))).toBeLessThan(100) // ~1-line summary, not the 10k-token body
+  })
+
   test("keeps the last REAL turn verbatim even when a trailing empty compaction carrier is the newest 'turn'", () => {
     const carrier = {
       info: { id: "cc", sessionID: "s", role: "user", time: { created: 0 }, agent: "a", model: { providerID: "p", modelID: "m" } },

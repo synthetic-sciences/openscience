@@ -143,6 +143,18 @@ describe("session.message-v2.toModelMessages — compacted tool args (P2.3)", ()
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s).toContain("x".repeat(1000))
   })
+
+  test("truncates oversized args of a SUPERSEDED (duplicate) tool call — its output is a stub, so the args are dead weight", () => {
+    const big = "y".repeat(300)
+    const content = "z".repeat(1000)
+    const input: MessageV2.WithParts[] = [
+      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "write", completedTool("write", { filePath: "/a", content }, big))] },
+      { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "write", completedTool("write", { filePath: "/a", content }, big))] },
+    ]
+    const s = JSON.stringify(MessageV2.toModelMessages(input, model))
+    expect(s).toContain("chars]") // the later (superseded) call's content arg is truncated
+    expect(s.split(content).length - 1).toBe(1) // the full content ships only once (the kept first call)
+  })
 })
 
 describe("session.message-v2.supersededOutputs (P2.1)", () => {
@@ -163,6 +175,26 @@ describe("session.message-v2.supersededOutputs (P2.1)", () => {
   test("does not dedupe distinct outputs", () => {
     const set = MessageV2.supersededOutputs(two("a".repeat(300), "b".repeat(300)), 200)
     expect(set.size).toBe(0)
+  })
+
+  test("does NOT dedupe identical output from DIFFERENT inputs (different targets)", () => {
+    // Two reads of DIFFERENT files whose bodies happen to be byte-identical must not
+    // collapse — the back-ref claims "same tool, same content", which would be a lie.
+    const big = "y".repeat(300)
+    const diff: MessageV2.WithParts[] = [
+      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "fileA" }, big))] },
+      { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "read", completedTool("read", { p: "fileB" }, big))] },
+    ]
+    expect(MessageV2.supersededOutputs(diff, 200).size).toBe(0)
+  })
+
+  test("does NOT dedupe identical output from DIFFERENT tools", () => {
+    const big = "y".repeat(300)
+    const diff: MessageV2.WithParts[] = [
+      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "x" }, big))] },
+      { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "bash", completedTool("bash", { command: "cat x" }, big))] },
+    ]
+    expect(MessageV2.supersededOutputs(diff, 200).size).toBe(0)
   })
 
   test("does not dedupe outputs shorter than the minimum", () => {

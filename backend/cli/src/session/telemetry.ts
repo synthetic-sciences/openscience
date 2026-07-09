@@ -61,6 +61,8 @@ export namespace SessionTelemetry {
       skills: c.skills,
       images: c.images,
     })
+    // Fire-and-forget: callers don't await this. Bus.publish rejects if any subscriber
+    // throws, so swallow it here — telemetry must never crash the session loop it observes.
     return Bus.publish(Event.Context, {
       sessionID: input.sessionID,
       tokens: {
@@ -73,7 +75,7 @@ export namespace SessionTelemetry {
       },
       images: c.images,
       total: c.total,
-    })
+    }).catch((error) => log.debug("context telemetry publish failed", { error: `${error}` }))
   }
 
   export function recordCompaction(input: {
@@ -86,7 +88,11 @@ export namespace SessionTelemetry {
   }) {
     // When the caller knows only the reclaimed amount (the prune path returns just that),
     // derive `after` from `before` so consumers always get a consistent before/after/delta.
-    const after = input.after ?? (input.before !== undefined ? input.before - input.reclaimed : undefined)
+    // Clamp at 0: `before` (real provider tokens) and `reclaimed` (a local estimate over the
+    // pruned history) use different bases, so the estimate can exceed `before` — a context
+    // size is never negative.
+    const rawAfter = input.after ?? (input.before !== undefined ? input.before - input.reclaimed : undefined)
+    const after = rawAfter !== undefined ? Math.max(0, rawAfter) : undefined
     log.debug("compaction", {
       sessionID: input.sessionID,
       trigger: input.trigger,
@@ -102,6 +108,6 @@ export namespace SessionTelemetry {
       before: input.before,
       after,
       reclaimed: input.reclaimed,
-    })
+    }).catch((error) => log.debug("compaction telemetry publish failed", { error: `${error}` }))
   }
 }
