@@ -352,7 +352,19 @@ export default function Page(): JSX.Element {
     on(
       () => [params.id, messages().length > 0] as const,
       ([, hasMessages]) => {
-        if (hasMessages) chatScroll.forceScrollToBottom()
+        if (!hasMessages) return
+        // A turn's markdown/code-highlight/katex renders progressively AFTER the
+        // message array populates, growing scrollHeight over ~1s. An idle session
+        // isn't in follow-mode, so createAutoScroll won't track that growth — a
+        // single scroll lands at the early bottom. Re-pin across the load window
+        // (bail the moment the user scrolls up, so we never fight them).
+        chatScroll.forceScrollToBottom()
+        const timers = [80, 200, 450, 800, 1200].map((ms) =>
+          setTimeout(() => {
+            if (!chatScroll.userScrolled()) chatScroll.forceScrollToBottom()
+          }, ms),
+        )
+        onCleanup(() => timers.forEach(clearTimeout))
       },
     ),
   )
