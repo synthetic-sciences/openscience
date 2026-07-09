@@ -1,7 +1,7 @@
 {
   "name": "openscience-landing",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.3.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
