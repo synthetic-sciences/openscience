@@ -280,8 +280,10 @@ export namespace SessionPrompt {
     }
     delete s[sessionID]
     // Flush any coalesced (debounced) streaming part writes now, so the final
-    // text/reasoning content is durable the moment the turn goes idle.
-    Session.flushPendingParts()
+    // text/reasoning content is durable the moment the turn goes idle. cancel()
+    // is sync (invoked from a `using` disposer), so this can't be awaited; log
+    // instead of leaving an unhandled rejection.
+    void Session.flushPendingParts(sessionID).catch((e) => log.error("flushPendingParts failed", { error: e }))
     SessionStatus.set(sessionID, { type: "idle" })
     return
   }

@@ -24,5 +24,9 @@ export function createCoalescer<T>(flush: (key: string, value: T) => Promise<voi
       const keys = [...pending.keys()]
       for (const key of keys) await run(key)
     },
+    async flushWhere(predicate: (key: string) => boolean) {
+      const keys = [...pending.keys()].filter(predicate)
+      for (const key of keys) await run(key)
+    },
   }
 }

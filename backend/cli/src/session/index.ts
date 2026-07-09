@@ -397,16 +397,16 @@ export namespace Session {
     const delta = "delta" in input ? input.delta : undefined
     // Publish immediately so the SSE stream is not gated on the disk write.
     Bus.publish(MessageV2.Event.PartUpdated, { part, delta })
-    const key = part.messageID + "/" + part.id
+    const key = part.sessionID + "/" + part.messageID + "/" + part.id
     partWriter.push(key, part)
-    // Only text/reasoning stream many deltas; every other part arrives whole, so
-    // flush it now. Streaming parts ride the 250ms timer plus the idle flush.
-    const streaming = part.type === "text" || part.type === "reasoning"
+    // Only a streaming delta rides the 250ms timer plus the idle flush; whole/synthetic
+    // parts (no delta) and the final text/reasoning-end part flush immediately.
+    const streaming = delta !== undefined && (part.type === "text" || part.type === "reasoning")
     if (!streaming) await partWriter.flushNow(key)
     return part
   })
 
-  export const flushPendingParts = () => partWriter.flushAll()
+  export const flushPendingParts = (sessionID: string) => partWriter.flushWhere((k) => k.startsWith(sessionID + "/"))
 
   export const getUsage = fn(
     z.object({

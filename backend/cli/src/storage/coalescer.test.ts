@@ -31,4 +31,23 @@ describe("createCoalescer", () => {
     await c.flushNow("missing")
     expect(writes).toEqual([])
   })
+
+  test("flushWhere only flushes keys matching the predicate", async () => {
+    const writes: [string, number][] = []
+    const c = createCoalescer<number>((k, v) => void writes.push([k, v]), 1000)
+    c.push("sessionA/msg1/part1", 1)
+    c.push("sessionA/msg1/part2", 2)
+    c.push("sessionB/msg1/part1", 9)
+    await c.flushWhere((k) => k.startsWith("sessionA/"))
+    expect(writes.sort()).toEqual([
+      ["sessionA/msg1/part1", 1],
+      ["sessionA/msg1/part2", 2],
+    ])
+    await c.flushAll()
+    expect(writes.sort()).toEqual([
+      ["sessionA/msg1/part1", 1],
+      ["sessionA/msg1/part2", 2],
+      ["sessionB/msg1/part1", 9],
+    ])
+  })
 })
