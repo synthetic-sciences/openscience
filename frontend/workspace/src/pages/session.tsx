@@ -20,7 +20,6 @@ import { useLayout } from "@/context/layout"
 import { useTheme } from "@synsci/ui/theme"
 import { PromptInput } from "@/components/prompt-input"
 import { NewSessionView } from "@/components/session/session-new-view"
-import { TodoTracker } from "@/thesis/TodoTracker"
 import { Wordmark } from "@/thesis/Wordmark"
 import { AppHeader, HeaderIconButton, HeaderDivider } from "@/thesis/AppHeader"
 import { RightPane } from "@/thesis/RightPane"
@@ -606,7 +605,6 @@ export default function Page(): JSX.Element {
                       </button>
                     </div>
                   </Show>
-                  <TodoTracker />
                   <PromptInput
                     newSessionWorktree={newSessionWorktree()}
                     onNewSessionWorktreeReset={() => setNewSessionWorktree("main")}
