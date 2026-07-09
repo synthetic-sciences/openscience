@@ -943,6 +943,14 @@ export namespace Provider {
     )
 
     function isProviderAllowed(providerID: string): boolean {
+      // Codex OAuth (openai-codex) is the user's own ChatGPT subscription: it
+      // routes straight to chatgpt.com and never debits the managed wallet, so a
+      // completed sign-in must surface regardless of managed-mode routing or the
+      // synced managed catalog whitelist. Treat it as BYOK-class (like a local
+      // provider) — only an explicit `disabled` entry hides it. Without this,
+      // managed users finish the ChatGPT login (the credential persists) but the
+      // provider is filtered out and the UI never flips to Connected.
+      if (providerID === "openai-codex") return !disabled.has(providerID)
       if (managedOpenRouterOnly && !managedProviderAllowed(providerID) && !localProviderIds.has(providerID))
         return false
       if (enabled && !enabled.has(providerID)) return false

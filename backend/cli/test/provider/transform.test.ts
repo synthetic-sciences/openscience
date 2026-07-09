@@ -1253,20 +1253,49 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
-    test("gpt models return OPENAI_EFFORTS with reasoning", () => {
+    test("gpt models map through the per-model OpenAI effort ladder (reasoning wrapper)", () => {
       const model = createMockModel({
-        id: "openrouter/gpt-4",
+        id: "openrouter/gpt-5.2",
         providerID: "openrouter",
         api: {
-          id: "gpt-4",
+          id: "gpt-5.2",
           url: "https://openrouter.ai",
           npm: "@openrouter/ai-sdk-provider",
         },
+        release_date: "2025-12-11",
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      // gpt-5.2: none/low/medium/high/xhigh (no minimal); OpenRouter wraps in reasoning.effort.
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
       expect(result.low).toEqual({ reasoning: { effort: "low" } })
-      expect(result.high).toEqual({ reasoning: { effort: "high" } })
+      expect(result.xhigh).toEqual({ reasoning: { effort: "xhigh" } })
+    })
+
+    test("claude via OpenRouter offers NO reasoning variants (#167: unsignable round-trip)", () => {
+      // OpenRouter strips Anthropic's thinking-block signature, so Claude reasoning
+      // 400s on multi-step tool-use turns — variants() must return {} for Claude on
+      // OR (native-Anthropic BYOK keeps its full ladder, tested separately).
+      for (const apiId of ["anthropic/claude-opus-4.8", "anthropic/claude-sonnet-5", "anthropic/claude-sonnet-4-5"]) {
+        const result = ProviderTransform.variants(
+          createMockModel({
+            id: apiId,
+            providerID: "openrouter",
+            api: { id: apiId, url: "https://openrouter.ai", npm: "@openrouter/ai-sdk-provider" },
+          }),
+        )
+        expect(result).toEqual({})
+      }
+    })
+
+    test("no-effort-dial models expose no variants (kimi = on/off only)", () => {
+      const result = ProviderTransform.variants(
+        createMockModel({
+          id: "openrouter/kimi-k2.7",
+          providerID: "openrouter",
+          api: { id: "moonshotai/kimi-k2.7", url: "https://openrouter.ai", npm: "@openrouter/ai-sdk-provider" },
+        }),
+      )
+      expect(result).toEqual({})
     })
 
     test("gemini-3 returns WIDELY_SUPPORTED_EFFORTS with reasoning", () => {
@@ -1319,18 +1348,19 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/gateway", () => {
-    test("returns OPENAI_EFFORTS with reasoningEffort", () => {
+    test("uses the per-model OpenAI effort ladder with reasoningEffort", () => {
       const model = createMockModel({
-        id: "gateway/gateway-model",
+        id: "gateway/gpt-5.5",
         providerID: "gateway",
         api: {
-          id: "gateway-model",
+          id: "gpt-5.5",
           url: "https://gateway.ai",
           npm: "@ai-sdk/gateway",
         },
+        release_date: "2026-04-24",
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
@@ -1620,7 +1650,7 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
-    test("models after 2025-11-13 include 'none' effort", () => {
+    test("models on/after 2025-11-13 use 'none' and drop 'minimal' (5.1+ replaced it)", () => {
       const model = createMockModel({
         id: "gpt-5-nano",
         providerID: "openai",
@@ -1632,10 +1662,11 @@ describe("ProviderTransform.variants", () => {
         release_date: "2025-11-14",
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high"])
+      // GPT-5.1 replaced `minimal` with `none` — they are never both accepted.
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high"])
     })
 
-    test("models after 2025-12-04 include 'xhigh' effort", () => {
+    test("models on/after 2025-12-11 include 'xhigh' effort (GPT-5.2 introduced it)", () => {
       const model = createMockModel({
         id: "openai/gpt-5-chat",
         providerID: "openai",
@@ -1644,10 +1675,10 @@ describe("ProviderTransform.variants", () => {
           url: "https://api.openai.com",
           npm: "@ai-sdk/openai",
         },
-        release_date: "2025-12-05",
+        release_date: "2025-12-11",
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
     })
   })
 
@@ -1691,58 +1722,64 @@ describe("ProviderTransform.variants", () => {
     })
   })
 
-  describe("@ai-sdk/anthropic adaptive thinking (Opus 4.7+ / Claude 5+)", () => {
-    // The @ai-sdk/anthropic effort enum is widened to {low, medium, high, xhigh,
-    // max} by tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch, so those values
-    // are accepted at request time. xhigh is the Opus 4.8+ deep-reasoning tier;
-    // every adaptive Claude also exposes max.
-    const ALLOWED_EFFORTS = ["low", "medium", "high", "xhigh", "max"]
-
-    const adaptiveModel = (id: string) =>
+  describe("@ai-sdk/anthropic effort vs classic thinking", () => {
+    // Verified against platform.claude.com/docs/build-with-claude/effort (July
+    // 2026). Two paths:
+    //  • EFFORT (output_config.effort, full low→max incl. xhigh): the newest
+    //    Claudes that REJECT manual thinking — Opus 4.7/4.8, Sonnet 5, Fable 5,
+    //    Mythos 5, and the 5+ generation. The SDK effort enum is widened to
+    //    include xhigh/max by tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch.
+    //  • CLASSIC thinking-budget (low/medium/high/max): everything else — Opus
+    //    4.5/4.6, Sonnet 4.5/4.6, Haiku 4.5 — which have no effort param (4.5
+    //    would 400) but accept a manual thinking budget.
+    const anthropicModel = (id: string) =>
       createMockModel({
         id,
         providerID: "anthropic",
-        api: {
-          id,
-          url: "https://api.anthropic.com",
-          npm: "@ai-sdk/anthropic",
-        },
+        api: { id, url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
       })
 
-    for (const id of ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-7", "claude-haiku-5", "claude-opus-5"]) {
-      test(`${id} only emits SDK-accepted effort values`, () => {
-        const result = ProviderTransform.variants(adaptiveModel(id))
-        const efforts = Object.values(result)
-          .map((v) => (v as { effort?: string }).effort)
-          .filter((e): e is string => typeof e === "string")
-        expect(efforts.length).toBeGreaterThan(0)
-        for (const e of efforts) expect(ALLOWED_EFFORTS).toContain(e)
+    const EFFORT_MODELS = [
+      "claude-opus-4-7",
+      "claude-opus-4-8",
+      "claude-opus-5",
+      "claude-sonnet-5",
+      "claude-fable-5",
+      "claude-mythos-5",
+    ]
+    for (const id of EFFORT_MODELS) {
+      test(`${id} exposes the full low→max effort ladder including xhigh`, () => {
+        const result = ProviderTransform.variants(anthropicModel(id))
+        expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+        expect(result.low).toEqual({ effort: "low" })
+        expect(result.xhigh).toEqual({ effort: "xhigh" })
+        expect(result.max).toEqual({ effort: "max" })
       })
     }
 
-    // xhigh is gated to Opus 4.8+ (and Opus 5+); other adaptive Claudes cap at max.
-    test("claude-opus-4-8 exposes the full low→max effort range including xhigh", () => {
-      const result = ProviderTransform.variants(adaptiveModel("claude-opus-4-8"))
-      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
-      expect(result.low).toEqual({ effort: "low" })
+    // Regression guard: Fable/Mythos are NOT opus/sonnet/haiku, so a naive regex
+    // drops them to the classic path where manual thinking 400s.
+    test("claude-fable-5 uses effort, not a thinking budget", () => {
+      const result = ProviderTransform.variants(anthropicModel("claude-fable-5"))
       expect(result.high).toEqual({ effort: "high" })
-      expect(result.xhigh).toEqual({ effort: "xhigh" })
-      expect(result.max).toEqual({ effort: "max" })
+      expect(result.high).not.toHaveProperty("thinking")
     })
 
-    test("claude-opus-5 also exposes xhigh", () => {
-      const result = ProviderTransform.variants(adaptiveModel("claude-opus-5"))
-      expect(Object.keys(result)).toContain("xhigh")
-      expect(Object.keys(result)).toContain("max")
-    })
-
-    test("non-Opus adaptive Claudes stop at max (no xhigh)", () => {
-      for (const id of ["claude-sonnet-4-7", "claude-sonnet-5", "claude-haiku-5", "claude-opus-4-7"]) {
-        const result = ProviderTransform.variants(adaptiveModel(id))
+    const CLASSIC_MODELS = [
+      "claude-opus-4-5",
+      "claude-opus-4-6",
+      "claude-sonnet-4-5",
+      "claude-sonnet-4-6",
+      "claude-haiku-4-5",
+    ]
+    for (const id of CLASSIC_MODELS) {
+      test(`${id} uses classic thinking-budget variants (no effort param)`, () => {
+        const result = ProviderTransform.variants(anthropicModel(id))
         expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
-        expect(Object.keys(result)).not.toContain("xhigh")
-      }
-    })
+        expect(result.low).toHaveProperty("thinking")
+        expect((result.low as { effort?: string }).effort).toBeUndefined()
+      })
+    }
   })
 
   describe("@ai-sdk/amazon-bedrock", () => {

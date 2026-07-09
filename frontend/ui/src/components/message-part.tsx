@@ -743,13 +743,18 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   )
 }
 
+// Providers that don't expose raw chain-of-thought — OpenAI's models, and
+// anything routed through OpenRouter — return the reasoning *encrypted*: the
+// real content lives in providerMetadata (for multi-turn continuation) and the
+// visible text is empty, a literal "[REDACTED]" placeholder, or a readable
+// summary with "[REDACTED]" appended. None of the placeholder is meaningful, so
+// stripRedactedReasoning() drops it — a wholly-encrypted part collapses to empty
+// and the <Show> hides it, while a "…summary![REDACTED]" keeps its readable text.
+// (Supersedes the exact-match approach: OpenRouter mostly appends the placeholder
+// to a real summary, which exact-match would leave visible.)
+
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = props.part as ReasoningPart
-  // OpenRouter returns encrypted reasoning as a "[REDACTED]" placeholder (the real
-  // payload is the encrypted blob kept in metadata for model continuity, not for
-  // display). Strip it so the reasoning isn't cluttered with "[REDACTED]" — a
-  // whole-encrypted part collapses to empty and the <Show> hides it. This only
-  // touches reasoning; tool output keeps its legitimate secret masking.
   const text = () => stripRedactedReasoning(part.text)
   const throttledText = createTypewriter(text)
 

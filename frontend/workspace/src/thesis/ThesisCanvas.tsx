@@ -16,6 +16,8 @@ import {
   onMount,
   onCleanup,
   untrack,
+  getOwner,
+  runWithOwner,
   type JSX,
   For,
   Show,
@@ -276,21 +278,28 @@ export function ThesisCanvas(): JSX.Element {
   // visible. The structural-signature memo above ensures a no-op refetch (same
   // data) doesn't trigger a force-sim rebuild or view refit.
   onMount(() => {
+    // Capture the component's reactive owner: the interval/event callbacks below
+    // fire detached from it, so calling refetch* there re-creates the resource
+    // computation with no owner ("computations created outside a createRoot"
+    // warning + a small leak). runWithOwner re-establishes it.
+    const owner = getOwner()
     // One guarded handler for the interval + focus + visibility — only refetch
     // when the document is actually visible (a window can focus while hidden).
     const tick = () => {
       if (document.visibilityState !== "visible") return
-      if (graphId() === undefined) {
-        // Unlinked (Initialize hero showing): an agent-driven `openscience project init`
-        // (e.g. from the initialize-atlas-graph skill) may have just created this
-        // folder's graph. Re-arm the one-shot auto-select and re-resolve so the new
-        // graph is picked up and selected automatically.
-        settled = false
-        void refetchFolderProject()
-        void refetchGraphs()
-      } else {
-        void refetchTree()
-      }
+      runWithOwner(owner, () => {
+        if (graphId() === undefined) {
+          // Unlinked (Initialize hero showing): an agent-driven `openscience project init`
+          // (e.g. from the initialize-atlas-graph skill) may have just created this
+          // folder's graph. Re-arm the one-shot auto-select and re-resolve so the new
+          // graph is picked up and selected automatically.
+          settled = false
+          void refetchFolderProject()
+          void refetchGraphs()
+        } else {
+          void refetchTree()
+        }
+      })
     }
     const interval = setInterval(tick, 8000)
     window.addEventListener("focus", tick)

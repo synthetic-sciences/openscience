@@ -424,8 +424,32 @@ export namespace ProviderTransform {
   }
 
   const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
-  const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
-  const OPENAI_GPT55_EFFORTS = ["none", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+
+  // The reasoning-effort ladder OpenAI actually accepts, per model — verified
+  // against developers.openai.com model pages + the API changelog (July 2026):
+  //   o-series          low/medium/high
+  //   gpt-5   (2025-08) minimal/low/medium/high        (minimal; no none)
+  //   gpt-5.1 (2025-11-13) none/low/medium/high         (none replaces minimal)
+  //   gpt-5.2 (2025-12-11) none/low/medium/high/xhigh
+  //   gpt-5.5 (2026-04) none/low/medium/high/xhigh
+  //   *-codex           low/medium/high (+xhigh on 5.2-codex); never none/minimal
+  //   gpt-5-pro         high only (fixed) → [] (no effort dial)
+  //   gpt-5.2-pro       medium/high/xhigh
+  // `none`/`xhigh` are date-gated so future minor bumps inherit them, with
+  // explicit carve-outs for the codex/pro variants that diverge from the flagship
+  // of the same date (a pure date gate would misfire on those).
+  function openaiEfforts(model: Provider.Model): string[] {
+    const id = model.id.toLowerCase()
+    if (id.includes("gpt-5-pro")) return []
+    if (id.includes("gpt-5") && id.includes("pro")) return ["medium", "high", "xhigh"]
+    if (id.includes("codex"))
+      return /5[.-]2/.test(id) ? [...WIDELY_SUPPORTED_EFFORTS, "xhigh"] : [...WIDELY_SUPPORTED_EFFORTS]
+    const arr = [...WIDELY_SUPPORTED_EFFORTS]
+    if (model.release_date >= "2025-11-13") arr.unshift("none")
+    else if (id.includes("gpt-5")) arr.unshift("minimal")
+    if (model.release_date >= "2025-12-11") arr.push("xhigh")
+    return arr
+  }
 
   export function variants(model: Provider.Model): Record<string, Record<string, any>> {
     if (!model.capabilities.reasoning) return {}
@@ -462,38 +486,38 @@ export namespace ProviderTransform {
     if (id.includes("grok")) return {}
 
     switch (model.api.npm) {
-      case "@openrouter/ai-sdk-provider":
-        // Claude via OpenRouter cannot round-trip reasoning. Anthropic requires the
-        // signed thinking block to be replayed unmodified on the next step of a
-        // tool-use turn, but OpenRouter strips that signature on these routes — so
-        // the moment Claude produces a thinking block and the turn continues (tool
-        // call → result), the replay is rejected with 400 "Invalid `signature`…" /
-        // "…blocks cannot be modified", surfaced as the generic "Provider returned
-        // error" that stalls the loop. Offer NO reasoning-effort variants for it, so
-        // no thinking block is ever generated to fail — matching the last-known-good
-        // release (1.2.5). Native-Anthropic BYOK is a different npm (@ai-sdk/anthropic)
-        // and keeps its reasoning, since it carries a valid signature. Uses the SAME
-        // predicate as options() above so the two guards can't disagree and leak.
+      case "@openrouter/ai-sdk-provider": {
+        // Claude via OpenRouter cannot round-trip reasoning (#167): Anthropic requires
+        // the signed thinking block replayed unmodified on the next step of a tool-use
+        // turn, but @openrouter/ai-sdk-provider@1.5.x strips that signature → 400
+        // "Invalid signature" that stalls multi-step turns. Offer NO reasoning for
+        // Claude here so no thinking block is ever generated to fail; native-Anthropic
+        // BYOK (@ai-sdk/anthropic) carries a valid signature and keeps its full ladder.
+        // Re-enable when @openrouter/ai-sdk-provider@2.x + ai@^6 lands (drop this guard
+        // AND the options() one). Same predicate as options() so the guards can't drift.
         if (isAnthropic(model)) return {}
-        // OpenRouter accepts a unified `reasoning.effort` for ANY reasoning-capable
-        // model (DeepSeek, GLM, Kimi, Gemini, OpenAI), normalizing effort to a token
-        // budget where the native API is on/off only. gpt keeps its wider ladder
-        // (none/minimal/xhigh); everything else uses the universal low/medium/high floor.
-        if (model.id.includes("gpt")) {
-          return Object.fromEntries(
-            (id.includes("gpt-5.5") ? OPENAI_GPT55_EFFORTS : OPENAI_EFFORTS).map((effort) => [
-              effort,
-              { reasoning: { effort } },
-            ]),
-          )
-        }
-        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
+        // OpenRouter takes a unified `reasoning.effort` and clamps any level a model
+        // doesn't support to the nearest one (no 400) — verified against
+        // openrouter.ai/docs/use-cases/reasoning-tokens. The only hazard is silent
+        // clamping: an exotic level on a model without that tier is a dead UI option,
+        // so gate max/xhigh to families that have them and emit nothing for no-dial ones.
+        const orEffort = (efforts: string[]) =>
+          Object.fromEntries(efforts.map((effort) => [effort, { reasoning: { effort } }]))
+        // No effort dial (reasoning is on/off only): low/medium/high would be three
+        // identical "on" options — misleading — so expose none (runs at default).
+        if (id.includes("kimi") || id.includes("minimax") || id.includes("mistral")) return {}
+        if (id.includes("glm") && !/glm-[5-9]/.test(id)) return {} // GLM-4.6 = thinking toggle only
+        if (model.id.includes("gpt")) return orEffort(openaiEfforts(model))
+        // DeepSeek-v4 / GLM-5.x carry a native "max" tier above high.
+        if (/deepseek-v[4-9]/.test(id) || /glm-[5-9]/.test(id)) return orEffort([...WIDELY_SUPPORTED_EFFORTS, "max"])
+        return orEffort(WIDELY_SUPPORTED_EFFORTS)
+      }
 
       // NOTE: the gateway rejects max_tokens when reasoningEffort is set — the
       // conflict is resolved in maxOutputTokens() (drops the cap for gateway
       // calls carrying a reasoningEffort), so the effort variants are safe here.
       case "@ai-sdk/gateway":
-        return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+        return Object.fromEntries(openaiEfforts(model).map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/github-copilot":
         const copilotEfforts = iife(() => {
@@ -549,27 +573,9 @@ export namespace ProviderTransform {
         )
       case "@ai-sdk/openai":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
-        if (id === "gpt-5-pro") return {}
-        const openaiEfforts = iife(() => {
-          if (id.includes("gpt-5.5")) return OPENAI_GPT55_EFFORTS
-          if (id.includes("codex")) {
-            if (id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
-            return WIDELY_SUPPORTED_EFFORTS
-          }
-          const arr = [...WIDELY_SUPPORTED_EFFORTS]
-          if (id.includes("gpt-5-") || id === "gpt-5") {
-            arr.unshift("minimal")
-          }
-          if (model.release_date >= "2025-11-13") {
-            arr.unshift("none")
-          }
-          if (model.release_date >= "2025-12-04") {
-            arr.push("xhigh")
-          }
-          return arr
-        })
+        // openaiEfforts() returns [] for gpt-5-pro (fixed high) → no variants.
         return Object.fromEntries(
-          openaiEfforts.map((effort) => [
+          openaiEfforts(model).map((effort) => [
             effort,
             {
               reasoningEffort: effort,
@@ -585,39 +591,32 @@ export namespace ProviderTransform {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
         const cap = model.limit.output
 
-        // Opus 4.7+ (and any future Claude that ships the new shape) rejects
-        // `thinking.type.enabled`. They use `thinking.type.adaptive` plus
-        // `output_config.effort`. Detect by canonical id.
-        const usesAdaptiveThinking =
-          /^claude-(opus|sonnet|haiku)-4-[7-9]\b/.test(id) || /^claude-(opus|sonnet|haiku)-[5-9]\b/.test(id)
+        // The newest Claudes REJECT manual extended thinking (`thinking.type:
+        // "enabled"` → 400) and drive depth via `output_config.effort` instead.
+        // Verified against platform.claude.com/docs/build-with-claude/effort
+        // (July 2026): Opus 4.7/4.8, Sonnet 5, Fable 5, Mythos 5 (and the 5+
+        // generation) all support the full low→max ladder INCLUDING xhigh. The AI
+        // SDK maps our top-level `effort` → `output_config: { effort }`; the pinned
+        // patch (tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch) widens its enum
+        // to include xhigh/max. Detection is by canonical id — note Fable/Mythos
+        // are NOT opus/sonnet/haiku, so they must be matched explicitly or they
+        // fall through to the classic path below and 400 (manual thinking rejected).
+        const usesEffort = /^claude-opus-4[.-][78]\b/.test(id) || /^claude-(opus|sonnet|fable|mythos)-[5-9]\b/.test(id)
 
-        if (usesAdaptiveThinking) {
-          // Opus 4.7+ uses adaptive thinking driven by `output_config.effort`.
-          // The AI SDK Anthropic provider:
-          //   - rejects `thinking.type: "adaptive"` (zod schema only allows
-          //     "enabled" | "disabled" — see node_modules/@ai-sdk/anthropic/
-          //     dist/index.mjs:578)
-          //   - emits `thinking: { type: enabled, budget_tokens }` ONLY if
-          //     anthropicOptions.thinking.type === "enabled"
-          //   - emits `output_config: { effort }` independently when the
-          //     top-level `effort` field is set (line 1911-1913)
-          // Therefore for adaptive models we OMIT thinking entirely and only
-          // send effort. The model defaults to adaptive thinking on the wire.
-          //
-          // The provider's stock `effort` zod enum stops at high; the pinned
-          // patch in tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch widens it
-          // to low|medium|high|xhigh|max so the full adaptive range is usable.
-          // xhigh is the Opus 4.8+ deep-reasoning tier; other adaptive Claudes
-          // cap at max.
-          const supportsXhigh = /^claude-opus-4-[8-9]\b/.test(id) || /^claude-opus-[5-9]\b/.test(id)
+        if (usesEffort) {
           return {
             low: { effort: "low" },
             medium: { effort: "medium" },
             high: { effort: "high" },
-            ...(supportsXhigh ? { xhigh: { effort: "xhigh" } } : {}),
+            xhigh: { effort: "xhigh" },
             max: { effort: "max" },
           }
         }
+
+        // Everything else (Opus 4.5/4.6, Sonnet 4.5/4.6, Haiku 4.5, older) uses
+        // classic extended thinking via a token budget. These accept manual
+        // thinking; the 4.5 models have NO effort param (it would 400), so they
+        // must stay on this path.
 
         return {
           low: {
