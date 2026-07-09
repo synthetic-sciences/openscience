@@ -388,6 +388,8 @@ In `message-v2.ts`, in the `Assistant` schema (after `finish: z.string().optiona
 
 - [ ] **Step 4: Implement the re-splice in `filterCompacted`**
 
+> **CORRECTION (applied during execution, commit `9744031`):** the code block below is WRONG — it assumes `MessageV2.stream` yields oldest-first, but it yields **newest-first**, and the original `filterCompacted` ended with `result.reverse()`. Dropping the reverse would reverse every turn's message order. The shipped implementation (see `backend/cli/src/session/message-v2.ts` `filterCompacted`, ported from opencode's `retain` mechanism) reads the newest-first stream, keeps the early-break, collects the tail via a `retain` marker, `reverse()`s to oldest-first, then re-orders `[carrier, summary, …tail…, continuation]`. Use that, not the block below.
+
 Replace the body of `filterCompacted` (message-v2.ts ~984-999) so that, when the boundary summary has a `tailStartId`, the messages from `tailStartId` up to the boundary are retained and re-ordered after the summary:
 
 ```typescript
