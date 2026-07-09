@@ -882,7 +882,12 @@ describe("session.message-v2.filterCompacted — verbatim tail (P3.2)", () => {
     // fixtures are NEWEST-first because MessageV2.stream (the real caller's input) yields newest-first.
     const msgs: MessageV2.WithParts[] = [
       mk("cont", "assistant", [txt("cont", "continuing")], { finish: "stop", parentID: "cc" }),
-      mk("sum", "assistant", [txt("sum", "HANDOFF")], { summary: true, finish: "stop", parentID: "cc", tailStartId: "utail" }),
+      mk("sum", "assistant", [txt("sum", "HANDOFF")], {
+        summary: true,
+        finish: "stop",
+        parentID: "cc",
+        tailStartId: "utail",
+      }),
       compactionCarrier("cc"),
       mk("atail", "assistant", [txt("atail", "recent work")]),
       mk("utail", "user", [txt("utail", "current request")]),

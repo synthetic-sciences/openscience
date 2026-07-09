@@ -179,18 +179,18 @@ describe("session.message-v2.fromError", () => {
 })
 
 describe("SessionRetry.isContextOverflow", () => {
-  const api = (data: {
-    statusCode?: number
-    responseBody?: string
-    message?: string
-  }) =>
+  const api = (data: { statusCode?: number; responseBody?: string; message?: string }) =>
     new MessageV2.APIError({ message: "", isRetryable: true, ...data }).toObject() as MessageV2.APIError
 
   test("true for OpenAI/Codex context_length_exceeded code in responseBody", () => {
     const err = api({
       statusCode: 400,
       responseBody: JSON.stringify({
-        error: { type: "invalid_request_error", code: "context_length_exceeded", message: "Your input exceeds the context window of this model." },
+        error: {
+          type: "invalid_request_error",
+          code: "context_length_exceeded",
+          message: "Your input exceeds the context window of this model.",
+        },
       }),
     })
     expect(SessionRetry.isContextOverflow(err)).toBe(true)
@@ -200,32 +200,56 @@ describe("SessionRetry.isContextOverflow", () => {
     // string_above_max_length fires when ONE string parameter exceeds its per-field limit,
     // which compaction can't fix. Only classify it as overflow if the message ALSO describes
     // a context-window condition (caught by the patterns), not on the code alone.
-    const err = api({ statusCode: 400, responseBody: JSON.stringify({ error: { code: "string_above_max_length", message: "too long" } }) })
+    const err = api({
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { code: "string_above_max_length", message: "too long" } }),
+    })
     expect(SessionRetry.isContextOverflow(err)).toBe(false)
   })
 
   test("true for Anthropic-style 'prompt is too long' message (no code)", () => {
-    const err = wrap(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "prompt is too long: 250000 tokens > 200000 maximum" } }))
+    const err = wrap(
+      JSON.stringify({
+        type: "error",
+        error: { type: "invalid_request_error", message: "prompt is too long: 250000 tokens > 200000 maximum" },
+      }),
+    )
     expect(SessionRetry.isContextOverflow(err)).toBe(true)
   })
 
   test("true for Gemini-style INVALID_ARGUMENT message that mentions the context window", () => {
-    const err = wrap(JSON.stringify({ error: { status: "INVALID_ARGUMENT", message: "The input token count exceeds the maximum number of tokens allowed." } }))
+    const err = wrap(
+      JSON.stringify({
+        error: {
+          status: "INVALID_ARGUMENT",
+          message: "The input token count exceeds the maximum number of tokens allowed.",
+        },
+      }),
+    )
     expect(SessionRetry.isContextOverflow(err)).toBe(true)
   })
 
   test("false for a 5xx server error even if its body mentions context", () => {
-    const err = api({ statusCode: 503, responseBody: JSON.stringify({ error: { message: "context service temporarily unavailable" } }) })
+    const err = api({
+      statusCode: 503,
+      responseBody: JSON.stringify({ error: { message: "context service temporarily unavailable" } }),
+    })
     expect(SessionRetry.isContextOverflow(err)).toBe(false)
   })
 
   test("false for a plain rate limit", () => {
-    const err = api({ statusCode: 429, responseBody: JSON.stringify({ error: { type: "too_many_requests", message: "Rate limited" } }) })
+    const err = api({
+      statusCode: 429,
+      responseBody: JSON.stringify({ error: { type: "too_many_requests", message: "Rate limited" } }),
+    })
     expect(SessionRetry.isContextOverflow(err)).toBe(false)
   })
 
   test("false for an unrelated bad-parameter invalid_request_error", () => {
-    const err = api({ statusCode: 400, responseBody: JSON.stringify({ error: { type: "invalid_request_error", message: "Unknown parameter: 'foo'." } }) })
+    const err = api({
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { type: "invalid_request_error", message: "Unknown parameter: 'foo'." } }),
+    })
     expect(SessionRetry.isContextOverflow(err)).toBe(false)
   })
 
@@ -233,7 +257,9 @@ describe("SessionRetry.isContextOverflow", () => {
     // A retryable TPM rate limit must not be treated as a deterministic overflow.
     const err = api({
       statusCode: 429,
-      responseBody: JSON.stringify({ error: { message: "Rate limit reached. Please reduce your prompt length and retry." } }),
+      responseBody: JSON.stringify({
+        error: { message: "Rate limit reached. Please reduce your prompt length and retry." },
+      }),
     })
     expect(SessionRetry.isContextOverflow(err)).toBe(false)
   })
@@ -243,7 +269,9 @@ describe("SessionRetry.isContextOverflow", () => {
     // rate-limit guidance, and no remaining overflow pattern is present here.
     const err = api({
       statusCode: 400,
-      responseBody: JSON.stringify({ error: { message: "You are sending too many tokens; reduce the length of the messages." } }),
+      responseBody: JSON.stringify({
+        error: { message: "You are sending too many tokens; reduce the length of the messages." },
+      }),
     })
     expect(SessionRetry.isContextOverflow(err)).toBe(false)
   })

@@ -71,7 +71,9 @@ const toolPart = (
       title: "",
       metadata: {},
       time: { start: 0, end: 1, ...(opts?.compacted ? { compacted: 2 } : {}) },
-      attachments: Array.from({ length: opts?.images ?? 0 }, (_, i) => imageFilePart(messageID, `${id}-att${i}`, "x.png")),
+      attachments: Array.from({ length: opts?.images ?? 0 }, (_, i) =>
+        imageFilePart(messageID, `${id}-att${i}`, "x.png"),
+      ),
     },
   }) as MessageV2.Part
 
@@ -139,7 +141,10 @@ describe("session.message-v2.composition", () => {
   })
 
   test("a compacted tool part collapses to its 1-line summary and drops its attachments", () => {
-    const full = { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "bash", { cmd: "ls" }, "o".repeat(4000), { images: 1 })] }
+    const full = {
+      info: assistantInfo("a1", "u1"),
+      parts: [toolPart("a1", "t1", "bash", { cmd: "ls" }, "o".repeat(4000), { images: 1 })],
+    }
     const compacted = {
       info: assistantInfo("a2", "u1"),
       parts: [toolPart("a2", "t2", "bash", { cmd: "ls" }, "o".repeat(4000), { images: 1, compacted: true })],

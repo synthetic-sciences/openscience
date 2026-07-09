@@ -778,7 +778,8 @@ export namespace MessageV2 {
         // match) is not a re-read, and the back-ref explicitly claims "the same tool" — so
         // keying on output alone would tell the model an untrue thing about unrelated calls.
         const key = `${part.tool} ${JSON.stringify(part.state.input ?? {})} ${output}`
-        if (firstSeen.has(key)) superseded.add(part.id) // a later identical copy
+        if (firstSeen.has(key))
+          superseded.add(part.id) // a later identical copy
         else firstSeen.set(key, part.id) // the first full copy — keep it
       }
     return superseded
@@ -869,7 +870,9 @@ export namespace MessageV2 {
           // Mirror toModelMessages: a compacted OR superseded call's args are truncated in
           // the render, so count them truncated here too — otherwise the breakdown over-counts.
           const reducedArgs = compacted || superseded.has(part.id)
-          out[bucket] += Token.estimate(JSON.stringify((reducedArgs ? truncateArgs(part.state.input) : part.state.input) ?? {}))
+          out[bucket] += Token.estimate(
+            JSON.stringify((reducedArgs ? truncateArgs(part.state.input) : part.state.input) ?? {}),
+          )
           if (part.state.status === "completed") {
             const body = superseded.has(part.id)
               ? DUPLICATE_OUTPUT

@@ -74,7 +74,10 @@ const toolPart = (messageID: string, id: string, tool: string, state: MessageV2.
 
 describe("session.message-v2.toolSummary", () => {
   test("uses the title as the descriptor and reports the output line count", () => {
-    const s = MessageV2.toolSummary("bash", completedTool("bash", { command: "npm test" }, "a\nb\nc", { title: "npm test" }))
+    const s = MessageV2.toolSummary(
+      "bash",
+      completedTool("bash", { command: "npm test" }, "a\nb\nc", { title: "npm test" }),
+    )
     expect(s).toBe("[bash] npm test → cleared (3 lines)")
   })
 
@@ -94,7 +97,14 @@ describe("session.message-v2.toModelMessages — compacted tool rendering (P2.2)
     const input: MessageV2.WithParts[] = [
       {
         info: assistantInfo("a1", "u1"),
-        parts: [toolPart("a1", "t1", "bash", completedTool("bash", { command: "npm test" }, "a\nb\nc", { title: "npm test", compacted: true }))],
+        parts: [
+          toolPart(
+            "a1",
+            "t1",
+            "bash",
+            completedTool("bash", { command: "npm test" }, "a\nb\nc", { title: "npm test", compacted: true }),
+          ),
+        ],
       },
     ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
@@ -106,7 +116,14 @@ describe("session.message-v2.toModelMessages — compacted tool rendering (P2.2)
     const input: MessageV2.WithParts[] = [
       {
         info: assistantInfo("a1", "u1"),
-        parts: [toolPart("a1", "t1", "bash", completedTool("bash", { command: "npm test" }, "full output here", { title: "npm test" }))],
+        parts: [
+          toolPart(
+            "a1",
+            "t1",
+            "bash",
+            completedTool("bash", { command: "npm test" }, "full output here", { title: "npm test" }),
+          ),
+        ],
       },
     ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
@@ -130,7 +147,9 @@ describe("session.message-v2.truncateArgs (P2.3)", () => {
 describe("session.message-v2.toModelMessages — compacted tool args (P2.3)", () => {
   test("truncates oversized args of a compacted tool call, keeps small ones", () => {
     const state = completedTool("write", { filePath: "/a", content: "x".repeat(1000) }, "ok", { compacted: true })
-    const input: MessageV2.WithParts[] = [{ info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "write", state)] }]
+    const input: MessageV2.WithParts[] = [
+      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "write", state)] },
+    ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s).not.toContain("x".repeat(1000))
     expect(s).toContain("chars]") // truncation marker present
@@ -139,7 +158,9 @@ describe("session.message-v2.toModelMessages — compacted tool args (P2.3)", ()
 
   test("does NOT truncate args of a live (non-compacted) tool call", () => {
     const state = completedTool("write", { filePath: "/a", content: "x".repeat(1000) }, "ok")
-    const input: MessageV2.WithParts[] = [{ info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "write", state)] }]
+    const input: MessageV2.WithParts[] = [
+      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "write", state)] },
+    ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s).toContain("x".repeat(1000))
   })
@@ -148,8 +169,14 @@ describe("session.message-v2.toModelMessages — compacted tool args (P2.3)", ()
     const big = "y".repeat(300)
     const content = "z".repeat(1000)
     const input: MessageV2.WithParts[] = [
-      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "write", completedTool("write", { filePath: "/a", content }, big))] },
-      { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "write", completedTool("write", { filePath: "/a", content }, big))] },
+      {
+        info: assistantInfo("a1", "u1"),
+        parts: [toolPart("a1", "t1", "write", completedTool("write", { filePath: "/a", content }, big))],
+      },
+      {
+        info: assistantInfo("a2", "u1"),
+        parts: [toolPart("a2", "t2", "write", completedTool("write", { filePath: "/a", content }, big))],
+      },
     ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s).toContain("chars]") // the later (superseded) call's content arg is truncated
@@ -159,7 +186,10 @@ describe("session.message-v2.toModelMessages — compacted tool args (P2.3)", ()
 
 describe("session.message-v2.supersededOutputs (P2.1)", () => {
   const two = (o1: string, o2: string, attach?: MessageV2.FilePart[]): MessageV2.WithParts[] => [
-    { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "x" }, o1, { attachments: attach }))] },
+    {
+      info: assistantInfo("a1", "u1"),
+      parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "x" }, o1, { attachments: attach }))],
+    },
     { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "read", completedTool("read", { p: "x" }, o2))] },
   ]
 
@@ -182,8 +212,14 @@ describe("session.message-v2.supersededOutputs (P2.1)", () => {
     // collapse — the back-ref claims "same tool, same content", which would be a lie.
     const big = "y".repeat(300)
     const diff: MessageV2.WithParts[] = [
-      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "fileA" }, big))] },
-      { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "read", completedTool("read", { p: "fileB" }, big))] },
+      {
+        info: assistantInfo("a1", "u1"),
+        parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "fileA" }, big))],
+      },
+      {
+        info: assistantInfo("a2", "u1"),
+        parts: [toolPart("a2", "t2", "read", completedTool("read", { p: "fileB" }, big))],
+      },
     ]
     expect(MessageV2.supersededOutputs(diff, 200).size).toBe(0)
   })
@@ -191,8 +227,14 @@ describe("session.message-v2.supersededOutputs (P2.1)", () => {
   test("does NOT dedupe identical output from DIFFERENT tools", () => {
     const big = "y".repeat(300)
     const diff: MessageV2.WithParts[] = [
-      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "x" }, big))] },
-      { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "bash", completedTool("bash", { command: "cat x" }, big))] },
+      {
+        info: assistantInfo("a1", "u1"),
+        parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "x" }, big))],
+      },
+      {
+        info: assistantInfo("a2", "u1"),
+        parts: [toolPart("a2", "t2", "bash", completedTool("bash", { command: "cat x" }, big))],
+      },
     ]
     expect(MessageV2.supersededOutputs(diff, 200).size).toBe(0)
   })
@@ -203,7 +245,17 @@ describe("session.message-v2.supersededOutputs (P2.1)", () => {
   })
 
   test("does not dedupe a part that carries attachments", () => {
-    const att = [{ id: "att", sessionID, messageID: "a1", type: "file", mime: "image/png", filename: "x.png", url: "data:image/png;base64,Zm9v" }] as unknown as MessageV2.FilePart[]
+    const att = [
+      {
+        id: "att",
+        sessionID,
+        messageID: "a1",
+        type: "file",
+        mime: "image/png",
+        filename: "x.png",
+        url: "data:image/png;base64,Zm9v",
+      },
+    ] as unknown as MessageV2.FilePart[]
     const set = MessageV2.supersededOutputs(two("y".repeat(300), "y".repeat(300), att), 200)
     expect(set.size).toBe(0)
   })
@@ -213,8 +265,14 @@ describe("session.message-v2.toModelMessages — duplicate output back-reference
   test("the LATER identical read becomes the back-reference; the earliest keeps the full body", () => {
     const big = "y".repeat(300)
     const input: MessageV2.WithParts[] = [
-      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "x" }, big))] },
-      { info: assistantInfo("a2", "u1"), parts: [toolPart("a2", "t2", "read", completedTool("read", { p: "x" }, big))] },
+      {
+        info: assistantInfo("a1", "u1"),
+        parts: [toolPart("a1", "t1", "read", completedTool("read", { p: "x" }, big))],
+      },
+      {
+        info: assistantInfo("a2", "u1"),
+        parts: [toolPart("a2", "t2", "read", completedTool("read", { p: "x" }, big))],
+      },
     ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s.split(big).length - 1).toBe(1) // full body shipped exactly once (the earliest)
@@ -252,9 +310,13 @@ describe("session.message-v2.toModelMessages — oversized image guard (P2.4)", 
   const bigUrl = "data:image/png;base64," + "A".repeat(7_000_000) // ~5.25 MB decoded > 5 MB cap
 
   test("replaces an oversized tool-attachment image with the nudge; base64 never ships", () => {
-    const att = [{ id: "att", sessionID, messageID: "a1", type: "file", mime: "image/png", filename: "big.png", url: bigUrl }] as unknown as MessageV2.FilePart[]
+    const att = [
+      { id: "att", sessionID, messageID: "a1", type: "file", mime: "image/png", filename: "big.png", url: bigUrl },
+    ] as unknown as MessageV2.FilePart[]
     const state = completedTool("read", { filePath: "/big.png" }, "read ok", { attachments: att })
-    const input: MessageV2.WithParts[] = [{ info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", state)] }]
+    const input: MessageV2.WithParts[] = [
+      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "read", state)] },
+    ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s).not.toContain("AAAA") // the base64 is not sent
     expect(s).toContain("too large to send")
@@ -262,7 +324,20 @@ describe("session.message-v2.toModelMessages — oversized image guard (P2.4)", 
 
   test("replaces an oversized user file-part image with the nudge", () => {
     const input: MessageV2.WithParts[] = [
-      { info: userInfo("u1"), parts: [{ id: "f1", sessionID, messageID: "u1", type: "file", mime: "image/png", filename: "huge.png", url: bigUrl } as unknown as MessageV2.Part] },
+      {
+        info: userInfo("u1"),
+        parts: [
+          {
+            id: "f1",
+            sessionID,
+            messageID: "u1",
+            type: "file",
+            mime: "image/png",
+            filename: "huge.png",
+            url: bigUrl,
+          } as unknown as MessageV2.Part,
+        ],
+      },
     ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s).not.toContain("AAAA")
@@ -273,7 +348,9 @@ describe("session.message-v2.toModelMessages — oversized image guard (P2.4)", 
 describe("session.message-v2.composition — stays in sync with compacted rendering", () => {
   test("a compacted tool counts the summary length, matching what is actually sent", () => {
     const state = completedTool("bash", { command: "npm test" }, "a\nb\nc", { title: "npm test", compacted: true })
-    const input: MessageV2.WithParts[] = [{ info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "bash", state)] }]
+    const input: MessageV2.WithParts[] = [
+      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "bash", state)] },
+    ]
     const summary = MessageV2.toolSummary("bash", state)
     const expected = Token.estimate(JSON.stringify(state.input)) + Token.estimate(summary)
     expect(MessageV2.composition(input).tool).toBe(expected)
@@ -282,7 +359,20 @@ describe("session.message-v2.composition — stays in sync with compacted render
   test("an oversized image counts as its nudge text, not a flat image estimate", () => {
     const bigUrl = "data:image/png;base64," + "A".repeat(7_000_000)
     const input: MessageV2.WithParts[] = [
-      { info: userInfo("u1"), parts: [{ id: "f1", sessionID, messageID: "u1", type: "file", mime: "image/png", filename: "huge.png", url: bigUrl } as unknown as MessageV2.Part] },
+      {
+        info: userInfo("u1"),
+        parts: [
+          {
+            id: "f1",
+            sessionID,
+            messageID: "u1",
+            type: "file",
+            mime: "image/png",
+            filename: "huge.png",
+            url: bigUrl,
+          } as unknown as MessageV2.Part,
+        ],
+      },
     ]
     const c = MessageV2.composition(input)
     expect(c.images).toBe(0) // not counted as a shipped image
