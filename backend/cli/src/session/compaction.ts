@@ -164,6 +164,67 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     return `${head}\n\n${HANDOFF_STRUCTURE}\n\n${HANDOFF_RULES}${focus}`
   }
 
+  // How many recent turns (user message + its following assistant/tool messages) to
+  // keep verbatim during compaction, and the token budget that bounds them. A turn is
+  // always kept even when it alone exceeds tailTokens — see selectTail's force-last-user
+  // guarantee. Overridable via config.compaction.tailTurns / tailTokens.
+  export const TAIL_TURNS = 2
+  export const TAIL_TOKENS_MIN = 8_000
+  export const TAIL_TOKENS_MAX = 32_000
+
+  // Flat token estimate for one message: text/reasoning parts plus tool input/output
+  // (and IMAGE_TOKEN_ESTIMATE per completed-tool image attachment). Used by selectTail
+  // to size the verbatim tail against its token budget.
+  export function messageTokens(msg: MessageV2.WithParts): number {
+    let total = 0
+    for (const part of msg.parts) {
+      if (part.type === "text" || part.type === "reasoning") total += Token.estimate(part.text)
+      if (part.type === "tool") {
+        total += Token.estimate(JSON.stringify(part.state.input ?? {}))
+        if (part.state.status === "completed") {
+          total += Token.estimate(part.state.output)
+          total +=
+            (part.state.attachments ?? []).filter((x) => x.mime.startsWith("image/")).length * IMAGE_TOKEN_ESTIMATE
+        }
+        if (part.state.status === "error") total += Token.estimate(part.state.error)
+      }
+      if (part.type === "file" && part.mime.startsWith("image/")) total += IMAGE_TOKEN_ESTIMATE
+    }
+    return total
+  }
+
+  // Split the history into a verbatim recent tail + a head to summarize. Returns the id of
+  // the user message the tail begins at. Keeps whole turns (a user message + its following
+  // assistant/tool messages) newest-first up to tailTurns, trimmed to the tailTokens budget
+  // but never below one turn — so the current request is always kept verbatim. Returns {}
+  // when the tail would cover everything or there is nothing older to summarize.
+  export function selectTail(
+    messages: MessageV2.WithParts[],
+    opts: { tailTurns: number; tailTokens: number },
+  ): { tailStartId?: string } {
+    const turnStarts = messages.flatMap((m, i) => (m.info.role === "user" ? [i] : []))
+    if (turnStarts.length < 2) return {}
+    const turnSize = (start: number, end: number) => {
+      let sum = 0
+      for (let i = start; i < end; i++) sum += messageTokens(messages[i])
+      return sum
+    }
+    let tokens = 0
+    let cut = messages.length // start index of the oldest kept turn
+    for (let t = turnStarts.length - 1; t >= 0; t--) {
+      const start = turnStarts[t]
+      const end = t + 1 < turnStarts.length ? turnStarts[t + 1] : messages.length
+      const size = turnSize(start, end)
+      const keptTurns = turnStarts.length - t - 1
+      // always keep the newest turn; then keep more only within budget and up to tailTurns
+      if (keptTurns >= 1 && (keptTurns >= opts.tailTurns || tokens + size > opts.tailTokens)) break
+      tokens += size
+      cut = start
+    }
+    if (cut <= 0 || cut >= messages.length) return {} // tail covers everything / nothing kept
+    return { tailStartId: messages[cut].info.id }
+  }
+
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
 

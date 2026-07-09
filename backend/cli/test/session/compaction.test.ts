@@ -217,7 +217,8 @@ describe("session.compaction.isOverflow", () => {
 })
 
 describe("session.compaction circuit breaker", () => {
-  const ineffective = (sid: string) => SessionCompaction.noteCompaction({ sessionID: sid, before: 100_000, reclaimed: 1_000 }) // 1%
+  const ineffective = (sid: string) =>
+    SessionCompaction.noteCompaction({ sessionID: sid, before: 100_000, reclaimed: 1_000 }) // 1%
 
   test("trips after N consecutive ineffective (<10%) compactions", async () => {
     await using tmp = await tmpdir()
@@ -502,5 +503,72 @@ describe("session.compaction.buildHandoffPrompt", () => {
   test("focus is appended in both branches", () => {
     expect(SessionCompaction.buildHandoffPrompt({ focus: "the deploy" })).toContain("the deploy")
     expect(SessionCompaction.buildHandoffPrompt({ previousSummary: "x", focus: "the deploy" })).toContain("the deploy")
+  })
+})
+
+describe("session.compaction.selectTail", () => {
+  const u = (id: string, text = "hi"): MessageV2.WithParts =>
+    ({
+      info: {
+        id,
+        sessionID: "s",
+        role: "user",
+        time: { created: 0 },
+        agent: "a",
+        model: { providerID: "p", modelID: "m" },
+      } as unknown as MessageV2.WithParts["info"],
+      parts: [{ id: `${id}p`, sessionID: "s", messageID: id, type: "text", text } as unknown as MessageV2.Part],
+    }) as unknown as MessageV2.WithParts
+  const a = (id: string, text: string): MessageV2.WithParts =>
+    ({
+      info: {
+        id,
+        sessionID: "s",
+        role: "assistant",
+        parentID: "u",
+        modelID: "m",
+        providerID: "p",
+        mode: "",
+        agent: "a",
+        summary: false,
+        finish: "stop",
+        cost: 0,
+        time: { created: 0 },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      } as unknown as MessageV2.WithParts["info"],
+      parts: [{ id: `${id}p`, sessionID: "s", messageID: id, type: "text", text } as unknown as MessageV2.Part],
+    }) as unknown as MessageV2.WithParts
+
+  test("keeps at least the last user turn verbatim (force-last-user), summarizing the rest", () => {
+    const msgs = [u("u1"), a("a1", "x".repeat(400)), u("u2"), a("a2", "y".repeat(400)), u("u3"), a("a3", "done")]
+    const { tailStartId } = SessionCompaction.selectTail(msgs, { tailTurns: 1, tailTokens: 10_000 })
+    expect(tailStartId).toBe("u3") // the last turn is preserved; u1/u2 turns get summarized
+  })
+
+  test("keeps up to tailTurns turns when the budget allows", () => {
+    const msgs = [u("u1"), a("a1", "x"), u("u2"), a("a2", "y"), u("u3"), a("a3", "z")]
+    const { tailStartId } = SessionCompaction.selectTail(msgs, { tailTurns: 2, tailTokens: 10_000 })
+    expect(tailStartId).toBe("u2") // last 2 turns kept
+  })
+
+  test("token budget trims below tailTurns (but never below 1 turn)", () => {
+    // each turn ~ 250 tokens (1000 chars / 4). budget 300 fits only the newest turn.
+    const big = "z".repeat(1000)
+    const msgs = [u("u1"), a("a1", big), u("u2"), a("a2", big), u("u3"), a("a3", big)]
+    const { tailStartId } = SessionCompaction.selectTail(msgs, { tailTurns: 3, tailTokens: 300 })
+    expect(tailStartId).toBe("u3")
+  })
+
+  test("returns {} when there is only one turn (nothing to summarize)", () => {
+    expect(SessionCompaction.selectTail([u("u1"), a("a1", "hi")], { tailTurns: 2, tailTokens: 10_000 })).toEqual({})
+  })
+
+  test("returns {} when the tail would cover every turn", () => {
+    const msgs = [u("u1"), a("a1", "hi"), u("u2"), a("a2", "hi")]
+    expect(SessionCompaction.selectTail(msgs, { tailTurns: 5, tailTokens: 10_000 })).toEqual({})
+  })
+
+  test("messageTokens counts text + tool output", () => {
+    expect(SessionCompaction.messageTokens(a("a1", "x".repeat(40)))).toBe(10)
   })
 })
