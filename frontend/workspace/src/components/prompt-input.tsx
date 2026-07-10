@@ -60,7 +60,15 @@ import { showToast } from "@synsci/ui/toast"
 import { base64Encode } from "@synsci/util/encode"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
-const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
+const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf", "text/markdown", "text/plain"]
+const ACCEPTED_FILE_EXTENSIONS = [".md", ".markdown", ".txt"]
+
+function attachmentMime(file: File) {
+  const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase()
+  if (extension === ".md" || extension === ".markdown") return "text/markdown"
+  if (extension === ".txt") return "text/plain"
+  if (ACCEPTED_FILE_TYPES.includes(file.type)) return file.type
+}
 
 type PendingPrompt = {
   abort: AbortController
@@ -228,7 +236,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
   )
   const working = createMemo(() => status()?.type !== "idle")
-  const imageAttachments = createMemo(
+  const uploadAttachments = createMemo(
     () => prompt.current().filter((part) => part.type === "image") as ImageAttachmentPart[],
   )
 
@@ -325,8 +333,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
-  const addImageAttachment = async (file: File) => {
-    if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
+  const addUploadAttachment = async (file: File) => {
+    const mime = attachmentMime(file)
+    if (!mime) return
 
     const reader = new FileReader()
     reader.onload = () => {
@@ -335,7 +344,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "image",
         id: crypto.randomUUID(),
         filename: file.name,
-        mime: file.type,
+        mime,
         dataUrl,
       }
       const cursorPosition = prompt.cursor() ?? getCursorPosition(editorRef)
@@ -344,7 +353,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     reader.readAsDataURL(file)
   }
 
-  const removeImageAttachment = (id: string) => {
+  const removeUploadAttachment = (id: string) => {
     const current = prompt.current()
     const next = current.filter((part) => part.type !== "image" || part.id !== id)
     prompt.set(next, prompt.cursor())
@@ -360,12 +369,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const items = Array.from(clipboardData.items)
     const fileItems = items.filter((item) => item.kind === "file")
-    const imageItems = fileItems.filter((item) => ACCEPTED_FILE_TYPES.includes(item.type))
+    const attachmentItems = fileItems.filter((item) => {
+      const file = item.getAsFile()
+      return file && attachmentMime(file)
+    })
 
-    if (imageItems.length > 0) {
-      for (const item of imageItems) {
+    if (attachmentItems.length > 0) {
+      for (const item of attachmentItems) {
         const file = item.getAsFile()
-        if (file) await addImageAttachment(file)
+        if (file) await addUploadAttachment(file)
       }
       return
     }
@@ -412,9 +424,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!dropped) return
 
     for (const file of Array.from(dropped)) {
-      if (ACCEPTED_FILE_TYPES.includes(file.type)) {
-        await addImageAttachment(file)
-      }
+      if (attachmentMime(file)) await addUploadAttachment(file)
     }
   }
 
@@ -796,7 +806,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleInput = () => {
     const rawParts = parseFromDOM()
-    const images = imageAttachments()
+    const images = uploadAttachments()
     const cursorPosition = getCursorPosition(editorRef)
     const rawText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
     const trimmed = rawText.replace(/\u200B/g, "").trim()
@@ -1152,7 +1162,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const currentPrompt = prompt.current()
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
-    const images = imageAttachments().slice()
+    const images = uploadAttachments().slice()
     const mode = store.mode
 
     if (text.trim().length === 0 && images.length === 0) {
@@ -1833,16 +1843,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </For>
           </div>
         </Show>
-        <Show when={imageAttachments().length > 0}>
+        <Show when={uploadAttachments().length > 0}>
           <div class="flex flex-wrap gap-2 px-3 pt-3">
-            <For each={imageAttachments()}>
+            <For each={uploadAttachments()}>
               {(attachment) => (
                 <div class="relative group">
                   <Show
                     when={attachment.mime.startsWith("image/")}
                     fallback={
                       <div class="size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base">
-                        <Icon name="folder" class="size-6 text-text-weak" />
+                        <FileIcon node={{ path: attachment.filename, type: "file" }} class="size-6 text-text-weak" />
                       </div>
                     }
                   >
@@ -1857,7 +1867,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </Show>
                   <button
                     type="button"
-                    onClick={() => removeImageAttachment(attachment.id)}
+                    onClick={() => removeUploadAttachment(attachment.id)}
                     class="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-surface-raised-stronger-non-alpha border border-border-base flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface-raised-base-hover"
                     aria-label={language.t("prompt.attachment.remove")}
                   >
@@ -2054,11 +2064,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <input
               ref={fileInputRef}
               type="file"
-              accept={ACCEPTED_FILE_TYPES.join(",")}
+              accept={[...ACCEPTED_FILE_TYPES, ...ACCEPTED_FILE_EXTENSIONS].join(",")}
               class="hidden"
               onChange={(e) => {
                 const file = e.currentTarget.files?.[0]
-                if (file) addImageAttachment(file)
+                if (file) addUploadAttachment(file)
                 e.currentTarget.value = ""
               }}
             />
