@@ -38,6 +38,39 @@ sc.settings.verbosity = 3
 sc.settings.set_figure_params(dpi=80, facecolor='white')
 sc.settings.figdir = FIGURES_DIR
 
+# Memory-aware parallelism (#102). Parallel steps like regress_out fork one
+# worker PROCESS per job, each holding a full DENSE copy of the matrix — so the
+# safe n_jobs is bounded by RAM, not just CPU. Size it at runtime (below) rather
+# than hardcoding: the largest worker count whose per-worker copies fit in a
+# fraction of available memory.
+import os as _os
+
+
+def _available_ram_bytes():
+    try:
+        import psutil
+        return psutil.virtual_memory().available
+    except Exception:
+        try:  # POSIX fallback (psutil gives *available*, which is preferred)
+            return _os.sysconf('SC_PAGE_SIZE') * _os.sysconf('SC_PHYS_PAGES')
+        except (ValueError, OSError, AttributeError):
+            return 8 * 1024 ** 3  # unknown -> assume 8 GB
+
+
+def memory_safe_n_jobs(adata, fraction=0.5):
+    """Largest worker count whose per-worker dense copies fit in `fraction` of RAM."""
+    per_worker = max(1, adata.n_obs * adata.n_vars * 8)  # float64 dense copy, bytes
+    fits = int(_available_ram_bytes() * fraction // per_worker)
+    return max(1, min(_os.cpu_count() or 1, fits))
+
+
+# Modest default for light parallel steps; regress_out picks a RAM-aware value.
+sc.settings.n_jobs = min(_os.cpu_count() or 1, 4)
+
+# Guardrail: above this dense-matrix size (GB), the template skips the
+# memory-hazardous dense steps (regress_out) and warns instead of OOMing.
+MAX_DENSE_GB = 8.0
+
 # ============================================================================
 # 1. LOAD DATA
 # ============================================================================
@@ -52,6 +85,14 @@ adata = sc.read_h5ad(INPUT_FILE)
 # adata = sc.read_csv('data/counts.csv')  # For CSV data
 
 print(f"Loaded: {adata.n_obs} cells x {adata.n_vars} genes")
+
+# Memory guard (#102): a count matrix stored DENSE uses ~8 bytes/element and can
+# be tens/hundreds of GB, OOMing the machine on load alone. Keep counts sparse.
+import scipy.sparse as _sp
+_dense_gb = adata.n_obs * adata.n_vars * 8 / 1e9
+if not _sp.issparse(adata.X) and _dense_gb > MAX_DENSE_GB:
+    print(f"WARNING: adata.X is DENSE (~{_dense_gb:.1f} GB). Convert to sparse to "
+          f"avoid running out of memory:  adata.X = scipy.sparse.csr_matrix(adata.X)")
 
 # ============================================================================
 # 2. QUALITY CONTROL
@@ -128,10 +169,27 @@ print("\n" + "=" * 80)
 print("SCALING AND REGRESSION")
 print("=" * 80)
 
-# Regress out unwanted sources of variation
-sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'])
+# Regress out unwanted sources of variation.
+# NOTE (#102): regress_out densifies the matrix and runs one joblib worker per
+# job, each holding a full dense copy — the biggest memory hazard in this
+# pipeline. It is optional in modern workflows, so it stays OFF by default and
+# is skipped automatically when the dense matrix would exceed MAX_DENSE_GB.
+REGRESS_OUT = False
+_hvg_dense_gb = adata.n_obs * adata.n_vars * 8 / 1e9
+if REGRESS_OUT and _hvg_dense_gb <= MAX_DENSE_GB:
+    n_jobs = memory_safe_n_jobs(adata)  # as many workers as fit in RAM, up to cores
+    print(f"regress_out: n_jobs={n_jobs} (each worker copies ~{_hvg_dense_gb:.1f} GB)")
+    sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'], n_jobs=n_jobs)
+elif REGRESS_OUT:
+    print(f"WARNING: skipping regress_out — dense matrix ~{_hvg_dense_gb:.1f} GB "
+          f"exceeds MAX_DENSE_GB={MAX_DENSE_GB} GB (#102). Subset cells/HVGs first.")
 
-# Scale data
+# Scale to unit variance. zero_center=True (default) fills every structural zero
+# and densifies the matrix; for a very large matrix this alone can exhaust
+# memory. Scaling here runs on the HVG subset (done above); if it is still huge,
+# reduce N_TOP_GENES or the cell count.
+if _hvg_dense_gb > MAX_DENSE_GB * 2:
+    print(f"WARNING: scaling will densify a ~{_hvg_dense_gb:.1f} GB matrix (#102).")
 sc.pp.scale(adata, max_value=10)
 
 # ============================================================================

@@ -238,7 +238,14 @@ sc.settings.autoshow = False           # Don't show plots automatically
 sc.settings.autosave = True            # Autosave figures
 sc.settings.figdir = './figures/'      # Figure directory
 sc.settings.cachedir = './cache/'      # Cache directory
-sc.settings.n_jobs = 8                 # Number of parallel jobs
+sc.settings.n_jobs = 1                 # Parallel jobs. CAUTION: parallel steps
+                                       # like regress_out fork one worker per job,
+                                       # each holding a full DENSE copy of the
+                                       # matrix — n_jobs is bounded by RAM, not
+                                       # just CPU (n_jobs=8 on a large matrix can
+                                       # OOM the machine). Size it to memory:
+                                       # min(cores, avail_RAM / per-worker bytes).
+                                       # See analysis_template.py memory_safe_n_jobs().
 ```
 
 ## Useful Utilities
