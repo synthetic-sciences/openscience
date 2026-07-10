@@ -1087,6 +1087,33 @@ export namespace OpenScience {
     return result
   }
 
+  /** BLAS / OpenMP / joblib parallelism knobs. Left unset, numpy/scipy BLAS,
+   *  numba, and joblib each default to *all* cores — and joblib's loky backend
+   *  forks one full data copy per worker. Nested (a scanpy step with n_jobs on
+   *  top of all-core BLAS) both oversubscribes CPU and multiplies memory, which
+   *  is how a single analysis balloons to tens of GB across several processes
+   *  (issue #102). Cap to a modest share of cores as a default the user can
+   *  override. This is not a hard memory limit — macOS ignores RLIMIT_AS — it
+   *  bounds the parallelism multiplier. */
+  const COMPUTE_PARALLELISM_VARS = [
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMBA_NUM_THREADS",
+    "BLIS_NUM_THREADS",
+    "LOKY_MAX_CPU_COUNT",
+  ]
+  export function withComputeParallelismCaps(env: Record<string, string>): Record<string, string> {
+    const cap = String(Math.max(1, Math.min(os.cpus().length, 4)))
+    const result = { ...env }
+    for (const key of COMPUTE_PARALLELISM_VARS) {
+      if (!result[key]) result[key] = cap
+    }
+    return result
+  }
+
   /** Subprocess env = sanitized base env + any user-owned BYOK provider keys
    *  from auth.json. Lets skill scripts (e.g. nano-banana image generation)
    *  use a key the user connected with `openscience login`, without leaking the
@@ -1096,7 +1123,7 @@ export namespace OpenScience {
     const auth = await Auth.all().catch(() => ({}) as Record<string, Auth.Info>)
     // Prepend the bundled atlas CLI to PATH so the agent's native `atlas`
     // commands resolve without a separate global install.
-    return withAtlasOnPath(mergeByokEnv(base, auth))
+    return withComputeParallelismCaps(withAtlasOnPath(mergeByokEnv(base, auth)))
   }
 
   // === Server-side Skills ===
