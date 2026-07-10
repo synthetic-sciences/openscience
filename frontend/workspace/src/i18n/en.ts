@@ -227,6 +227,10 @@ export const dict = {
 
   "prompt.toast.pasteUnsupported.title": "unsupported paste",
   "prompt.toast.pasteUnsupported.description": "only images or PDFs can be pasted here.",
+  "prompt.toast.uploadUnsupported.title": "unsupported file",
+  "prompt.toast.uploadUnsupported.description": "only images, PDFs, and text files can be attached.",
+  "prompt.toast.uploadNotText.title": "couldn't attach file",
+  "prompt.toast.uploadNotText.description": "this file looks binary, not text.",
   "prompt.toast.modelAgentRequired.title": "select an agent and model",
   "prompt.toast.modelAgentRequired.description": "choose an agent and model before sending a prompt.",
   "prompt.toast.worktreeCreateFailed.title": "failed to create worktree",

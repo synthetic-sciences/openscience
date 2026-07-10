@@ -130,15 +130,15 @@ function isAcceptedTextFile(file: File) {
 // the leading window. Mirrors the byte-sniff other agents use before trusting
 // an upload as text.
 function looksBinary(bytes: Uint8Array) {
-  const window = bytes.subarray(0, TEXT_ATTACHMENT_SNIFF_BYTES)
-  if (window.length === 0) return false
+  const head = bytes.subarray(0, TEXT_ATTACHMENT_SNIFF_BYTES)
+  if (head.length === 0) return false
   let control = 0
-  for (const byte of window) {
+  for (const byte of head) {
     if (byte === 0) return true
     const isText = byte === 0x09 || byte === 0x0a || byte === 0x0d || (byte >= 0x20 && byte !== 0x7f)
     if (!isText) control++
   }
-  return control / window.length > TEXT_ATTACHMENT_CONTROL_RATIO
+  return control / head.length > TEXT_ATTACHMENT_CONTROL_RATIO
 }
 
 // Normalise newlines and strip control characters (except tab/newline) so an
@@ -440,24 +440,33 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const unsupportedUploadToast = () =>
     showToast({
-      title: language.t("prompt.toast.pasteUnsupported.title"),
-      description: language.t("prompt.toast.pasteUnsupported.description"),
+      title: language.t("prompt.toast.uploadUnsupported.title"),
+      description: language.t("prompt.toast.uploadUnsupported.description"),
+    })
+
+  const notTextToast = () =>
+    showToast({
+      title: language.t("prompt.toast.uploadNotText.title"),
+      description: language.t("prompt.toast.uploadNotText.description"),
     })
 
   const addTextAttachment = async (file: File) => {
     if (!isAcceptedTextFile(file)) return
-    const bytes = new Uint8Array(await file.arrayBuffer())
+    // Read at most the cap — never pull a multi-hundred-MB file fully into memory.
+    const oversize = file.size > TEXT_ATTACHMENT_MAX_BYTES
+    const slice = oversize ? file.slice(0, TEXT_ATTACHMENT_MAX_BYTES) : file
+    const bytes = new Uint8Array(await slice.arrayBuffer())
     if (looksBinary(bytes)) {
-      unsupportedUploadToast()
+      notTextToast()
       return
     }
-    let text = sanitizeText(new TextDecoder("utf-8").decode(bytes))
-    const encoded = new TextEncoder().encode(text)
-    if (encoded.length > TEXT_ATTACHMENT_MAX_BYTES) {
-      text =
-        new TextDecoder("utf-8").decode(encoded.subarray(0, TEXT_ATTACHMENT_MAX_BYTES)) +
-        `\n\n[openscience: truncated ${file.name} at ${TEXT_ATTACHMENT_MAX_BYTES / 1024} KB]`
-    }
+    // A cap-boundary slice can cut a multibyte codepoint; the decoder leaves a
+    // trailing replacement char — drop it before appending the note.
+    const decoded = sanitizeText(new TextDecoder("utf-8").decode(bytes))
+    const body = oversize ? decoded.replace(/�+$/, "") : decoded
+    const text = oversize
+      ? `${body}\n\n[openscience: truncated ${file.name} at ${TEXT_ATTACHMENT_MAX_BYTES / 1024} KB]`
+      : body
     // Carry the text as a text/plain data URL so the CLI inlines it as a Read
     // text part (see message materialisation). Force the mime — a `.md` may
     // arrive as text/markdown, but the CLI keys on exactly "text/plain".

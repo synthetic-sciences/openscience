@@ -72,10 +72,18 @@ export namespace SessionPrompt {
 
   // Decode a `data:text/plain;base64,...` attachment into its text, capped.
   // Strips the data-URL prefix and decodes standard base64 (not base64url).
+  // Also strips control chars (except tab/newline): the browser sanitises too,
+  // but this is the shared trust boundary — an SDK-supplied attachment must not
+  // smuggle terminal escapes or NULs into the transcript.
   export function decodeTextAttachment(url: string, filename?: string) {
     const comma = url.indexOf(",")
     const payload = comma === -1 ? url : url.slice(comma + 1)
-    const text = Buffer.from(payload, "base64").toString("utf8")
+    const text = Buffer.from(payload, "base64")
+      .toString("utf8")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
     if (text.length <= TEXT_ATTACHMENT_MAX_CHARS) return text
     return (
       text.slice(0, TEXT_ATTACHMENT_MAX_CHARS) +

@@ -38,4 +38,10 @@ describe("SessionPrompt.decodeTextAttachment", () => {
     const text = "y".repeat(SessionPrompt.TEXT_ATTACHMENT_MAX_CHARS)
     expect(SessionPrompt.decodeTextAttachment(dataUrl(text))).toBe(text)
   })
+
+  test("strips control chars (NUL, ANSI escapes) but keeps tab/newline", () => {
+    const out = SessionPrompt.decodeTextAttachment(dataUrl("a\x00b\x1b[31mc\td\r\ne"))
+    expect(out).toBe("ab[31mc\td\ne")
+    expect(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(out)).toBe(false)
+  })
 })
