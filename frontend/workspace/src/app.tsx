@@ -10,6 +10,7 @@ import { I18nProvider } from "@synsci/ui/context"
 import { Diff } from "@synsci/ui/diff"
 import { Code } from "@synsci/ui/code"
 import { ThemeProvider } from "@synsci/ui/theme"
+import { Toast } from "@synsci/ui/toast"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
@@ -69,6 +70,8 @@ export function AppBaseProviders(props: ParentProps) {
       <ThemeProvider>
         <LanguageProvider>
           <UiI18nBridge>
+            {/* Hosts all showToast() output — without a mounted region, every toast is a no-op. */}
+            <Toast.Region />
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
               <DialogProvider>
                 <MarkedProviderWithNativeParser>
