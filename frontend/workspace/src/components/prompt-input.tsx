@@ -440,12 +440,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const unsupportedUploadToast = () =>
     showToast({
+      variant: "error",
       title: language.t("prompt.toast.uploadUnsupported.title"),
       description: language.t("prompt.toast.uploadUnsupported.description"),
     })
 
   const notTextToast = () =>
     showToast({
+      variant: "error",
       title: language.t("prompt.toast.uploadNotText.title"),
       description: language.t("prompt.toast.uploadNotText.description"),
     })
@@ -503,18 +505,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     event.stopPropagation()
 
     const items = Array.from(clipboardData.items)
-    const fileItems = items.filter((item) => item.kind === "file")
-    const uploadable = fileItems
+    const files = items
+      .filter((item) => item.kind === "file")
       .map((item) => item.getAsFile())
-      .filter((file): file is File => !!file && (ACCEPTED_FILE_TYPES.includes(file.type) || isAcceptedTextFile(file)))
+      .filter((file): file is File => !!file)
 
-    if (uploadable.length > 0) {
-      for (const file of uploadable) await handleUploadedFile(file)
-      return
-    }
-
-    if (fileItems.length > 0) {
-      unsupportedUploadToast()
+    // Route every pasted file through the handler — it attaches supported ones
+    // and banners unsupported ones, so nothing is dropped silently.
+    if (files.length > 0) {
+      for (const file of files) await handleUploadedFile(file)
       return
     }
 
@@ -551,10 +550,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const dropped = event.dataTransfer?.files
     if (!dropped) return
 
+    // Route every dropped file through the handler so an unsupported one
+    // banners instead of being silently skipped.
     for (const file of Array.from(dropped)) {
-      if (ACCEPTED_FILE_TYPES.includes(file.type) || isAcceptedTextFile(file)) {
-        await handleUploadedFile(file)
-      }
+      await handleUploadedFile(file)
     }
   }
 
@@ -2025,7 +2024,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Icon name="close" class="size-3 text-text-weak" />
                   </button>
                   <div class="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/50 rounded-b-md">
-                    <span class="text-10-regular text-white truncate block">{attachment.filename}</span>
+                    <span class="text-10-regular text-white truncate block text-center">{attachment.filename}</span>
                   </div>
                 </div>
               )}
