@@ -18,6 +18,7 @@ import { Binary } from "@synsci/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part } from "./message-part"
+import { stripRedactedReasoning } from "./tool-display"
 import { Markdown } from "./markdown"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -253,6 +254,9 @@ export function SessionTurn(
       if (!msgParts) continue
       for (const p of msgParts) {
         if (p?.type === "tool") return true
+        // Ignore encrypted-reasoning placeholders ("[REDACTED]") so a turn whose only
+        // reasoning is an encrypted blob doesn't get a toggle that reveals nothing.
+        if (p?.type === "reasoning" && stripRedactedReasoning(p.text ?? "").length > 0) return true
       }
     }
     return false

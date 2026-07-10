@@ -65,6 +65,12 @@ export const dict = {
   "ui.tool.todos.read": "할 일 읽기",
   "ui.tool.questions": "질문",
   "ui.tool.agent": "{{type}} 에이전트",
+  "ui.tool.websearch": "웹 검색",
+  "ui.tool.codesearch": "코드 검색",
+  "ui.tool.multiedit": "다중 편집",
+  "ui.tool.learn": "학습",
+  "ui.tool.notebook": "노트북",
+  "ui.tool.skill": "스킬: {{name}}",
 
   "ui.common.file.one": "파일",
   "ui.common.file.other": "파일",

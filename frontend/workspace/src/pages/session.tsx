@@ -13,6 +13,7 @@ import {
 } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { SessionTurn } from "@synsci/ui/session-turn"
+import { createAutoScroll } from "@synsci/ui/hooks"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { useLayout } from "@/context/layout"
@@ -42,6 +43,7 @@ import { CommandPalette } from "@/thesis/CommandPalette"
 import { HelpOverlay } from "@/thesis/HelpOverlay"
 import { ToastContainer } from "@/thesis/Toast"
 import {
+  IconChevronDown,
   IconChevronLeft,
   IconPlus,
   IconSearch,
@@ -384,79 +386,61 @@ export default function Page(): JSX.Element {
     if (centerTabs.active() === "skills") setVisitedSkills(true)
   })
 
-  // Chat scroll. The container resizes whenever the right pane opens/closes
-  // (the chat column narrows/widens) or the window changes size. A bare reflow
-  // can drop the scroll position to the top, so we track whether the user is
-  // pinned to the bottom and re-anchor on every resize via a ResizeObserver —
-  // sticking to the bottom when they were reading the latest output, or
-  // preserving their distance from the bottom when they had scrolled up.
-  let scrollRef: HTMLDivElement | undefined
-  let scrollObserver: ResizeObserver | undefined
-  let boundScroll: HTMLDivElement | undefined
-  const NEAR_BOTTOM_PX = 120
-  let pinnedToBottom = true
-  let distanceFromBottom = 0
-
-  const recordScroll = () => {
-    if (!scrollRef) return
-    distanceFromBottom = scrollRef.scrollHeight - scrollRef.scrollTop - scrollRef.clientHeight
-    pinnedToBottom = distanceFromBottom <= NEAR_BOTTOM_PX
-  }
-
-  const stickToBottom = () => {
-    if (scrollRef) scrollRef.scrollTop = scrollRef.scrollHeight
-  }
-
-  const reanchor = () => {
-    if (!scrollRef) return
-    if (pinnedToBottom) stickToBottom()
-    else scrollRef.scrollTop = Math.max(0, scrollRef.scrollHeight - scrollRef.clientHeight - distanceFromBottom)
-  }
-
-  const attachScroll = (el: HTMLDivElement) => {
-    if (boundScroll === el) return
-    if (scrollObserver) scrollObserver.disconnect()
-    if (boundScroll) boundScroll.removeEventListener("scroll", recordScroll)
-    boundScroll = el
-    scrollRef = el
-    pinnedToBottom = true
-    el.addEventListener("scroll", recordScroll, { passive: true })
-    // First callback fires synchronously on observe; ignore it (initial layout)
-    // and only re-anchor on genuine resizes after that.
-    let primed = false
-    scrollObserver = new ResizeObserver(() => {
-      if (!primed) {
-        primed = true
-        return
-      }
-      reanchor()
-    })
-    scrollObserver.observe(el)
-  }
-
-  onCleanup(() => {
-    if (scrollObserver) scrollObserver.disconnect()
-    if (boundScroll) boundScroll.removeEventListener("scroll", recordScroll)
+  // Chat scroll: stick to the bottom while the agent streams; detach the
+  // moment the user scrolls up (a "jump to latest" button re-attaches).
+  // Follow is driven by content growth (ResizeObserver on the content
+  // wrapper), not message count, so streamed part updates keep the view
+  // pinned instead of only re-anchoring on new messages / container resize.
+  const working = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    const status = sync.data.session_status?.[id]
+    return !!status && status.type !== "idle"
   })
 
-  // New messages / session switch → keep the latest output in view when the
-  // user is pinned to the bottom (don't yank them down if they scrolled up).
+  const chatScroll = createAutoScroll({
+    working,
+    overflowAnchor: "dynamic",
+    bottomThreshold: 120,
+  })
+
+  // Re-pin when the user switches sessions, and on initial mount once
+  // messages populate (covers direct URL / bookmark / refresh into a long,
+  // idle session, where createAutoScroll's settling window would otherwise
+  // expire before async-loaded messages render).
   createEffect(
     on(
-      () => [messages().length, params.id],
-      ([, id], prev) => {
-        const sessionChanged = !prev || prev[1] !== id
-        if (sessionChanged) pinnedToBottom = true
-        if (scrollRef && pinnedToBottom)
-          requestAnimationFrame(() => {
-            if (scrollRef && pinnedToBottom) stickToBottom()
-          })
+      () => [params.id, messages().length > 0] as const,
+      ([, hasMessages]) => {
+        if (!hasMessages) return
+        // A turn's markdown/code-highlight/katex renders progressively AFTER the
+        // message array populates, growing scrollHeight over ~1s. An idle session
+        // isn't in follow-mode, so createAutoScroll won't track that growth — a
+        // single scroll lands at the early bottom. Re-pin across the load window
+        // (bail the moment the user scrolls up, so we never fight them).
+        chatScroll.forceScrollToBottom()
+        const timers = [80, 200, 450, 800, 1200].map((ms) =>
+          setTimeout(() => {
+            if (!chatScroll.userScrolled()) chatScroll.forceScrollToBottom()
+          }, ms),
+        )
+        onCleanup(() => timers.forEach(clearTimeout))
       },
     ),
   )
 
   createEffect(() => {
     if (project()) layout.projects.open(project()!.worktree)
+  })
+
+  // Re-anchor a bottom-following view on viewport-height changes with no new
+  // content (window resize, right-pane toggle, mobile virtual keyboard).
+  onMount(() => {
+    const onResize = () => {
+      if (!chatScroll.userScrolled()) chatScroll.forceScrollToBottom()
+    }
+    window.addEventListener("resize", onResize)
+    onCleanup(() => window.removeEventListener("resize", onResize))
   })
 
   return (
@@ -542,117 +526,170 @@ export default function Page(): JSX.Element {
             >
               <Switch>
                 <Match when={params.id && messages().length > 0}>
+                  {/* Scoped to just the scroll area (not the revert banner / Composer
+                      below) so the jump-to-latest pill's position:absolute resolves
+                      against this box instead of the whole chat column. */}
                   <div
-                    ref={attachScroll}
-                    class="thesis-scroll thesis-chat-scroll session-scroller"
                     style={{
+                      position: "relative",
                       flex: 1,
                       "min-height": 0,
-                      "overflow-y": "auto",
-                      "overflow-x": "hidden",
-                      position: "relative",
+                      display: "flex",
+                      "flex-direction": "column",
                     }}
                   >
-                    {/* Sticky title + back-to-parent (sub-agent) header */}
-                    <Show when={activeSession()?.title || activeSession()?.parentID}>
-                      <div class="sticky top-0 z-30 bg-background-stronger w-full">
-                        <div class="w-full px-4 md:px-6 md:max-w-200 md:mx-auto">
-                          <div class="h-10 flex items-center gap-1.5">
-                            <Show when={activeSession()?.parentID}>
-                              <button
-                                type="button"
-                                class="flex items-center justify-center size-7 shrink-0 rounded-md text-text-weak hover:text-text-base hover:bg-surface-base-hover transition-colors"
-                                aria-label="Back to parent session"
-                                onClick={() => navigate(`/${params.dir}/session/${activeSession()!.parentID}`)}
-                              >
-                                <IconChevronLeft />
-                              </button>
-                            </Show>
-                            <Show when={activeSession()?.title}>
-                              <EditableTitle
-                                title={activeSession()!.title!}
-                                onRename={(t) => void renameSession(activeSession()!.id, t)}
-                              />
-                            </Show>
+                    <div
+                      ref={chatScroll.scrollRef}
+                      onScroll={chatScroll.handleScroll}
+                      onClick={chatScroll.handleInteraction}
+                      class="thesis-scroll thesis-chat-scroll session-scroller"
+                      style={{
+                        flex: 1,
+                        "min-height": 0,
+                        "overflow-y": "auto",
+                        "overflow-x": "hidden",
+                      }}
+                    >
+                      {/* Sticky title + back-to-parent (sub-agent) header — kept
+                          outside contentRef so the ResizeObserver measures only
+                          the growing message list, not the sticky header. */}
+                      <Show when={activeSession()?.title || activeSession()?.parentID}>
+                        <div class="sticky top-0 z-30 bg-background-stronger w-full">
+                          <div class="w-full px-4 md:px-6 md:max-w-200 md:mx-auto">
+                            <div class="h-10 flex items-center gap-1.5">
+                              <Show when={activeSession()?.parentID}>
+                                <button
+                                  type="button"
+                                  class="flex items-center justify-center size-7 shrink-0 rounded-md text-text-weak hover:text-text-base hover:bg-surface-base-hover transition-colors"
+                                  aria-label="Back to parent session"
+                                  onClick={() => navigate(`/${params.dir}/session/${activeSession()!.parentID}`)}
+                                >
+                                  <IconChevronLeft />
+                                </button>
+                              </Show>
+                              <Show when={activeSession()?.title}>
+                                <EditableTitle
+                                  title={activeSession()!.title!}
+                                  onRename={(t) => void renameSession(activeSession()!.id, t)}
+                                />
+                              </Show>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </Show>
+                      </Show>
 
-                    {/* Centered conversation column with 2px between-turn divider */}
-                    <div class="w-full md:max-w-200 md:mx-auto flex flex-col items-start justify-start pt-3 pb-[calc(10rem+64px)]">
-                      <For each={turnMessages()}>
-                        {(message, index) => (
-                          <div data-message-id={message.id} class="min-w-0 w-full max-w-full">
-                            <Show
-                              when={!hasCompactionPart(message.id)}
-                              fallback={
-                                <Show
-                                  when={message.id === compactingMessageId()}
-                                  fallback={
+                      {/* Centered conversation column with 2px between-turn divider */}
+                      <div
+                        ref={chatScroll.contentRef}
+                        class="w-full md:max-w-200 md:mx-auto flex flex-col items-start justify-start pt-3 pb-[calc(10rem+64px)]"
+                      >
+                        <For each={turnMessages()}>
+                          {(message, index) => (
+                            <div data-message-id={message.id} class="min-w-0 w-full max-w-full">
+                              <Show
+                                when={!hasCompactionPart(message.id)}
+                                fallback={
+                                  <Show
+                                    when={message.id === compactingMessageId()}
+                                    fallback={
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          "align-items": "center",
+                                          gap: "10px",
+                                          padding: "2px 16px",
+                                          "font-size": "11px",
+                                          "letter-spacing": "0.06em",
+                                          "text-transform": "uppercase",
+                                          color: "var(--color-text-faint)",
+                                        }}
+                                      >
+                                        <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
+                                        <span>context compacted</span>
+                                        <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
+                                      </div>
+                                    }
+                                  >
                                     <div
                                       style={{
                                         display: "flex",
                                         "align-items": "center",
-                                        gap: "10px",
-                                        padding: "2px 16px",
+                                        "justify-content": "center",
+                                        gap: "8px",
+                                        padding: "6px 16px",
+                                        "font-family": FONT_MONO,
                                         "font-size": "11px",
                                         "letter-spacing": "0.06em",
                                         "text-transform": "uppercase",
                                         color: "var(--color-text-faint)",
                                       }}
                                     >
-                                      <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
-                                      <span>context compacted</span>
-                                      <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
+                                      <AsciiSpinner size={10} />
+                                      <span>compacting conversation…</span>
                                     </div>
-                                  }
-                                >
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      "align-items": "center",
-                                      "justify-content": "center",
-                                      gap: "8px",
-                                      padding: "6px 16px",
-                                      "font-family": FONT_MONO,
-                                      "font-size": "11px",
-                                      "letter-spacing": "0.06em",
-                                      "text-transform": "uppercase",
-                                      color: "var(--color-text-faint)",
-                                    }}
-                                  >
-                                    <AsciiSpinner size={10} />
-                                    <span>compacting conversation…</span>
-                                  </div>
-                                </Show>
-                              }
-                            >
-                              <SessionTurn
-                                sessionID={params.id!}
-                                messageID={message.id}
-                                lastUserMessageID={lastUserMessage()?.id}
-                                stepsExpanded={stepsExpanded()[message.id] ?? false}
-                                onStepsExpandedToggle={() => toggleSteps(message.id)}
-                                classes={{
-                                  root: "min-w-0 w-full relative",
-                                  content: "flex flex-col justify-between !overflow-visible",
-                                  container: "w-full px-4 md:px-6",
-                                }}
-                              />
-                            </Show>
-                            {/* The v1.1.116 between-turns rule — skipped for a
-                                compaction row, which already draws its own "context
-                                compacted" divider (avoids a doubled rule). */}
-                            <Show when={index() < turnMessages().length - 1 && !hasCompactionPart(message.id)}>
-                              <div class="w-full px-4 md:px-6 pt-2 pb-1">
-                                <div class="h-[2px] bg-border-weak-base rounded-full" />
-                              </div>
-                            </Show>
-                          </div>
-                        )}
-                      </For>
+                                  </Show>
+                                }
+                              >
+                                <SessionTurn
+                                  sessionID={params.id!}
+                                  messageID={message.id}
+                                  lastUserMessageID={lastUserMessage()?.id}
+                                  stepsExpanded={stepsExpanded()[message.id] ?? false}
+                                  onStepsExpandedToggle={() => toggleSteps(message.id)}
+                                  classes={{
+                                    root: "min-w-0 w-full relative",
+                                    content: "flex flex-col justify-between !overflow-visible",
+                                    container: "w-full px-4 md:px-6",
+                                  }}
+                                />
+                              </Show>
+                              {/* The v1.1.116 between-turns rule — skipped for a
+                                  compaction row, which already draws its own "context
+                                  compacted" divider (avoids a doubled rule). */}
+                              <Show when={index() < turnMessages().length - 1 && !hasCompactionPart(message.id)}>
+                                <div class="w-full px-4 md:px-6 pt-2 pb-1">
+                                  <div class="h-[2px] bg-border-weak-base rounded-full" />
+                                </div>
+                              </Show>
+                            </div>
+                          )}
+                        </For>
+                      </div>
                     </div>
+
+                    <Show when={chatScroll.userScrolled()}>
+                      <button
+                        type="button"
+                        onClick={() => chatScroll.forceScrollToBottom()}
+                        title="Jump to latest"
+                        style={{
+                          position: "absolute",
+                          // The content column reserves calc(10rem + 64px) of bottom
+                          // padding (above) so the last message clears the absolute
+                          // prompt dock; land the pill just above that same
+                          // reservation so the dock doesn't sit on top of it.
+                          bottom: "calc(10rem + 64px + 16px)",
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          display: "inline-flex",
+                          "align-items": "center",
+                          gap: "6px",
+                          padding: "6px 12px",
+                          "border-radius": "999px",
+                          border: "1px solid var(--color-border-strong)",
+                          background: "var(--color-surface-solid)",
+                          "box-shadow": "var(--shadow-md)",
+                          "font-family": FONT_MONO,
+                          "font-size": "11px",
+                          color: "var(--color-text)",
+                          cursor: "pointer",
+                          "z-index": 6,
+                        }}
+                      >
+                        <IconChevronDown size={13} strokeWidth={1.6} />
+                        jump to latest
+                      </button>
+                    </Show>
                   </div>
                 </Match>
                 <Match when={true}>

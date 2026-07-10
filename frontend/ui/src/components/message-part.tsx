@@ -37,9 +37,11 @@ import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Button } from "./button"
 import { Card } from "./card"
+import { createTypewriter } from "./typewriter"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
+import { Spinner } from "./spinner"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
 import { findLast } from "@synsci/util/array"
@@ -50,6 +52,7 @@ import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { NotebookView, type NotebookCellProps } from "./notebook-cell"
+import { skillName, stripRedactedReasoning } from "./tool-display"
 
 interface Diagnostic {
   range: {
@@ -111,45 +114,32 @@ export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
 // import resolves against the v1.1.116 message-part.
 export const ARTIFACT_TOOL = "__artifact__"
 
-const TEXT_RENDER_THROTTLE_MS = 100
+// A file-mutation tool (write/edit/apply_patch) has no diff/content for a brief
+// window right after it starts, which would otherwise render a title-only card
+// that reads as "done but blank". Show a compact spinner + label during that
+// genuinely-blank window only; each renderer's <Show> also opens as soon as its
+// body content is available (e.g. the diff/content used during permission
+// approval, which happens before the tool finishes), not just on completion.
+function isToolDone(status?: string) {
+  return status === "completed" || status === "error"
+}
+
+function ToolProgress(props: { label: string; subtitle?: string }): JSX.Element {
+  return (
+    <div data-component="tool-progress">
+      <Spinner />
+      <span data-slot="tool-progress-label">{props.label}</span>
+      <Show when={props.subtitle}>
+        <span data-slot="tool-progress-subtitle">{props.subtitle}</span>
+      </Show>
+    </div>
+  )
+}
 
 function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
   return a.every((x, i) => x === b[i])
-}
-
-function createThrottledValue(getValue: () => string) {
-  const [value, setValue] = createSignal(getValue())
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  let last = 0
-
-  createEffect(() => {
-    const next = getValue()
-    const now = Date.now()
-    const remaining = TEXT_RENDER_THROTTLE_MS - (now - last)
-    if (remaining <= 0) {
-      if (timeout) {
-        clearTimeout(timeout)
-        timeout = undefined
-      }
-      last = now
-      setValue(next)
-      return
-    }
-    if (timeout) clearTimeout(timeout)
-    timeout = setTimeout(() => {
-      last = Date.now()
-      setValue(next)
-      timeout = undefined
-    }, remaining)
-  })
-
-  onCleanup(() => {
-    if (timeout) clearTimeout(timeout)
-  })
-
-  return value
 }
 
 function relativizeProjectPaths(text: string, directory?: string) {
@@ -271,6 +261,35 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
       return {
         icon: "bubble-5",
         title: i18n.t("ui.tool.questions"),
+      }
+    case "websearch":
+      return {
+        icon: "window-cursor",
+        title: i18n.t("ui.tool.websearch"),
+        subtitle: input.query,
+      }
+    case "codesearch":
+      return {
+        icon: "magnifying-glass-menu",
+        title: i18n.t("ui.tool.codesearch"),
+        subtitle: input.query ?? input.pattern,
+      }
+    case "multiedit":
+      return {
+        icon: "code-lines",
+        title: i18n.t("ui.tool.multiedit"),
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "learn":
+      return {
+        icon: "mcp",
+        title: i18n.t("ui.tool.learn"),
+      }
+    case "notebook":
+      return {
+        icon: "code-lines",
+        title: i18n.t("ui.tool.notebook"),
+        subtitle: input.path ? getFilename(input.path) : undefined,
       }
     default:
       return {
@@ -513,6 +532,7 @@ export interface ToolProps {
   output?: string
   status?: string
   partID?: string
+  title?: string
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
@@ -611,6 +631,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     if (perm?.metadata) return { ...perm.metadata, ...partMetadata() }
     return partMetadata()
   }
+  // @ts-expect-error - title only exists on the running/completed state variants
+  const title = () => part.state?.title as string | undefined
 
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
@@ -651,6 +673,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             output={part.state.output}
             status={part.state.status}
             partID={part.id}
+            title={title()}
             hideDetails={props.hideDetails}
             forceOpen={forceOpen()}
             locked={showPermission() || showQuestion()}
@@ -683,7 +706,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const i18n = useI18n()
   const part = props.part as TextPart
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
-  const throttledText = createThrottledValue(displayText)
+  const throttledText = createTypewriter(displayText)
   const [copied, setCopied] = createSignal(false)
 
   const handleCopy = async () => {
@@ -723,18 +746,17 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 // Providers that don't expose raw chain-of-thought — OpenAI's models, and
 // anything routed through OpenRouter — return the reasoning *encrypted*: the
 // real content lives in providerMetadata (for multi-turn continuation) and the
-// visible text is either empty or a literal "[REDACTED]" placeholder. Neither
-// is readable, so render nothing rather than walls of "[REDACTED]". Exact-match
-// only, so a genuine summary that happens to mention a redacted secret still shows.
-const ENCRYPTED_REASONING_PLACEHOLDER = "[REDACTED]"
+// visible text is empty, a literal "[REDACTED]" placeholder, or a readable
+// summary with "[REDACTED]" appended. None of the placeholder is meaningful, so
+// stripRedactedReasoning() drops it — a wholly-encrypted part collapses to empty
+// and the <Show> hides it, while a "…summary![REDACTED]" keeps its readable text.
+// (Supersedes the exact-match approach: OpenRouter mostly appends the placeholder
+// to a real summary, which exact-match would leave visible.)
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = props.part as ReasoningPart
-  const text = () => {
-    const trimmed = part.text.trim()
-    return trimmed === ENCRYPTED_REASONING_PLACEHOLDER ? "" : trimmed
-  }
-  const throttledText = createThrottledValue(text)
+  const text = () => stripRedactedReasoning(part.text)
+  const throttledText = createTypewriter(text)
 
   return (
     <Show when={throttledText()}>
@@ -782,6 +804,25 @@ ToolRegistry.register({
           )}
         </For>
       </>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "skill",
+  render(props) {
+    const i18n = useI18n()
+    const name = skillName({ metadata: props.metadata, input: props.input, title: props.title })
+    return (
+      <BasicTool {...props} icon="mcp" trigger={{ title: i18n.t("ui.tool.skill", { name }) }}>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
+        </Show>
+      </BasicTool>
     )
   },
 })
@@ -1098,58 +1139,64 @@ ToolRegistry.register({
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const filename = () => getFilename(props.input.filePath ?? "")
     const canOpen = () => !!(data.openFile && props.input.filePath)
+    const bodyReady = () => !!(props.metadata.filediff?.path || props.input.filePath)
     return (
-      <BasicTool
-        {...props}
-        icon="code-lines"
-        trigger={
-          <div data-component="edit-trigger">
-            <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">
-                <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.edit")}</span>
-                <span
-                  data-slot="message-part-title-filename"
-                  classList={{ clickable: canOpen() }}
-                  onClick={(e) => {
-                    if (!canOpen()) return
-                    e.stopPropagation()
-                    data.openFile!(props.input.filePath!)
-                  }}
-                >
-                  {filename()}
-                </span>
-              </div>
-              <Show when={props.input.filePath?.includes("/")}>
-                <div data-slot="message-part-path">
-                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
-                </div>
-              </Show>
-            </div>
-            <div data-slot="message-part-actions">
-              <Show when={props.metadata.filediff}>
-                <DiffChanges changes={props.metadata.filediff} />
-              </Show>
-            </div>
-          </div>
-        }
+      <Show
+        when={isToolDone(props.status) || bodyReady()}
+        fallback={<ToolProgress label={i18n.t("ui.messagePart.title.edit")} subtitle={filename()} />}
       >
-        <Show when={props.metadata.filediff?.path || props.input.filePath}>
-          <div data-component="edit-content">
-            <Dynamic
-              component={diffComponent}
-              before={{
-                name: props.metadata?.filediff?.file || props.input.filePath,
-                contents: props.metadata?.filediff?.before || props.input.oldString,
-              }}
-              after={{
-                name: props.metadata?.filediff?.file || props.input.filePath,
-                contents: props.metadata?.filediff?.after || props.input.newString,
-              }}
-            />
-          </div>
-        </Show>
-        <DiagnosticsDisplay diagnostics={diagnostics()} />
-      </BasicTool>
+        <BasicTool
+          {...props}
+          icon="code-lines"
+          trigger={
+            <div data-component="edit-trigger">
+              <div data-slot="message-part-title-area">
+                <div data-slot="message-part-title">
+                  <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.edit")}</span>
+                  <span
+                    data-slot="message-part-title-filename"
+                    classList={{ clickable: canOpen() }}
+                    onClick={(e) => {
+                      if (!canOpen()) return
+                      e.stopPropagation()
+                      data.openFile!(props.input.filePath!)
+                    }}
+                  >
+                    {filename()}
+                  </span>
+                </div>
+                <Show when={props.input.filePath?.includes("/")}>
+                  <div data-slot="message-part-path">
+                    <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
+                  </div>
+                </Show>
+              </div>
+              <div data-slot="message-part-actions">
+                <Show when={props.metadata.filediff}>
+                  <DiffChanges changes={props.metadata.filediff} />
+                </Show>
+              </div>
+            </div>
+          }
+        >
+          <Show when={props.metadata.filediff?.path || props.input.filePath}>
+            <div data-component="edit-content">
+              <Dynamic
+                component={diffComponent}
+                before={{
+                  name: props.metadata?.filediff?.file || props.input.filePath,
+                  contents: props.metadata?.filediff?.before || props.input.oldString,
+                }}
+                after={{
+                  name: props.metadata?.filediff?.file || props.input.filePath,
+                  contents: props.metadata?.filediff?.after || props.input.newString,
+                }}
+              />
+            </div>
+          </Show>
+          <DiagnosticsDisplay diagnostics={diagnostics()} />
+        </BasicTool>
+      </Show>
     )
   },
 })
@@ -1164,6 +1211,7 @@ ToolRegistry.register({
     const filename = () => getFilename(props.input.filePath ?? "")
     const canOpen = () => !!(data.openFile && props.input.filePath)
     const isNotebook = () => (props.input.filePath ?? "").endsWith(".ipynb")
+    const bodyReady = () => !!props.input.content
 
     const notebookCells = createMemo((): NotebookCellProps[] => {
       if (!isNotebook() || !props.input.content) return []
@@ -1191,60 +1239,65 @@ ToolRegistry.register({
     })
 
     return (
-      <BasicTool
-        {...props}
-        icon={isNotebook() ? "code" : "code-lines"}
-        trigger={
-          <div data-component="write-trigger">
-            <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">
-                <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.write")}</span>
-                <span
-                  data-slot="message-part-title-filename"
-                  classList={{ clickable: canOpen() }}
-                  onClick={(e) => {
-                    if (!canOpen()) return
-                    e.stopPropagation()
-                    data.openFile!(props.input.filePath!)
-                  }}
-                >
-                  {filename()}
-                </span>
-              </div>
-              <Show when={props.input.filePath?.includes("/")}>
-                <div data-slot="message-part-path">
-                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
-                </div>
-              </Show>
-            </div>
-            <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
-          </div>
-        }
+      <Show
+        when={isToolDone(props.status) || bodyReady()}
+        fallback={<ToolProgress label={i18n.t("ui.messagePart.title.write")} subtitle={filename()} />}
       >
-        <Show when={props.input.content}>
-          <Show
-            when={isNotebook() && notebookCells().length > 0}
-            fallback={
-              <div data-component="write-content">
-                <Dynamic
-                  component={codeComponent}
-                  file={{
-                    name: props.input.filePath,
-                    contents: props.input.content,
-                    cacheKey: checksum(props.input.content),
-                  }}
-                  overflow="scroll"
-                />
+        <BasicTool
+          {...props}
+          icon={isNotebook() ? "code" : "code-lines"}
+          trigger={
+            <div data-component="write-trigger">
+              <div data-slot="message-part-title-area">
+                <div data-slot="message-part-title">
+                  <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.write")}</span>
+                  <span
+                    data-slot="message-part-title-filename"
+                    classList={{ clickable: canOpen() }}
+                    onClick={(e) => {
+                      if (!canOpen()) return
+                      e.stopPropagation()
+                      data.openFile!(props.input.filePath!)
+                    }}
+                  >
+                    {filename()}
+                  </span>
+                </div>
+                <Show when={props.input.filePath?.includes("/")}>
+                  <div data-slot="message-part-path">
+                    <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
+                  </div>
+                </Show>
               </div>
-            }
-          >
-            <div data-component="write-content">
-              <NotebookView cells={notebookCells()} title={filename()} />
+              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
             </div>
+          }
+        >
+          <Show when={props.input.content}>
+            <Show
+              when={isNotebook() && notebookCells().length > 0}
+              fallback={
+                <div data-component="write-content">
+                  <Dynamic
+                    component={codeComponent}
+                    file={{
+                      name: props.input.filePath,
+                      contents: props.input.content,
+                      cacheKey: checksum(props.input.content),
+                    }}
+                    overflow="scroll"
+                  />
+                </div>
+              }
+            >
+              <div data-component="write-content">
+                <NotebookView cells={notebookCells()} title={filename()} />
+              </div>
+            </Show>
           </Show>
-        </Show>
-        <DiagnosticsDisplay diagnostics={diagnostics()} />
-      </BasicTool>
+          <DiagnosticsDisplay diagnostics={diagnostics()} />
+        </BasicTool>
+      </Show>
     )
   },
 })
@@ -1275,65 +1328,70 @@ ToolRegistry.register({
     })
 
     return (
-      <BasicTool
-        {...props}
-        icon="code-lines"
-        trigger={{
-          title: i18n.t("ui.tool.patch"),
-          subtitle: subtitle(),
-        }}
+      <Show
+        when={isToolDone(props.status) || files().length > 0}
+        fallback={<ToolProgress label={i18n.t("ui.tool.patch")} subtitle={subtitle()} />}
       >
-        <Show when={files().length > 0}>
-          <div data-component="apply-patch-files">
-            <For each={files()}>
-              {(file) => (
-                <div data-component="apply-patch-file">
-                  <div data-slot="apply-patch-file-header">
-                    <Switch>
-                      <Match when={file.type === "delete"}>
-                        <span data-slot="apply-patch-file-action" data-type="delete">
-                          {i18n.t("ui.patch.action.deleted")}
-                        </span>
-                      </Match>
-                      <Match when={file.type === "add"}>
-                        <span data-slot="apply-patch-file-action" data-type="add">
-                          {i18n.t("ui.patch.action.created")}
-                        </span>
-                      </Match>
-                      <Match when={file.type === "move"}>
-                        <span data-slot="apply-patch-file-action" data-type="move">
-                          {i18n.t("ui.patch.action.moved")}
-                        </span>
-                      </Match>
-                      <Match when={file.type === "update"}>
-                        <span data-slot="apply-patch-file-action" data-type="update">
-                          {i18n.t("ui.patch.action.patched")}
-                        </span>
-                      </Match>
-                    </Switch>
-                    <span data-slot="apply-patch-file-path">{file.relativePath}</span>
+        <BasicTool
+          {...props}
+          icon="code-lines"
+          trigger={{
+            title: i18n.t("ui.tool.patch"),
+            subtitle: subtitle(),
+          }}
+        >
+          <Show when={files().length > 0}>
+            <div data-component="apply-patch-files">
+              <For each={files()}>
+                {(file) => (
+                  <div data-component="apply-patch-file">
+                    <div data-slot="apply-patch-file-header">
+                      <Switch>
+                        <Match when={file.type === "delete"}>
+                          <span data-slot="apply-patch-file-action" data-type="delete">
+                            {i18n.t("ui.patch.action.deleted")}
+                          </span>
+                        </Match>
+                        <Match when={file.type === "add"}>
+                          <span data-slot="apply-patch-file-action" data-type="add">
+                            {i18n.t("ui.patch.action.created")}
+                          </span>
+                        </Match>
+                        <Match when={file.type === "move"}>
+                          <span data-slot="apply-patch-file-action" data-type="move">
+                            {i18n.t("ui.patch.action.moved")}
+                          </span>
+                        </Match>
+                        <Match when={file.type === "update"}>
+                          <span data-slot="apply-patch-file-action" data-type="update">
+                            {i18n.t("ui.patch.action.patched")}
+                          </span>
+                        </Match>
+                      </Switch>
+                      <span data-slot="apply-patch-file-path">{file.relativePath}</span>
+                      <Show when={file.type !== "delete"}>
+                        <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
+                      </Show>
+                      <Show when={file.type === "delete"}>
+                        <span data-slot="apply-patch-deletion-count">-{file.deletions}</span>
+                      </Show>
+                    </div>
                     <Show when={file.type !== "delete"}>
-                      <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
-                    </Show>
-                    <Show when={file.type === "delete"}>
-                      <span data-slot="apply-patch-deletion-count">-{file.deletions}</span>
+                      <div data-component="apply-patch-file-diff">
+                        <Dynamic
+                          component={diffComponent}
+                          before={{ name: file.filePath, contents: file.before }}
+                          after={{ name: file.filePath, contents: file.after }}
+                        />
+                      </div>
                     </Show>
                   </div>
-                  <Show when={file.type !== "delete"}>
-                    <div data-component="apply-patch-file-diff">
-                      <Dynamic
-                        component={diffComponent}
-                        before={{ name: file.filePath, contents: file.before }}
-                        after={{ name: file.filePath, contents: file.after }}
-                      />
-                    </div>
-                  </Show>
-                </div>
-              )}
-            </For>
-          </div>
-        </Show>
-      </BasicTool>
+                )}
+              </For>
+            </div>
+          </Show>
+        </BasicTool>
+      </Show>
     )
   },
 })

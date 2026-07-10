@@ -66,6 +66,12 @@ export const dict = {
   "ui.tool.todos.read": "อ่านรายการงาน",
   "ui.tool.questions": "คำถาม",
   "ui.tool.agent": "เอเจนต์ {{type}}",
+  "ui.tool.websearch": "ค้นหาเว็บ",
+  "ui.tool.codesearch": "ค้นหาโค้ด",
+  "ui.tool.multiedit": "แก้ไขหลายจุด",
+  "ui.tool.learn": "เรียนรู้",
+  "ui.tool.notebook": "โน้ตบุ๊ก",
+  "ui.tool.skill": "ทักษะ: {{name}}",
 
   "ui.common.file.one": "ไฟล์",
   "ui.common.file.other": "ไฟล์",

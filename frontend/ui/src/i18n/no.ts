@@ -68,6 +68,12 @@ export const dict: Record<Keys, string> = {
   "ui.tool.todos.read": "Les gjøremål",
   "ui.tool.questions": "Spørsmål",
   "ui.tool.agent": "{{type}}-agent",
+  "ui.tool.websearch": "Websøk",
+  "ui.tool.codesearch": "Kodesøk",
+  "ui.tool.multiedit": "Multiredigering",
+  "ui.tool.learn": "Lær",
+  "ui.tool.notebook": "Notatbok",
+  "ui.tool.skill": "Skill: {{name}}",
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",

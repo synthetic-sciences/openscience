@@ -11,6 +11,7 @@ import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
 import { Storage } from "../storage/storage"
+import { createCoalescer } from "../storage/coalescer"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
@@ -386,16 +387,26 @@ export namespace Session {
     }),
   ])
 
+  const partWriter = createCoalescer<MessageV2.Part>(
+    (_key, part) => Storage.write(["part", part.messageID, part.id], part),
+    250,
+  )
+
   export const updatePart = fn(UpdatePartInput, async (input) => {
     const part = "delta" in input ? input.part : input
     const delta = "delta" in input ? input.delta : undefined
-    await Storage.write(["part", part.messageID, part.id], part)
-    Bus.publish(MessageV2.Event.PartUpdated, {
-      part,
-      delta,
-    })
+    // Publish immediately so the SSE stream is not gated on the disk write.
+    Bus.publish(MessageV2.Event.PartUpdated, { part, delta })
+    const key = part.sessionID + "/" + part.messageID + "/" + part.id
+    partWriter.push(key, part)
+    // Only a streaming delta rides the 250ms timer plus the idle flush; whole/synthetic
+    // parts (no delta) and the final text/reasoning-end part flush immediately.
+    const streaming = delta !== undefined && (part.type === "text" || part.type === "reasoning")
+    if (!streaming) await partWriter.flushNow(key)
     return part
   })
+
+  export const flushPendingParts = (sessionID: string) => partWriter.flushWhere((k) => k.startsWith(sessionID + "/"))
 
   export const getUsage = fn(
     z.object({

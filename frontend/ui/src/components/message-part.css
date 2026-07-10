@@ -839,3 +839,31 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* Compact spinner + label shown while a write/edit/apply_patch tool is running,
+   before its diff/content exists — revealed as the full card on completion. */
+[data-component="tool-progress"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-weak);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-large);
+
+  [data-component="spinner"] {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+
+  [data-slot="tool-progress-subtitle"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-base);
+  }
+}
