@@ -47,20 +47,31 @@ import os as _os
 
 
 def _available_ram_bytes():
+    # We need *available* RAM (not total) — a box already using most of its
+    # memory must pick fewer workers, or the guard green-lights an OOM.
     try:
         import psutil
         return psutil.virtual_memory().available
     except Exception:
-        try:  # POSIX fallback (psutil gives *available*, which is preferred)
-            return _os.sysconf('SC_PAGE_SIZE') * _os.sysconf('SC_PHYS_PAGES')
-        except (ValueError, OSError, AttributeError):
-            return 8 * 1024 ** 3  # unknown -> assume 8 GB
+        pass
+    try:  # Linux: MemAvailable is the accurate figure
+        with open('/proc/meminfo') as f:
+            for line in f:
+                if line.startswith('MemAvailable:'):
+                    return int(line.split()[1]) * 1024
+    except Exception:
+        pass
+    try:  # last resort: TOTAL physical RAM, halved so we don't over-commit
+        return (_os.sysconf('SC_PAGE_SIZE') * _os.sysconf('SC_PHYS_PAGES')) // 2
+    except (ValueError, OSError, AttributeError):
+        return 4 * 1024 ** 3  # unknown -> assume 4 GB
 
 
 def memory_safe_n_jobs(adata, fraction=0.5):
-    """Largest worker count whose per-worker dense copies fit in `fraction` of RAM."""
+    """Largest worker count whose per-worker dense copies fit in `fraction` of RAM.
+    Reserves one copy for the parent process, which also densifies the matrix."""
     per_worker = max(1, adata.n_obs * adata.n_vars * 8)  # float64 dense copy, bytes
-    fits = int(_available_ram_bytes() * fraction // per_worker)
+    fits = int(_available_ram_bytes() * fraction // per_worker) - 1  # -1: parent's copy
     return max(1, min(_os.cpu_count() or 1, fits))
 
 

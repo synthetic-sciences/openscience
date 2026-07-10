@@ -1087,31 +1087,21 @@ export namespace OpenScience {
     return result
   }
 
-  /** BLAS / OpenMP / joblib parallelism knobs. Left unset, numpy/scipy BLAS,
-   *  numba, and joblib each default to *all* cores — and joblib's loky backend
-   *  forks one full data copy per worker. Nested (a scanpy step with n_jobs on
-   *  top of all-core BLAS) both oversubscribes CPU and multiplies memory, which
-   *  is how a single analysis balloons to tens of GB across several processes
-   *  (issue #102). Cap to a modest share of cores as a default the user can
-   *  override. This is not a hard memory limit — macOS ignores RLIMIT_AS — it
-   *  bounds the parallelism multiplier. */
-  const COMPUTE_PARALLELISM_VARS = [
-    "OMP_NUM_THREADS",
-    "OPENBLAS_NUM_THREADS",
-    "MKL_NUM_THREADS",
-    "NUMEXPR_NUM_THREADS",
-    "VECLIB_MAXIMUM_THREADS",
-    "NUMBA_NUM_THREADS",
-    "BLIS_NUM_THREADS",
-    "LOKY_MAX_CPU_COUNT",
-  ]
+  const CPU_COUNT = Math.max(1, os.cpus().length)
+
+  /** joblib's loky backend forks one full data COPY per worker process, so its
+   *  default worker count (n_jobs=-1) is the memory multiplier behind #102. Cap
+   *  LOKY_MAX_CPU_COUNT to a modest share of cores, only when unset.
+   *
+   *  We deliberately do NOT cap the BLAS/OpenMP/numba THREAD pools
+   *  (OMP_NUM_THREADS, MKL_NUM_THREADS, …): those are shared-memory threads, so
+   *  capping them throttles legitimate single-process compute (a bash-run
+   *  numpy/torch job) without saving any memory, and joblib already pins worker
+   *  thread pools to 1 to avoid nested oversubscription. This is not a hard
+   *  memory limit — macOS ignores RLIMIT_AS — it bounds the worker-COPY count. */
   export function withComputeParallelismCaps(env: Record<string, string>): Record<string, string> {
-    const cap = String(Math.max(1, Math.min(os.cpus().length, 4)))
-    const result = { ...env }
-    for (const key of COMPUTE_PARALLELISM_VARS) {
-      if (!result[key]) result[key] = cap
-    }
-    return result
+    if (env.LOKY_MAX_CPU_COUNT) return env
+    return { ...env, LOKY_MAX_CPU_COUNT: String(Math.min(CPU_COUNT, 4)) }
   }
 
   /** Subprocess env = sanitized base env + any user-owned BYOK provider keys

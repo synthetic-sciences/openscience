@@ -2,29 +2,30 @@ import { expect, test } from "bun:test"
 import os from "os"
 import { OpenScience } from "../src/openscience"
 
-const expectedCap = String(Math.max(1, Math.min(os.cpus().length, 4)))
+const cap = String(Math.min(Math.max(1, os.cpus().length), 4))
 
-test("caps BLAS/OpenMP/joblib parallelism vars when unset", () => {
+test("caps joblib worker-process count (LOKY) when unset", () => {
   const out = OpenScience.withComputeParallelismCaps({ PATH: "/usr/bin" })
-  expect(out.OMP_NUM_THREADS).toBe(expectedCap)
-  expect(out.OPENBLAS_NUM_THREADS).toBe(expectedCap)
-  expect(out.MKL_NUM_THREADS).toBe(expectedCap)
-  expect(out.VECLIB_MAXIMUM_THREADS).toBe(expectedCap) // macOS Accelerate
-  expect(out.NUMBA_NUM_THREADS).toBe(expectedCap)
-  expect(out.LOKY_MAX_CPU_COUNT).toBe(expectedCap) // bounds joblib worker-process copies
+  expect(out.LOKY_MAX_CPU_COUNT).toBe(cap)
   expect(out.PATH).toBe("/usr/bin") // unrelated vars untouched
 })
 
-test("never overrides a value the user already set", () => {
-  const out = OpenScience.withComputeParallelismCaps({ OMP_NUM_THREADS: "16", MKL_NUM_THREADS: "8" })
-  expect(out.OMP_NUM_THREADS).toBe("16")
-  expect(out.MKL_NUM_THREADS).toBe("8")
-  // still fills the ones the user did not set
-  expect(out.OPENBLAS_NUM_THREADS).toBe(expectedCap)
+test("does NOT cap shared-memory BLAS/OpenMP/numba thread pools", () => {
+  // Those are threads (no per-thread data copy) — capping them only throttles
+  // legit compute without saving memory. Only worker PROCESSES are bounded.
+  const out = OpenScience.withComputeParallelismCaps({})
+  expect(out.OMP_NUM_THREADS).toBeUndefined()
+  expect(out.MKL_NUM_THREADS).toBeUndefined()
+  expect(out.NUMBA_NUM_THREADS).toBeUndefined()
 })
 
-test("cap is at least 1 and at most 4", () => {
-  const cap = Number(OpenScience.withComputeParallelismCaps({}).OMP_NUM_THREADS)
-  expect(cap).toBeGreaterThanOrEqual(1)
-  expect(cap).toBeLessThanOrEqual(4)
+test("never overrides a user-set LOKY_MAX_CPU_COUNT", () => {
+  const out = OpenScience.withComputeParallelismCaps({ LOKY_MAX_CPU_COUNT: "16" })
+  expect(out.LOKY_MAX_CPU_COUNT).toBe("16")
+})
+
+test("cap is between 1 and 4", () => {
+  const n = Number(OpenScience.withComputeParallelismCaps({}).LOKY_MAX_CPU_COUNT)
+  expect(n).toBeGreaterThanOrEqual(1)
+  expect(n).toBeLessThanOrEqual(4)
 })
