@@ -3,6 +3,7 @@ import { Tool } from "../tool"
 import { spawn, type ChildProcess } from "child_process"
 import path from "path"
 import os from "os"
+import { Shell } from "@/shell/shell"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
 import { Config } from "@/config/config"
@@ -83,9 +84,7 @@ const kernels = new Map<string, Kernel>()
 // Clean up all kernels on process exit
 function cleanupAll() {
   for (const [id, kernel] of kernels) {
-    try {
-      kernel.process.kill()
-    } catch {}
+    Shell.killTreeSync(kernel.process)
     try {
       require("fs").unlinkSync(kernel.scriptPath)
     } catch {}
@@ -102,9 +101,7 @@ function cleanupIdle() {
   const idle = 30 * 60 * 1000 // 30 min
   for (const [id, kernel] of kernels) {
     if (now - kernel.lastUsed > idle) {
-      try {
-        kernel.process.kill()
-      } catch {}
+      void Shell.killTree(kernel.process, { exited: () => kernel.process.exitCode !== null })
       try {
         require("fs").unlinkSync(kernel.scriptPath)
       } catch {}
@@ -149,6 +146,8 @@ async function getKernel(sessionID: string): Promise<Kernel> {
     cwd: Instance.directory,
     env: { ...(await OpenScience.subprocessEnv(process.env)), PYTHONUNBUFFERED: "1" },
     stdio: ["pipe", "pipe", "pipe"],
+    // Own process group so killing the kernel reaps its joblib/BLAS children (#102).
+    detached: process.platform !== "win32",
   })
 
   // Collect kernel stderr (startup warnings, etc.)
@@ -162,7 +161,7 @@ async function getKernel(sessionID: string): Promise<Kernel> {
   // Wait for ready signal
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      proc.kill()
+      void Shell.killTree(proc, { exited: () => proc.exitCode !== null })
       reject(new Error(`Kernel startup timed out. stderr: ${kernelStderr}`))
     }, 15_000)
 
@@ -198,10 +197,8 @@ function executeInKernel(
 ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      // Kill the timed-out kernel — it will be restarted on next call
-      try {
-        kernel.process.kill()
-      } catch {}
+      // Kill the timed-out kernel (and its worker children) — restarted next call
+      void Shell.killTree(kernel.process, { exited: () => kernel.process.exitCode !== null })
       reject(new Error(`Cell execution timed out after ${Math.round(timeout / 1000)}s`))
     }, timeout)
 

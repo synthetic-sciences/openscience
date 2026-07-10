@@ -4,6 +4,7 @@ import { spawn, type ChildProcess } from "child_process"
 import path from "path"
 import os from "os"
 import { unlinkSync } from "fs"
+import { Shell } from "@/shell/shell"
 import { Instance } from "@/project/instance"
 import { OpenScience } from "@/openscience"
 import { Config } from "@/config/config"
@@ -235,6 +236,8 @@ class RKernel implements Kernel {
       cwd: opts?.cwd ?? Instance.directory,
       env: { ...(await OpenScience.subprocessEnv(process.env)), ...(opts?.env ?? {}) },
       stdio: ["pipe", "pipe", "pipe"],
+      // Own process group so killing the kernel reaps its worker children (#102).
+      detached: process.platform !== "win32",
     })
     this.proc = proc
 
@@ -245,9 +248,7 @@ class RKernel implements Kernel {
 
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        try {
-          proc.kill()
-        } catch {}
+        void Shell.killTree(proc, { exited: () => proc.exitCode !== null })
         reject(new Error(`R kernel startup timed out. stderr: ${this.stderrTail}`))
       }, 20_000)
       let buf = ""
@@ -280,17 +281,13 @@ class RKernel implements Kernel {
     const raw = await new Promise<RawResult>((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup()
-        try {
-          proc.kill()
-        } catch {}
+        void Shell.killTree(proc, { exited: () => proc.exitCode !== null })
         reject(new Error(`Cell execution timed out after ${Math.round(timeout / 1000)}s`))
       }, timeout)
 
       const onAbort = () => {
         cleanup()
-        try {
-          proc.kill()
-        } catch {}
+        void Shell.killTree(proc, { exited: () => proc.exitCode !== null })
         reject(new Error("Execution aborted"))
       }
 
@@ -325,9 +322,19 @@ class RKernel implements Kernel {
   }
 
   async shutdown(): Promise<void> {
-    try {
-      this.proc?.kill()
-    } catch {}
+    const proc = this.proc
+    if (proc) await Shell.killTree(proc, { exited: () => proc.exitCode !== null })
+    if (this.scriptPath) {
+      try {
+        unlinkSync(this.scriptPath)
+      } catch {}
+      this.scriptPath = undefined
+    }
+  }
+
+  /** Synchronous group kill for process-exit handlers. */
+  killSync(): void {
+    if (this.proc) Shell.killTreeSync(this.proc)
     if (this.scriptPath) {
       try {
         unlinkSync(this.scriptPath)
@@ -381,6 +388,14 @@ class RKernelManager implements KernelManager {
       this.kernels.delete(id)
     }
   }
+
+  /** Sync variant for process-exit handlers. */
+  shutdownAllSync(): void {
+    for (const [id, k] of this.kernels) {
+      k.killSync()
+      this.kernels.delete(id)
+    }
+  }
 }
 
 /** Process-wide singleton manager. */
@@ -390,7 +405,7 @@ let exitHooked = false
 function hookExit() {
   if (exitHooked) return
   exitHooked = true
-  const cleanup = () => void rKernels.shutdownAll()
+  const cleanup = () => rKernels.shutdownAllSync()
   process.on("exit", cleanup)
   process.on("SIGTERM", cleanup)
   process.on("SIGINT", cleanup)

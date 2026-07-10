@@ -34,6 +34,28 @@ export namespace Shell {
       }
     }
   }
+  /** Synchronous best-effort group SIGKILL. For process-exit handlers, where
+   *  the event loop is already stopping and the async killTree (which sleeps
+   *  before escalating) cannot complete. Requires the child to be spawned
+   *  `detached` so the negative pid targets the whole group. */
+  export function killTreeSync(proc: ChildProcess): void {
+    const pid = proc.pid
+    if (!pid) return
+    if (process.platform === "win32") {
+      try {
+        spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" })
+      } catch {}
+      return
+    }
+    try {
+      process.kill(-pid, "SIGKILL")
+    } catch {
+      try {
+        proc.kill("SIGKILL")
+      } catch {}
+    }
+  }
+
   const BLACKLIST = new Set(["fish", "nu"])
 
   function exists(p: string) {
