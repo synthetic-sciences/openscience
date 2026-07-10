@@ -369,7 +369,14 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const attachments = createMemo(() =>
     files()?.filter((f) => {
       const mime = f.mime
-      return mime.startsWith("image/") || mime === "application/pdf"
+      // Images and PDFs are always attachments. A raw uploaded blob (data: URL with
+      // no source.text — e.g. an uploaded .md/.txt) also renders as a filename chip;
+      // @file references carry source.text and stay inline instead.
+      return (
+        mime.startsWith("image/") ||
+        mime === "application/pdf" ||
+        (f.url?.startsWith("data:") === true && f.source?.text === undefined)
+      )
     }),
   )
 

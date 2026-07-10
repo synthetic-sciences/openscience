@@ -1202,7 +1202,16 @@ export namespace SessionPrompt {
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: Buffer.from(part.url, "base64url").toString(),
+                    // part.url is a full data: URL (data:text/plain[;base64],<payload>).
+                    // Decode only the payload after the comma; base64url-decoding the
+                    // whole URL left a ~12-byte garbage prefix from "data:text/plain,".
+                    text: iife(() => {
+                      const comma = part.url.indexOf(",")
+                      const payload = comma === -1 ? part.url : part.url.slice(comma + 1)
+                      return part.url.slice(0, comma).includes(";base64")
+                        ? Buffer.from(payload, "base64").toString()
+                        : decodeURIComponent(payload)
+                    }),
                   },
                   {
                     ...part,

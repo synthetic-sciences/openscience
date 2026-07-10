@@ -84,8 +84,15 @@ function same<T>(a: readonly T[], b: readonly T[]) {
 
 function isAttachment(part: PartType | undefined) {
   if (part?.type !== "file") return false
-  const mime = (part as FilePart).mime ?? ""
-  return mime.startsWith("image/") || mime === "application/pdf"
+  const file = part as FilePart
+  const mime = file.mime ?? ""
+  // Images/PDFs, plus raw uploaded blobs (data: URL, no source.text — e.g. .md/.txt).
+  // @file references carry source.text and render inline, not as chips.
+  return (
+    mime.startsWith("image/") ||
+    mime === "application/pdf" ||
+    (file.url?.startsWith("data:") === true && file.source?.text === undefined)
+  )
 }
 
 function AssistantMessageItem(props: {
