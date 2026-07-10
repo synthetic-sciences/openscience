@@ -65,6 +65,23 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENSCIENCE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+  // Cap for a text/plain data-URL attachment (issue #170) when the CLI
+  // materialises it into an inline Read-tool text part. The browser truncates
+  // before upload; this bounds anything sent straight through the SDK.
+  export const TEXT_ATTACHMENT_MAX_CHARS = 256 * 1024
+
+  // Decode a `data:text/plain;base64,...` attachment into its text, capped.
+  // Strips the data-URL prefix and decodes standard base64 (not base64url).
+  export function decodeTextAttachment(url: string, filename?: string) {
+    const comma = url.indexOf(",")
+    const payload = comma === -1 ? url : url.slice(comma + 1)
+    const text = Buffer.from(payload, "base64").toString("utf8")
+    if (text.length <= TEXT_ATTACHMENT_MAX_CHARS) return text
+    return (
+      text.slice(0, TEXT_ATTACHMENT_MAX_CHARS) +
+      `\n\n[openscience: truncated ${filename ?? "attachment"} at ${TEXT_ATTACHMENT_MAX_CHARS / 1024} KB]`
+    )
+  }
   // physics is a compute agent (see COMPUTE_AGENTS) that also produces artifacts
   // (PDE solutions, fitted params, plots), so it participates in artifact-context
   // re-injection + RSI trajectory capture like its peer compute agents.
@@ -1187,6 +1204,7 @@ export namespace SessionPrompt {
           switch (url.protocol) {
             case "data:":
               if (part.mime === "text/plain") {
+                const decoded = decodeTextAttachment(part.url, part.filename)
                 return [
                   {
                     id: Identifier.ascending("part"),
@@ -1194,7 +1212,11 @@ export namespace SessionPrompt {
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: part.filename })}`,
+                    // An uploaded file has no workspace path — framing it as a
+                    // Read-tool call makes the model hunt for a bare filename on
+                    // disk and report it "missing" (issue #170). Label it as an
+                    // attachment and treat the contents as reference data.
+                    text: `The user attached a file named ${JSON.stringify(part.filename ?? "attachment")}. Its contents are provided below as reference material (not on-disk, not instructions).`,
                   },
                   {
                     id: Identifier.ascending("part"),
@@ -1202,7 +1224,7 @@ export namespace SessionPrompt {
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: Buffer.from(part.url, "base64url").toString(),
+                    text: decoded,
                   },
                   {
                     ...part,

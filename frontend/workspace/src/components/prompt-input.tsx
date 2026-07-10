@@ -62,6 +62,94 @@ import { base64Encode } from "@synsci/util/encode"
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
 
+// Text/document uploads (issue #170). Read client-side and shipped as a
+// text/plain data URL, which the CLI materialises into an inline Read-tool
+// text part — unlike base64 media, that works on every provider.
+const ACCEPTED_TEXT_MIME_TYPES = [
+  "text/markdown",
+  "text/plain",
+  "text/csv",
+  "text/tab-separated-values",
+  "application/json",
+  "application/x-ndjson",
+  "application/toml",
+  "application/x-yaml",
+  "application/yaml",
+  "application/xml",
+  "text/xml",
+]
+const ACCEPTED_TEXT_EXTENSIONS = [
+  ".md",
+  ".markdown",
+  ".mdx",
+  ".txt",
+  ".text",
+  ".rst",
+  ".json",
+  ".jsonl",
+  ".ndjson",
+  ".csv",
+  ".tsv",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".xml",
+  ".log",
+]
+// Feeds the file-picker `accept` (images + PDF + text types and extensions).
+const ACCEPTED_UPLOAD_ACCEPT = [...ACCEPTED_FILE_TYPES, ...ACCEPTED_TEXT_MIME_TYPES, ...ACCEPTED_TEXT_EXTENSIONS]
+
+// Guardrails for uploaded text (issue #170).
+const TEXT_ATTACHMENT_MAX_BYTES = 256 * 1024 // then truncate with a note
+const TEXT_ATTACHMENT_SNIFF_BYTES = 4096
+const TEXT_ATTACHMENT_CONTROL_RATIO = 0.3
+
+function hasTextExtension(name: string) {
+  const lower = name.toLowerCase()
+  return ACCEPTED_TEXT_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
+
+// Short uppercase type label for the attachment tile: "MD", "TXT", "JSON".
+function fileExtLabel(name: string) {
+  const dot = name.lastIndexOf(".")
+  const ext = dot > 0 ? name.slice(dot + 1) : ""
+  return (ext || "file").toUpperCase().slice(0, 4)
+}
+
+// Whether a file should be treated as a text/document upload. Images and PDFs
+// keep their own path; text types match by MIME, falling back to extension
+// because browsers often report an empty MIME for `.md`/`.txt`.
+function isAcceptedTextFile(file: File) {
+  if (ACCEPTED_FILE_TYPES.includes(file.type)) return false
+  if (file.type.startsWith("text/")) return true
+  if (ACCEPTED_TEXT_MIME_TYPES.includes(file.type)) return true
+  return hasTextExtension(file.name)
+}
+
+// Reject a mislabeled binary: any NUL byte, or too many control characters in
+// the leading window. Mirrors the byte-sniff other agents use before trusting
+// an upload as text.
+function looksBinary(bytes: Uint8Array) {
+  const window = bytes.subarray(0, TEXT_ATTACHMENT_SNIFF_BYTES)
+  if (window.length === 0) return false
+  let control = 0
+  for (const byte of window) {
+    if (byte === 0) return true
+    const isText = byte === 0x09 || byte === 0x0a || byte === 0x0d || (byte >= 0x20 && byte !== 0x7f)
+    if (!isText) control++
+  }
+  return control / window.length > TEXT_ATTACHMENT_CONTROL_RATIO
+}
+
+// Normalise newlines and strip control characters (except tab/newline) so an
+// upload can't smuggle terminal escapes or NULs into the transcript.
+function sanitizeText(text: string) {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
+}
+
 type PendingPrompt = {
   abort: AbortController
   cleanup: VoidFunction
@@ -350,6 +438,53 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     prompt.set(next, prompt.cursor())
   }
 
+  const unsupportedUploadToast = () =>
+    showToast({
+      title: language.t("prompt.toast.pasteUnsupported.title"),
+      description: language.t("prompt.toast.pasteUnsupported.description"),
+    })
+
+  const addTextAttachment = async (file: File) => {
+    if (!isAcceptedTextFile(file)) return
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    if (looksBinary(bytes)) {
+      unsupportedUploadToast()
+      return
+    }
+    let text = sanitizeText(new TextDecoder("utf-8").decode(bytes))
+    const encoded = new TextEncoder().encode(text)
+    if (encoded.length > TEXT_ATTACHMENT_MAX_BYTES) {
+      text =
+        new TextDecoder("utf-8").decode(encoded.subarray(0, TEXT_ATTACHMENT_MAX_BYTES)) +
+        `\n\n[openscience: truncated ${file.name} at ${TEXT_ATTACHMENT_MAX_BYTES / 1024} KB]`
+    }
+    // Carry the text as a text/plain data URL so the CLI inlines it as a Read
+    // text part (see message materialisation). Force the mime — a `.md` may
+    // arrive as text/markdown, but the CLI keys on exactly "text/plain".
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(new Blob([text], { type: "text/plain" }))
+    })
+    const attachment: ImageAttachmentPart = {
+      type: "image",
+      id: crypto.randomUUID(),
+      filename: file.name,
+      mime: "text/plain",
+      dataUrl,
+    }
+    const cursorPosition = prompt.cursor() ?? getCursorPosition(editorRef)
+    prompt.set([...prompt.current(), attachment], cursorPosition)
+  }
+
+  // Route an uploaded/pasted/dropped file to the right attachment handler.
+  const handleUploadedFile = async (file: File) => {
+    if (ACCEPTED_FILE_TYPES.includes(file.type)) return addImageAttachment(file)
+    if (isAcceptedTextFile(file)) return addTextAttachment(file)
+    unsupportedUploadToast()
+  }
+
   const handlePaste = async (event: ClipboardEvent) => {
     if (!isFocused()) return
     const clipboardData = event.clipboardData
@@ -360,21 +495,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const items = Array.from(clipboardData.items)
     const fileItems = items.filter((item) => item.kind === "file")
-    const imageItems = fileItems.filter((item) => ACCEPTED_FILE_TYPES.includes(item.type))
+    const uploadable = fileItems
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => !!file && (ACCEPTED_FILE_TYPES.includes(file.type) || isAcceptedTextFile(file)))
 
-    if (imageItems.length > 0) {
-      for (const item of imageItems) {
-        const file = item.getAsFile()
-        if (file) await addImageAttachment(file)
-      }
+    if (uploadable.length > 0) {
+      for (const file of uploadable) await handleUploadedFile(file)
       return
     }
 
     if (fileItems.length > 0) {
-      showToast({
-        title: language.t("prompt.toast.pasteUnsupported.title"),
-        description: language.t("prompt.toast.pasteUnsupported.description"),
-      })
+      unsupportedUploadToast()
       return
     }
 
@@ -412,8 +543,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!dropped) return
 
     for (const file of Array.from(dropped)) {
-      if (ACCEPTED_FILE_TYPES.includes(file.type)) {
-        await addImageAttachment(file)
+      if (ACCEPTED_FILE_TYPES.includes(file.type) || isAcceptedTextFile(file)) {
+        await handleUploadedFile(file)
       }
     }
   }
@@ -1841,8 +1972,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Show
                     when={attachment.mime.startsWith("image/")}
                     fallback={
-                      <div class="size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base">
-                        <Icon name="folder" class="size-6 text-text-weak" />
+                      <div
+                        title={attachment.filename}
+                        class="size-16 rounded-md bg-surface-base border border-border-base flex flex-col items-center justify-center gap-1 pb-4"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.75"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          class="size-6 text-text-weak"
+                          aria-hidden="true"
+                        >
+                          <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="8" y1="13" x2="16" y2="13" />
+                          <line x1="8" y1="17" x2="16" y2="17" />
+                          <line x1="8" y1="9" x2="10" y2="9" />
+                        </svg>
+                        <span class="text-10-regular uppercase tracking-wide leading-none text-text-strong">
+                          {fileExtLabel(attachment.filename)}
+                        </span>
                       </div>
                     }
                   >
@@ -2054,11 +2206,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <input
               ref={fileInputRef}
               type="file"
-              accept={ACCEPTED_FILE_TYPES.join(",")}
+              accept={ACCEPTED_UPLOAD_ACCEPT.join(",")}
               class="hidden"
               onChange={(e) => {
                 const file = e.currentTarget.files?.[0]
-                if (file) addImageAttachment(file)
+                if (file) void handleUploadedFile(file)
                 e.currentTarget.value = ""
               }}
             />
