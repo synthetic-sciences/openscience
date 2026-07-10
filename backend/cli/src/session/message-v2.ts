@@ -552,8 +552,8 @@ export namespace MessageV2 {
               type: "text",
               text: part.text,
             })
-          // text/plain and directory files are converted into text parts, ignore them
-          if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
+          // Text and directory files are converted into text parts, ignore them
+          if (part.type === "file" && !part.mime.startsWith("text/") && part.mime !== "application/x-directory") {
             const dropped = dropImage(part.mime, part.url, part.filename)
             if (dropped) {
               userMessage.parts.push({ type: "text", text: dropped })

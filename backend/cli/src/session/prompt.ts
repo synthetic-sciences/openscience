@@ -1186,7 +1186,8 @@ export namespace SessionPrompt {
           const url = new URL(part.url)
           switch (url.protocol) {
             case "data:":
-              if (part.mime === "text/plain") {
+              if (part.mime.startsWith("text/")) {
+                const text = await fetch(part.url).then((response) => response.text())
                 return [
                   {
                     id: Identifier.ascending("part"),
@@ -1202,7 +1203,7 @@ export namespace SessionPrompt {
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: Buffer.from(part.url, "base64url").toString(),
+                    text,
                   },
                   {
                     ...part,
@@ -1224,7 +1225,7 @@ export namespace SessionPrompt {
                 part.mime = "application/x-directory"
               }
 
-              if (part.mime === "text/plain") {
+              if (part.mime.startsWith("text/")) {
                 let offset: number | undefined = undefined
                 let limit: number | undefined = undefined
                 const range = {

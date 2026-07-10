@@ -279,17 +279,24 @@ describe("session.message-v2.toModelMessage", () => {
           {
             ...basePart(messageID, "p5"),
             type: "file",
+            mime: "text/markdown",
+            filename: "notes.md",
+            url: "https://example.com/notes.md",
+          },
+          {
+            ...basePart(messageID, "p6"),
+            type: "file",
             mime: "application/x-directory",
             filename: "dir",
             url: "https://example.com/dir",
           },
           {
-            ...basePart(messageID, "p6"),
+            ...basePart(messageID, "p7"),
             type: "compaction",
             auto: true,
           },
           {
-            ...basePart(messageID, "p7"),
+            ...basePart(messageID, "p8"),
             type: "subtask",
             prompt: "prompt",
             description: "desc",
