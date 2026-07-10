@@ -37,7 +37,7 @@ import {
   IconAtom,
   IconActivity,
 } from "@/thesis/shared/Icon"
-import { thesisAPI, type ThesisNode } from "@/thesis/api/thesis"
+import { thesisAPI, type InitProjectResponse, type ThesisNode } from "@/thesis/api/thesis"
 import { toast } from "@/thesis/Toast"
 import { promptDialog } from "@/thesis/dialogs"
 import { AsciiSpinner } from "@/thesis/shared/AsciiSpinner"
@@ -62,6 +62,24 @@ const MODES: { k: Mode; label: string; Icon: ModeIcon }[] = [
   { k: "orbit", label: "orbit", Icon: IconAtom },
   { k: "timeline", label: "timeline", Icon: IconActivity },
 ]
+
+function initProjectFailureMessage(result: InitProjectResponse): string {
+  const host = result.host ? ` (${result.host})` : ""
+  switch (result.error) {
+    case "unauthenticated":
+      return `Atlas login required${host}. Run openscience login to initialize project graphs. Codex subscription models still work without Atlas.`
+    case "plan":
+      return `Atlas plan required${host}. Project graphs need Atlas access; Codex subscription models still work without Atlas.`
+    case "unreachable":
+      return result.message
+        ? `Atlas could not be reached${host}: ${result.message}`
+        : `Atlas could not be reached${host}. Codex subscription models still work without Atlas.`
+    case "backend":
+      return result.message ? `Atlas backend error${host}: ${result.message}` : `Atlas backend returned no project id${host}.`
+    default:
+      return result.message ?? "backend returned no project id"
+  }
+}
 
 interface Pt {
   x: number
@@ -592,8 +610,9 @@ export function ThesisCanvas(): JSX.Element {
     if (initializing()) return
     setInitializing(true)
     try {
-      const { project_id } = await thesisAPI.initProject(directory())
-      if (!project_id) throw new Error("backend returned no project id")
+      const result = await thesisAPI.initProject(directory())
+      const { project_id } = result
+      if (!project_id) throw new Error(initProjectFailureMessage(result))
       settled = true
       await refetchAll()
       setGraphId(project_id)
