@@ -9,12 +9,28 @@ export class Semaphore {
     this.available = Math.max(1, Math.floor(max))
   }
 
-  async acquire(): Promise<void> {
+  /** Resolves once a slot is free. If `signal` aborts while this call is queued,
+   *  the waiter is removed and acquire() rejects — so a cancelled caller never
+   *  holds a slot and release() never hands one to a dead waiter (#102). */
+  async acquire(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) throw signal.reason ?? new Error("aborted while waiting for a slot")
     if (this.available > 0) {
       this.available--
       return
     }
-    await new Promise<void>((resolve) => this.waiters.push(resolve))
+    return new Promise<void>((resolve, reject) => {
+      const waiter = () => {
+        signal?.removeEventListener("abort", onAbort)
+        resolve()
+      }
+      const onAbort = () => {
+        const i = this.waiters.indexOf(waiter)
+        if (i >= 0) this.waiters.splice(i, 1)
+        reject(signal!.reason ?? new Error("aborted while waiting for a slot"))
+      }
+      this.waiters.push(waiter)
+      signal?.addEventListener("abort", onAbort, { once: true })
+    })
   }
 
   release(): void {

@@ -73,7 +73,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // call is itself nested inside a compute subagent — the outer already holds
       // a slot, so re-acquiring here could deadlock a small pool.
       const capSlot = COMPUTE_SUBAGENTS.has(agent.name) && !COMPUTE_SUBAGENTS.has(caller?.name ?? "")
-      if (capSlot) await computeSlots.acquire()
+      // Pass the abort signal so a cancelled subagent that's still QUEUED unblocks
+      // immediately instead of waiting for an unrelated task to free a slot (#102).
+      // If acquire throws (aborted), we never held a slot, so the defer below is
+      // never registered and nothing is released.
+      if (capSlot) await computeSlots.acquire(ctx.abort)
       using _slot = defer(() => {
         if (capSlot) computeSlots.release()
       })

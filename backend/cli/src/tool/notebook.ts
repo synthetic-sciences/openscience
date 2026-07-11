@@ -249,7 +249,11 @@ class PythonKernel implements Kernel {
     })
     const proc = spawn(sandboxed.file, sandboxed.args, {
       cwd: opts?.cwd ?? Instance.directory,
-      env: { ...(await OpenScience.subprocessEnv(process.env)), ...(opts?.env ?? {}), PYTHONUNBUFFERED: "1" },
+      env: OpenScience.withComputeParallelismCaps({
+        ...(await OpenScience.subprocessEnv(process.env)),
+        ...(opts?.env ?? {}),
+        PYTHONUNBUFFERED: "1",
+      }),
       stdio: ["pipe", "pipe", "pipe"],
       // Own process group so killing the kernel reaps its children too — a
       // scanpy run forks joblib/BLAS workers that would otherwise be orphaned

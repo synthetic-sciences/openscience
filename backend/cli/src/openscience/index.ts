@@ -1098,7 +1098,11 @@ export namespace OpenScience {
    *  capping them throttles legitimate single-process compute (a bash-run
    *  numpy/torch job) without saving any memory, and joblib already pins worker
    *  thread pools to 1 to avoid nested oversubscription. This is not a hard
-   *  memory limit — macOS ignores RLIMIT_AS — it bounds the worker-COPY count. */
+   *  memory limit — macOS ignores RLIMIT_AS — it bounds the worker-COPY count.
+   *
+   *  Applied at the compute-kernel spawn boundary (notebook/rkernel/biology),
+   *  NOT inside the shared subprocessEnv — a memory-parallelism cap doesn't
+   *  belong on every subprocess the agent runs (git, atlas, plain bash). */
   export function withComputeParallelismCaps(env: Record<string, string>): Record<string, string> {
     if (env.LOKY_MAX_CPU_COUNT) return env
     return { ...env, LOKY_MAX_CPU_COUNT: String(Math.min(CPU_COUNT, 4)) }
@@ -1112,8 +1116,9 @@ export namespace OpenScience {
     const base = filterEnvForSubprocess(env)
     const auth = await Auth.all().catch(() => ({}) as Record<string, Auth.Info>)
     // Prepend the bundled atlas CLI to PATH so the agent's native `atlas`
-    // commands resolve without a separate global install.
-    return withComputeParallelismCaps(withAtlasOnPath(mergeByokEnv(base, auth)))
+    // commands resolve without a separate global install. The joblib/loky memory
+    // cap is applied by the compute-kernel spawns, not here (#102).
+    return withAtlasOnPath(mergeByokEnv(base, auth))
   }
 
   // === Server-side Skills ===

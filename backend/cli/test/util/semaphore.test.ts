@@ -38,3 +38,45 @@ test("max floors at 1 (never zero-slot deadlock)", async () => {
   await sem.acquire()
   expect(true).toBe(true) // resolved, did not hang
 })
+
+test("acquire rejects immediately when the signal is already aborted", async () => {
+  const sem = new Semaphore(1)
+  const ac = new AbortController()
+  ac.abort()
+  await expect(sem.acquire(ac.signal)).rejects.toBeDefined()
+  // the slot was not consumed by the rejected call
+  await sem.acquire()
+  expect(true).toBe(true)
+})
+
+test("abort while queued rejects and does not leak the slot", async () => {
+  const sem = new Semaphore(1)
+  await sem.acquire() // hold the only slot
+  const ac = new AbortController()
+  const queued = sem.acquire(ac.signal)
+  await sleep(1)
+  ac.abort()
+  await expect(queued).rejects.toBeDefined()
+  // the aborted waiter left the queue, so release returns the slot to the pool
+  sem.release()
+  await sem.acquire() // resolves rather than hanging on a ghost waiter
+  expect(true).toBe(true)
+})
+
+test("aborting one queued waiter still serves a live waiter (no lost slot)", async () => {
+  const sem = new Semaphore(1)
+  await sem.acquire() // hold slot
+  const ac = new AbortController()
+  const aborted = sem.acquire(ac.signal).then(
+    () => "resolved",
+    () => "rejected",
+  )
+  const order: string[] = []
+  const live = sem.acquire().then(() => order.push("live"))
+  await sleep(1)
+  ac.abort() // drop the first waiter
+  expect(await aborted).toBe("rejected")
+  sem.release() // must go to the live waiter, not the dead one
+  await live
+  expect(order).toEqual(["live"])
+})

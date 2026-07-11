@@ -144,7 +144,10 @@ async function getKernel(sessionID: string): Promise<Kernel> {
   })
   const proc = spawn(sandboxed.file, sandboxed.args, {
     cwd: Instance.directory,
-    env: { ...(await OpenScience.subprocessEnv(process.env)), PYTHONUNBUFFERED: "1" },
+    env: OpenScience.withComputeParallelismCaps({
+      ...(await OpenScience.subprocessEnv(process.env)),
+      PYTHONUNBUFFERED: "1",
+    }),
     stdio: ["pipe", "pipe", "pipe"],
     // Own process group so killing the kernel reaps its joblib/BLAS children (#102).
     detached: process.platform !== "win32",

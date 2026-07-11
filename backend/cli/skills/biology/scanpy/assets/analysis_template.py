@@ -68,11 +68,13 @@ def _available_ram_bytes():
 
 
 def memory_safe_n_jobs(adata, fraction=0.5):
-    """Largest worker count whose per-worker dense copies fit in `fraction` of RAM.
-    Reserves one copy for the parent process, which also densifies the matrix."""
+    """Largest worker count whose per-worker dense copies fit in `fraction` of RAM,
+    reserving one copy for the parent process (which also densifies the matrix).
+    Returns 0 when not even a single worker copy fits — the caller must then skip
+    the dense step rather than run one worker that OOMs anyway (#102)."""
     per_worker = max(1, adata.n_obs * adata.n_vars * 8)  # float64 dense copy, bytes
     fits = int(_available_ram_bytes() * fraction // per_worker) - 1  # -1: parent's copy
-    return max(1, min(_os.cpu_count() or 1, fits))
+    return max(0, min(_os.cpu_count() or 1, fits))
 
 
 # Modest default for light parallel steps; regress_out picks a RAM-aware value.
@@ -189,8 +191,14 @@ REGRESS_OUT = False
 _hvg_dense_gb = adata.n_obs * adata.n_vars * 8 / 1e9
 if REGRESS_OUT and _hvg_dense_gb <= MAX_DENSE_GB:
     n_jobs = memory_safe_n_jobs(adata)  # as many workers as fit in RAM, up to cores
-    print(f"regress_out: n_jobs={n_jobs} (each worker copies ~{_hvg_dense_gb:.1f} GB)")
-    sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'], n_jobs=n_jobs)
+    if n_jobs >= 1:
+        print(f"regress_out: n_jobs={n_jobs} (each worker copies ~{_hvg_dense_gb:.1f} GB)")
+        sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'], n_jobs=n_jobs)
+    else:
+        # Even one worker's dense copy won't fit the RAM budget — running it would
+        # OOM, so skip rather than proceed with a doomed single worker (#102).
+        print(f"WARNING: skipping regress_out — not enough free RAM for even one "
+              f"dense worker copy (~{_hvg_dense_gb:.1f} GB) (#102). Subset cells/HVGs first.")
 elif REGRESS_OUT:
     print(f"WARNING: skipping regress_out — dense matrix ~{_hvg_dense_gb:.1f} GB "
           f"exceeds MAX_DENSE_GB={MAX_DENSE_GB} GB (#102). Subset cells/HVGs first.")

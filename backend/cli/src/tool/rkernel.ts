@@ -234,7 +234,10 @@ class RKernel implements Kernel {
     })
     const proc = spawn(sandboxed.file, sandboxed.args, {
       cwd: opts?.cwd ?? Instance.directory,
-      env: { ...(await OpenScience.subprocessEnv(process.env)), ...(opts?.env ?? {}) },
+      env: OpenScience.withComputeParallelismCaps({
+        ...(await OpenScience.subprocessEnv(process.env)),
+        ...(opts?.env ?? {}),
+      }),
       stdio: ["pipe", "pipe", "pipe"],
       // Own process group so killing the kernel reaps its worker children (#102).
       detached: process.platform !== "win32",
