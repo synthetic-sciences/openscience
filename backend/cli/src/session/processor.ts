@@ -13,6 +13,7 @@ import type { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
+import { hasRepeatedTail } from "./loop-guard"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
 import { OpenScience, InsufficientCreditsError } from "@/openscience"
@@ -87,6 +88,9 @@ export namespace SessionProcessor {
     let attempt = 0
     let needsCompaction = false
     let overflow = false
+    // Set when the model degenerates into repeating the same block within one
+    // turn; breaks the stream loop and finalizes the turn as "stop" (#176).
+    let repeatAbort = false
 
     const result = {
       get message() {
@@ -143,6 +147,9 @@ export namespace SessionProcessor {
 
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+            // Reset per stream attempt (retries re-enter this block).
+            repeatAbort = false
+            let lastRepeatCheck = 0
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -445,6 +452,19 @@ export namespace SessionProcessor {
                         part: currentText,
                         delta: value.text,
                       })
+                    // Intra-turn degeneration guard (#176): once the model is just
+                    // re-emitting the same block, stop consuming so it can't spin
+                    // for minutes. Throttled to every ~1.5KB of new text.
+                    if (currentText.text.length - lastRepeatCheck >= 1500) {
+                      lastRepeatCheck = currentText.text.length
+                      if (hasRepeatedTail(currentText.text)) {
+                        repeatAbort = true
+                        log.warn("intra-turn text repetition — aborting generation", {
+                          sessionID: input.sessionID,
+                          length: currentText.text.length,
+                        })
+                      }
+                    }
                   }
                   break
 
@@ -481,6 +501,9 @@ export namespace SessionProcessor {
                   continue
               }
               if (needsCompaction || overflow) break
+              // Breaking the for-await disposes the iterator, which aborts the
+              // underlying request so the model stops generating (#176).
+              if (repeatAbort) break
             }
           } catch (e: any) {
             log.error("process", {
@@ -558,6 +581,10 @@ export namespace SessionProcessor {
               })
             }
           }
+          // A repetition-aborted turn never received a finish-step event, so
+          // stamp a terminal reason — otherwise the outer loop treats the blank
+          // finish as "continuing" and keeps going (#176).
+          if (repeatAbort && !input.assistantMessage.finish) input.assistantMessage.finish = "stop"
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
           if (overflow) return "overflow"
