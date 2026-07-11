@@ -7,6 +7,23 @@ import { spawn, type ChildProcess } from "child_process"
 const SIGKILL_TIMEOUT_MS = 200
 
 export namespace Shell {
+  /** POSIX: true only when `pid` leads its own process group (i.e. was spawned
+   *  `detached`), so a negative-pid signal targets ONLY its group and can never
+   *  reach ours. On Linux we verify via /proc; elsewhere we can't cheaply check,
+   *  so trust the caller. Guards a negative-pid kill against a non-detached child
+   *  whose group is our own (#102). */
+  function leadsOwnGroup(pid: number): boolean {
+    if (process.platform !== "linux") return true
+    try {
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8")
+      // Fields after the ")" that closes comm are: state ppid pgrp session ...
+      const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ")
+      return Number(fields[2]) === pid
+    } catch {
+      return false
+    }
+  }
+
   export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
     const pid = proc.pid
     if (!pid || opts?.exited?.()) return
@@ -20,19 +37,45 @@ export namespace Shell {
       return
     }
 
-    try {
-      process.kill(-pid, "SIGTERM")
-      await Bun.sleep(SIGKILL_TIMEOUT_MS)
-      if (!opts?.exited?.()) {
-        process.kill(-pid, "SIGKILL")
-      }
-    } catch (_e) {
-      proc.kill("SIGTERM")
-      await Bun.sleep(SIGKILL_TIMEOUT_MS)
-      if (!opts?.exited?.()) {
-        proc.kill("SIGKILL")
+    if (leadsOwnGroup(pid)) {
+      try {
+        process.kill(-pid, "SIGTERM")
+        await Bun.sleep(SIGKILL_TIMEOUT_MS)
+        if (!opts?.exited?.()) process.kill(-pid, "SIGKILL")
+        return
+      } catch (_e) {
+        // group gone or not permitted — fall through to a single-process kill
       }
     }
+    try {
+      proc.kill("SIGTERM")
+      await Bun.sleep(SIGKILL_TIMEOUT_MS)
+      if (!opts?.exited?.()) proc.kill("SIGKILL")
+    } catch {}
+  }
+
+  /** Synchronous best-effort group SIGKILL. For process-exit handlers, where the
+   *  event loop is already stopping and the async killTree (which sleeps before
+   *  escalating) cannot complete. Only signals the group when the child leads its
+   *  own (spawned `detached`); otherwise kills just the child (#102). */
+  export function killTreeSync(proc: ChildProcess): void {
+    const pid = proc.pid
+    if (!pid) return
+    if (process.platform === "win32") {
+      try {
+        spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" })
+      } catch {}
+      return
+    }
+    if (leadsOwnGroup(pid)) {
+      try {
+        process.kill(-pid, "SIGKILL")
+        return
+      } catch {}
+    }
+    try {
+      proc.kill("SIGKILL")
+    } catch {}
   }
   const BLACKLIST = new Set(["fish", "nu"])
 

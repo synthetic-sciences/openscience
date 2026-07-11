@@ -12,8 +12,17 @@ import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
 import { RLMState } from "../session/rlm/state"
+import { Semaphore } from "../util/semaphore"
 
 const ARTIFACT_AGENTS = ["research", "biology", "ml"]
+
+// Kernel-running compute specialists (a subset of the agents, excluding the
+// general `research` harness). Each opens its own python/R kernel holding a full
+// dataset; several in parallel sum past RAM and OOM the machine (#102). Bound how
+// many run at once — subagents complete, so the slot is always freed.
+const COMPUTE_SUBAGENTS = new Set(["biology", "ml", "physics"])
+const MAX_COMPUTE_SUBAGENTS = Math.max(1, Number(process.env.OPENSCIENCE_MAX_COMPUTE_SUBAGENTS) || 2)
+const computeSlots = new Semaphore(MAX_COMPUTE_SUBAGENTS)
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -59,6 +68,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+
+      // Bound concurrent kernel-running compute subagents (#102). Skip when this
+      // call is itself nested inside a compute subagent — the outer already holds a
+      // slot, so re-acquiring here could deadlock a small pool. Abort-aware: a
+      // cancelled subagent still queued unblocks immediately and frees no slot.
+      const capSlot = COMPUTE_SUBAGENTS.has(agent.name) && !COMPUTE_SUBAGENTS.has(caller?.name ?? "")
+      if (capSlot) await computeSlots.acquire(ctx.abort)
+      using _slot = defer(() => {
+        if (capSlot) computeSlots.release()
+      })
 
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
 
