@@ -1,5 +1,4 @@
 import { For, Show, createMemo, createResource, createSignal } from "solid-js"
-import { Icon } from "@synsci/ui/icon"
 import { IconButton } from "@synsci/ui/icon-button"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -19,6 +18,8 @@ import {
   EmptyState,
   FormField,
   FormButton,
+  Avatar,
+  Chip,
 } from "./_shared"
 
 // System agents that are implementation details, not user-facing specialists.
@@ -182,18 +183,11 @@ function AgentRow(props: { agent: Agent; onDelete?: () => void; busy: boolean })
     props.agent.mode === "subagent" ? "subagent" : props.agent.mode === "all" ? "primary · subagent" : "primary"
   return (
     <Row>
-      <div
-        class="flex items-center justify-center size-8 rounded-xs flex-shrink-0 text-icon-strong-base"
-        style={{ background: props.agent.color ? `${props.agent.color}22` : "var(--color-surface-raised-base)" }}
-      >
-        <Icon name="models" size="small" />
-      </div>
+      <Avatar monogram={props.agent.name.slice(0, 1)} tint={props.agent.color ?? undefined} />
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <span class="text-14-medium text-text-strong truncate">{props.agent.name}</span>
-          <span class="text-11-medium text-text-weak/70 px-1.5 py-0.5 rounded-md bg-surface-raised-base/60">
-            {modeLabel()}
-          </span>
+          <Chip>{modeLabel()}</Chip>
         </div>
         <Show when={props.agent.description}>
           <p class="text-12-regular text-text-weak truncate mt-0.5">{props.agent.description}</p>

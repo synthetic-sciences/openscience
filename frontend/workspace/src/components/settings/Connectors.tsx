@@ -5,7 +5,6 @@ import { IconButton } from "@synsci/ui/icon-button"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { StatusDot } from "@/atlas/shared/StatusDot"
 import type { Config, McpStatus } from "@synsci/sdk/v2/client"
 import {
   PanelScroll,
@@ -20,6 +19,8 @@ import {
   EmptyState,
   FormField,
   FormButton,
+  Avatar,
+  Chip,
 } from "./_shared"
 
 type McpConfig = NonNullable<Config["mcp"]>[string]
@@ -62,6 +63,15 @@ export default function Connectors() {
     return "muted"
   }
   const statusText = (s: McpStatus | undefined) => (s ? s.status.replaceAll("_", " ") : "unknown")
+  // Wash the connector's avatar tile by connection state so status reads at a
+  // glance; a muted/off connector stays neutral.
+  function statusTint(s: McpStatus | undefined): string | undefined {
+    const d = dot(s)
+    if (d === "active") return "var(--color-success)"
+    if (d === "error") return "var(--color-error)"
+    if (d === "pending") return "var(--color-warning)"
+    return undefined
+  }
 
   async function toggle(name: string, on: boolean) {
     setBusy(true)
@@ -223,14 +233,12 @@ export default function Connectors() {
                     const s = () => status()[name]
                     return (
                       <Row>
-                        <StatusDot status={dot(s())} pulse={s()?.status === "connected"} />
+                        <Avatar icon={config.type === "remote" ? "link" : "console"} tint={statusTint(s())} />
                         <div class="min-w-0 flex-1">
                           <div class="flex items-center gap-2">
                             <span class="text-14-medium text-text-strong truncate">{name}</span>
-                            <span class="text-11-medium text-text-weak/70 px-1.5 py-0.5 rounded-md bg-surface-raised-base/60">
-                              {config.type}
-                            </span>
-                            <span class="text-11-regular text-text-weak/60">{statusText(s())}</span>
+                            <Chip>{config.type}</Chip>
+                            <span class="text-11-regular text-text-weak/60 truncate">{statusText(s())}</span>
                           </div>
                           <p class="text-12-regular text-text-weak truncate mt-0.5">
                             {config.type === "local" ? config.command.join(" ") : config.url}
