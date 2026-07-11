@@ -165,7 +165,6 @@ export type UserMessage = {
   }
   variant?: string
   tier?: "fast" | "pro" | "ultra"
-  fast?: boolean
 }
 
 export type ProviderAuthError = {
@@ -243,6 +242,7 @@ export type AssistantMessage = {
     }
   }
   finish?: string
+  tailStartId?: string
 }
 
 export type Message = UserMessage | AssistantMessage
@@ -506,6 +506,9 @@ export type CompactionPart = {
   messageID: string
   type: "compaction"
   auto: boolean
+  focus?: string
+  handoffFile?: string
+  trigger?: "proactive" | "overflow" | "manual"
 }
 
 export type Part =
@@ -551,6 +554,9 @@ export type SessionStatus =
     }
   | {
       type: "busy"
+    }
+  | {
+      type: "compacting"
     }
 
 export type EventSessionStatus = {
@@ -636,6 +642,35 @@ export type EventQuestionRejected = {
   properties: {
     sessionID: string
     requestID: string
+  }
+}
+
+export type EventSessionContext = {
+  type: "session.context"
+  properties: {
+    sessionID: string
+    tokens: {
+      system: number
+      text: number
+      reasoning: number
+      tool: number
+      skills: number
+      image: number
+    }
+    images: number
+    total: number
+  }
+}
+
+export type EventSessionCompaction = {
+  type: "session.compaction"
+  properties: {
+    sessionID: string
+    trigger: "proactive" | "overflow" | "manual"
+    mechanism: "prune" | "summary"
+    before?: number
+    after?: number
+    reclaimed: number
   }
 }
 
@@ -861,6 +896,8 @@ export type Event =
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
+  | EventSessionContext
+  | EventSessionCompaction
   | EventSessionCompacted
   | EventTodoUpdated
   | EventMcpToolsChanged
@@ -1451,6 +1488,10 @@ export type ProviderConfig = {
     apiKey?: string
     baseURL?: string
     /**
+     * Shell command whose stdout is a short-lived bearer token. Sent as 'Authorization: Bearer <token>' on every request and re-minted automatically before the token's JWT exp (or every request for a non-JWT token). Use for providers behind rotating/SSO-minted credentials.
+     */
+    tokenCommand?: string
+    /**
      * GitHub Enterprise URL for copilot authentication
      */
     enterpriseUrl?: string
@@ -1539,6 +1580,28 @@ export type McpRemoteConfig = {
  * @deprecated Always uses stretch layout.
  */
 export type LayoutConfig = "auto" | "stretch"
+
+/**
+ * OS-level execution sandbox for the agent's shell commands.
+ */
+export type SandboxConfig = {
+  /**
+   * Run the agent's shell commands inside an OS sandbox (macOS Seatbelt / Linux bubblewrap) that confines writes to the workspace. Off by default.
+   */
+  enabled?: boolean
+  /**
+   * Whether sandboxed commands may reach the network. Default: allow.
+   */
+  network?: "allow" | "deny"
+  /**
+   * Extra absolute paths — beyond the workspace and temp dirs — the sandbox may write to.
+   */
+  allowWrite?: Array<string>
+  /**
+   * Behaviour when no sandbox backend exists on this platform: 'warn' (default) runs unsandboxed with a notice, 'error' refuses to run the command, 'allow' runs unsandboxed silently.
+   */
+  onUnavailable?: "warn" | "error" | "allow"
+}
 
 export type Config = {
   /**
@@ -1693,6 +1756,7 @@ export type Config = {
   instructions?: Array<string>
   layout?: LayoutConfig
   permission?: PermissionConfig
+  sandbox?: SandboxConfig
   tools?: {
     [key: string]: boolean
   }
@@ -1711,6 +1775,22 @@ export type Config = {
      * Enable pruning of old tool outputs (default: true)
      */
     prune?: boolean
+    /**
+     * Compact when context exceeds this fraction of the model window (default: 0.75)
+     */
+    threshold?: number
+    /**
+     * Assumed context window (tokens) when a provider reports 0 (default: 128000)
+     */
+    fallbackContext?: number
+    /**
+     * Minimum recent turns kept verbatim during compaction (default: 2)
+     */
+    tailTurns?: number
+    /**
+     * Token budget for the verbatim recent tail during compaction (default: clamp(0.20*usable, 8000, 32000))
+     */
+    tailTokens?: number
   }
   experimental?: {
     hook?: {
@@ -2078,6 +2158,7 @@ export type Command = {
   agent?: string
   model?: string
   mcp?: boolean
+  menu?: boolean
   template: string
   subtask?: boolean
   hints: Array<string>
@@ -2430,6 +2511,27 @@ export type AccountBillingModeSetResponses = {
 }
 
 export type AccountBillingModeSetResponse = AccountBillingModeSetResponses[keyof AccountBillingModeSetResponses]
+
+export type AccountLoginKeyData = {
+  body?: {
+    key: string
+  }
+  path?: never
+  query?: never
+  url: "/account/login-key"
+}
+
+export type AccountLoginKeyResponses = {
+  /**
+   * Login result
+   */
+  200: {
+    ok: boolean
+    error?: string
+  }
+}
+
+export type AccountLoginKeyResponse = AccountLoginKeyResponses[keyof AccountLoginKeyResponses]
 
 export type AccountLogoutData = {
   body?: never
@@ -3089,6 +3191,67 @@ export type SettingsPreferencesUpdateResponses = {
 export type SettingsPreferencesUpdateResponse =
   SettingsPreferencesUpdateResponses[keyof SettingsPreferencesUpdateResponses]
 
+export type PostSettingsLocalStartData = {
+  body?: {
+    id: string
+  }
+  path?: never
+  query?: never
+  url: "/settings/local/start"
+}
+
+export type PostSettingsLocalStartResponses = {
+  200: unknown
+}
+
+export type PostSettingsLocalModelsData = {
+  body?: {
+    url: string
+    key?: string
+  }
+  path?: never
+  query?: never
+  url: "/settings/local/models"
+}
+
+export type PostSettingsLocalModelsResponses = {
+  200: unknown
+}
+
+export type PostSettingsLocalData = {
+  body?: {
+    url: string
+    id?: string
+    name?: string
+    key?: string
+    models: Array<string>
+    setDefault?: boolean
+  }
+  path?: never
+  query?: never
+  url: "/settings/local"
+}
+
+export type PostSettingsLocalResponses = {
+  200: unknown
+}
+
+export type PutSettingsSandboxData = {
+  body?: {
+    enabled?: boolean
+    network?: "allow" | "deny"
+    allowWrite?: Array<string>
+    onUnavailable?: "warn" | "error" | "allow"
+  }
+  path?: never
+  query?: never
+  url: "/settings/sandbox"
+}
+
+export type PutSettingsSandboxResponses = {
+  200: unknown
+}
+
 export type SettingsBillingGetData = {
   body?: never
   path?: never
@@ -3149,6 +3312,38 @@ export type SettingsBillingUpdateResponses = {
 }
 
 export type SettingsBillingUpdateResponse = SettingsBillingUpdateResponses[keyof SettingsBillingUpdateResponses]
+
+export type SettingsWalletGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/wallet"
+}
+
+export type SettingsWalletGetResponses = {
+  /**
+   * Wallet state
+   */
+  200: {
+    signedIn: boolean
+    /**
+     * Wallet balance in USD; -1 when signed out or unavailable
+     */
+    balanceUsd: number
+    billingMode: "managed" | "byok" | null
+    managedSupported: boolean
+    lifetimeSpentUsd: number
+    transactions: Array<{
+      id: string
+      amountCents: number
+      source: string
+      description: string
+      createdAt: string
+    }>
+  }
+}
+
+export type SettingsWalletGetResponse = SettingsWalletGetResponses[keyof SettingsWalletGetResponses]
 
 export type AuthRemoveData = {
   body?: never
@@ -4189,7 +4384,6 @@ export type SessionPromptData = {
     system?: string
     variant?: string
     tier?: "fast" | "pro" | "ultra"
-    fast?: boolean
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -4378,7 +4572,6 @@ export type SessionPromptAsyncData = {
     system?: string
     variant?: string
     tier?: "fast" | "pro" | "ultra"
-    fast?: boolean
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
