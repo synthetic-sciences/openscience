@@ -39,6 +39,49 @@ sc.settings.set_figure_params(dpi=80, facecolor='white')
 sc.settings.figdir = FIGURES_DIR
 
 # ============================================================================
+# MEMORY GUARDS (#102)
+# ============================================================================
+# Parallel steps like regress_out fork one worker PROCESS per job, each holding a
+# full DENSE copy of the matrix — so the safe worker count is bounded by RAM, not
+# just CPU. Size it at runtime rather than hardcoding n_jobs=-1.
+import os as _os
+
+
+def _available_ram_bytes():
+    # *available* RAM (not total): a box already using most of its memory must
+    # pick fewer workers, or the guard green-lights an OOM.
+    try:
+        import psutil
+        return psutil.virtual_memory().available
+    except Exception:
+        pass
+    try:  # Linux: MemAvailable is the accurate figure
+        with open('/proc/meminfo') as f:
+            for line in f:
+                if line.startswith('MemAvailable:'):
+                    return int(line.split()[1]) * 1024
+    except Exception:
+        pass
+    try:  # last resort: TOTAL physical RAM, halved so we don't over-commit
+        return (_os.sysconf('SC_PAGE_SIZE') * _os.sysconf('SC_PHYS_PAGES')) // 2
+    except (ValueError, OSError, AttributeError):
+        return 4 * 1024 ** 3  # unknown -> assume 4 GB
+
+
+def memory_safe_n_jobs(adata, fraction=0.5):
+    """Largest worker count whose per-worker dense copies fit in `fraction` of RAM,
+    reserving one copy for the parent process (which also densifies the matrix).
+    Returns 0 when not even one worker copy fits — the caller must then skip the
+    dense step rather than run one worker that OOMs anyway."""
+    per_worker = max(1, adata.n_obs * adata.n_vars * 8)  # float64 dense copy, bytes
+    fits = int(_available_ram_bytes() * fraction // per_worker) - 1  # -1: parent's copy
+    return max(0, min(_os.cpu_count() or 1, fits))
+
+
+# Above this dense-matrix size (GB), skip the memory-hazardous dense step and warn.
+MAX_DENSE_GB = 8.0
+
+# ============================================================================
 # 1. LOAD DATA
 # ============================================================================
 
@@ -52,6 +95,14 @@ adata = sc.read_h5ad(INPUT_FILE)
 # adata = sc.read_csv('data/counts.csv')  # For CSV data
 
 print(f"Loaded: {adata.n_obs} cells x {adata.n_vars} genes")
+
+# Memory guard (#102): a count matrix stored DENSE uses ~8 bytes/element and can
+# be tens/hundreds of GB, OOMing the machine on load alone. Keep counts sparse.
+import scipy.sparse as _sp
+_load_gb = adata.n_obs * adata.n_vars * 8 / 1e9
+if not _sp.issparse(adata.X) and _load_gb > MAX_DENSE_GB:
+    print(f"WARNING: adata.X is DENSE (~{_load_gb:.1f} GB). Convert to sparse to "
+          f"avoid running out of memory:  adata.X = scipy.sparse.csr_matrix(adata.X)")
 
 # ============================================================================
 # 2. QUALITY CONTROL
@@ -128,8 +179,20 @@ print("\n" + "=" * 80)
 print("SCALING AND REGRESSION")
 print("=" * 80)
 
-# Regress out unwanted sources of variation
-sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'])
+# Regress out unwanted sources of variation.
+# Memory guard (#102): regress_out densifies the matrix and forks one joblib
+# worker (a full dense copy) per job — the biggest memory hazard here. Size the
+# worker count to available RAM, and skip only when even one dense copy won't fit
+# (running it anyway would just OOM). regress_out stays ON by default.
+_dense_gb = adata.n_obs * adata.n_vars * 8 / 1e9
+_n_jobs = memory_safe_n_jobs(adata)
+if _n_jobs >= 1 and _dense_gb <= MAX_DENSE_GB:
+    print(f"regress_out: n_jobs={_n_jobs} (each worker copies ~{_dense_gb:.1f} GB)")
+    sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'], n_jobs=_n_jobs)
+else:
+    print(f"WARNING: skipping regress_out — dense matrix ~{_dense_gb:.1f} GB would "
+          f"exhaust RAM (fits={_n_jobs}, MAX_DENSE_GB={MAX_DENSE_GB}). Subset cells "
+          f"or reduce N_TOP_GENES first, then re-run this step (#102).")
 
 # Scale data
 sc.pp.scale(adata, max_value=10)
