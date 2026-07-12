@@ -1,6 +1,7 @@
 import { createSignal, createMemo, createEffect, type JSX, For, Show } from "solid-js"
 import { FONT_MONO, FONT_SANS, sectionTitle } from "@/styles/tokens"
 import { useSDK } from "@/context/sdk"
+import { useLanguage } from "@/context/language"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useTerminal } from "@/context/terminal"
 import { Terminal } from "@/components/terminal"
@@ -32,6 +33,7 @@ function readSavedWidth(): number {
 export function RightPane(): JSX.Element {
   const tab = uiStore.rightPaneTab
   const setTab = uiStore.setRightPaneTab
+  const language = useLanguage()
   // Keep-alive: once a tab has been opened it stays mounted (hidden via CSS),
   // so switching tabs never re-mounts/re-fetches/re-animates — no flash.
   const [visited, setVisited] = createSignal<Set<RightPaneTab>>(new Set([tab()]))
@@ -46,7 +48,7 @@ export function RightPane(): JSX.Element {
     dialog.show(() => <SkillLibraryDialog onPick={(name) => uiStore.setPrefill(`/${name} `)} />)
   const TABS: { k: RightPaneTab; label?: string; Icon: (p: { size?: number; strokeWidth?: number }) => JSX.Element }[] =
     [
-      { k: "canvas", label: "atlas", Icon: IconLayoutGrid },
+      { k: "canvas", label: language.t("panel.tab.atlas"), Icon: IconLayoutGrid },
       { k: "terminal", Icon: IconTerminal },
     ]
   const visibleTabs = createMemo(() => TABS.filter((t) => !uiStore.isTabHidden(t.k)))
@@ -157,10 +159,10 @@ export function RightPane(): JSX.Element {
             </For>
           </div>
           <div style={{ position: "relative", display: "flex", "align-items": "center", "flex-shrink": 0 }}>
-            <button onClick={openSkillLibrary} title="skill library" style={paneCtl(false)}>
+            <button onClick={openSkillLibrary} title={language.t("panel.action.skillLibrary")} style={paneCtl(false)}>
               <IconBraces size={12} strokeWidth={1.5} />
             </button>
-            <button onClick={() => setPanelMenu((v) => !v)} title="panel settings" style={paneCtl(panelMenu())}>
+            <button onClick={() => setPanelMenu((v) => !v)} title={language.t("panel.action.settings")} style={paneCtl(panelMenu())}>
               <IconSettings size={12} strokeWidth={1.5} />
             </button>
             <Show when={panelMenu()}>
@@ -180,7 +182,7 @@ export function RightPane(): JSX.Element {
                   "min-width": "150px",
                 }}
               >
-                <div style={paneMenuLabel}>show in panel</div>
+                <div style={paneMenuLabel}>{language.t("panel.menu.show")}</div>
                 <For each={TABS}>
                   {(t) => (
                     <button onClick={() => uiStore.toggleTabHidden(t.k)} style={paneMenuRow()}>
@@ -193,7 +195,7 @@ export function RightPane(): JSX.Element {
                           color: uiStore.isTabHidden(t.k) ? "var(--color-text-faint)" : "var(--color-success)",
                         }}
                       >
-                        {uiStore.isTabHidden(t.k) ? "off" : "on"}
+                        {uiStore.isTabHidden(t.k) ? language.t("panel.status.off") : language.t("panel.status.on")}
                       </span>
                     </button>
                   )}
@@ -207,11 +209,11 @@ export function RightPane(): JSX.Element {
                   style={paneMenuRow()}
                 >
                   <IconChevronRight size={12} strokeWidth={1.5} />
-                  <span style={{ flex: 1, "text-align": "left" }}>hide panel</span>
+                  <span style={{ flex: 1, "text-align": "left" }}>{language.t("panel.action.hide")}</span>
                 </button>
               </div>
             </Show>
-            <button onClick={() => uiStore.setRightPaneOpen(false)} title="hide panel" style={paneCtl(false)}>
+            <button onClick={() => uiStore.setRightPaneOpen(false)} title={language.t("panel.action.hide")} style={paneCtl(false)}>
               <IconChevronRight size={13} strokeWidth={1.5} />
             </button>
           </div>
@@ -232,6 +234,7 @@ export function RightPane(): JSX.Element {
 function TerminalTab(): JSX.Element {
   const terminal = useTerminal()
   const sdk = useSDK()
+  const language = useLanguage()
   const loopback = () => {
     try {
       const host = new URL(sdk.url).hostname
@@ -256,13 +259,13 @@ function TerminalTab(): JSX.Element {
       >
         <IconTerminal size={13} strokeWidth={1.5} />
         <span style={{ "font-family": FONT_MONO, "font-size": "11px", color: "var(--color-text-muted)" }}>
-          terminal
+          {language.t("panel.label.terminal")}
         </span>
         <span style={{ flex: 1 }} />
         <Show when={loopback()}>
-          <button type="button" onClick={() => terminal.new()} style={smallAction()}>
-            new
-          </button>
+            <button type="button" onClick={() => terminal.new()} style={smallAction()}>
+              {language.t("panel.action.newTerminal")}
+            </button>
         </Show>
       </div>
       <Show
@@ -277,7 +280,7 @@ function TerminalTab(): JSX.Element {
               "line-height": 1.5,
             }}
           >
-            Terminal access is available only when <code>openscience web</code> is connected to a loopback server.
+              {language.t("panel.terminal.loopbackOnly")}
           </div>
         }
       >
@@ -296,7 +299,7 @@ function TerminalTab(): JSX.Element {
               }}
             >
               <button type="button" onClick={() => terminal.new()} style={emptyAction()}>
-                start terminal
+                {language.t("panel.terminal.start")}
               </button>
             </div>
           }
@@ -359,7 +362,7 @@ function TerminalTab(): JSX.Element {
                   <Terminal
                     pty={pty}
                     onCleanup={(next) => terminal.update(next)}
-                    onConnectError={(e) => toast.error("terminal disconnected", e.message)}
+                    onConnectError={(e) => toast.error(language.t("panel.terminal.disconnected"), e.message)}
                   />
                 </div>
               )}
@@ -375,6 +378,7 @@ function CollapsedRail(props: {
   tabs: { k: RightPaneTab; Icon: (p: { size?: number; strokeWidth?: number }) => JSX.Element }[]
   onOpen: (t?: RightPaneTab) => void
 }): JSX.Element {
+  const language = useLanguage()
   return (
     <aside
       style={{
@@ -389,7 +393,7 @@ function CollapsedRail(props: {
         background: "var(--color-bg-subtle)",
       }}
     >
-      <button onClick={() => props.onOpen()} title="show panel" style={railBtn()}>
+      <button onClick={() => props.onOpen()} title={language.t("panel.action.show")} style={railBtn()}>
         <IconChevronLeft size={14} strokeWidth={1.5} />
       </button>
       <span style={{ width: "18px", height: "1px", background: "var(--color-border)", margin: "4px 0" }} />

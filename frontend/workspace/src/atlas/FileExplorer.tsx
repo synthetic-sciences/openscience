@@ -1,6 +1,7 @@
 import { createSignal, createResource, createMemo, onCleanup, type JSX, For, Show } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { useLanguage } from "@/context/language"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { centerTabs } from "@/atlas/store/centerTabs"
 import { atlasAPI, type AtlasNode } from "@/atlas/api/atlas"
@@ -76,20 +77,20 @@ function formatSize(bytes?: number): string {
   return `${val < 10 ? val.toFixed(1) : Math.round(val)} ${units[u]}`
 }
 
-function relativeTime(mtime?: number): string {
+function relativeTime(t: (key: string, params?: Record<string, string | number>) => string, mtime?: number): string {
   if (!mtime) return ""
   const diff = Date.now() - mtime
   const s = Math.round(diff / 1000)
-  if (s < 60) return "now"
+  if (s < 60) return t("files.time.now")
   const m = Math.round(s / 60)
-  if (m < 60) return `${m}m ago`
+  if (m < 60) return t("files.time.minutes", { n: m })
   const h = Math.round(m / 60)
-  if (h < 24) return `${h}h ago`
+  if (h < 24) return t("files.time.hours", { n: h })
   const d = Math.round(h / 24)
-  if (d < 30) return `${d}d ago`
+  if (d < 30) return t("files.time.days", { n: d })
   const mo = Math.round(d / 30)
-  if (mo < 12) return `${mo}mo ago`
-  return `${Math.round(mo / 12)}y ago`
+  if (mo < 12) return t("files.time.months", { n: mo })
+  return t("files.time.years", { n: Math.round(mo / 12) })
 }
 
 function sortNodes(nodes: FileNode[]): FileNode[] {
@@ -124,6 +125,7 @@ function ListGlyph(props: { size?: number }): JSX.Element {
 export function FileExplorer(): JSX.Element {
   const sdk = useSDK()
   const sync = useSync()
+  const language = useLanguage()
 
   const projectRoot = () => sync.project?.worktree || sync.data.path.directory || sdk.directory
   const home = () => sync.data.path.home || projectRoot()
@@ -198,7 +200,7 @@ export function FileExplorer(): JSX.Element {
         const msg = String(err?.body?.message ?? err?.message ?? (typeof err === "string" ? err : "") ?? "")
         const status = err?.response?.status ?? err?.status ?? err?.statusCode
         if (status === 403 || /permission denied|full disk access/i.test(msg)) {
-          setPermissionError(msg || "OpenScience cannot read this directory")
+          setPermissionError(msg || language.t("files.error.cantReadDir"))
         }
         return [] as FileNode[]
       }
@@ -225,7 +227,7 @@ export function FileExplorer(): JSX.Element {
 
   const machineLabel = () => {
     const segs = home().split("/").filter(Boolean)
-    return segs[segs.length - 1] || "This computer"
+    return segs[segs.length - 1] || language.t("files.label.thisComputer")
   }
 
   return (
@@ -254,7 +256,7 @@ export function FileExplorer(): JSX.Element {
           <button type="button" onClick={() => setMachineMenu((v) => !v)} style={machineBtn()}>
             <IconCpu size={13} strokeWidth={1.5} />
             <span style={{ display: "flex", "flex-direction": "column", "line-height": 1.15, "text-align": "left" }}>
-              <span style={{ "font-size": "11px", color: "var(--color-text)" }}>This computer</span>
+              <span style={{ "font-size": "11px", color: "var(--color-text)" }}>{language.t("files.label.thisComputer")}</span>
               <span style={{ "font-size": "10px", color: "var(--color-text-faint)" }}>{machineLabel()}</span>
             </span>
             <IconChevronDown size={11} strokeWidth={1.5} />
@@ -270,7 +272,7 @@ export function FileExplorer(): JSX.Element {
                 }}
               >
                 <IconHome size={12} strokeWidth={1.5} />
-                <span style={{ flex: 1, "text-align": "left" }}>Home</span>
+                <span style={{ flex: 1, "text-align": "left" }}>{language.t("files.label.home")}</span>
               </button>
               <button
                 type="button"
@@ -281,7 +283,7 @@ export function FileExplorer(): JSX.Element {
                 }}
               >
                 <IconFolder size={12} strokeWidth={1.5} />
-                <span style={{ flex: 1, "text-align": "left" }}>Project root</span>
+                <span style={{ flex: 1, "text-align": "left" }}>{language.t("files.label.projectRoot")}</span>
               </button>
             </div>
           </Show>
@@ -293,21 +295,21 @@ export function FileExplorer(): JSX.Element {
         <div style={pill()}>
           <button type="button" style={pillBtn(mode() === "host")} onClick={() => setMode("host")}>
             <IconFolder size={11} strokeWidth={1.6} />
-            files
+            {language.t("files.tab.files")}
           </button>
           <button type="button" style={pillBtn(mode() === "artifacts")} onClick={() => setMode("artifacts")}>
             <IconArchive size={11} strokeWidth={1.6} />
-            artifacts
+            {language.t("files.tab.artifacts")}
           </button>
         </div>
 
         {/* list / grid pill toggle */}
         <Show when={mode() === "host"}>
           <div style={pill()}>
-            <button type="button" title="list" style={pillBtn(view() === "list")} onClick={() => setView("list")}>
+            <button type="button" title={language.t("files.view.list")} style={pillBtn(view() === "list")} onClick={() => setView("list")}>
               <ListGlyph size={12} />
             </button>
-            <button type="button" title="grid" style={pillBtn(view() === "grid")} onClick={() => setView("grid")}>
+            <button type="button" title={language.t("files.view.grid")} style={pillBtn(view() === "grid")} onClick={() => setView("grid")}>
               <IconLayoutGrid size={12} strokeWidth={1.6} />
             </button>
           </div>
@@ -328,14 +330,14 @@ export function FileExplorer(): JSX.Element {
         >
           <button
             type="button"
-            title="back"
+            title={language.t("files.action.back")}
             disabled={!history().length}
             style={navBtn(!history().length)}
             onClick={goBack}
           >
             <IconChevronLeft size={13} strokeWidth={1.6} />
           </button>
-          <button type="button" title="up" style={navBtn(false)} onClick={goUp}>
+          <button type="button" title={language.t("files.action.up")} style={navBtn(false)} onClick={goUp}>
             <IconArrowUp size={13} strokeWidth={1.6} />
           </button>
           <div style={pathBar()}>
@@ -370,7 +372,7 @@ export function FileExplorer(): JSX.Element {
               }}
             />
           </div>
-          <button type="button" title="refresh" style={navBtn(false)} onClick={() => setRefreshKey((k) => k + 1)}>
+          <button type="button" title={language.t("files.action.refresh")} style={navBtn(false)} onClick={() => setRefreshKey((k) => k + 1)}>
             <IconRefresh size={12} strokeWidth={1.6} />
           </button>
         </div>
@@ -390,7 +392,7 @@ export function FileExplorer(): JSX.Element {
           <input
             value={filter()}
             onInput={(e) => setFilterDebounced(e.currentTarget.value)}
-            placeholder="filter this folder…"
+            placeholder={language.t("files.search.placeholder")}
             style={{
               all: "unset",
               flex: 1,
@@ -400,13 +402,13 @@ export function FileExplorer(): JSX.Element {
             }}
           />
           <span style={{ "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-text-faint)" }}>
-            {filtered().length} items
+            {filtered().length} {language.t("files.status.items")}
           </span>
         </div>
 
         {/* body */}
         <div class="atlas-scroll" style={{ flex: 1, "min-height": 0, "overflow-y": "auto", "overflow-x": "hidden" }}>
-          <Show when={!entries.loading || entries.latest} fallback={<div style={emptyMsg()}>loading…</div>}>
+          <Show when={!entries.loading || entries.latest} fallback={<div style={emptyMsg()}>{language.t("common.loading")}</div>}>
             <Show
               when={!permissionError()}
               fallback={
@@ -429,7 +431,7 @@ export function FileExplorer(): JSX.Element {
                       color: "var(--color-text)",
                     }}
                   >
-                    Can't read this folder
+                    {language.t("files.error.cantRead")}
                   </div>
                   <div
                     style={{
@@ -457,12 +459,12 @@ export function FileExplorer(): JSX.Element {
                       color: "var(--color-text)",
                     }}
                   >
-                    retry
+                    {language.t("files.action.retry")}
                   </button>
                 </div>
               }
             >
-              <Show when={filtered().length > 0} fallback={<div style={emptyMsg()}>empty folder</div>}>
+              <Show when={filtered().length > 0} fallback={<div style={emptyMsg()}>{language.t("files.status.emptyFolder")}</div>}>
                 <Show when={view() === "list"} fallback={<GridBody nodes={filtered()} onClick={onRowClick} />}>
                   <ListBody nodes={filtered()} onClick={onRowClick} />
                 </Show>
@@ -476,12 +478,13 @@ export function FileExplorer(): JSX.Element {
 }
 
 function ListBody(props: { nodes: FileNode[]; onClick: (n: FileNode) => void }): JSX.Element {
+  const language = useLanguage()
   return (
     <div>
       <div style={colHeader()}>
-        <span style={{ flex: 1 }}>Name</span>
-        <span style={{ width: "78px", "text-align": "right" }}>Size</span>
-        <span style={{ width: "78px", "text-align": "right" }}>Modified</span>
+        <span style={{ flex: 1 }}>{language.t("files.col.name")}</span>
+        <span style={{ width: "78px", "text-align": "right" }}>{language.t("files.col.size")}</span>
+        <span style={{ width: "78px", "text-align": "right" }}>{language.t("files.col.modified")}</span>
       </div>
       <For each={props.nodes}>
         {(node) => {
@@ -513,7 +516,7 @@ function ListBody(props: { nodes: FileNode[]; onClick: (n: FileNode) => void }):
                 {node.name}
               </span>
               <span style={cell()}>{formatSize(node.size)}</span>
-              <span style={cell()}>{relativeTime(node.mtime)}</span>
+              <span style={cell()}>{relativeTime(language.t, node.mtime)}</span>
             </button>
           )
         }}
@@ -575,6 +578,7 @@ type ArtifactRow = { node: AtlasNode; artifact: { name?: string; kind?: string; 
 function ArtifactsPanel(): JSX.Element {
   const sync = useSync()
   const sdk = useSDK()
+  const language = useLanguage()
   const directory = () => sync.project?.worktree || sync.data.path.directory || sdk.directory
   const [data] = createResource(directory, async (dir) => {
     try {
@@ -600,14 +604,14 @@ function ArtifactsPanel(): JSX.Element {
         when={(data.latest ?? []).length > 0}
         fallback={
           <div style={emptyMsg()}>
-            {data.loading ? "loading artifacts…" : "no artifacts yet · attach a file to seed one"}
+            {data.loading ? language.t("files.status.loadingArtifacts") : language.t("files.status.noArtifacts")}
           </div>
         }
       >
         <div style={colHeader()}>
-          <span style={{ width: "60px" }}>Kind</span>
-          <span style={{ flex: 1 }}>Name</span>
-          <span style={{ width: "120px", "text-align": "right" }}>Node</span>
+          <span style={{ width: "60px" }}>{language.t("files.col.kind")}</span>
+          <span style={{ flex: 1 }}>{language.t("files.col.name")}</span>
+          <span style={{ width: "120px", "text-align": "right" }}>{language.t("files.col.node")}</span>
         </div>
         <For each={data.latest ?? []}>
           {(r) => (

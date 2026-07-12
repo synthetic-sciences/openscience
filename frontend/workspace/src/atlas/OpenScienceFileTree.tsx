@@ -1,6 +1,7 @@
 import { createSignal, createResource, createMemo, onCleanup, type JSX, For, Show } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { useLanguage } from "@/context/language"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconFolder, IconFile, IconChevronRight, IconChevronDown, IconRefresh, IconSearch } from "@/atlas/shared/Icon"
 
@@ -63,6 +64,7 @@ function sortNodes(nodes: FileNode[]): FileNode[] {
 export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }): JSX.Element {
   const sdk = useSDK()
   const sync = useSync()
+  const language = useLanguage()
   const directory = () => sync.project?.worktree || sync.data.path.directory || sdk.directory
 
   const [filter, setFilter] = createSignal("")
@@ -97,7 +99,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
         // hits EACCES/EPERM — surface that to the UI so we can prompt for
         // Full Disk Access on macOS instead of showing "0 entries".
         if (status === 403) {
-          const message = err?.body?.message ?? err?.message ?? "OpenScience cannot read this directory"
+          const message = err?.body?.message ?? err?.message ?? language.t("fileTree.error.cantReadDir")
           setPermissionError(String(message))
         }
         return [] as FileNode[]
@@ -127,7 +129,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
         <input
           value={filter()}
           onInput={(e) => onFilter(e.currentTarget.value)}
-          placeholder="filter files…"
+          placeholder={language.t("fileTree.search.placeholder")}
           style={{
             all: "unset",
             flex: 1,
@@ -138,7 +140,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
         />
         <button
           onClick={() => setRefreshKey((k) => k + 1)}
-          title="refresh"
+          title={language.t("fileTree.action.refresh")}
           style={{
             all: "unset",
             cursor: "pointer",
@@ -158,7 +160,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
             "letter-spacing": "0.04em",
           }}
         >
-          {totalCount()} entries
+          {totalCount()} {language.t("fileTree.status.entries")}
         </span>
       </div>
 
@@ -185,7 +187,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
                     color: "var(--color-text-faint)",
                   }}
                 >
-                  loading…
+                  {language.t("common.loading")}
                 </div>
               }
             >
@@ -204,7 +206,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
                   >
                     <IconFolder size={20} strokeWidth={1.4} />
                     <div style={{ "font-family": FONT_SANS, "font-size": "13px", color: "var(--color-text-muted)" }}>
-                      No files here
+                      {language.t("fileTree.status.empty")}
                     </div>
                   </div>
                 }
@@ -227,7 +229,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
                       color: "var(--color-text)",
                     }}
                   >
-                    Can't read this folder
+                    {language.t("fileTree.error.cantRead")}
                   </div>
                   <div
                     style={{
@@ -239,8 +241,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
                     }}
                   >
                     <Show when={isMac()} fallback={<>{permissionError()}</>}>
-                      Grant <strong>Full Disk Access</strong> to OpenScience in System Settings → Privacy &amp;
-                      Security, then refresh.
+                      {language.t("fileTree.error.fdaPermission")}
                     </Show>
                   </div>
                   <Show when={isMac()}>
@@ -257,7 +258,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
                         color: "var(--color-text)",
                       }}
                     >
-                      Open System Settings
+                      {language.t("fileTree.action.openSettings")}
                     </a>
                   </Show>
                 </div>
@@ -301,6 +302,7 @@ function Node(props: {
   filter: () => string
 }): JSX.Element {
   const sdk = useSDK()
+  const language = useLanguage()
   const isOpen = () => props.expanded().has(props.node.path)
   const e = ext(props.node.name)
   const matches = () => {
@@ -336,7 +338,7 @@ function Node(props: {
           if (props.node.type === "directory") props.onToggle(props.node.path)
           else props.onOpen?.(props.node.path)
         }}
-        title={props.node.ignored ? `${props.node.name} · ignored by gitignore / OpenScience` : props.node.name}
+        title={props.node.ignored ? language.t("fileTree.hint.ignored", { name: props.node.name }) : props.node.name}
         style={{
           all: "unset",
           cursor: "pointer",
@@ -392,7 +394,7 @@ function Node(props: {
               padding: "2px 0",
             }}
           >
-            loading…
+            {language.t("common.loading")}
           </div>
         </Show>
         <Show when={childRows().length > 0}>

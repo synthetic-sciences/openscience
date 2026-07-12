@@ -8,6 +8,7 @@ import { Icon } from "@synsci/ui/icon"
 import { showToast } from "@synsci/ui/toast"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { uiStore } from "@/atlas/store/ui"
 import { settingsApi } from "./api"
@@ -36,6 +37,7 @@ interface Runtime {
 }
 
 const LocalModels: Component = () => {
+  const lang = useLanguage()
   const sdk = useGlobalSDK()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -72,7 +74,7 @@ const LocalModels: Component = () => {
       await fn()
       refetch()
     } catch (err) {
-      showToast({ title: failure, description: err instanceof Error ? err.message : String(err) })
+      showToast({ title: lang.t(failure), description: err instanceof Error ? err.message : String(err) })
     }
     setBusy(false)
   }
@@ -84,11 +86,11 @@ const LocalModels: Component = () => {
           method: "POST",
           body: JSON.stringify({ url: d.baseURL, id: d.id, name: `${d.name} (local)`, models: d.models }),
         }),
-      "Failed to add local models",
+      "settings.localModels.toast.addFailed",
     )
 
   const removeProvider = (id: string) =>
-    guard(() => call(`/${encodeURIComponent(id)}`, { method: "DELETE" }), "Failed to remove provider")
+    guard(() => call(`/${encodeURIComponent(id)}`, { method: "DELETE" }), "settings.localModels.toast.removeFailed")
 
   // ── Start a runtime for the user (host it) ──
   const [starting, setStarting] = createSignal<string>()
@@ -103,22 +105,22 @@ const LocalModels: Component = () => {
         models?: string[]
       }>("/start", { method: "POST", body: JSON.stringify({ id: rt.id }) })
       if (r.installed === false) {
-        showToast({ title: `${rt.name} isn't installed`, description: `Install it, then start it here.` })
+        showToast({ title: lang.t("settings.localModels.toast.notInstalled", { name: rt.name }), description: lang.t("settings.localModels.toast.notInstalled.description") })
         window.open(r.install ?? rt.install, "_blank", "noopener")
       } else if (r.running && r.models?.length) {
         await call("/", {
           method: "POST",
           body: JSON.stringify({ url: rt.baseURL, id: rt.id, name: `${rt.name} (local)`, models: r.models }),
         })
-        showToast({ title: `${rt.name} is running`, description: `Added ${r.models.length} model(s).` })
+        showToast({ title: lang.t("settings.localModels.toast.running", { name: rt.name }), description: lang.t("settings.localModels.toast.running.description", { count: r.models.length }) })
       } else if (r.running) {
-        showToast({ title: `${rt.name} is running`, description: "No models yet — pull one below, then rescan." })
+        showToast({ title: lang.t("settings.localModels.toast.runningNoModels", { name: rt.name }), description: lang.t("settings.localModels.toast.runningNoModels.description") })
       } else {
-        showToast({ title: `Couldn't start ${rt.name}`, description: "The server didn't come up in time." })
+        showToast({ title: lang.t("settings.localModels.toast.couldNotStart", { name: rt.name }), description: lang.t("settings.localModels.toast.couldNotStart.description") })
       }
       refetch()
     } catch (err) {
-      showToast({ title: `Couldn't start ${rt.name}`, description: err instanceof Error ? err.message : String(err) })
+      showToast({ title: lang.t("settings.localModels.toast.couldNotStart", { name: rt.name }), description: err instanceof Error ? err.message : String(err) })
     }
     setStarting(undefined)
   }
@@ -130,7 +132,7 @@ const LocalModels: Component = () => {
           method: "POST",
           body: JSON.stringify({ url: rt.baseURL, id: rt.id, name: `${rt.name} (local)`, models: rt.models }),
         }),
-      "Failed to add models",
+      "settings.localModels.toast.addRunningFailed",
     )
 
   // ── Pull a model (in the terminal, with visible progress) ──
@@ -155,12 +157,12 @@ const LocalModels: Component = () => {
         body: JSON.stringify({ url: url().trim(), key: key().trim() || undefined }),
       })
       if (r.error || !r.models.length) {
-        showToast({ title: "No models found", description: r.error ?? "The endpoint returned no models." })
+        showToast({ title: lang.t("settings.localModels.toast.noModelsFound"), description: r.error ?? lang.t("settings.localModels.toast.noModelsFound.description") })
       }
       setFound(r.models)
       setSelected(new Set(r.models))
       setListedUrl(r.baseURL)
-    }, "Couldn't reach the endpoint")
+    }, "settings.localModels.toast.couldNotReachEndpoint")
 
   const toggle = (m: string) => {
     const next = new Set(selected())
@@ -171,7 +173,7 @@ const LocalModels: Component = () => {
   const addCustom = () =>
     guard(async () => {
       const models = [...selected()]
-      if (!models.length) throw new Error("Select at least one model.")
+      if (!models.length) throw new Error(lang.t("settings.localModels.toast.selectAtLeastOne"))
       await call("/", {
         method: "POST",
         body: JSON.stringify({ url: url().trim(), key: key().trim() || undefined, models }),
@@ -181,16 +183,15 @@ const LocalModels: Component = () => {
       setFound([])
       setSelected(new Set<string>())
       setListedUrl("")
-    }, "Failed to add local models")
+    }, "settings.localModels.toast.addFailed")
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[820px]">
-          <h2 class="text-16-medium text-text-strong">Local models</h2>
+          <h2 class="text-16-medium text-text-strong">{lang.t("settings.localModels.heading")}</h2>
           <p class="text-13-regular text-text-weak">
-            Run models on your own machine — Ollama, LM Studio, llama.cpp, vLLM, or any OpenAI-compatible endpoint.
-            Free, offline, never metered.
+            {lang.t("settings.localModels.description")}
           </p>
         </div>
       </div>
@@ -198,9 +199,9 @@ const LocalModels: Component = () => {
       <div class="flex flex-col gap-8 px-4 pb-12 sm:px-8 max-w-[820px]">
         {/* ── Run locally (host it for the user) ── */}
         <section class="flex flex-col gap-3">
-          <h3 class="text-13-medium text-text-strong">Run a model locally</h3>
+          <h3 class="text-13-medium text-text-strong">{lang.t("settings.localModels.section.runLocally")}</h3>
           <p class="text-12-regular text-text-weak/70">
-            Let OpenScience start and host a runtime for you — no terminal needed.
+            {lang.t("settings.localModels.section.runLocally.description")}
           </p>
           <For each={status()}>
             {(rt) => (
@@ -215,9 +216,9 @@ const LocalModels: Component = () => {
                   <span class="text-11-regular text-text-weak">
                     <Show
                       when={!rt.installed}
-                      fallback={rt.running ? `running · ${rt.models.length} model(s)` : "installed · not running"}
+                      fallback={rt.running ? lang.t("settings.localModels.status.runningWithModels", { count: rt.models.length }) : lang.t("settings.localModels.status.installedNotRunning")}
                     >
-                      not installed — <code>{rt.serveHint}</code>
+                      {lang.t("settings.localModels.status.notInstalled")} — <code>{rt.serveHint}</code>
                     </Show>
                   </span>
                 </div>
@@ -229,7 +230,7 @@ const LocalModels: Component = () => {
                       variant="secondary"
                       onClick={() => window.open(rt.install, "_blank", "noopener")}
                     >
-                      install
+                      {lang.t("settings.localModels.action.install")}
                     </Button>
                   }
                 >
@@ -242,7 +243,7 @@ const LocalModels: Component = () => {
                         disabled={busy() || !!starting()}
                         onClick={() => startRuntime(rt)}
                       >
-                        {starting() === rt.id ? "starting…" : "start"}
+                        {starting() === rt.id ? lang.t("settings.localModels.status.starting") : lang.t("settings.localModels.action.start")}
                       </Button>
                     }
                   >
@@ -252,7 +253,7 @@ const LocalModels: Component = () => {
                       disabled={busy() || rt.models.length === 0}
                       onClick={() => addRunning(rt)}
                     >
-                      add {rt.models.length}
+                      {lang.t("settings.localModels.action.addModels", { count: rt.models.length })}
                     </Button>
                   </Show>
                 </Show>
@@ -263,9 +264,9 @@ const LocalModels: Component = () => {
 
         {/* ── Pull a model (Ollama, via the terminal) ── */}
         <section class="flex flex-col gap-2">
-          <h3 class="text-13-medium text-text-strong">Pull a model</h3>
+          <h3 class="text-13-medium text-text-strong">{lang.t("settings.localModels.section.pullModel")}</h3>
           <p class="text-12-regular text-text-weak/70">
-            Download an Ollama model — runs <code>ollama pull</code> in the terminal so you can watch progress.
+            {lang.t("settings.localModels.section.pullModel.description")}
           </p>
           <div class="flex gap-2">
             <input
@@ -276,11 +277,11 @@ const LocalModels: Component = () => {
               onKeyDown={(e) => e.key === "Enter" && pull()}
             />
             <Button size="small" variant="secondary" disabled={!pullName().trim()} onClick={pull}>
-              pull in terminal
+              {lang.t("settings.localModels.action.pullInTerminal")}
             </Button>
           </div>
           <p class="text-11-regular text-text-weak/60">
-            Prefer to do it yourself? In the terminal:{" "}
+            {lang.t("settings.localModels.section.pullModel.terminalHint")}{" "}
             <button
               class="underline hover:text-text-strong"
               onClick={() => runInTerminal("ollama", ["serve"], "ollama serve")}
@@ -293,17 +294,16 @@ const LocalModels: Component = () => {
         {/* ── Detected runtimes ── */}
         <section class="flex flex-col gap-3">
           <div class="flex items-center justify-between">
-            <h3 class="text-13-medium text-text-strong">Detected on this machine</h3>
+            <h3 class="text-13-medium text-text-strong">{lang.t("settings.localModels.section.detected")}</h3>
             <Button size="small" variant="secondary" disabled={busy()} onClick={refetch}>
-              rescan
+              {lang.t("settings.localModels.action.rescan")}
             </Button>
           </div>
           <Show
             when={(detected()?.length ?? 0) > 0}
             fallback={
               <p class="text-12-regular text-text-weak/70">
-                Nothing running yet. Start a server (e.g. <code>ollama serve</code>) and hit rescan, or add a custom
-                endpoint below.
+                {lang.t("settings.localModels.empty.nothingRunning")}
               </p>
             }
           >
@@ -315,11 +315,11 @@ const LocalModels: Component = () => {
                       <Icon name="check" class="text-text-success" /> {d.name}
                     </span>
                     <span class="text-11-regular text-text-weak">
-                      {d.baseURL} · {d.models.length} model(s)
+                      {d.baseURL} · {lang.t("settings.localModels.status.modelCount", { count: d.models.length })}
                     </span>
                   </div>
                   <Button size="small" variant="primary" disabled={busy()} onClick={() => addRuntime(d)}>
-                    add {d.models.length}
+                    {lang.t("settings.localModels.action.addModels", { count: d.models.length })}
                   </Button>
                 </div>
               )}
@@ -329,7 +329,7 @@ const LocalModels: Component = () => {
 
         {/* ── Custom endpoint ── */}
         <section class="flex flex-col gap-3">
-          <h3 class="text-13-medium text-text-strong">Custom endpoint</h3>
+          <h3 class="text-13-medium text-text-strong">{lang.t("settings.localModels.section.customEndpoint")}</h3>
           <div class="flex flex-col gap-2">
             <input
               class="w-full rounded-[4px] border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
@@ -339,17 +339,17 @@ const LocalModels: Component = () => {
             />
             <input
               class="w-full rounded-[4px] border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
-              placeholder="API key (optional — most local servers need none)"
+              placeholder={lang.t("settings.localModels.placeholder.apiKey")}
               value={key()}
               onInput={(e) => setKey(e.currentTarget.value)}
             />
             <div class="flex gap-2">
               <Button size="small" variant="secondary" disabled={busy() || !url().trim()} onClick={listCustom}>
-                list models
+                {lang.t("settings.localModels.action.listModels")}
               </Button>
               <Show when={found().length > 0}>
                 <Button size="small" variant="primary" disabled={busy() || selected().size === 0} onClick={addCustom}>
-                  add {selected().size} selected
+                  {lang.t("settings.localModels.action.addSelected", { count: selected().size })}
                 </Button>
               </Show>
             </div>
@@ -371,10 +371,10 @@ const LocalModels: Component = () => {
 
         {/* ── Configured ── */}
         <section class="flex flex-col gap-3">
-          <h3 class="text-13-medium text-text-strong">Configured</h3>
+          <h3 class="text-13-medium text-text-strong">{lang.t("settings.localModels.section.configured")}</h3>
           <Show
             when={(configured()?.length ?? 0) > 0}
-            fallback={<p class="text-12-regular text-text-weak/70">No local providers yet.</p>}
+            fallback={<p class="text-12-regular text-text-weak/70">{lang.t("settings.localModels.empty.noProviders")}</p>}
           >
             <For each={configured()}>
               {(p) => (
@@ -382,7 +382,7 @@ const LocalModels: Component = () => {
                   <div class="flex flex-col gap-0.5">
                     <span class="text-13-medium text-text-strong">{p.id}</span>
                     <span class="text-11-regular text-text-weak">
-                      {p.baseURL} · {p.models.length} model(s)
+                      {p.baseURL} · {lang.t("settings.localModels.status.modelCount", { count: p.models.length })}
                     </span>
                   </div>
                   <Button
@@ -391,9 +391,9 @@ const LocalModels: Component = () => {
                     icon="trash"
                     disabled={busy()}
                     onClick={() => removeProvider(p.id)}
-                  >
-                    remove
-                  </Button>
+                    >
+                      {lang.t("common.remove")}
+                    </Button>
                 </div>
               )}
             </For>

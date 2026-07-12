@@ -3,6 +3,7 @@ import { currentDirectory } from "@/utils/base64"
 import { Icon } from "@synsci/ui/icon"
 import { Switch } from "@synsci/ui/switch"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 
 // Persistent notes/instructions the agent recalls across sessions. Wired to a
@@ -19,6 +20,7 @@ const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2)
 
 export default function Memory() {
+  const lang = useLanguage()
   const sdk = useGlobalSDK()
   const platform = usePlatform()
   const doFetch = platform.fetch ?? fetch
@@ -84,7 +86,7 @@ export default function Memory() {
   }
 
   function clearAll() {
-    if (!window.confirm(`Clear all ${scope() === "global" ? "global" : "project"} memory? This cannot be undone.`))
+    if (!window.confirm(lang.t("settings.memory.confirm.clearAll")))
       return
     void persist({ enabled: doc().enabled, categories: [] })
   }
@@ -129,10 +131,9 @@ export default function Memory() {
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
-          <h2 class="text-16-medium text-text-strong">Memory</h2>
+          <h2 class="text-16-medium text-text-strong">{lang.t("settings.memory.heading")}</h2>
           <p class="text-13-regular text-text-weak">
-            Notes and standing instructions the agent remembers across sessions. When memory is on, these are added to
-            the agent's context on every turn.
+            {lang.t("settings.memory.description")}
           </p>
         </div>
       </div>
@@ -143,8 +144,8 @@ export default function Memory() {
           <For
             each={
               [
-                { id: "global", label: "Global" },
-                { id: "project", label: "This project" },
+                { id: "global", label: "settings.memory.scope.global" },
+                { id: "project", label: "settings.memory.scope.project" },
               ] as const
             }
           >
@@ -158,7 +159,7 @@ export default function Memory() {
                 }}
                 onClick={() => selectScope(opt.id)}
               >
-                {opt.label}
+                {lang.t(opt.label)}
               </button>
             )}
           </For>
@@ -173,9 +174,9 @@ export default function Memory() {
         {/* Master toggle + clear all */}
         <div class="flex items-center justify-between gap-3 rounded-[4px] border border-border-weak-base bg-surface-base/40 px-4 py-3">
           <div class="flex flex-col gap-0.5 min-w-0">
-            <span class="text-13-medium text-text-strong">Memory enabled</span>
+            <span class="text-13-medium text-text-strong">{lang.t("settings.memory.row.enabled.title")}</span>
             <span class="text-12-regular text-text-weak">
-              {doc().enabled ? "Notes are recalled into agent context." : "Notes are saved but not recalled."}
+              {doc().enabled ? lang.t("settings.memory.status.recalled") : lang.t("settings.memory.status.notRecalled")}
             </span>
           </div>
           <div class="flex items-center gap-3 flex-shrink-0">
@@ -186,14 +187,14 @@ export default function Memory() {
                 disabled={saving()}
                 onClick={clearAll}
               >
-                clear all
+                {lang.t("settings.memory.action.clearAll")}
               </button>
             </Show>
             <Switch checked={doc().enabled} onChange={toggleEnabled} />
           </div>
         </div>
 
-        <Show when={!loading()} fallback={<div class="text-13-regular text-text-weak py-6 text-center">Loading…</div>}>
+        <Show when={!loading()} fallback={<div class="text-13-regular text-text-weak py-6 text-center">{lang.t("common.loading")}…</div>}>
           {/* Categories */}
           <div class="flex flex-col gap-4">
             <For each={doc().categories}>
@@ -214,7 +215,7 @@ export default function Memory() {
                   <div class="flex flex-col">
                     <For
                       each={category.notes}
-                      fallback={<span class="px-4 py-3 text-12-regular text-text-weak/70">No notes yet.</span>}
+                      fallback={<span class="px-4 py-3 text-12-regular text-text-weak/70">{lang.t("settings.memory.empty.noNotes")}</span>}
                     >
                       {(note) => (
                         <div class="group flex items-start gap-2 px-4 py-2.5 border-b border-border-weak-base/60 last:border-b-0">
@@ -237,7 +238,7 @@ export default function Memory() {
                     <div class="flex items-center gap-2 px-3 py-2.5">
                       <input
                         type="text"
-                        placeholder="Add a note…"
+                        placeholder={lang.t("settings.memory.placeholder.addNote")}
                         value={drafts()[category.id] ?? ""}
                         disabled={saving()}
                         class="flex-1 h-9 px-3 rounded-xs border border-border-weak-base bg-surface-raised-base/40 text-13-regular text-text-strong placeholder:text-text-weak/60 outline-none focus:border-border-base"
@@ -250,7 +251,7 @@ export default function Memory() {
                         disabled={saving() || !(drafts()[category.id] ?? "").trim()}
                         onClick={() => addNote(category.id)}
                       >
-                        add
+                        {lang.t("settings.memory.action.add")}
                       </button>
                     </div>
                   </div>
@@ -263,7 +264,7 @@ export default function Memory() {
           <div class="flex items-center gap-2">
             <input
               type="text"
-              placeholder="New category"
+              placeholder={lang.t("settings.memory.placeholder.newCategory")}
               value={newCategory()}
               disabled={saving()}
               class="flex-1 h-9 px-3 rounded-xs border border-border-weak-base bg-surface-base/40 text-13-regular text-text-strong placeholder:text-text-weak/60 outline-none focus:border-border-base"
@@ -277,7 +278,7 @@ export default function Memory() {
               onClick={addCategory}
             >
               <Icon name="plus" size="small" />
-              add category
+              {lang.t("settings.memory.action.addCategory")}
             </button>
           </div>
         </Show>

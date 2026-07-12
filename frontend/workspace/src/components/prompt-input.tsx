@@ -1401,12 +1401,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const end = selection ? Math.max(selection.startLine, selection.endLine) : undefined
       const range =
         start === undefined || end === undefined
-          ? "this file"
+          ? language.t("comment.range.thisFile")
           : start === end
-            ? `line ${start}`
-            : `lines ${start} through ${end}`
+            ? language.t("comment.range.line", { n: start })
+            : language.t("comment.range.lineRange", { start, end })
 
-      return `The user made the following comment regarding ${range} of ${path}: ${comment}`
+      return language.t("comment.note", { range, path, comment })
     }
 
     const addContextFile = (input: { path: string; selection?: FileSelection; comment?: string }) => {

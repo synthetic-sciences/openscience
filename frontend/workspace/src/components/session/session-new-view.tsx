@@ -56,11 +56,9 @@ export function NewSessionView(props: NewSessionViewProps) {
       <div class="text-20-medium text-text-weaker">{language.t("command.session.new")}</div>
       <Show when={noModel()}>
         <div class="flex flex-col gap-1.5 rounded-lg border border-border-base bg-surface-raised-base px-4 py-3 self-stretch max-w-full">
-          <div class="text-13-medium text-text-strong">No model connected</div>
+          <div class="text-13-medium text-text-strong">{language.t("session.new.noModel.title")}</div>
           <div class="text-12-regular text-text-weak leading-relaxed">
-            You don't have a provider key set. Bring your own with{" "}
-            <code class="text-text-base">openscience keys signin</code> (OpenAI · Anthropic · Gemini, or ChatGPT / Codex
-            — no API key needed), or use managed credits with <code class="text-text-base">openscience login</code>.
+            {language.t("session.new.noModel.description")}
           </div>
         </div>
       </Show>

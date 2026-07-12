@@ -5,12 +5,13 @@
 // Backend: routes/settings/compute.ts. Provider keys are encrypted at rest
 // under ~/.openscience/ (AES-256-GCM, machine-local key) and never returned to the
 // browser — the panel only ever sees connection state + metadata.
-import { Component, For, Show, createResource, createSignal, type JSX } from "solid-js"
+import { Component, For, Show, createMemo, createResource, createSignal, type JSX } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Select } from "@synsci/ui/select"
 import { Icon } from "@synsci/ui/icon"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { StatusDot } from "@/atlas/shared/StatusDot"
 import { settingsApi } from "./api"
@@ -52,6 +53,7 @@ const fmtDate = (iso: string | null) => {
 }
 
 const Compute: Component = () => {
+  const lang = useLanguage()
   const sdk = useGlobalSDK()
   const platform = usePlatform()
   const fetchFn = platform.fetch ?? fetch
@@ -66,7 +68,7 @@ const Compute: Component = () => {
     try {
       mutate(await fn())
     } catch (err) {
-      showToast({ title: failure, description: err instanceof Error ? err.message : String(err) })
+      showToast({ title: lang.t(failure), description: err instanceof Error ? err.message : String(err) })
       refetch()
     }
     setBusy(false)
@@ -83,13 +85,13 @@ const Compute: Component = () => {
     if (!keyValue().trim()) return
     await run(
       () => call<ComputeInfo>(`/provider/${id}`, { method: "POST", body: JSON.stringify({ key: keyValue().trim() }) }),
-      "Failed to connect provider",
+      "settings.compute.toast.connectFailed",
     )
     setKeyValue("")
     setConnecting(undefined)
   }
   const removeProvider = (id: string) =>
-    run(() => call<ComputeInfo>(`/provider/${id}`, { method: "DELETE" }), "Failed to remove provider")
+    run(() => call<ComputeInfo>(`/provider/${id}`, { method: "DELETE" }), "settings.compute.toast.removeFailed")
 
   // ── SSH host add form ──
   const [addingHost, setAddingHost] = createSignal(false)
@@ -117,7 +119,7 @@ const Compute: Component = () => {
             port: hPort().trim() ? Number(hPort().trim()) : undefined,
           }),
         }),
-      "Failed to add SSH host",
+      "settings.compute.toast.addSshHostFailed",
     )
     resetHost()
   }
@@ -141,31 +143,31 @@ const Compute: Component = () => {
           method: "POST",
           body: JSON.stringify({ label: epLabel().trim(), url: epUrl().trim(), kind: epKind() }),
         }),
-      "Failed to add model endpoint",
+      "settings.compute.toast.addEndpointFailed",
     )
     resetEp()
   }
 
   const kindOptions: { value: "local" | "remote"; label: string }[] = [
-    { value: "remote", label: "Remote" },
-    { value: "local", label: "Local" },
+    { value: "remote", label: "settings.compute.kind.remote" },
+    { value: "local", label: "settings.compute.kind.local" },
   ]
+  const kindOpts = createMemo(() => kindOptions.map((o) => ({ value: o.value, label: lang.t(o.label) })))
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[820px]">
-          <h2 class="text-16-medium text-text-strong">Compute</h2>
+          <h2 class="text-16-medium text-text-strong">{lang.t("settings.compute.heading")}</h2>
           <p class="text-13-regular text-text-weak">
-            GPU providers for sandboxes and training. Add your own key to run on your account for free — or skip the key
-            and provision from the Compute tab, funded by your CLI wallet.
+            {lang.t("settings.compute.description")}
           </p>
         </div>
       </div>
 
       <div class="flex flex-col gap-8 px-4 pb-12 sm:px-8 max-w-[820px]">
         {/* ── GPU providers (BYOK) ── */}
-        <Section title="GPU providers" subtitle="Bring your own key — connect once and work runs under your account.">
+        <Section title={lang.t("settings.compute.section.gpuProviders")} subtitle={lang.t("settings.compute.section.gpuProviders.description")}>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <For each={info()?.providers}>
               {(p) => (
@@ -183,16 +185,15 @@ const Compute: Component = () => {
             </For>
           </div>
           <p class="text-11-regular text-text-weak/70 leading-relaxed">
-            Everything is BYOK — connect a provider once and work runs under your account. Your provider bills you
-            directly — we never store a key in plaintext.
-            <span class="text-text-weak"> encrypted at rest · your provider, your bill · revoke anytime.</span>
+            {lang.t("settings.compute.section.gpuProviders.note")}
+            <span class="text-text-weak"> {lang.t("settings.compute.section.gpuProviders.noteEncryption")}</span>
           </p>
         </Section>
 
         {/* ── SSH hosts ── */}
         <Section
-          title="SSH hosts"
-          subtitle="Machines the agent can dispatch runs to over SSH."
+          title={lang.t("settings.compute.section.sshHosts")}
+          subtitle={lang.t("settings.compute.section.sshHosts.description")}
           action={
             <Button
               size="small"
@@ -201,23 +202,23 @@ const Compute: Component = () => {
               disabled={busy()}
               onClick={() => setAddingHost((v) => !v)}
             >
-              add SSH host
+              {lang.t("settings.compute.action.addSshHost")}
             </Button>
           }
         >
           <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
             <Show
               when={(info()?.ssh_hosts.length ?? 0) > 0}
-              fallback={<Empty when={!addingHost()} text="No SSH hosts yet." />}
+              fallback={<Empty when={!addingHost()} text={lang.t("settings.compute.empty.noSshHosts")} />}
             >
               <For each={info()?.ssh_hosts}>
                 {(h) => (
                   <Row title={h.label} subtitle={`${h.user ? `${h.user}@` : ""}${h.host}${h.port ? `:${h.port}` : ""}`}>
                     <RemoveButton
                       disabled={busy()}
-                      onClick={() =>
-                        run(() => call<ComputeInfo>(`/ssh/${h.id}`, { method: "DELETE" }), "Failed to remove host")
-                      }
+                       onClick={() =>
+                         run(() => call<ComputeInfo>(`/ssh/${h.id}`, { method: "DELETE" }), "settings.compute.toast.removeHostFailed")
+                       }
                     />
                   </Row>
                 )}
@@ -226,15 +227,15 @@ const Compute: Component = () => {
             <Show when={addingHost()}>
               <div class="flex flex-col gap-3 p-4 border-t border-border-weak-base">
                 <div class="grid grid-cols-2 gap-3">
-                  <TextField label="Label" value={hLabel()} onInput={setHLabel} placeholder="lab-gpu-01" />
+                  <TextField label={lang.t("settings.compute.form.label")} value={hLabel()} onInput={setHLabel} placeholder={lang.t("settings.compute.form.ssh.hostPlaceholder")} />
                   <TextField
-                    label="Host"
+                    label={lang.t("settings.compute.form.host")}
                     value={hHost()}
                     onInput={setHHost}
                     placeholder="10.0.0.4 or gpu.lab.internal"
                   />
-                  <TextField label="User (optional)" value={hUser()} onInput={setHUser} placeholder="ubuntu" />
-                  <TextField label="Port (optional)" value={hPort()} onInput={setHPort} placeholder="22" />
+                  <TextField label={lang.t("settings.compute.form.userOptional")} value={hUser()} onInput={setHUser} placeholder="ubuntu" />
+                  <TextField label={lang.t("settings.compute.form.portOptional")} value={hPort()} onInput={setHPort} placeholder="22" />
                 </div>
                 <FormActions
                   onCancel={resetHost}
@@ -248,8 +249,8 @@ const Compute: Component = () => {
 
         {/* ── Model endpoints ── */}
         <Section
-          title="Model endpoints"
-          subtitle="Local or remote inference URLs the agent can route requests to."
+          title={lang.t("settings.compute.section.modelEndpoints")}
+          subtitle={lang.t("settings.compute.section.modelEndpoints.description")}
           action={
             <Button
               size="small"
@@ -258,14 +259,14 @@ const Compute: Component = () => {
               disabled={busy()}
               onClick={() => setAddingEp((v) => !v)}
             >
-              add model endpoint
+              {lang.t("settings.compute.action.addModelEndpoint")}
             </Button>
           }
         >
           <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
             <Show
               when={(info()?.endpoints.length ?? 0) > 0}
-              fallback={<Empty when={!addingEp()} text="No model endpoints yet." />}
+              fallback={<Empty when={!addingEp()} text={lang.t("settings.compute.empty.noEndpoints")} />}
             >
               <For each={info()?.endpoints}>
                 {(e) => (
@@ -273,10 +274,10 @@ const Compute: Component = () => {
                     <RemoveButton
                       disabled={busy()}
                       onClick={() =>
-                        run(
-                          () => call<ComputeInfo>(`/endpoint/${e.id}`, { method: "DELETE" }),
-                          "Failed to remove endpoint",
-                        )
+                         run(
+                           () => call<ComputeInfo>(`/endpoint/${e.id}`, { method: "DELETE" }),
+                           "settings.compute.toast.removeEndpointFailed",
+                         )
                       }
                     />
                   </Row>
@@ -286,12 +287,12 @@ const Compute: Component = () => {
             <Show when={addingEp()}>
               <div class="flex flex-col gap-3 p-4 border-t border-border-weak-base">
                 <div class="grid grid-cols-2 gap-3">
-                  <TextField label="Label" value={epLabel()} onInput={setEpLabel} placeholder="local-vllm" />
+                  <TextField label={lang.t("settings.compute.form.label")} value={epLabel()} onInput={setEpLabel} placeholder="local-vllm" />
                   <div class="flex flex-col gap-1.5">
-                    <span class="text-12-medium text-text-weak">Kind</span>
+                    <span class="text-12-medium text-text-weak">{lang.t("settings.compute.form.kind")}</span>
                     <Select
-                      options={kindOptions}
-                      current={kindOptions.find((o) => o.value === epKind())}
+                      options={kindOpts()}
+                      current={kindOpts().find((o) => o.value === epKind())}
                       value={(o) => o.value}
                       label={(o) => o.label}
                       onSelect={(o) => o && setEpKind(o.value)}
@@ -330,6 +331,7 @@ const ProviderCard: Component<{
   onConnect: () => void
   onRemove: () => void
 }> = (props) => {
+  const lang = useLanguage()
   const p = () => props.provider
   return (
     <div class="flex flex-col gap-3 p-4 rounded-[4px] border border-border-weak-base bg-surface-base/40">
@@ -346,23 +348,23 @@ const ProviderCard: Component<{
       <Show when={p().connected}>
         <div class="flex flex-col gap-0.5">
           <Show when={fmtDate(p().connected_at)}>
-            {(d) => <span class="text-11-regular text-text-weak/70">Connected {d()}</span>}
+            {(d) => <span class="text-11-regular text-text-weak/70">{lang.t("settings.compute.status.connectedSince", { date: d() })}</span>}
           </Show>
-          <span class="text-11-regular text-text-weak/70">Last used {fmtDate(p().last_used) ?? "never"}</span>
+          <span class="text-11-regular text-text-weak/70">{lang.t("settings.compute.status.lastUsed")} {fmtDate(p().last_used) ?? lang.t("settings.compute.status.never")}</span>
         </div>
       </Show>
 
       <Show when={props.connecting}>
         <div class="flex flex-col gap-2">
           <TextField
-            label="API key"
+            label={lang.t("settings.compute.form.apiKey")}
             value={props.keyValue}
             onInput={props.onKeyInput}
             placeholder={p().placeholder}
             secret
           />
           <p class="text-11-regular text-text-weak/70">
-            Encrypted at rest under ~/.openscience/ · never returned to the browser.
+            {lang.t("settings.compute.status.encryptedAtRest")}
           </p>
         </div>
       </Show>
@@ -375,12 +377,12 @@ const ProviderCard: Component<{
               when={props.connecting}
               fallback={
                 <Button size="small" variant="primary" disabled={props.busy} onClick={props.onOpen}>
-                  connect
+                  {lang.t("common.connect")}
                 </Button>
               }
             >
               <Button size="small" variant="ghost" disabled={props.busy} onClick={props.onOpen}>
-                cancel
+                {lang.t("common.cancel")}
               </Button>
               <Button
                 size="small"
@@ -388,7 +390,7 @@ const ProviderCard: Component<{
                 disabled={props.busy || !props.keyValue.trim()}
                 onClick={props.onConnect}
               >
-                connect
+                {lang.t("common.connect")}
               </Button>
             </Show>
           }
@@ -398,16 +400,16 @@ const ProviderCard: Component<{
             fallback={
               <>
                 <Button size="small" variant="ghost" disabled={props.busy} onClick={props.onRemove}>
-                  remove
+                  {lang.t("common.remove")}
                 </Button>
                 <Button size="small" variant="secondary" disabled={props.busy} onClick={props.onOpen}>
-                  re-add key
+                  {lang.t("settings.compute.action.reAddKey")}
                 </Button>
               </>
             }
           >
             <Button size="small" variant="ghost" disabled={props.busy} onClick={props.onOpen}>
-              cancel
+              {lang.t("common.cancel")}
             </Button>
             <Button
               size="small"
@@ -415,7 +417,7 @@ const ProviderCard: Component<{
               disabled={props.busy || !props.keyValue.trim()}
               onClick={props.onConnect}
             >
-              save key
+              {lang.t("settings.compute.action.saveKey")}
             </Button>
           </Show>
         </Show>
@@ -425,7 +427,8 @@ const ProviderCard: Component<{
 }
 
 const Badge: Component<{ connected: boolean; verified: boolean }> = (props) => {
-  const label = () => (props.connected ? (props.verified ? "verified" : "connected") : "not connected")
+  const lang = useLanguage()
+  const label = () => (props.connected ? (props.verified ? lang.t("settings.compute.status.verified") : lang.t("settings.compute.status.connected")) : lang.t("settings.compute.status.notConnected"))
   return (
     <span
       class="flex-shrink-0 px-2 py-0.5 rounded-full text-11-regular border"
@@ -491,16 +494,18 @@ const FormActions: Component<{
   onSave: () => void
   saveLabel?: string
   saveDisabled?: boolean
-}> = (props) => (
+}> = (props) => {
+  const lang = useLanguage()
+  return (
   <div class="flex items-center justify-end gap-2">
     <Button size="small" variant="ghost" onClick={props.onCancel}>
-      cancel
+      {lang.t("common.cancel")}
     </Button>
     <Button size="small" variant="primary" disabled={props.saveDisabled} onClick={props.onSave}>
-      {props.saveLabel ?? "add"}
+      {props.saveLabel ?? lang.t("settings.compute.action.add")}
     </Button>
   </div>
-)
+)}
 
 const TextField: Component<{
   label: string

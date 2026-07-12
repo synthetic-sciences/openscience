@@ -1,5 +1,6 @@
 import { type JSX, Show, For, onMount, onCleanup } from "solid-js"
 import { Portal } from "solid-js/web"
+import { useLanguage } from "@/context/language"
 import { FONT_MONO, FONT_SANS, FONT_SERIF } from "@/styles/tokens"
 import { IconX } from "@/atlas/shared/Icon"
 import { AgentIcon } from "@/atlas/shared/AgentIcon"
@@ -11,29 +12,30 @@ interface HelpOverlayProps {
 
 const SECTIONS: Array<{ title: string; rows: Array<{ keys: string[]; label: string }> }> = [
   {
-    title: "navigation",
+    title: "help.section.navigation",
     rows: [
-      { keys: ["⌘", "K"], label: "command palette" },
-      { keys: ["⌘", "N"], label: "open folder / new project" },
-      { keys: ["?"], label: "open this help" },
+      { keys: ["⌘", "K"], label: "help.action.commandPalette" },
+      { keys: ["⌘", "N"], label: "help.action.openFolder" },
+      { keys: ["?"], label: "help.action.openHelp" },
     ],
   },
   {
-    title: "chat",
+    title: "help.section.chat",
     rows: [
-      { keys: ["↵"], label: "send message" },
-      { keys: ["⇧", "↵"], label: "newline in composer" },
-      { keys: ["/"], label: "skill menu" },
-      { keys: ["esc"], label: "close modal" },
+      { keys: ["↵"], label: "help.action.sendMessage" },
+      { keys: ["⇧", "↵"], label: "help.action.newline" },
+      { keys: ["/"], label: "help.action.skillMenu" },
+      { keys: ["esc"], label: "help.action.closeModal" },
     ],
   },
   {
-    title: "sessions",
-    rows: [{ keys: ["dbl-click"], label: "rename a session" }],
+    title: "help.section.sessions",
+    rows: [{ keys: ["dbl-click"], label: "help.action.renameSession" }],
   },
 ]
 
 export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
+  const language = useLanguage()
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && props.open) props.onClose()
@@ -65,7 +67,7 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
                 color: "var(--color-text)",
               }}
             >
-              keyboard shortcuts
+              {language.t("help.heading")}
             </span>
             <span style={{ flex: 1 }} />
             <button
@@ -104,7 +106,7 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
                       color: "var(--color-text-faint)",
                     }}
                   >
-                    {section.title}
+                    {language.t(section.title)}
                   </div>
                   <For each={section.rows}>
                     {(row) => (
@@ -144,7 +146,7 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
                             flex: 1,
                           }}
                         >
-                          {row.label}
+                          {language.t(row.label)}
                         </span>
                       </div>
                     )}

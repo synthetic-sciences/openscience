@@ -8,6 +8,7 @@ import { createSignal, createMemo, onMount, onCleanup, For, Show, type JSX } fro
 import { Dialog } from "@synsci/ui/dialog"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useSync } from "@/context/sync"
+import { useLanguage } from "@/context/language"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconSearch } from "@/atlas/shared/Icon"
 
@@ -28,6 +29,7 @@ function originOf(location: string): string {
 
 export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: () => void }): JSX.Element {
   const sync = useSync()
+  const language = useLanguage()
   const [query, setQuery] = createSignal("")
   let panelRef: HTMLDivElement | undefined
 
@@ -111,7 +113,7 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
             color: "var(--color-text-faint)",
           }}
         >
-          skills
+          {language.t("skills.browser.label")}
         </span>
         <span
           class="tab-fig"
@@ -123,7 +125,7 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
           autofocus
           value={query()}
           onInput={(e) => setQuery(e.currentTarget.value)}
-          placeholder="search skills…"
+          placeholder={language.t("skills.browser.search")}
           style={{
             all: "unset",
             flex: 1,
@@ -136,7 +138,7 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
         <button
           type="button"
           onClick={props.onClose}
-          title="close (esc)"
+          title={language.t("skills.browser.closeTooltip")}
           style={{
             all: "unset",
             cursor: "pointer",
@@ -163,7 +165,7 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
                 color: "var(--color-text-faint)",
               }}
             >
-              no matching skills
+              {language.t("skills.browser.noMatch")}
             </div>
           }
         >
@@ -270,6 +272,7 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
 export function SkillLibraryDialog(props: { onPick: (name: string) => void }): JSX.Element {
   const sync = useSync()
   const dialog = useDialog()
+  const language = useLanguage()
   const [query, setQuery] = createSignal("")
 
   const groups = createMemo(() => {
@@ -303,7 +306,7 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void }): J
   }
 
   return (
-    <Dialog title="Skill Library" size="large" transition>
+    <Dialog title={language.t("skills.library.title")} size="large" transition>
       <div
         style={{
           display: "flex",
@@ -330,7 +333,7 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void }): J
             autofocus
             value={query()}
             onInput={(e) => setQuery(e.currentTarget.value)}
-            placeholder="search skills…"
+            placeholder={language.t("skills.library.search")}
             style={{
               all: "unset",
               flex: 1,
@@ -348,7 +351,7 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void }): J
               color: "var(--color-text-faint)",
             }}
           >
-            {total()} skills
+            {total()} {language.t("skills.library.count")}
           </span>
         </div>
 
@@ -376,7 +379,7 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void }): J
                   color: "var(--color-text-faint)",
                 }}
               >
-                no matching skills
+                {language.t("skills.library.noMatch")}
               </div>
             }
           >

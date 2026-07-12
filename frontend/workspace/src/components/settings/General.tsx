@@ -11,6 +11,7 @@ import { Select } from "@synsci/ui/select"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
@@ -33,13 +34,14 @@ type Preferences = {
 }
 
 const REASONING = [
-  { value: "minimal", label: "Minimal" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
+  { value: "minimal", label: "settings.general.reasoning.minimal" },
+  { value: "low", label: "settings.general.reasoning.low" },
+  { value: "medium", label: "settings.general.reasoning.medium" },
+  { value: "high", label: "settings.general.reasoning.high" },
 ] as const
 
 export default function General() {
+  const lang = useLanguage()
   const sdk = useGlobalSDK()
   const sync = useGlobalSync()
   const models = useModels()
@@ -83,15 +85,15 @@ export default function General() {
   }
 
   const signOut = async () => {
-    if (!window.confirm("Disconnect this local server from OpenScience?")) return
+    if (!window.confirm(lang.t("settings.general.confirm.signOut"))) return
     setBusy(true)
     try {
       const res = await sdk.client.account.logout()
       if (res.error)
-        throw new Error(typeof res.error === "string" ? res.error : "The server could not clear the session")
+        throw new Error(typeof res.error === "string" ? res.error : lang.t("settings.general.toast.couldNotClearSession"))
       setAccount({ session: false })
     } catch (err) {
-      showToast({ variant: "error", title: "Sign out failed", description: message(err) })
+      showToast({ variant: "error", title: lang.t("settings.general.toast.signOutFailed"), description: message(err) })
     } finally {
       setBusy(false)
     }
@@ -104,7 +106,7 @@ export default function General() {
       .map((m) => ({ value: `${m.provider.id}/${m.id}`, label: `${m.name} · ${m.provider.name}` }))
       .sort((a, b) => a.label.localeCompare(b.label)),
   )
-  const defaultModel = () => sync.data.config.model
+  const reasoningOpts = createMemo(() => REASONING.map((r) => ({ value: r.value, label: lang.t(r.label) })))
   const subagentModel = () => sync.data.config.small_model
   const setDefaultModel = (value: string) => void sync.updateConfig({ model: value })
   const setSubagentModel = (value: string) => void sync.updateConfig({ small_model: value })
@@ -119,8 +121,8 @@ export default function General() {
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-8">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-8 pb-8 max-w-[760px]">
-          <h2 class="text-16-medium text-text-strong">General</h2>
-          <p class="text-13-regular text-text-weak">Your account, default models, licensing, and appearance.</p>
+          <h2 class="text-16-medium text-text-strong">{lang.t("settings.general.heading")}</h2>
+          <p class="text-13-regular text-text-weak">{lang.t("settings.general.description")}</p>
         </div>
       </div>
 
@@ -141,42 +143,42 @@ export default function General() {
         </Show>
 
         {/* Account */}
-        <Section title="Account" description="Your OpenScience identity and subscription.">
+        <Section title={lang.t("settings.general.section.account")} description={lang.t("settings.general.section.account.description")}>
           <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
-            <Row title="Email">
+            <Row title={lang.t("settings.general.row.email.title")}>
               <span class="text-13-regular text-text-strong">
-                {(account()?.user?.email as string) ?? (account()?.session === false ? "Not connected" : "—")}
+                {(account()?.user?.email as string) ?? (account()?.session === false ? lang.t("settings.general.status.notConnected") : "—")}
               </span>
             </Row>
-            <Row title="Plan">
-              <span class="text-13-regular text-text-strong capitalize">{plan() ?? "Free"}</span>
+            <Row title={lang.t("settings.general.row.plan.title")}>
+              <span class="text-13-regular text-text-strong capitalize">{plan() ?? lang.t("settings.general.status.free")}</span>
             </Row>
             <Show when={org()}>
-              <Row title="Organization">
+              <Row title={lang.t("settings.general.row.organization.title")}>
                 <span class="text-13-regular text-text-strong">{org()}</span>
               </Row>
             </Show>
-            <Row title="Billing" description="Manage your subscription, wallet, and invoices.">
+            <Row title={lang.t("settings.general.row.billing.title")} description={lang.t("settings.general.row.billing.description")}>
               <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardCli)}>
-                manage billing
+                {lang.t("settings.general.action.manageBilling")}
               </Button>
             </Row>
-            <Row title="Session" description="Disconnect this machine from OpenScience.">
+            <Row title={lang.t("settings.general.row.session.title")} description={lang.t("settings.general.row.session.description")}>
               <Button
                 size="small"
                 variant="secondary"
                 disabled={busy() || account()?.session === false}
                 onClick={() => void signOut()}
               >
-                sign out
+                {lang.t("settings.general.action.signOut")}
               </Button>
             </Row>
             <Show when={account()?.session === false}>
               <div class="px-4 py-3">
                 <p class="text-12-regular text-text-weak">
-                  Signed out — run{" "}
-                  <code style={{ "font-family": FONT_CODE, "font-size": "11px" }}>openscience connect login</code> in a
-                  terminal to reconnect this machine.
+                  {lang.t("settings.general.status.signedOutHint")}{" "}
+                  <code style={{ "font-family": FONT_CODE, "font-size": "11px" }}>openscience connect login</code>{" "}
+                  {lang.t("settings.general.status.signedOutHint.terminal")}
                 </p>
               </div>
             </Show>
@@ -184,9 +186,9 @@ export default function General() {
         </Section>
 
         {/* Model */}
-        <Section title="Model" description="Defaults applied to new sessions and background tasks.">
+        <Section title={lang.t("settings.general.section.model")} description={lang.t("settings.general.section.model.description")}>
           <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
-            <Row title="Default model" description="Primary model used when a session starts.">
+            <Row title={lang.t("settings.general.row.defaultModel.title")} description={lang.t("settings.general.row.defaultModel.description")}>
               <Select
                 options={modelOptions()}
                 current={modelOptions().find((o) => o.value === defaultModel())}
@@ -196,10 +198,10 @@ export default function General() {
                 variant="secondary"
                 size="small"
                 triggerVariant="settings"
-                placeholder="Auto"
+                placeholder={lang.t("common.default")}
               />
             </Row>
-            <Row title="Subagent model" description="Model for titles, summaries, and subagent tasks (small_model).">
+            <Row title={lang.t("settings.general.row.subagentModel.title")} description={lang.t("settings.general.row.subagentModel.description")}>
               <Select
                 options={modelOptions()}
                 current={modelOptions().find((o) => o.value === subagentModel())}
@@ -209,13 +211,13 @@ export default function General() {
                 variant="secondary"
                 size="small"
                 triggerVariant="settings"
-                placeholder="Auto"
+                placeholder={lang.t("common.default")}
               />
             </Row>
-            <Row title="Reasoning effort" description="Thinking budget for models that support it.">
+            <Row title={lang.t("settings.general.row.reasoningEffort.title")} description={lang.t("settings.general.row.reasoningEffort.description")}>
               <Select
-                options={[...REASONING]}
-                current={REASONING.find((o) => o.value === prefs()?.reasoning_effort) ?? REASONING[2]}
+                options={reasoningOpts()}
+                current={reasoningOpts().find((o) => o.value === prefs()?.reasoning_effort) ?? reasoningOpts()[2]}
                 value={(o) => o.value}
                 label={(o) => o.label}
                 onSelect={(o) => o && void savePref({ reasoning_effort: o.value })}
@@ -228,18 +230,18 @@ export default function General() {
         </Section>
 
         {/* Licensing */}
-        <Section title="Licensing" description="How you intend to use outputs from OpenScience.">
+        <Section title={lang.t("settings.general.section.licensing")} description={lang.t("settings.general.section.licensing.description")}>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <IntentCard
               active={prefs()?.intent === "non-commercial"}
-              title="Non-commercial"
-              body="Research, evaluation, and personal projects."
+              title={lang.t("settings.general.licensing.nonCommercial.title")}
+              body={lang.t("settings.general.licensing.nonCommercial.body")}
               onClick={() => void savePref({ intent: "non-commercial" })}
             />
             <IntentCard
               active={prefs()?.intent === "commercial"}
-              title="Commercial"
-              body="Use in a product or for-profit work."
+              title={lang.t("settings.general.licensing.commercial.title")}
+              body={lang.t("settings.general.licensing.commercial.body")}
               onClick={() => void savePref({ intent: "commercial" })}
             />
           </div>
@@ -280,7 +282,9 @@ const Row: Component<{ title: string; description?: string; children: JSX.Elemen
   </div>
 )
 
-const IntentCard: Component<{ active: boolean; title: string; body: string; onClick: () => void }> = (props) => (
+const IntentCard: Component<{ active: boolean; title: string; body: string; onClick: () => void }> = (props) => {
+  const lang = useLanguage()
+  return (
   <button
     type="button"
     onClick={props.onClick}
@@ -301,11 +305,12 @@ const IntentCard: Component<{ active: boolean; title: string; body: string; onCl
     <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
       <span class="text-14-medium text-text-strong">{props.title}</span>
       <Show when={props.active}>
-        <span style={{ "font-family": FONT_SANS, "font-size": "11px", color: "var(--color-text-muted)" }}>active</span>
+        <span style={{ "font-family": FONT_SANS, "font-size": "11px", color: "var(--color-text-muted)" }}>{lang.t("settings.billing.status.active")}</span>
       </Show>
     </div>
     <span class="text-12-regular text-text-weak" style={{ "line-height": 1.5 }}>
       {props.body}
     </span>
   </button>
-)
+  )
+}

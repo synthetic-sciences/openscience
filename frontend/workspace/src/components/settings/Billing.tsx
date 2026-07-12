@@ -11,6 +11,7 @@ import { useParams } from "@solidjs/router"
 import { Button } from "@synsci/ui/button"
 import type { SettingsBillingGetResponse } from "@synsci/sdk/v2/client"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { URLS } from "@/config/urls"
@@ -62,30 +63,31 @@ const when = (iso: string) => {
 const LLM_MODES = [
   {
     value: "managed" as const,
-    title: "Managed",
-    body: "LLM calls route through your Atlas wallet — metered credits, no API keys needed.",
+    title: "settings.billing.mode.managed.title",
+    body: "settings.billing.mode.managed.body",
   },
   {
     value: "byok" as const,
-    title: "BYOK",
-    body: "Your own provider keys or OAuth subscriptions (Claude Pro, ChatGPT, Copilot). Never billed here.",
+    title: "settings.billing.mode.byok.title",
+    body: "settings.billing.mode.byok.body",
   },
   {
     value: null,
-    title: "Auto",
-    body: "Detect from the credential backing each call — managed proxy tokens bill the wallet, your own keys don't.",
+    title: "settings.billing.mode.auto.title",
+    body: "settings.billing.mode.auto.body",
   },
 ]
 const COMPUTE_MODES = [
-  { value: "managed" as const, title: "Managed", body: "Atlas-provisioned GPUs, billed to your wallet." },
+  { value: "managed" as const, title: "settings.billing.compute.managed.title", body: "settings.billing.compute.managed.body" },
   {
     value: "byok" as const,
-    title: "BYOK",
-    body: "Your own connected GPU providers (Settings → Compute). Your provider bills you directly.",
+    title: "settings.billing.compute.byok.title",
+    body: "settings.billing.compute.byok.body",
   },
 ]
 
 export default function Billing(): JSX.Element {
+  const lang = useLanguage()
   const sdk = useGlobalSDK()
   const platform = usePlatform()
   const server = useServer()
@@ -115,14 +117,14 @@ export default function Billing(): JSX.Element {
     setBillingError(undefined)
     const res = await sdk.client.settings.billing.get()
     if (res.data) return setBilling(res.data)
-    setBillingError("Couldn't load spend settings.")
+    setBillingError(lang.t("settings.billing.toast.loadFailed"))
   }
   const updateBilling = async (patch: { llm?: "managed" | "byok" | null; compute?: "managed" | "byok" }) => {
     setBillingBusy(true)
     setBillingError(undefined)
     const res = await sdk.client.settings.billing.update(patch)
     if (res.data) setBilling(res.data)
-    if (!res.data) setBillingError("Couldn't save spend settings.")
+    if (!res.data) setBillingError(lang.t("settings.billing.toast.saveFailed"))
     setBillingBusy(false)
   }
 
@@ -189,57 +191,57 @@ export default function Billing(): JSX.Element {
   return (
     <PanelScroll>
       <PanelHeader
-        title="Billing"
-        description="Your Atlas wallet, what runs on it, and where the spend goes — balance, spend routing, usage, and the credit ledger."
+        title={lang.t("settings.billing.heading")}
+        description={lang.t("settings.billing.description")}
       />
       <PanelBody>
         {/* ── Balance ─────────────────────────────────────────────────── */}
         <div class="flex flex-col gap-3">
-          <SectionLabel label="Balance" />
+          <SectionLabel label={lang.t("settings.billing.section.balance")} />
           <Show when={walletError()}>
             <div style={errorBanner()}>{walletError()}</div>
           </Show>
           <Card>
             <Row>
               <div class="flex flex-col gap-0.5">
-                <span class="text-12-regular text-text-weak">Atlas session</span>
+                <span class="text-12-regular text-text-weak">{lang.t("settings.billing.status.atlasSession")}</span>
                 <span class="text-13-medium text-text-strong">
-                  {wLoading() ? "…" : signedIn() ? "Signed in" : "Signed out"}
+                  {wLoading() ? lang.t("common.loading.ellipsis") : signedIn() ? lang.t("settings.billing.status.signedIn") : lang.t("settings.billing.status.signedOut")}
                 </span>
               </div>
               <div class="flex flex-col gap-0.5">
-                <span class="text-12-regular text-text-weak">Balance</span>
+                <span class="text-12-regular text-text-weak">{lang.t("settings.billing.status.balance")}</span>
                 <Show
                   when={balanceKnown()}
-                  fallback={<span class="text-16-medium text-text-weak">{wLoading() ? "…" : "—"}</span>}
+                  fallback={<span class="text-16-medium text-text-weak">{wLoading() ? lang.t("common.loading.ellipsis") : "—"}</span>}
                 >
                   <span class="text-16-medium text-text-strong">{money(wallet()!.balanceUsd)}</span>
                 </Show>
               </div>
               <div class="flex flex-col gap-0.5">
-                <span class="text-12-regular text-text-weak">Billing</span>
+                <span class="text-12-regular text-text-weak">{lang.t("settings.billing.status.billing")}</span>
                 <Show
                   when={!wLoading() && signedIn() && mode()}
-                  fallback={<span class="text-13-medium text-text-weak">{wLoading() ? "…" : "—"}</span>}
+                  fallback={<span class="text-13-medium text-text-weak">{wLoading() ? lang.t("common.loading.ellipsis") : "—"}</span>}
                 >
                   <span class="text-13-medium text-text-strong capitalize">{mode()}</span>
                 </Show>
               </div>
               <div class="flex-1" />
               <Button size="small" variant="primary" onClick={() => platform.openLink(URLS.dashboardCli)}>
-                Add funds
+                {lang.t("settings.billing.action.addFunds")}
               </Button>
             </Row>
             <Show when={signedIn() && (wallet()?.lifetimeSpentUsd ?? 0) > 0}>
               <Row>
-                <span class="text-12-regular text-text-weak flex-1">Lifetime spent</span>
+                <span class="text-12-regular text-text-weak flex-1">{lang.t("settings.billing.status.lifetimeSpent")}</span>
                 <span class="text-13-medium text-text-strong">{money(wallet()!.lifetimeSpentUsd)}</span>
               </Row>
             </Show>
             <Show when={!wLoading() && !signedIn()}>
               <Row>
                 <p class="text-12-regular text-text-weak">
-                  Sign in to Atlas to use managed credits. Bring-your-own-key models work without an account.
+                  {lang.t("settings.billing.status.signInHint")}
                 </p>
               </Row>
             </Show>
@@ -249,24 +251,24 @@ export default function Billing(): JSX.Element {
         {/* ── Spend routing ───────────────────────────────────────────── */}
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <SectionLabel label="Spend routing" />
+            <SectionLabel label={lang.t("settings.billing.section.spendRouting")} />
             <p class="text-12-regular text-text-weak">
-              Choose what runs on your wallet and what runs on your own keys — independently for inference and compute.
+              {lang.t("settings.billing.section.spendRouting.description")}
             </p>
           </div>
           <Show when={billingError()}>
             <div style={errorBanner()}>{billingError()}</div>
           </Show>
           <div class="flex flex-col gap-2">
-            <span class="text-12-regular text-text-weak">LLM inference</span>
+            <span class="text-12-regular text-text-weak">{lang.t("settings.billing.section.llmInference")}</span>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <For each={LLM_MODES}>
                 {(m) => (
                   <ModeCard
                     active={billing() !== undefined && billing()!.llm === m.value}
                     disabled={billingBusy() || billing() === undefined}
-                    title={m.title}
-                    body={m.body}
+                    title={lang.t(m.title)}
+                    body={lang.t(m.body)}
                     onClick={() => void updateBilling({ llm: m.value })}
                   />
                 )}
@@ -274,15 +276,15 @@ export default function Billing(): JSX.Element {
             </div>
           </div>
           <div class="flex flex-col gap-2">
-            <span class="text-12-regular text-text-weak">Compute</span>
+            <span class="text-12-regular text-text-weak">{lang.t("settings.billing.section.compute")}</span>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <For each={COMPUTE_MODES}>
                 {(m) => (
                   <ModeCard
                     active={billing()?.compute === m.value}
                     disabled={billingBusy() || billing() === undefined}
-                    title={m.title}
-                    body={m.body}
+                    title={lang.t(m.title)}
+                    body={lang.t(m.body)}
                     onClick={() => void updateBilling({ compute: m.value })}
                   />
                 )}
@@ -294,9 +296,9 @@ export default function Billing(): JSX.Element {
         {/* ── Usage ───────────────────────────────────────────────────── */}
         <div class="flex flex-col gap-3">
           <div class="flex items-baseline justify-between">
-            <SectionLabel label="This week" />
+            <SectionLabel label={lang.t("settings.billing.section.thisWeek")} />
             <span class="text-12-regular text-text-weak">
-              {money(weekTotal())} · {compact(usage()?.weekly.reduce((a, d) => a + d.tokens, 0) ?? 0)} tokens
+              {money(weekTotal())} · {compact(usage()?.weekly.reduce((a, d) => a + d.tokens, 0) ?? 0)} {lang.t("settings.billing.status.tokens")}
             </span>
           </div>
           <Show when={usageError()}>
@@ -331,9 +333,9 @@ export default function Billing(): JSX.Element {
         {/* Extra usage budget */}
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <SectionLabel label="Extra usage budget" />
+            <SectionLabel label={lang.t("settings.billing.section.extraBudget")} />
             <p class="text-12-regular text-text-weak">
-              A personal managed-compute ceiling. Set 0 for no extra budget beyond your plan.
+              {lang.t("settings.billing.section.extraBudget.description")}
             </p>
           </div>
           <div class="border border-border-weak-base rounded-[4px] bg-surface-base/40 px-4 py-4 flex flex-col gap-3">
@@ -345,7 +347,7 @@ export default function Billing(): JSX.Element {
               }}
             >
               <label class="flex flex-col gap-1 w-[160px]">
-                <span style={sectionTitle}>Budget (USD)</span>
+                <span style={sectionTitle}>{lang.t("settings.billing.form.budget")}</span>
                 <input
                   type="number"
                   min="0"
@@ -362,7 +364,7 @@ export default function Billing(): JSX.Element {
                 variant="secondary"
                 disabled={String(budget()) === (budgetDraft() || "0")}
               >
-                save
+                {lang.t("common.save")}
               </Button>
             </form>
             <Show when={budget() > 0}>
@@ -380,7 +382,7 @@ export default function Billing(): JSX.Element {
                   />
                 </div>
                 <span class="text-11-regular text-text-weak">
-                  {money(weekTotal())} of {money(budget())} used this week
+                  {lang.t("settings.billing.status.budgetUsed", { spent: money(weekTotal()), budget: money(budget()) })}
                 </span>
               </div>
             </Show>
@@ -391,11 +393,11 @@ export default function Billing(): JSX.Element {
         <Show when={usage()?.latest}>
           {(latest) => (
             <div class="flex flex-col gap-3">
-              <SectionLabel label="Most recent session" />
+              <SectionLabel label={lang.t("settings.billing.section.mostRecentSession")} />
               <div class="border border-border-weak-base rounded-[4px] bg-surface-base/40 px-4 py-4 flex items-center justify-between gap-4">
                 <div class="flex flex-col gap-0.5 min-w-0">
                   <span class="text-13-medium text-text-strong truncate">{latest().title}</span>
-                  <span class="text-12-regular text-text-weak">{compact(tokenSum(latest().tokens))} tokens</span>
+                  <span class="text-12-regular text-text-weak">{compact(tokenSum(latest().tokens))} {lang.t("settings.billing.status.tokens")}</span>
                 </div>
                 <span class="text-14-medium text-text-strong">{money(latest().cost)}</span>
               </div>
@@ -406,9 +408,9 @@ export default function Billing(): JSX.Element {
         {/* Where tokens go */}
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <SectionLabel label="Where tokens go" />
+            <SectionLabel label={lang.t("settings.billing.section.whereTokensGo")} />
             <p class="text-12-regular text-text-weak">
-              Spend per model across {usage()?.sessions ?? 0} local sessions.
+              {lang.t("settings.billing.section.whereTokensGo.description", { sessions: usage()?.sessions ?? 0 })}
             </p>
           </div>
           <Show
@@ -418,7 +420,7 @@ export default function Billing(): JSX.Element {
                 class="text-12-regular text-text-weak"
                 style={{ border: "1px dashed var(--color-border-strong)", "border-radius": "4px", padding: "16px" }}
               >
-                No local usage recorded yet. Run a session and spend will show up here.
+                {lang.t("settings.billing.empty.noUsage")}
               </div>
             }
           >
@@ -451,7 +453,7 @@ export default function Billing(): JSX.Element {
         {/* ── Recent transactions (credit ledger) — omitted when empty ── */}
         <Show when={txns().length > 0}>
           <div class="flex flex-col gap-3">
-            <SectionLabel label="Recent transactions" count={txns().length} />
+            <SectionLabel label={lang.t("settings.billing.section.recentTransactions")} count={txns().length} />
             <Card>
               <For each={txns()}>
                 {(t) => (
@@ -479,7 +481,9 @@ export default function Billing(): JSX.Element {
 
 const ModeCard: Component<{ active: boolean; disabled: boolean; title: string; body: string; onClick: () => void }> = (
   props,
-) => (
+) => {
+  const lang = useLanguage()
+  return (
   <button
     type="button"
     disabled={props.disabled}
@@ -502,14 +506,15 @@ const ModeCard: Component<{ active: boolean; disabled: boolean; title: string; b
     <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
       <span class="text-14-medium text-text-strong">{props.title}</span>
       <Show when={props.active}>
-        <span style={{ "font-family": FONT_SANS, "font-size": "11px", color: "var(--color-text-muted)" }}>active</span>
+        <span style={{ "font-family": FONT_SANS, "font-size": "11px", color: "var(--color-text-muted)" }}>{lang.t("settings.billing.status.active")}</span>
       </Show>
     </div>
     <span class="text-12-regular text-text-weak" style={{ "line-height": 1.5 }}>
       {props.body}
     </span>
   </button>
-)
+  )
+}
 
 function errorBanner(): JSX.CSSProperties {
   return {

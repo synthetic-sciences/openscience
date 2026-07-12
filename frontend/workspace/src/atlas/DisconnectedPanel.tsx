@@ -1,6 +1,7 @@
 import { Show, type JSX } from "solid-js"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useServer } from "@/context/server"
+import { useLanguage } from "@/context/language"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 
@@ -13,6 +14,7 @@ import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 export function DisconnectedPanel(): JSX.Element {
   const server = useServer()
   const dialog = useDialog()
+  const language = useLanguage()
 
   return (
     <Show when={server.healthy() === false}>
@@ -40,7 +42,7 @@ export function DisconnectedPanel(): JSX.Element {
           <div
             style={{ "font-family": FONT_SANS, "font-size": "12.5px", "font-weight": 500, color: "var(--color-text)" }}
           >
-            Can't reach your local OpenScience server
+            {language.t("connection.lost.title")}
           </div>
           <div
             style={{
@@ -52,7 +54,7 @@ export function DisconnectedPanel(): JSX.Element {
               "white-space": "nowrap",
             }}
           >
-            {server.name} · start it with <code>openscience web</code> or switch servers · retrying…
+            {server.name} · {language.t("connection.lost.detail")}
           </div>
         </div>
         <button
@@ -71,7 +73,7 @@ export function DisconnectedPanel(): JSX.Element {
             "flex-shrink": 0,
           }}
         >
-          switch server
+          {language.t("connection.action.switchServer")}
         </button>
       </div>
     </Show>
