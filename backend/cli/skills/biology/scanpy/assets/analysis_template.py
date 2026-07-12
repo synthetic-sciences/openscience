@@ -92,14 +92,17 @@ print("\n" + "=" * 80)
 print("NORMALIZATION")
 print("=" * 80)
 
+# Preserve raw counts before normalization
+adata.layers['counts'] = adata.X.copy()
+
 # Normalize to 10,000 counts per cell
 sc.pp.normalize_total(adata, target_sum=1e4)
 
 # Log-transform
 sc.pp.log1p(adata)
 
-# Store normalized data
-adata.raw = adata
+# Store log-normalized data for plotting and marker visualization
+adata.layers['log1p'] = adata.X.copy()
 
 # ============================================================================
 # 4. FEATURE SELECTION
@@ -209,9 +212,9 @@ marker_genes = {
 
 # Visualize marker genes
 for cell_type, genes in marker_genes.items():
-    available_genes = [g for g in genes if g in adata.raw.var_names]
+    available_genes = [g for g in genes if g in adata.var_names]
     if available_genes:
-        sc.pl.umap(adata, color=available_genes, use_raw=True,
+        sc.pl.umap(adata, color=available_genes, layer='log1p',
                    save=f'_{cell_type.replace(" ", "_")}')
 
 # Manual annotation based on marker expression (customize this mapping)

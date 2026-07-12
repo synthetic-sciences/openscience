@@ -44,14 +44,17 @@ sc.pl.scatter(adata, x='total_counts', y='n_genes_by_counts')
 ### 3. Normalization
 
 ```python
+# Preserve raw counts before normalization
+adata.layers['counts'] = adata.X.copy()
+
 # Normalize to 10,000 counts per cell
 sc.pp.normalize_total(adata, target_sum=1e4)
 
 # Log-transform the data
 sc.pp.log1p(adata)
 
-# Store normalized data in raw for later use
-adata.raw = adata
+# Optionally preserve log-normalized values for plotting
+adata.layers['log1p'] = adata.X.copy()
 ```
 
 ### 4. Feature Selection
@@ -199,7 +202,7 @@ sc.pl.umap(adata, color='T_cell_score')
 ## Best Practices
 
 1. Always visualize QC metrics before filtering
-2. Save raw counts before normalization (`adata.raw = adata`)
+2. Preserve raw counts before normalization (`adata.layers['counts'] = adata.X.copy()`)
 3. Use Leiden instead of Louvain for clustering (more efficient)
 4. Try multiple clustering resolutions to find optimal granularity
 5. Validate cell type annotations with known marker genes

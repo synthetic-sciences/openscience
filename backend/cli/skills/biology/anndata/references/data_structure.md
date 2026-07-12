@@ -74,20 +74,20 @@ print(adata.var.loc['ENSG00001'])
 Dictionary storing alternative matrices with the same dimensions as X.
 
 ```python
-# Store raw counts, normalized data, and scaled data
+# Store counts, log-normalized data, and scaled data
 adata = ad.AnnData(X=np.random.rand(100, 2000))
-adata.layers['raw_counts'] = np.random.randint(0, 100, (100, 2000))
-adata.layers['normalized'] = adata.X / np.sum(adata.X, axis=1, keepdims=True)
-adata.layers['scaled'] = (adata.X - adata.X.mean()) / adata.X.std()
+adata.layers['counts'] = adata.X.copy()
+adata.layers['log1p'] = normalized_log_matrix
+adata.layers['scaled'] = scaled_matrix
 
 # Access layers
-raw_data = adata.layers['raw_counts']
-normalized_data = adata.layers['normalized']
+counts = adata.layers['counts']
+log_normalized = adata.layers['log1p']
 ```
 
 Common layer uses:
-- `raw_counts`: Original count data before normalization
-- `normalized`: Log-normalized or TPM values
+- `counts`: Original count data before normalization
+- `log1p`: Log-normalized expression values
 - `scaled`: Z-scored values for analysis
 - `imputed`: Data after imputation
 
@@ -188,25 +188,20 @@ Common uns uses:
 - Cluster information
 - Tool-specific metadata
 
-### raw (Original Data Snapshot)
-Optional attribute preserving the original data matrix and variable annotations before filtering.
+### raw (Optional Snapshot)
+Optional attribute that can store a snapshot of `X` and `var`. It is common in older Scanpy tutorials, but it is not required for most workflows and can create unnecessary copies. Prefer layers when preserving count data or multiple matrix representations.
 
 ```python
-# Create AnnData and store raw state
+# Preferred: preserve counts in a layer before normalization
 adata = ad.AnnData(X=np.random.rand(100, 5000))
 adata.var['gene_name'] = [f'Gene_{i}' for i in range(5000)]
+adata.layers['counts'] = adata.X.copy()
 
-# Store raw state before filtering
-adata.raw = adata.copy()
-
-# Filter to highly variable genes
-highly_variable_mask = np.random.rand(5000) > 0.5
-adata = adata[:, highly_variable_mask]
-
-# Access original data
-original_matrix = adata.raw.X
-original_var = adata.raw.var
+# Optional/legacy: create .raw only when a downstream tool expects it
+# Assign a full copy to adata.raw in that specific case.
 ```
+
+Layers stay aligned to the current AnnData shape. After subsetting variables, `adata.layers['counts']` contains counts for the retained variables.
 
 ## Object Properties
 
