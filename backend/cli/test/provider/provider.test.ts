@@ -35,6 +35,21 @@ import { Env } from "../../src/env"
 const SONNET = "claude-sonnet-4-6"
 const OPUS = "claude-opus-4-5"
 
+test("Codex OAuth allowlist includes the GPT-5.6 family", () => {
+  for (const id of [
+    "gpt-5.6",
+    "gpt-5-6",
+    "gpt-5.6-sol",
+    "gpt-5-6-sol",
+    "gpt-5.6-terra",
+    "gpt-5-6-terra",
+    "gpt-5.6-luna",
+    "gpt-5-6-luna",
+  ]) {
+    expect(Provider.isCodexModel(id)).toBe(true)
+  }
+})
+
 test("pinned catalog models are present in the seeded test fixture", async () => {
   await using tmp = await tmpdir({})
   await Instance.provide({
