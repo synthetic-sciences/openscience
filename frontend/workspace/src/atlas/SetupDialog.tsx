@@ -17,6 +17,7 @@ import { Button } from "@synsci/ui/button"
 import { TextField } from "@synsci/ui/text-field"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
 import { URLS } from "@/config/urls"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { settingsApi } from "@/components/settings/api"
@@ -52,6 +53,7 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
   const dialog = useDialog()
   const sdk = useGlobalSDK()
   const platform = usePlatform()
+  const language = useLanguage()
 
   const base = () => sdk.url
   const fetchFn = () => platform.fetch ?? fetch
@@ -92,7 +94,7 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
         body: JSON.stringify({ key: k }),
       })
       if (!res.ok) {
-        setError(res.error || "That key was rejected. Double-check it and try again.")
+        setError(res.error || language.t("setup.error.keyRejected"))
         return
       }
       // Refresh the frontend so the managed provider + models appear without a
@@ -127,7 +129,7 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
   }
 
   return (
-    <Dialog title="Set up models">
+    <Dialog title={language.t("setup.title")}>
       <div
         style={{ display: "flex", "flex-direction": "column", gap: "16px", "max-width": "460px", padding: "4px 2px" }}
       >
@@ -149,25 +151,25 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
 
         {/* ── Choose a path ── */}
         <Show when={view() === "choose"}>
-          <p style={intro()}>Pick how to power your models. You can change this anytime in Settings.</p>
+          <p style={intro()}>{language.t("setup.intro")}</p>
           <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
             <ChoiceCard
-              title="Atlas managed"
-              hint="recommended"
-              body="Prepaid wallet, zero setup. Metered credits — no API keys needed."
+              title={language.t("setup.option.managed")}
+              hint={language.t("setup.hint.recommended")}
+              body={language.t("setup.option.managedBody")}
               onClick={openManaged}
             />
             <ChoiceCard
-              title="Your own keys"
-              body="Bring an Anthropic / OpenAI / Google key. Stored on this machine, free and unmetered here."
+              title={language.t("setup.option.byok")}
+              body={language.t("setup.option.byokBody")}
               onClick={() => {
                 setError(undefined)
                 setView("byok")
               }}
             />
             <ChoiceCard
-              title="Not now"
-              body="Explore first with the free demo models. Set up anytime."
+              title={language.t("setup.option.notNow")}
+              body={language.t("setup.option.notNowBody")}
               muted
               onClick={dismiss}
             />
@@ -177,11 +179,10 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
         {/* ── Atlas managed: paste key ── */}
         <Show when={view() === "managed"}>
           <p style={intro()}>
-            A sign-in tab just opened at <span style={{ color: "var(--color-text)" }}>{hostOf(URLS.dashboardCli)}</span>
-            . Copy your <code style={code()}>thk_</code> API key from there and paste it below.
+            {language.t("setup.managed.intro", { host: hostOf(URLS.dashboardCli) })}
           </p>
           <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
-            <span style={label()}>Atlas API key</span>
+            <span style={label()}>{language.t("setup.label.apiKey")}</span>
             <TextField
               type="password"
               hideLabel
@@ -204,14 +205,14 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
               disabled={busy() || !key().trim()}
               onClick={() => void connectManaged()}
             >
-              {busy() ? "connecting…" : "connect"}
+              {busy() ? language.t("setup.status.connecting") : language.t("setup.action.connect")}
             </Button>
             <Button variant="ghost" size="small" onClick={() => platform.openLink(URLS.dashboardCli)}>
-              reopen sign-in
+              {language.t("setup.action.reopenSignIn")}
             </Button>
             <span style={{ flex: 1 }} />
             <Button variant="ghost" size="small" onClick={() => setView("choose")}>
-              back
+              {language.t("setup.action.back")}
             </Button>
           </div>
         </Show>
@@ -219,24 +220,25 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
         {/* ── Managed connected ── */}
         <Show when={view() === "done"}>
           <p style={intro()}>
-            Connected to Atlas.
-            <Show when={balance() !== undefined}> Wallet balance {money(balance()!)}.</Show> Managed models are ready.
+            {balance() !== undefined
+              ? language.t("setup.managed.doneWithBalance", { balance: money(balance()!) })
+              : language.t("setup.managed.done")}
           </p>
           <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
             <Button variant="primary" size="small" onClick={() => dialog.close()}>
-              start researching
+              {language.t("setup.action.start")}
             </Button>
             <Button variant="ghost" size="small" onClick={() => platform.openLink(URLS.dashboardCli)}>
-              add funds
+              {language.t("setup.action.addFunds")}
             </Button>
           </div>
         </Show>
 
         {/* ── Bring your own key ── */}
         <Show when={view() === "byok"}>
-          <p style={intro()}>Add a provider key. It's stored on this machine and billed directly by the provider.</p>
+          <p style={intro()}>{language.t("setup.byok.intro")}</p>
           <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
-            <span style={label()}>Provider</span>
+            <span style={label()}>{language.t("setup.label.provider")}</span>
             <div style={{ display: "flex", "flex-wrap": "wrap", gap: "6px" }}>
               <For each={BYOK_PROVIDERS}>
                 {(p) => (
@@ -262,7 +264,7 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
             </div>
           </div>
           <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
-            <span style={label()}>API key</span>
+            <span style={label()}>{language.t("setup.label.apiKeyInput")}</span>
             <TextField
               type="password"
               hideLabel
@@ -285,11 +287,11 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
               disabled={busy() || !byokKey().trim()}
               onClick={() => void saveByok()}
             >
-              {busy() ? "saving…" : "save key"}
+              {busy() ? language.t("setup.status.saving") : language.t("setup.action.saveKey")}
             </Button>
             <span style={{ flex: 1 }} />
             <Button variant="ghost" size="small" onClick={() => setView("choose")}>
-              back
+              {language.t("setup.action.back")}
             </Button>
           </div>
         </Show>

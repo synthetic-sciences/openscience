@@ -5,6 +5,7 @@ import { Icon } from "@synsci/ui/icon"
 import { IconButton } from "@synsci/ui/icon-button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
 import { SETTINGS_PANELS, SETTINGS_SECTIONS, DEFAULT_PANEL, findPanel, type SettingsPanelId } from "./settings/registry"
 import { SettingsNavContext } from "./settings/nav"
 
@@ -69,6 +70,7 @@ const SETTINGS_STYLES = `
 export const DialogSettings: Component = () => {
   const platform = usePlatform()
   const dialog = useDialog()
+  const language = useLanguage()
 
   // Browser-style history so back/forward chevrons are real navigation.
   const [history, setHistory] = createSignal<SettingsPanelId[]>([DEFAULT_PANEL])
@@ -99,7 +101,7 @@ export const DialogSettings: Component = () => {
             <For each={SETTINGS_SECTIONS}>
               {(section) => (
                 <div class="flex flex-col gap-1">
-                  <span class="px-2.5 pb-1 atlas-section-label">{section.label}</span>
+                  <span class="px-2.5 pb-1 atlas-section-label">{language.t(section.label)}</span>
                   <For each={SETTINGS_PANELS.filter((p) => p.section === section.id)}>
                     {(panel) => (
                       <button
@@ -114,7 +116,7 @@ export const DialogSettings: Component = () => {
                         aria-current={current().id === panel.id ? "page" : undefined}
                       >
                         <Icon name={panel.icon} size="small" class="flex-shrink-0" />
-                        <span class="truncate">{panel.title}</span>
+                        <span class="truncate">{language.t(panel.title)}</span>
                       </button>
                     )}
                   </For>
@@ -133,24 +135,24 @@ export const DialogSettings: Component = () => {
           {/* Header */}
           <header class="flex items-center justify-between gap-2 min-h-[52px] px-3 border-b border-border-weak-base flex-shrink-0">
             <div class="flex items-center gap-1 min-w-0">
-              <IconButton icon="arrow-left" variant="ghost" disabled={!canBack()} onClick={back} aria-label="Back" />
+              <IconButton icon="arrow-left" variant="ghost" disabled={!canBack()} onClick={back} aria-label={language.t("settings.dialog.aria.back")} />
               <IconButton
                 icon="arrow-right"
                 variant="ghost"
                 disabled={!canForward()}
                 onClick={forward}
-                aria-label="Forward"
+                aria-label={language.t("settings.dialog.aria.forward")}
               />
-              <span class="text-14-medium text-text-strong truncate pl-1">{current().title}</span>
+              <span class="text-14-medium text-text-strong truncate pl-1">{language.t(current().title)}</span>
             </div>
             <div class="flex items-center gap-1 flex-shrink-0">
               <IconButton
                 icon={expanded() ? "collapse" : "expand"}
                 variant="ghost"
                 onClick={() => setExpanded((v) => !v)}
-                aria-label={expanded() ? "Collapse" : "Expand"}
+                aria-label={expanded() ? language.t("settings.dialog.aria.collapse") : language.t("settings.dialog.aria.expand")}
               />
-              <IconButton icon="close" variant="ghost" onClick={() => dialog.close()} aria-label="Close" />
+              <IconButton icon="close" variant="ghost" onClick={() => dialog.close()} aria-label={language.t("settings.dialog.aria.close")} />
             </div>
           </header>
 
@@ -158,7 +160,7 @@ export const DialogSettings: Component = () => {
           <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
             <Suspense
               fallback={
-                <div class="flex flex-1 items-center justify-center text-13-regular text-text-weak">Loading…</div>
+                <div class="flex flex-1 items-center justify-center text-13-regular text-text-weak">{language.t("settings.dialog.loading")}</div>
               }
             >
               <SettingsNavContext.Provider value={navigate}>

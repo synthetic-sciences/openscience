@@ -4,6 +4,7 @@ import { Icon } from "@synsci/ui/icon"
 import { Switch } from "@synsci/ui/switch"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
 
 // Outbound domain allow-list. Wired to a real backend store:
 // GET/PUT /settings/network (backend/cli/src/settings/network.ts). The catalog
@@ -18,6 +19,7 @@ export default function Network() {
   const sdk = useGlobalSDK()
   const platform = usePlatform()
   const doFetch = platform.fetch ?? fetch
+  const lang = useLanguage()
 
   const [catalog, setCatalog] = createSignal<Group[]>([])
   const [state, setState] = createSignal<State>({ allowlistEnabled: false, enabled: [], custom: [] })
@@ -98,7 +100,7 @@ export default function Network() {
 
   function clearCustom() {
     if (state().custom.length === 0) return
-    if (!window.confirm("Remove all custom allowed domains?")) return
+    if (!window.confirm(lang.t("settings.network.confirm.clearCustom"))) return
     void persist({ ...state(), custom: [] })
   }
 
@@ -114,9 +116,9 @@ export default function Network() {
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
-          <h2 class="text-16-medium text-text-strong">Network</h2>
+          <h2 class="text-16-medium text-text-strong">{lang.t("settings.network.heading")}</h2>
           <p class="text-13-regular text-text-weak">
-            Control which domains the agent may reach. Enable curated science-connector groups or add your own domains.
+            {lang.t("settings.network.description")}
           </p>
         </div>
       </div>
@@ -131,20 +133,20 @@ export default function Network() {
         {/* Master allow-list toggle */}
         <div class="flex items-center justify-between gap-3 rounded-[4px] border border-border-weak-base bg-surface-base/40 px-4 py-3">
           <div class="flex flex-col gap-0.5 min-w-0">
-            <span class="text-13-medium text-text-strong">Enforce allow-list</span>
+            <span class="text-13-medium text-text-strong">{lang.t("settings.network.enforceAllowlist")}</span>
             <span class="text-12-regular text-text-weak">
               {state().allowlistEnabled
-                ? `Only the ${effectiveCount()} allowed domains below are reachable.`
-                : "Advisory only — the agent may reach any domain."}
+                ? lang.t("settings.network.allowlistOn", { count: effectiveCount() })
+                : lang.t("settings.network.allowlistOff")}
             </span>
           </div>
           <Switch checked={state().allowlistEnabled} onChange={toggleAllowlist} />
         </div>
 
-        <Show when={!loading()} fallback={<div class="text-13-regular text-text-weak py-6 text-center">Loading…</div>}>
+        <Show when={!loading()} fallback={<div class="text-13-regular text-text-weak py-6 text-center">{lang.t("common.loading")}…</div>}>
           {/* Domain groups */}
           <div class="flex flex-col gap-2">
-            <span class="atlas-section-label px-1">Domain sets</span>
+            <span class="atlas-section-label px-1">{lang.t("settings.network.domainSets")}</span>
             <For each={catalog()}>
               {(group) => {
                 const on = () => state().enabled.includes(group.id)
@@ -156,14 +158,14 @@ export default function Network() {
                         type="button"
                         class="flex items-center justify-center size-6 rounded-xs text-icon-weak-base hover:bg-surface-raised-base/60 transition-colors flex-shrink-0"
                         onClick={() => toggleExpanded(group.id)}
-                        aria-label={open() ? "Collapse" : "Expand"}
+                        aria-label={open() ? lang.t("common.collapse") : lang.t("common.expand")}
                       >
                         <Icon name={open() ? "chevron-down" : "chevron-right"} size="small" />
                       </button>
                       <div class="flex flex-col gap-0.5 min-w-0 flex-1">
                         <span class="text-13-medium text-text-strong truncate">{group.label}</span>
                         <span class="text-12-regular text-text-weak truncate">
-                          {group.description} · {group.domains.length} domains
+                          {group.description} · {group.domains.length} {lang.t("settings.network.domains")}
                         </span>
                       </div>
                       <Switch checked={on()} onChange={(v) => toggleGroup(group.id, v)} />
@@ -188,7 +190,7 @@ export default function Network() {
           {/* Custom allowed domains */}
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between px-1">
-              <span class="atlas-section-label">Allowed domains</span>
+              <span class="atlas-section-label">{lang.t("settings.network.allowedDomains")}</span>
               <Show when={state().custom.length > 0}>
                 <button
                   type="button"
@@ -196,14 +198,14 @@ export default function Network() {
                   disabled={saving()}
                   onClick={clearCustom}
                 >
-                  clear
+                  {lang.t("settings.network.clear")}
                 </button>
               </Show>
             </div>
             <div class="rounded-[4px] border border-border-weak-base bg-surface-base/40 overflow-hidden">
               <For
                 each={state().custom}
-                fallback={<span class="block px-4 py-3 text-12-regular text-text-weak/70">No custom domains.</span>}
+                fallback={<span class="block px-4 py-3 text-12-regular text-text-weak/70">{lang.t("settings.network.noCustomDomains")}</span>}
               >
                 {(domain) => (
                   <div class="group flex items-center gap-2 px-4 py-2.5 border-b border-border-weak-base/60 last:border-b-0">
@@ -213,7 +215,7 @@ export default function Network() {
                       class="flex items-center justify-center size-6 rounded-xs text-icon-weak-base hover:text-text-danger opacity-0 group-hover:opacity-100 transition-opacity"
                       disabled={saving()}
                       onClick={() => removeCustom(domain)}
-                      aria-label={`Remove ${domain}`}
+                      aria-label={lang.t("settings.network.removeDomain", { domain })}
                     >
                       <Icon name="close-small" size="small" />
                     </button>
@@ -223,7 +225,7 @@ export default function Network() {
               <div class="flex items-center gap-2 px-3 py-2.5 border-t border-border-weak-base">
                 <input
                   type="text"
-                  placeholder="add a domain, e.g. example.org"
+                  placeholder={lang.t("settings.network.addDomainPlaceholder")}
                   value={customDomain()}
                   disabled={saving()}
                   class="flex-1 h-9 px-3 rounded-xs border border-border-weak-base bg-surface-raised-base/40 text-13-regular text-text-strong placeholder:text-text-weak/60 outline-none focus:border-border-base font-mono"
@@ -237,7 +239,7 @@ export default function Network() {
                   onClick={addCustom}
                 >
                   <Icon name="plus" size="small" />
-                  add
+                  {lang.t("settings.network.add")}
                 </button>
               </div>
             </div>

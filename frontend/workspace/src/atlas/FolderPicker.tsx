@@ -3,6 +3,7 @@ import { Dialog } from "@synsci/ui/dialog"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { validateDirectoryPath } from "@/atlas/openDirectory"
 import {
@@ -60,6 +61,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
   const sdk = useGlobalSDK()
   const sync = useGlobalSync()
   const dialog = useDialog()
+  const language = useLanguage()
 
   const home = () => sync.data.path.home || "/"
   const [cwd, setCwd] = createSignal(home())
@@ -178,11 +180,11 @@ export function FolderPicker(props: PickerProps): JSX.Element {
   const sidebarLinks = createMemo(() => {
     const h = home()
     const links: Array<{ label: string; path: string; key: string }> = [
-      { label: "Home", path: h, key: "home" },
-      { label: "Desktop", path: h + "/Desktop", key: "desktop" },
-      { label: "Documents", path: h + "/Documents", key: "docs" },
-      { label: "Downloads", path: h + "/Downloads", key: "dl" },
-      { label: "Applications", path: "/Applications", key: "apps" },
+      { label: language.t("folder.sidebar.home"), path: h, key: "home" },
+      { label: language.t("folder.sidebar.desktop"), path: h + "/Desktop", key: "desktop" },
+      { label: language.t("folder.sidebar.documents"), path: h + "/Documents", key: "docs" },
+      { label: language.t("folder.sidebar.downloads"), path: h + "/Downloads", key: "dl" },
+      { label: language.t("folder.sidebar.applications"), path: "/Applications", key: "apps" },
     ]
     return links
   })
@@ -190,7 +192,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
   const recents = createMemo(() => readRecents())
 
   return (
-    <Dialog title="Open folder" size="large" transition>
+    <Dialog title={language.t("folder.title")} size="large" transition>
       <div
         style={{
           display: "flex",
@@ -212,14 +214,14 @@ export function FolderPicker(props: PickerProps): JSX.Element {
           }}
         >
           <div style={{ display: "flex", "flex-direction": "column", gap: "1px" }}>
-            <SectionLabel>favorites</SectionLabel>
+            <SectionLabel>{language.t("folder.sidebar.favorites")}</SectionLabel>
             <For each={sidebarLinks()}>
               {(l) => <SidebarRow label={l.label} active={cwd() === l.path} onClick={() => goTo(l.path)} />}
             </For>
           </div>
           <Show when={recents().length > 0}>
             <div style={{ display: "flex", "flex-direction": "column", gap: "1px" }}>
-              <SectionLabel>recent</SectionLabel>
+              <SectionLabel>{language.t("folder.sidebar.recent")}</SectionLabel>
               <For each={recents()}>
                 {(p) => (
                   <SidebarRow
@@ -260,13 +262,13 @@ export function FolderPicker(props: PickerProps): JSX.Element {
           >
             <button
               onClick={goUp}
-              title="parent folder"
+              title={language.t("folder.action.parentFolder")}
               style={navBtn(cwd() === "/" || cwd() === "")}
               disabled={cwd() === "/" || cwd() === ""}
             >
               <IconChevronLeft size={11} strokeWidth={1.5} />
             </button>
-            <button onClick={() => goTo(home())} title="home" style={navBtn(false)}>
+            <button onClick={() => goTo(home())} title={language.t("folder.action.home")} style={navBtn(false)}>
               <IconHome size={11} strokeWidth={1.5} />
             </button>
             <span style={{ width: "1px", height: "16px", background: "var(--color-border)" }} />
@@ -305,7 +307,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               )}
             </For>
             <span style={{ flex: 1 }} />
-            <button onClick={() => refetch()} title="refresh" style={navBtn(false)}>
+            <button onClick={() => refetch()} title={language.t("folder.action.refresh")} style={navBtn(false)}>
               <IconRefresh size={11} strokeWidth={1.5} />
             </button>
           </div>
@@ -326,7 +328,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
             <input
               value={filter()}
               onInput={(e) => setFilter(e.currentTarget.value)}
-              placeholder="filter folders…"
+              placeholder={language.t("folder.search.placeholder")}
               autofocus
               style={{
                 all: "unset",
@@ -345,7 +347,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 "letter-spacing": "0.04em",
               }}
             >
-              {filtered().length} {filtered().length === 1 ? "folder" : "folders"}
+              {filtered().length} {filtered().length === 1 ? language.t("folder.status.folder") : language.t("folder.status.folders")}
             </span>
           </div>
 
@@ -373,7 +375,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 "text-transform": "uppercase",
               }}
             >
-              go to
+              {language.t("folder.action.goTo")}
             </span>
             <input
               value={pathInput()}
@@ -381,7 +383,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               onKeyDown={(e) => {
                 if (e.key === "Enter") void goToTyped(pathInput())
               }}
-              placeholder="/Users/you/Desktop/bs-local · or paste any absolute path"
+              placeholder={language.t("folder.path.placeholder")}
               spellcheck={false}
               style={{
                 all: "unset",
@@ -408,8 +410,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 opacity: pathInput().trim() ? 1 : 0.5,
               }}
             >
-              go
-            </button>
+              {language.t("folder.action.go")}</button>
           </div>
 
           {/* Folder list */}
@@ -483,7 +484,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                           gap: "10px",
                         }}
                       >
-                        <span>couldn't read this folder</span>
+                        <span>{language.t("folder.error.cantRead")}</span>
                         <span style={{ color: "var(--color-text-faint)", "max-width": "360px", "line-height": 1.5 }}>
                           {error()}
                         </span>
@@ -501,7 +502,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                             color: "var(--color-text)",
                           }}
                         >
-                          retry
+                          {language.t("folder.action.retry")}
                         </button>
                       </div>
                     }
@@ -519,7 +520,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                         gap: "8px",
                       }}
                     >
-                      <Show when={(entries() ?? []).length === 0} fallback={<span>nothing matches the filter</span>}>
+                      <Show when={(entries() ?? []).length === 0} fallback={<span>{language.t("folder.status.noMatch")}</span>}>
                         <Show
                           when={
                             /\/Desktop$|\/Documents$|\/Downloads$/.test(cwd()) ||
@@ -527,15 +528,13 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                             cwd().endsWith("/Documents") ||
                             cwd().endsWith("/Downloads")
                           }
-                          fallback={<span>this folder is empty · pick it with the button below</span>}
+                          fallback={<span>{language.t("folder.status.empty")}</span>}
                         >
                           <span style={{ color: "var(--color-text)" }}>
-                            macOS is blocking the listing of <code>{cwd().split("/").pop()}</code>
+                            {language.t("folder.error.macBlocking", { folder: cwd().split("/").pop() ?? "" })}
                           </span>
                           <span style={{ "max-width": "360px", "line-height": 1.5 }}>
-                            To list this folder we'd need Full Disk Access for the
-                            <code>openscience</code> binary. For now, paste the absolute path of the folder you want
-                            into the <em>go to</em> bar above — OpenScience can still open any path you give it.
+                            {language.t("folder.error.needFda")}
                           </span>
                         </Show>
                       </Show>
@@ -574,18 +573,18 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               {cwd().replace(home(), "~")}
             </span>
             <button onClick={cancel} style={cancelBtn()}>
-              cancel
+              {language.t("common.cancel")}
             </button>
             <button
               onClick={async () => {
                 const valid = await validateDirectoryPath(cwd())
                 if (valid) pick(valid)
               }}
-              title="open the current folder as a project"
+              title={language.t("folder.action.openProject")}
               style={primaryBtn()}
             >
               <IconArrowRight size={11} strokeWidth={2} />
-              open this folder
+              {language.t("folder.action.openThis")}
             </button>
           </div>
         </div>
@@ -595,6 +594,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
 }
 
 function FolderRow(props: { entry: FolderEntry; onDrill: () => void; onPick: () => void }): JSX.Element {
+  const language = useLanguage()
   const [hover, setHover] = createSignal(false)
   return (
     <div
@@ -607,7 +607,7 @@ function FolderRow(props: { entry: FolderEntry; onDrill: () => void; onPick: () 
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title={`${props.entry.absolute} · click to enter · double-click to open as project`}
+      title={language.t("folder.hint.enterOrDblClick", { path: props.entry.absolute })}
       style={{
         cursor: "pointer",
         display: "flex",
@@ -640,7 +640,7 @@ function FolderRow(props: { entry: FolderEntry; onDrill: () => void; onPick: () 
           ev.stopPropagation()
           props.onPick()
         }}
-        title="open this folder as a project"
+        title={language.t("folder.action.openProjectRow")}
         style={{
           all: "unset",
           cursor: "pointer",
@@ -659,7 +659,7 @@ function FolderRow(props: { entry: FolderEntry; onDrill: () => void; onPick: () 
           transition: "opacity 160ms ease, transform 160ms ease",
         }}
       >
-        open
+        {language.t("folder.action.open")}
       </button>
       <IconChevronRight
         size={11}

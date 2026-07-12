@@ -1,5 +1,6 @@
 import { createSignal, Show, type JSX } from "solid-js"
 import { useDialog } from "@synsci/ui/context/dialog"
+import { useLanguage } from "@/context/language"
 import { FONT_MONO, FONT_SANS, FONT_SERIF } from "@/styles/tokens"
 
 type Dialog = ReturnType<typeof useDialog>
@@ -50,43 +51,46 @@ export function confirmDialog(
       dialog.close()
     }
     dialog.show(
-      () => (
-        <div style={card()}>
-          <div style={{ padding: "18px 20px 8px" }}>
-            <div style={{ "font-family": FONT_SERIF, "font-size": "19px", color: "var(--color-text)" }}>
-              {opts.title}
-            </div>
-            <Show when={opts.message}>
-              <div
-                style={{
-                  "margin-top": "8px",
-                  "font-family": FONT_SANS,
-                  "font-size": "13px",
-                  color: "var(--color-text-muted)",
-                  "line-height": 1.5,
-                }}
-              >
-                {opts.message}
+      () => {
+        const language = useLanguage()
+        return (
+          <div style={card()}>
+            <div style={{ padding: "18px 20px 8px" }}>
+              <div style={{ "font-family": FONT_SERIF, "font-size": "19px", color: "var(--color-text)" }}>
+                {opts.title}
               </div>
-            </Show>
+              <Show when={opts.message}>
+                <div
+                  style={{
+                    "margin-top": "8px",
+                    "font-family": FONT_SANS,
+                    "font-size": "13px",
+                    color: "var(--color-text-muted)",
+                    "line-height": 1.5,
+                  }}
+                >
+                  {opts.message}
+                </div>
+              </Show>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                "justify-content": "flex-end",
+                gap: "8px",
+                padding: "12px 20px 18px",
+              }}
+            >
+              <button type="button" style={actionBtn(false)} onClick={() => done(false)}>
+                {opts.cancelLabel ?? language.t("dialog.confirm.cancel")}
+              </button>
+              <button type="button" style={actionBtn(true, opts.danger)} onClick={() => done(true)}>
+                {opts.confirmLabel ?? language.t("dialog.confirm.ok")}
+              </button>
+            </div>
           </div>
-          <div
-            style={{
-              display: "flex",
-              "justify-content": "flex-end",
-              gap: "8px",
-              padding: "12px 20px 18px",
-            }}
-          >
-            <button type="button" style={actionBtn(false)} onClick={() => done(false)}>
-              {opts.cancelLabel ?? "cancel"}
-            </button>
-            <button type="button" style={actionBtn(true, opts.danger)} onClick={() => done(true)}>
-              {opts.confirmLabel ?? "confirm"}
-            </button>
-          </div>
-        </div>
-      ),
+        )
+      },
       { onClose: () => done(false), lite: true },
     )
   })
@@ -106,65 +110,68 @@ export function promptDialog(
     }
     const [value, setValue] = createSignal(opts.initial ?? "")
     dialog.show(
-      () => (
-        <div style={card()}>
-          <div style={{ padding: "18px 20px 8px" }}>
-            <div style={{ "font-family": FONT_SERIF, "font-size": "19px", color: "var(--color-text)" }}>
-              {opts.title}
-            </div>
-            <Show when={opts.message}>
-              <div
-                style={{
-                  "margin-top": "8px",
-                  "font-family": FONT_SANS,
-                  "font-size": "13px",
-                  color: "var(--color-text-muted)",
-                  "line-height": 1.5,
-                }}
-              >
-                {opts.message}
+      () => {
+        const language = useLanguage()
+        return (
+          <div style={card()}>
+            <div style={{ padding: "18px 20px 8px" }}>
+              <div style={{ "font-family": FONT_SERIF, "font-size": "19px", color: "var(--color-text)" }}>
+                {opts.title}
               </div>
-            </Show>
-            <input
-              autofocus
-              value={value()}
-              placeholder={opts.placeholder}
-              onInput={(e) => setValue(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") done(value())
-              }}
+              <Show when={opts.message}>
+                <div
+                  style={{
+                    "margin-top": "8px",
+                    "font-family": FONT_SANS,
+                    "font-size": "13px",
+                    color: "var(--color-text-muted)",
+                    "line-height": 1.5,
+                  }}
+                >
+                  {opts.message}
+                </div>
+              </Show>
+              <input
+                autofocus
+                value={value()}
+                placeholder={opts.placeholder}
+                onInput={(e) => setValue(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") done(value())
+                }}
+                style={{
+                  all: "unset",
+                  "box-sizing": "border-box",
+                  width: "100%",
+                  "margin-top": "12px",
+                  padding: "9px 10px",
+                  border: "1px solid var(--color-border)",
+                  "border-radius": "4px",
+                  background: "var(--color-bg)",
+                  color: "var(--color-text)",
+                  "font-family": FONT_MONO,
+                  "font-size": "12px",
+                }}
+              />
+            </div>
+            <div
               style={{
-                all: "unset",
-                "box-sizing": "border-box",
-                width: "100%",
-                "margin-top": "12px",
-                padding: "9px 10px",
-                border: "1px solid var(--color-border)",
-                "border-radius": "4px",
-                background: "var(--color-bg)",
-                color: "var(--color-text)",
-                "font-family": FONT_MONO,
-                "font-size": "12px",
+                display: "flex",
+                "justify-content": "flex-end",
+                gap: "8px",
+                padding: "12px 20px 18px",
               }}
-            />
+            >
+              <button type="button" style={actionBtn(false)} onClick={() => done(null)}>
+                {language.t("dialog.prompt.cancel")}
+              </button>
+              <button type="button" style={actionBtn(true)} onClick={() => done(value())}>
+                {opts.confirmLabel ?? language.t("dialog.prompt.ok")}
+              </button>
+            </div>
           </div>
-          <div
-            style={{
-              display: "flex",
-              "justify-content": "flex-end",
-              gap: "8px",
-              padding: "12px 20px 18px",
-            }}
-          >
-            <button type="button" style={actionBtn(false)} onClick={() => done(null)}>
-              cancel
-            </button>
-            <button type="button" style={actionBtn(true)} onClick={() => done(value())}>
-              {opts.confirmLabel ?? "ok"}
-            </button>
-          </div>
-        </div>
-      ),
+        )
+      },
       { onClose: () => done(null), lite: true },
     )
   })
@@ -183,39 +190,42 @@ export function alertDialog(
       dialog.close()
     }
     dialog.show(
-      () => (
-        <div style={card()}>
-          <div style={{ padding: "18px 20px 8px" }}>
-            <div
-              style={{
-                "font-family": FONT_SERIF,
-                "font-size": "19px",
-                color: opts.danger ? "var(--color-error, #ef4444)" : "var(--color-text)",
-              }}
-            >
-              {opts.title}
-            </div>
-            <Show when={opts.message}>
+      () => {
+        const language = useLanguage()
+        return (
+          <div style={card()}>
+            <div style={{ padding: "18px 20px 8px" }}>
               <div
                 style={{
-                  "margin-top": "8px",
-                  "font-family": FONT_SANS,
-                  "font-size": "13px",
-                  color: "var(--color-text-muted)",
-                  "line-height": 1.5,
+                  "font-family": FONT_SERIF,
+                  "font-size": "19px",
+                  color: opts.danger ? "var(--color-error, #ef4444)" : "var(--color-text)",
                 }}
               >
-                {opts.message}
+                {opts.title}
               </div>
-            </Show>
+              <Show when={opts.message}>
+                <div
+                  style={{
+                    "margin-top": "8px",
+                    "font-family": FONT_SANS,
+                    "font-size": "13px",
+                    color: "var(--color-text-muted)",
+                    "line-height": 1.5,
+                  }}
+                >
+                  {opts.message}
+                </div>
+              </Show>
+            </div>
+            <div style={{ display: "flex", "justify-content": "flex-end", padding: "12px 20px 18px" }}>
+              <button type="button" style={actionBtn(true)} onClick={done}>
+                {language.t("dialog.alert.ok")}
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", "justify-content": "flex-end", padding: "12px 20px 18px" }}>
-            <button type="button" style={actionBtn(true)} onClick={done}>
-              ok
-            </button>
-          </div>
-        </div>
-      ),
+        )
+      },
       { onClose: () => done(), lite: true },
     )
   })

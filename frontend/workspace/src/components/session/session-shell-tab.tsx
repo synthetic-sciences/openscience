@@ -1,6 +1,7 @@
 import { createMemo, createEffect, on, For, Show } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
+import { useLanguage } from "@/context/language"
 import { Icon } from "@synsci/ui/icon"
 import stripAnsi from "strip-ansi"
 import type { Message, Part, ToolPart } from "@synsci/sdk/v2/client"
@@ -12,6 +13,7 @@ interface SessionShellTabProps {
 export function SessionShellTab(props: SessionShellTabProps) {
   const params = useParams()
   const sync = useSync()
+  const language = useLanguage()
   let container: HTMLDivElement | undefined
 
   const bashParts = createMemo(() => {
@@ -98,7 +100,7 @@ export function SessionShellTab(props: SessionShellTabProps) {
           <div class="h-full flex flex-col items-center justify-center text-center gap-4 px-6">
             <Icon name="console" class="text-text-weaker opacity-30" />
             <div class="text-13-regular text-text-weak max-w-56">
-              No shell commands have been run in this session yet.
+              {language.t("session.shell.noCommands")}
             </div>
           </div>
         }

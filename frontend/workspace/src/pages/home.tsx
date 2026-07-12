@@ -217,7 +217,7 @@ export default function Home(): JSX.Element {
           <input
             value={filter()}
             onInput={(e) => setFilter(e.currentTarget.value)}
-            placeholder="search projects…"
+            placeholder={language.t("home.search.placeholder")}
             style={{
               all: "unset",
               flex: 1,
@@ -230,7 +230,7 @@ export default function Home(): JSX.Element {
         <FdaBanner />
         <button
           onClick={chooseProject}
-          title="open folder (⌘O)"
+          title={language.t("home.openFolder.title")}
           style={{
             all: "unset",
             cursor: "pointer",
@@ -250,14 +250,14 @@ export default function Home(): JSX.Element {
           }}
         >
           <IconPlus size={12} strokeWidth={2} />
-          new project
+          {language.t("home.newProject")}
         </button>
-        <HeaderIconButton onClick={cycleScheme} title="toggle theme">
+        <HeaderIconButton onClick={cycleScheme} title={language.t("home.toggleTheme")}>
           <Show when={isDark()} fallback={<IconMoon size={13} strokeWidth={1.5} />}>
             <IconSun size={13} strokeWidth={1.5} />
           </Show>
         </HeaderIconButton>
-        <HeaderIconButton onClick={() => dialog.show(() => <DialogSettings />)} title="settings">
+        <HeaderIconButton onClick={() => dialog.show(() => <DialogSettings />)} title={language.t("home.settings")}>
           <IconSettings size={13} strokeWidth={1.5} />
         </HeaderIconButton>
         <button
@@ -330,7 +330,7 @@ export default function Home(): JSX.Element {
                   color: "var(--color-text)",
                 }}
               >
-                Projects
+                {language.t("home.heading")}
               </h1>
               <span
                 style={{
@@ -371,11 +371,11 @@ export default function Home(): JSX.Element {
                         onOpen={() => openProject(p.worktree)}
                         onToggleFavorite={() => {
                           projectPrefs.toggleFavorite(p.worktree)
-                          toast.info(projectPrefs.isFavorite(p.worktree) ? "favorited" : "unfavorited", p.worktree)
+                          toast.info(projectPrefs.isFavorite(p.worktree) ? language.t("home.toast.favorited") : language.t("home.toast.unfavorited"), p.worktree)
                         }}
                         onHide={() => {
                           projectPrefs.hide(p.worktree)
-                          toast.info("removed from list", p.worktree)
+                          toast.info(language.t("home.toast.removedFromList"), p.worktree)
                         }}
                       />
                     )}
@@ -400,11 +400,11 @@ export default function Home(): JSX.Element {
                       onOpen={() => openProject(p.worktree)}
                       onToggleFavorite={() => {
                         projectPrefs.toggleFavorite(p.worktree)
-                        toast.info(projectPrefs.isFavorite(p.worktree) ? "favorited" : "unfavorited", p.worktree)
+                         toast.info(projectPrefs.isFavorite(p.worktree) ? language.t("home.toast.favorited") : language.t("home.toast.unfavorited"), p.worktree)
                       }}
                       onHide={() => {
                         projectPrefs.hide(p.worktree)
-                        toast.info("removed from list", p.worktree)
+                         toast.info(language.t("home.toast.removedFromList"), p.worktree)
                       }}
                     />
                   )}
@@ -420,6 +420,7 @@ export default function Home(): JSX.Element {
 }
 
 function NoProjectMatches(props: { query: string; onClear: () => void; onChoose: () => void }): JSX.Element {
+  const language = useLanguage()
   return (
     <div
       style={{
@@ -435,7 +436,7 @@ function NoProjectMatches(props: { query: string; onClear: () => void; onChoose:
       }}
     >
       <div style={{ "font-family": FONT_SERIF, "font-size": "24px", color: "var(--color-text)" }}>
-        No matching projects
+        {language.t("home.noMatchingProjects")}
       </div>
       <div
         style={{
@@ -445,14 +446,14 @@ function NoProjectMatches(props: { query: string; onClear: () => void; onChoose:
           "line-height": 1.5,
         }}
       >
-        Nothing matched <code style={{ "font-family": FONT_CODE }}>{props.query}</code>.
+        {language.t("home.nothingMatched", { query: props.query })}
       </div>
       <div style={{ display: "flex", gap: "8px" }}>
         <button type="button" onClick={props.onClear} style={emptyButton()}>
-          clear search
+          {language.t("home.clearSearch")}
         </button>
         <button type="button" onClick={props.onChoose} style={emptyButton(true)}>
-          open folder
+          {language.t("home.openFolder")}
         </button>
       </div>
     </div>
@@ -484,6 +485,7 @@ function ProjectCard(props: {
   onHide: () => void
 }): JSX.Element {
   const [hover, setHover] = createSignal(false)
+  const language = useLanguage()
   const display = () => (props.homedir ? props.worktree.replace(props.homedir, "~") : props.worktree)
   const name = () => {
     const segs = props.worktree.split("/").filter(Boolean)
@@ -550,7 +552,7 @@ function ProjectCard(props: {
                   color: "var(--color-warning)",
                   "flex-shrink": 0,
                 }}
-                title="favorite"
+                title={language.t("home.favorite")}
               >
                 <IconStarFilled size={12} />
               </span>
@@ -588,7 +590,7 @@ function ProjectCard(props: {
       >
         <button
           type="button"
-          title={props.isFavorite ? "unfavorite" : "favorite"}
+          title={props.isFavorite ? language.t("home.unfavorite") : language.t("home.favorite")}
           onClick={(e) => {
             e.stopPropagation()
             props.onToggleFavorite()
@@ -612,7 +614,7 @@ function ProjectCard(props: {
         </button>
         <button
           type="button"
-          title="remove from list"
+          title={language.t("home.removeFromList")}
           onClick={(e) => {
             e.stopPropagation()
             props.onHide()
@@ -656,7 +658,7 @@ function ProjectCard(props: {
               "font-weight": 400,
             }}
           >
-            open
+            {language.t("home.open")}
             <IconArrowRight size={11} strokeWidth={1.5} />
           </span>
         </Show>
@@ -666,6 +668,7 @@ function ProjectCard(props: {
 }
 
 function ViewToggle(props: { view: "grid" | "list"; onChange: (v: "grid" | "list") => void }): JSX.Element {
+  const language = useLanguage()
   const btn = (active: boolean): JSX.CSSProperties => ({
     all: "unset",
     cursor: "pointer",
@@ -690,7 +693,7 @@ function ViewToggle(props: { view: "grid" | "list"; onChange: (v: "grid" | "list
         border: "1px solid var(--color-border)",
       }}
     >
-      <button type="button" title="grid view" style={btn(props.view === "grid")} onClick={() => props.onChange("grid")}>
+      <button type="button" title={language.t("home.gridView")} style={btn(props.view === "grid")} onClick={() => props.onChange("grid")}>
         <svg
           width="14"
           height="14"
@@ -707,7 +710,7 @@ function ViewToggle(props: { view: "grid" | "list"; onChange: (v: "grid" | "list
           <rect x="14" y="14" width="7" height="7" rx="1.2" />
         </svg>
       </button>
-      <button type="button" title="list view" style={btn(props.view === "list")} onClick={() => props.onChange("list")}>
+      <button type="button" title={language.t("home.listView")} style={btn(props.view === "list")} onClick={() => props.onChange("list")}>
         <svg
           width="14"
           height="14"
@@ -736,6 +739,7 @@ function ProjectRow(props: {
   onHide: () => void
 }): JSX.Element {
   const [hover, setHover] = createSignal(false)
+  const language = useLanguage()
   const display = () => (props.homedir ? props.worktree.replace(props.homedir, "~") : props.worktree)
   const name = () => {
     const segs = props.worktree.split("/").filter(Boolean)
@@ -813,7 +817,7 @@ function ProjectRow(props: {
       >
         <button
           type="button"
-          title={props.isFavorite ? "unfavorite" : "favorite"}
+          title={props.isFavorite ? language.t("home.unfavorite") : language.t("home.favorite")}
           onClick={(e) => {
             e.stopPropagation()
             props.onToggleFavorite()
@@ -837,7 +841,7 @@ function ProjectRow(props: {
         </button>
         <button
           type="button"
-          title="remove from list"
+          title={language.t("home.removeFromList")}
           onClick={(e) => {
             e.stopPropagation()
             props.onHide()
@@ -861,6 +865,7 @@ function ProjectRow(props: {
 
 function NewProjectCard(props: { onClick: () => void }): JSX.Element {
   const [hover, setHover] = createSignal(false)
+  const language = useLanguage()
   return (
     <button
       onClick={props.onClick}
@@ -884,12 +889,13 @@ function NewProjectCard(props: { onClick: () => void }): JSX.Element {
       }}
     >
       <IconPlus size={15} strokeWidth={2} />
-      <span style={{ "font-family": FONT_SANS, "font-size": "13px", "font-weight": 400 }}>new project</span>
+      <span style={{ "font-family": FONT_SANS, "font-size": "13px", "font-weight": 400 }}>{language.t("home.newProject")}</span>
     </button>
   )
 }
 
 function EmptyHero(props: { onChoose: () => void }): JSX.Element {
+  const language = useLanguage()
   return (
     <div
       class="atlas-fade-in"
@@ -915,7 +921,7 @@ function EmptyHero(props: { onChoose: () => void }): JSX.Element {
           color: "var(--color-text)",
         }}
       >
-        Start a project
+        {language.t("home.emptyHero.title")}
       </h1>
       <p
         style={{
@@ -927,7 +933,7 @@ function EmptyHero(props: { onChoose: () => void }): JSX.Element {
           margin: 0,
         }}
       >
-        Pick a folder to work in — your sessions stay organized around it.
+        {language.t("home.emptyHero.description")}
       </p>
       <div style={{ display: "flex", gap: "10px", "margin-top": "8px" }}>
         <button
@@ -949,7 +955,7 @@ function EmptyHero(props: { onChoose: () => void }): JSX.Element {
           }}
         >
           <IconFolder size={14} strokeWidth={1.5} />
-          open folder…
+          {language.t("home.openFolderEllipsis")}
         </button>
       </div>
       <div
@@ -961,7 +967,7 @@ function EmptyHero(props: { onChoose: () => void }): JSX.Element {
           "margin-top": "16px",
         }}
       >
-        ⌘K command palette · ? help
+        {language.t("home.emptyHero.shortcutHint")}
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import { createSignal, createResource, type JSX, Show, onMount } from "solid-js"
 import { Dialog } from "@synsci/ui/dialog"
 import { useDialog } from "@synsci/ui/context/dialog"
+import { useLanguage } from "@/context/language"
 import { FONT_CODE, FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconRefresh, IconArrowRight } from "@/atlas/shared/Icon"
 
@@ -53,6 +54,7 @@ const STEP_BODY: Record<"mac" | "win" | "linux", string> = {
  * with a one-tap deep-link to System Settings (mac) and a recheck.
  */
 export function FdaChip(): JSX.Element {
+  const language = useLanguage()
   const [dismissed, setDismissed] = createSignal(
     typeof localStorage !== "undefined" && localStorage.getItem(DISMISS_KEY) === "1",
   )
@@ -112,7 +114,7 @@ export function FdaChip(): JSX.Element {
     <Show when={!dismissed() && !probe.loading && probe()?.fda === false}>
       <button
         onClick={openSheet}
-        title="grant filesystem access for the OS file picker"
+        title={language.t("fda.chip.title")}
         style={{
           all: "unset",
           "box-sizing": "border-box",
@@ -158,10 +160,11 @@ function FdaSheet(props: {
   onRecheck: () => Promise<void>
   onDismiss: () => void
 }): JSX.Element {
+  const language = useLanguage()
   const url = () => SETTINGS_URL[props.os]
   const [busy, setBusy] = createSignal(false)
   return (
-    <Dialog title={STEP_TITLE[props.os]}>
+    <Dialog title={STEP_TITLE[props.os] === "Grant Full Disk Access" ? language.t("fda.title") : language.t("fda.title.nonMac")}>
       <div
         style={{
           display: "flex",
@@ -179,7 +182,7 @@ function FdaSheet(props: {
             margin: 0,
           }}
         >
-          {STEP_BODY[props.os]}
+          {props.os === "mac" ? language.t("fda.body.mac") : props.os === "win" ? language.t("fda.body.win") : language.t("fda.body.linux")}
         </p>
         <Show when={props.os === "mac"}>
           <ol
@@ -194,13 +197,10 @@ function FdaSheet(props: {
               color: "var(--color-text)",
             }}
           >
-            <li>Open Privacy &amp; Security → Full Disk Access</li>
-            <li>
-              Click <strong>+</strong>, press <code style={kbd()}>⌘⇧G</code>, paste{" "}
-              <code style={kbd()}>/opt/homebrew/bin/openscience</code>, hit Enter, Open
-            </li>
-            <li>Toggle the openscience entry on</li>
-            <li>Restart OpenScience (kill + relaunch) — recheck below</li>
+            <li>{language.t("fda.step.1")}</li>
+            <li>{language.t("fda.step.2")}</li>
+            <li>{language.t("fda.step.3")}</li>
+            <li>{language.t("fda.step.4")}</li>
           </ol>
         </Show>
         <div style={{ display: "flex", gap: "8px", "padding-top": "4px" }}>
@@ -224,7 +224,7 @@ function FdaSheet(props: {
               }}
             >
               <IconArrowRight size={11} strokeWidth={1.5} />
-              open system settings
+              {language.t("fda.action.openSettings")}
             </a>
           </Show>
           <button
@@ -251,7 +251,7 @@ function FdaSheet(props: {
             }}
           >
             <IconRefresh size={11} strokeWidth={1.5} />
-            recheck
+            {language.t("fda.action.recheck")}
           </button>
           <span style={{ flex: 1 }} />
           <button
@@ -266,7 +266,7 @@ function FdaSheet(props: {
               color: "var(--color-text-muted)",
             }}
           >
-            skip
+            {language.t("fda.action.skip")}
           </button>
         </div>
         <Show when={props.reason}>

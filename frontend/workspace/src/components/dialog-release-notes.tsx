@@ -3,6 +3,7 @@ import { Dialog } from "@synsci/ui/dialog"
 import { Button } from "@synsci/ui/button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useSettings } from "@/context/settings"
+import { useLanguage } from "@/context/language"
 
 export type Highlight = {
   title: string
@@ -17,6 +18,7 @@ export type Highlight = {
 export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
   const dialog = useDialog()
   const settings = useSettings()
+  const language = useLanguage()
   const [index, setIndex] = createSignal(0)
 
   const total = () => props.highlights.length
@@ -99,16 +101,16 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
             <div class="flex flex-col items-start gap-3">
               {isLast() ? (
                 <Button variant="primary" size="large" onClick={handleClose}>
-                  get started
+                  {language.t("release.getStarted")}
                 </Button>
               ) : (
                 <Button variant="secondary" size="large" onClick={handleNext}>
-                  next
+                  {language.t("release.next")}
                 </Button>
               )}
 
               <Button variant="ghost" size="small" onClick={handleDisable}>
-                don't show these in the future
+                {language.t("release.dontShowAgain")}
               </Button>
             </div>
 
@@ -144,7 +146,7 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
             {feature()!.media!.type === "image" ? (
               <img
                 src={feature()!.media!.src}
-                alt={feature()!.media!.alt ?? feature()?.title ?? "Release preview"}
+                alt={feature()!.media!.alt ?? feature()?.title ?? language.t("release.preview")}
                 class="w-full h-full object-cover"
               />
             ) : (

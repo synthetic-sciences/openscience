@@ -14,6 +14,7 @@ import { Portal } from "solid-js/web"
 import { Markdown } from "@synsci/ui/markdown"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { FONT_MONO, FONT_SANS, FONT_CODE } from "@/styles/tokens"
 import { PdfViewer } from "@/science/renderers/documents/PdfViewer"
@@ -118,6 +119,7 @@ export function FileView(props: {
   const sdk = useSDK()
   const sync = useSync()
   const platform = usePlatform()
+  const language = useLanguage()
   const directory = () => props.directory || sync.project?.worktree || sync.data.path.directory || sdk.directory
   const name = () => props.path.split("/").pop() || props.path
   const e = () => ext(name())
@@ -198,9 +200,9 @@ export function FileView(props: {
       const next = typeof d?.content === "string" ? d.content : draft()
       setDraft(next)
       setSavedText(next)
-      toast.success("saved", name())
+      toast.success(language.t("preview.toast.saved"), name())
     } catch (err: any) {
-      toast.error("save failed", err?.message ?? String(err))
+      toast.error(language.t("preview.toast.saveFailed"), err?.message ?? String(err))
     } finally {
       setSaving(false)
     }
@@ -209,7 +211,7 @@ export function FileView(props: {
   const copy = async () => {
     try {
       await navigator.clipboard?.writeText(isBinary() ? dataUrl() : draft())
-      toast.success("copied", name())
+      toast.success(language.t("preview.toast.copied"), name())
     } catch {}
   }
 
@@ -288,10 +290,10 @@ export function FileView(props: {
 
         <Show when={dirty()}>
           <button type="button" onClick={() => setDraft(savedText())} style={ctlBtn()}>
-            reset
+            {language.t("common.reset")}
           </button>
           <button type="button" onClick={() => void save()} style={ctlBtn(true)}>
-            {saving() ? "saving…" : "save"}
+            {saving() ? language.t("common.saving") : language.t("common.save")}
           </button>
         </Show>
 
@@ -299,7 +301,7 @@ export function FileView(props: {
           <button
             type="button"
             onClick={() => setShowSource((v) => !v)}
-            title={showSource() ? "rendered view" : kind() === "code" ? "edit source" : "raw source"}
+            title={showSource() ? language.t("preview.action.renderedView") : kind() === "code" ? language.t("preview.action.editSource") : language.t("preview.action.rawSource")}
             style={iconBtn(showSource())}
           >
             <Show when={showSource()} fallback={<IconBraces size={13} strokeWidth={1.6} />}>
@@ -309,22 +311,22 @@ export function FileView(props: {
         </Show>
 
         <Show when={!isBinary()}>
-          <button type="button" onClick={() => void copy()} title="copy contents" style={iconBtn()}>
+          <button type="button" onClick={() => void copy()} title={language.t("preview.action.copyContents")} style={iconBtn()}>
             <IconCopy size={13} strokeWidth={1.6} />
           </button>
         </Show>
         <Show when={isBinary()}>
-          <a href={dataUrl()} download={name()} title="download" style={{ ...iconBtn(), "text-decoration": "none" }}>
+          <a href={dataUrl()} download={name()} title={language.t("preview.action.download")} style={{ ...iconBtn(), "text-decoration": "none" }}>
             <IconDownload size={13} strokeWidth={1.6} />
           </a>
         </Show>
 
-        <button type="button" onClick={() => setRefreshKey((k) => k + 1)} title="refresh" style={iconBtn()}>
+        <button type="button" onClick={() => setRefreshKey((k) => k + 1)} title={language.t("preview.action.refresh")} style={iconBtn()}>
           <IconRefresh size={13} strokeWidth={1.6} />
         </button>
 
         <Show when={props.onClose}>
-          <button type="button" onClick={() => props.onClose!()} title="close" style={iconBtn()}>
+          <button type="button" onClick={() => props.onClose!()} title={language.t("preview.action.close")} style={iconBtn()}>
             <IconX size={14} strokeWidth={1.7} />
           </button>
         </Show>
@@ -337,7 +339,7 @@ export function FileView(props: {
           <div
             style={{ padding: "20px", "font-family": FONT_MONO, "font-size": "12px", color: "var(--color-text-faint)" }}
           >
-            loading…
+            {language.t("common.loading")}
           </div>
         }
       >
@@ -367,7 +369,7 @@ export function FileView(props: {
                   color: "var(--color-text)",
                 }}
               >
-                couldn't open this file
+                {language.t("preview.error.cantOpen")}
               </div>
               <div
                 style={{
@@ -381,7 +383,7 @@ export function FileView(props: {
                 {file.error instanceof Error ? file.error.message : String(file.error)}
               </div>
               <button type="button" onClick={() => setRefreshKey((k) => k + 1)} style={retryBtn()}>
-                retry
+                {language.t("preview.action.retry")}
               </button>
             </div>
           }
@@ -445,9 +447,9 @@ export function FileView(props: {
                       "line-height": 1.6,
                     }}
                   >
-                    Binary file — no inline preview.
+                    {language.t("preview.binary.noPreview")}
                     <br />
-                    Use the download button above to open it.
+                    {language.t("preview.binary.downloadHint")}
                   </div>
                 </div>
               </Match>
