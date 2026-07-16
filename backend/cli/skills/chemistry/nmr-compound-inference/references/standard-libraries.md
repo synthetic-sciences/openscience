@@ -39,3 +39,25 @@ Use these as the default comparison set for this skill.
 - match field strength third
 - if those do not align, downgrade confidence explicitly
 - if the spectrum suggests multiple components, do not force a single-compound answer
+
+## Local candidate format
+
+Export or transcribe candidate peak lists into JSON:
+
+```json
+{
+  "candidates": [
+    {
+      "name": "candidate name",
+      "nucleus": "1H",
+      "solvent": "D2O",
+      "field_mhz": 600,
+      "source": "BMRB",
+      "url": "https://example.org/reference-entry",
+      "peaks": [1.234, 3.456, 7.89]
+    }
+  ]
+}
+```
+
+Alternatively use CSV with one peak per row and columns `name,nucleus,position,solvent,field_mhz,source,url`. Keep the source URL with every candidate so a reviewer can inspect the original spectrum and metadata.

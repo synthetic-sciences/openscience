@@ -371,7 +371,12 @@ export default function Home(): JSX.Element {
                         onOpen={() => openProject(p.worktree)}
                         onToggleFavorite={() => {
                           projectPrefs.toggleFavorite(p.worktree)
-                          toast.info(projectPrefs.isFavorite(p.worktree) ? language.t("home.toast.favorited") : language.t("home.toast.unfavorited"), p.worktree)
+                          toast.info(
+                            projectPrefs.isFavorite(p.worktree)
+                              ? language.t("home.toast.favorited")
+                              : language.t("home.toast.unfavorited"),
+                            p.worktree,
+                          )
                         }}
                         onHide={() => {
                           projectPrefs.hide(p.worktree)
@@ -400,11 +405,16 @@ export default function Home(): JSX.Element {
                       onOpen={() => openProject(p.worktree)}
                       onToggleFavorite={() => {
                         projectPrefs.toggleFavorite(p.worktree)
-                         toast.info(projectPrefs.isFavorite(p.worktree) ? language.t("home.toast.favorited") : language.t("home.toast.unfavorited"), p.worktree)
+                        toast.info(
+                          projectPrefs.isFavorite(p.worktree)
+                            ? language.t("home.toast.favorited")
+                            : language.t("home.toast.unfavorited"),
+                          p.worktree,
+                        )
                       }}
                       onHide={() => {
                         projectPrefs.hide(p.worktree)
-                         toast.info(language.t("home.toast.removedFromList"), p.worktree)
+                        toast.info(language.t("home.toast.removedFromList"), p.worktree)
                       }}
                     />
                   )}
@@ -693,7 +703,12 @@ function ViewToggle(props: { view: "grid" | "list"; onChange: (v: "grid" | "list
         border: "1px solid var(--color-border)",
       }}
     >
-      <button type="button" title={language.t("home.gridView")} style={btn(props.view === "grid")} onClick={() => props.onChange("grid")}>
+      <button
+        type="button"
+        title={language.t("home.gridView")}
+        style={btn(props.view === "grid")}
+        onClick={() => props.onChange("grid")}
+      >
         <svg
           width="14"
           height="14"
@@ -710,7 +725,12 @@ function ViewToggle(props: { view: "grid" | "list"; onChange: (v: "grid" | "list
           <rect x="14" y="14" width="7" height="7" rx="1.2" />
         </svg>
       </button>
-      <button type="button" title={language.t("home.listView")} style={btn(props.view === "list")} onClick={() => props.onChange("list")}>
+      <button
+        type="button"
+        title={language.t("home.listView")}
+        style={btn(props.view === "list")}
+        onClick={() => props.onChange("list")}
+      >
         <svg
           width="14"
           height="14"
@@ -889,7 +909,9 @@ function NewProjectCard(props: { onClick: () => void }): JSX.Element {
       }}
     >
       <IconPlus size={15} strokeWidth={2} />
-      <span style={{ "font-family": FONT_SANS, "font-size": "13px", "font-weight": 400 }}>{language.t("home.newProject")}</span>
+      <span style={{ "font-family": FONT_SANS, "font-size": "13px", "font-weight": 400 }}>
+        {language.t("home.newProject")}
+      </span>
     </button>
   )
 }

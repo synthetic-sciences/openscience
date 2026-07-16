@@ -177,6 +177,8 @@ collection = AnnCollection(
 )
 ```
 
+Use `join='inner'` for the intersection of variables measured in every object. Use `join='outer'` only when preserving the union matters. Outer joins zero-fill missing entries in sparse matrices by default, which can look like measured biological zeros, so record missingness or choose `fill_value` deliberately.
+
 ### 4. Data Manipulation
 
 Transform, subset, filter, and reorganize data efficiently.
@@ -236,7 +238,12 @@ adata.strings_to_categoricals()
 # Use backed mode for large files
 adata = ad.read_h5ad('large.h5ad', backed='r')
 
-# Store raw before filtering
+# Preserve counts before normalization
+adata.layers['counts'] = adata.X.copy()
+sc.pp.normalize_total(adata, target_sum=1e4)
+sc.pp.log1p(adata)
+
+# Preserve full-gene log values for marker plots after HVG subsetting
 adata.raw = adata.copy()
 adata = adata[:, adata.var['highly_variable']]
 ```
@@ -301,12 +308,13 @@ adata.obs['n_counts'] = adata.X.sum(axis=1)
 adata = adata[adata.obs['n_genes'] > 200]
 adata = adata[adata.obs['n_counts'] < 50000]
 
-# 3. Store raw
-adata.raw = adata.copy()
-
-# 4. Normalize and filter
+# 3. Preserve counts, then normalize
+adata.layers['counts'] = adata.X.copy()
 sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
+adata.raw = adata.copy()  # Full-gene log values survive var filtering
+
+# 4. Select analysis features
 sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 adata = adata[:, adata.var['highly_variable']]
 
@@ -400,4 +408,3 @@ adata.obs['new_col'] = external_data.set_index('cell_id').loc[adata.obs_names, '
 - **Scanpy tutorials**: https://scanpy.readthedocs.io/
 - **Scverse ecosystem**: https://scverse.org/
 - **GitHub repository**: https://github.com/scverse/anndata
-

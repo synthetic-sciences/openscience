@@ -1,5 +1,6 @@
 import { lazy, type Component } from "solid-js"
 import type { IconProps } from "@synsci/ui/icon"
+import type { TranslationKey } from "@/context/language"
 
 // ── Panel contract ──────────────────────────────────────────────────────────
 //
@@ -40,7 +41,7 @@ export interface SettingsPanel {
   /** Stable key used for routing/history. */
   id: SettingsPanelId
   /** Title shown in the shell header + rail label. */
-  title: string
+  title: TranslationKey
   /** Icon name from `@synsci/ui/icon`. */
   icon: IconProps["name"]
   /** Which rail group the row lives under. */
@@ -127,7 +128,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     section: "workspace",
     component: lazy(() => import("./Billing")),
   },
-  { id: "storage", title: "settings.panel.storage", icon: "folder", section: "workspace", component: lazy(() => import("./Storage")) },
+  {
+    id: "storage",
+    title: "settings.panel.storage",
+    icon: "folder",
+    section: "workspace",
+    component: lazy(() => import("./Storage")),
+  },
   {
     id: "general",
     title: "settings.panel.general",
@@ -137,7 +144,7 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   },
 ]
 
-export const SETTINGS_SECTIONS: { id: SettingsSection; label: string }[] = [
+export const SETTINGS_SECTIONS: { id: SettingsSection; label: TranslationKey }[] = [
   { id: "capabilities", label: "settings.section.capabilities" },
   { id: "workspace", label: "settings.section.workspace" },
 ]

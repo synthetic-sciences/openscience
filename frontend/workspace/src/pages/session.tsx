@@ -330,8 +330,8 @@ export default function Page(): JSX.Element {
     // menu's custom list by its `menu` flag.
     list.push({
       id: "session.compact",
-        title: language.t("session.command.compact"),
-        description: language.t("session.command.compact.description"),
+      title: language.t("session.command.compact"),
+      description: language.t("session.command.compact.description"),
       category: language.t("command.category.session"),
       slash: "compact",
       onSelect: () => {
@@ -346,8 +346,8 @@ export default function Page(): JSX.Element {
     // /handoff — write a self-contained handoff.md for another agent, then compact.
     list.push({
       id: "session.handoff",
-        title: language.t("session.command.handoff"),
-        description: language.t("session.command.handoff.description"),
+      title: language.t("session.command.handoff"),
+      description: language.t("session.command.handoff.description"),
       category: language.t("command.category.session"),
       slash: "handoff",
       onSelect: () => {
@@ -662,7 +662,6 @@ export default function Page(): JSX.Element {
                         type="button"
                         onClick={() => chatScroll.forceScrollToBottom()}
                         title={language.t("session.jumpToLatest")}
-
                         style={{
                           position: "absolute",
                           // The content column reserves calc(10rem + 64px) of bottom
@@ -718,7 +717,10 @@ export default function Page(): JSX.Element {
                       }}
                     >
                       <span style={{ flex: 1, "min-width": 0 }}>
-                        Conversation reverted. {revertedCount()} {revertedCount() === 1 ? language.t("session.revert.banner.one") : language.t("session.revert.banner.other", { count: revertedCount() })}
+                        Conversation reverted. {revertedCount()}{" "}
+                        {revertedCount() === 1
+                          ? language.t("session.revert.banner.one")
+                          : language.t("session.revert.banner.other", { count: revertedCount() })}
                       </span>
                       <button
                         type="button"
@@ -846,10 +848,18 @@ function CenterTabStrip(props: { chatTitle: string }): JSX.Element {
       <CenterTab active={active() === "chat"} label={props.chatTitle} onClick={() => centerTabs.setActive("chat")}>
         <IconMessageSquare size={12} strokeWidth={1.6} />
       </CenterTab>
-      <CenterTab active={active() === "files"} label={language.t("session.tab.files")} onClick={() => centerTabs.setActive("files")}>
+      <CenterTab
+        active={active() === "files"}
+        label={language.t("session.tab.files")}
+        onClick={() => centerTabs.setActive("files")}
+      >
         <IconFolderTree size={12} strokeWidth={1.6} />
       </CenterTab>
-      <CenterTab active={active() === "skills"} label={language.t("session.tab.skills")} onClick={() => centerTabs.setActive("skills")}>
+      <CenterTab
+        active={active() === "skills"}
+        label={language.t("session.tab.skills")}
+        onClick={() => centerTabs.setActive("skills")}
+      >
         <IconBrain size={12} strokeWidth={1.6} />
       </CenterTab>
       <For each={centerTabs.docs()}>

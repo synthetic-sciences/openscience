@@ -67,7 +67,8 @@ adata.obs        # Cell metadata (DataFrame)
 adata.var        # Gene metadata (DataFrame)
 adata.uns        # Unstructured annotations (dict)
 adata.obsm       # Multi-dimensional cell data (PCA, UMAP)
-adata.raw        # Raw data backup
+adata.layers     # Named matrices such as counts before normalization
+adata.raw        # Optional full-variable snapshot for marker lookup
 
 # Access cell and gene names
 adata.obs_names  # Cell barcodes
@@ -105,14 +106,17 @@ python scripts/qc_analysis.py input_file.h5ad --output filtered.h5ad
 ### 2. Normalization and Preprocessing
 
 ```python
+# Preserve counts before transforming X
+adata.layers['counts'] = adata.X.copy()
+
 # Normalize to 10,000 counts per cell
 sc.pp.normalize_total(adata, target_sum=1e4)
 
 # Log-transform
 sc.pp.log1p(adata)
 
-# Save raw counts for later
-adata.raw = adata
+# Preserve full-gene log values before HVG subsetting
+adata.raw = adata.copy()
 
 # Identify highly variable genes
 sc.pp.highly_variable_genes(adata, n_top_genes=2000)
@@ -301,12 +305,12 @@ sc.pp.combat(adata, key='batch')
 
 ## Common Pitfalls and Best Practices
 
-1. **Always save raw counts**: `adata.raw = adata` before filtering genes
+1. **Name matrix semantics explicitly**: save counts in `adata.layers['counts']` before normalization
 2. **Check QC plots carefully**: Adjust thresholds based on dataset quality
 3. **Use Leiden over Louvain**: More efficient and better results
 4. **Try multiple clustering resolutions**: Find optimal granularity
 5. **Validate cell type annotations**: Use multiple marker genes
-6. **Use `use_raw=True` for gene expression plots**: Shows original counts
+6. **Retain `.raw` when marker plots need non-HVG genes**: layers are sliced with `adata.var`; `.raw` is not
 7. **Check PCA variance ratio**: Determine optimal number of PCs
 8. **Save intermediate results**: Long workflows can fail partway through
 
@@ -386,4 +390,3 @@ The template includes all standard steps with configurable parameters and helpfu
 5. **Validate biologically**: Check marker genes match expected cell types
 6. **Document parameters**: Record QC thresholds and analysis settings
 7. **Save checkpoints**: Write intermediate results at key steps
-

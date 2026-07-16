@@ -13,6 +13,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import nmrglue as ng
 import numpy as np
+from nmr_match import load_library, normalize_nucleus, rank_candidates, region_flags
 
 
 @dataclass
@@ -32,6 +33,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--solvent", default="", help="Solvent label if known")
     parser.add_argument("--field-mhz", type=float, default=None, help="Field strength if known")
     parser.add_argument("--top-peaks", type=int, default=12, help="Number of peaks to keep")
+    parser.add_argument("--library", action="append", default=[], help="Reference JSON or CSV; repeatable")
+    parser.add_argument("--top-candidates", type=int, default=5, help="Number of ranked candidates to keep")
+    parser.add_argument("--tolerance-ppm", type=float, default=None, help="Peak matching tolerance")
     parser.add_argument(
         "--peak-threshold",
         type=float,
@@ -221,17 +225,6 @@ def find_peaks(x: np.ndarray, y: np.ndarray, rel_threshold: float, top_n: int) -
     return peaks
 
 
-def region_flags(peaks: list[dict[str, float]]) -> dict[str, bool]:
-    positions = [peak["position"] for peak in peaks]
-    return {
-        "has_aldehyde_region": any(9.0 <= pos <= 10.5 for pos in positions),
-        "has_aromatic_region": any(6.0 <= pos <= 8.5 for pos in positions),
-        "has_olefinic_region": any(4.5 <= pos <= 6.5 for pos in positions),
-        "has_oxygenated_aliphatic_region": any(3.0 <= pos <= 4.5 for pos in positions),
-        "has_simple_aliphatic_region": any(0.5 <= pos <= 3.0 for pos in positions),
-    }
-
-
 def build_search_query(args: argparse.Namespace, peaks: list[dict[str, float]]) -> str:
     peak_text = ", ".join(f"{peak['position']:.3f}" for peak in peaks[:8])
     parts = [args.nucleus, "NMR", "peaks", peak_text]
@@ -270,6 +263,7 @@ def save_report(
     peaks: list[dict[str, float]],
     query: str,
     flags: dict[str, bool],
+    candidates: list[dict[str, Any]],
     outputs: dict[str, str],
 ) -> None:
     lines = [
@@ -287,15 +281,22 @@ def save_report(
     ]
     for peak in peaks:
         lines.append(f"- {peak['position']:.4f} {spectrum.x_label}, normalized peak intensity {peak['normalized_intensity']:.3f}")
+    lines.extend(["", "## Nucleus-specific pattern hints"])
+    lines.extend(f"- {name.replace('_', ' ').title()}: `{present}`" for name, present in flags.items())
+    lines.extend(["", "## Ranked local-library candidates"])
+    if candidates:
+        for index, candidate in enumerate(candidates, start=1):
+            source = f" — [{candidate['source']}]({candidate['url']})" if candidate.get("source") and candidate.get("url") else ""
+            lines.append(
+                f"{index}. **{candidate['name']}** — score `{candidate['score']:.3f}`, {candidate['confidence']} confidence, "
+                f"{candidate['matched_count']}/{candidate['reference_count']} reference peaks matched, RMSE `{candidate['rmse_ppm']}` ppm{source}"
+            )
+            lines.append(f"   - Missing reference peaks: `{candidate['missing_reference_peaks']}`")
+            lines.append(f"   - Unmatched observed peaks: `{candidate['unmatched_observed_peaks']}`")
+    else:
+        lines.append("- No local reference library was supplied, so no candidate ranking was performed.")
     lines.extend(
         [
-            "",
-            "## Pattern hints",
-            f"- Aromatic region present: `{flags['has_aromatic_region']}`",
-            f"- Olefinic region present: `{flags['has_olefinic_region']}`",
-            f"- Oxygenated aliphatic region present: `{flags['has_oxygenated_aliphatic_region']}`",
-            f"- Simple aliphatic region present: `{flags['has_simple_aliphatic_region']}`",
-            f"- Aldehyde region present: `{flags['has_aldehyde_region']}`",
             "",
             "## Search next",
             f"- Recommended query: `{query}`",
@@ -305,8 +306,8 @@ def save_report(
             "- nmrshiftdb2: https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/t1.html",
             "",
             "## Guardrails",
-            "- This is a first-pass evidence package, not a final identity claim.",
-            "- Downrank hits that mismatch nucleus, solvent, field strength, or obvious peak pattern.",
+            "- A peak-list score is ranked evidence, not an identity confirmation.",
+            "- Inspect missing and unmatched peaks; mixtures, referencing offsets, pH, and solvent can change the result.",
             "- If this spectrum comes from raw FID magnitude processing, confidence should be lower than for a properly phased processed spectrum.",
         ]
     )
@@ -315,6 +316,7 @@ def save_report(
 
 def main() -> None:
     args = parse_args()
+    args.nucleus = normalize_nucleus(args.nucleus)
     input_path = Path(args.input).expanduser().resolve()
     output_dir = Path(args.output_dir).expanduser().resolve()
     ensure_dir(output_dir)
@@ -322,8 +324,18 @@ def main() -> None:
     spectrum = detect_and_load(input_path)
     y_norm = normalize_signal(spectrum.y)
     peaks = find_peaks(spectrum.x, y_norm, rel_threshold=args.peak_threshold, top_n=args.top_peaks)
-    flags = region_flags(peaks)
+    flags = region_flags(peaks, args.nucleus)
     query = build_search_query(args, peaks)
+    library = [candidate for item in args.library for candidate in load_library(Path(item).expanduser().resolve())]
+    candidates = rank_candidates(
+        peaks,
+        library,
+        args.nucleus,
+        args.solvent,
+        args.field_mhz,
+        args.tolerance_ppm,
+        args.top_candidates,
+    )
 
     spectrum_png = output_dir / "spectrum.png"
     peak_csv = output_dir / "peak_table.csv"
@@ -350,12 +362,13 @@ def main() -> None:
         "peak_count": len(peaks),
         "peaks": peaks,
         "pattern_flags": flags,
+        "candidates": candidates,
         "recommended_search_query": query,
         "metadata": spectrum.metadata,
         "outputs": outputs,
     }
     summary_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    save_report(report_md, args, spectrum, peaks, query, flags, outputs)
+    save_report(report_md, args, spectrum, peaks, query, flags, candidates, outputs)
     print(json.dumps(summary, indent=2))
 
 

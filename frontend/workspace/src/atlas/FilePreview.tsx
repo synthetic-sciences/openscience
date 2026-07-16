@@ -301,7 +301,13 @@ export function FileView(props: {
           <button
             type="button"
             onClick={() => setShowSource((v) => !v)}
-            title={showSource() ? language.t("preview.action.renderedView") : kind() === "code" ? language.t("preview.action.editSource") : language.t("preview.action.rawSource")}
+            title={
+              showSource()
+                ? language.t("preview.action.renderedView")
+                : kind() === "code"
+                  ? language.t("preview.action.editSource")
+                  : language.t("preview.action.rawSource")
+            }
             style={iconBtn(showSource())}
           >
             <Show when={showSource()} fallback={<IconBraces size={13} strokeWidth={1.6} />}>
@@ -311,22 +317,42 @@ export function FileView(props: {
         </Show>
 
         <Show when={!isBinary()}>
-          <button type="button" onClick={() => void copy()} title={language.t("preview.action.copyContents")} style={iconBtn()}>
+          <button
+            type="button"
+            onClick={() => void copy()}
+            title={language.t("preview.action.copyContents")}
+            style={iconBtn()}
+          >
             <IconCopy size={13} strokeWidth={1.6} />
           </button>
         </Show>
         <Show when={isBinary()}>
-          <a href={dataUrl()} download={name()} title={language.t("preview.action.download")} style={{ ...iconBtn(), "text-decoration": "none" }}>
+          <a
+            href={dataUrl()}
+            download={name()}
+            title={language.t("preview.action.download")}
+            style={{ ...iconBtn(), "text-decoration": "none" }}
+          >
             <IconDownload size={13} strokeWidth={1.6} />
           </a>
         </Show>
 
-        <button type="button" onClick={() => setRefreshKey((k) => k + 1)} title={language.t("preview.action.refresh")} style={iconBtn()}>
+        <button
+          type="button"
+          onClick={() => setRefreshKey((k) => k + 1)}
+          title={language.t("preview.action.refresh")}
+          style={iconBtn()}
+        >
           <IconRefresh size={13} strokeWidth={1.6} />
         </button>
 
         <Show when={props.onClose}>
-          <button type="button" onClick={() => props.onClose!()} title={language.t("preview.action.close")} style={iconBtn()}>
+          <button
+            type="button"
+            onClick={() => props.onClose!()}
+            title={language.t("preview.action.close")}
+            style={iconBtn()}
+          >
             <IconX size={14} strokeWidth={1.7} />
           </button>
         </Show>

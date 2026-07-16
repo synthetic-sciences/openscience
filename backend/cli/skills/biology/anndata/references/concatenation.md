@@ -36,7 +36,7 @@ print(adata_combined.shape)  # (100, 150)
 ## Join Types
 
 ### Inner join (intersection)
-Keep only variables/observations present in all objects.
+Keep only variables/observations present in all objects. Use this when downstream analysis must compare features measured in every input.
 
 ```python
 import pandas as pd
@@ -57,7 +57,7 @@ print(adata_inner.n_vars)  # 40 genes (overlap)
 ```
 
 ### Outer join (union)
-Keep all variables/observations, filling missing values.
+Keep all variables/observations, filling missing values. Use this when preserving every `var` entry matters.
 
 ```python
 # Outer join: all genes are kept
@@ -71,9 +71,11 @@ print(adata_outer.n_vars)  # 70 genes (union)
 
 ### Fill values for outer joins
 ```python
-# Specify fill value for missing data
+# Specify a fill value only when zero is scientifically appropriate
 adata_filled = ad.concat([adata1, adata2], join='outer', fill_value=0)
 ```
+
+Sparse outer joins default to zero for absent features, while dense joins may contain `NaN`. An absent feature is not always a measured biological zero: preserve a missingness indicator or choose `fill_value` deliberately when that distinction matters.
 
 ## Tracking Data Sources
 
@@ -364,8 +366,8 @@ print([set(adata.var_names) for adata in [adata1, adata2, adata3]])
 ```
 
 2. **Use appropriate join type**
-- `inner`: When you need the same features across all samples (most stringent)
-- `outer`: When you want to preserve all features (most inclusive)
+- `inner`: Intersection of features; safest when analysis requires comparable measurements
+- `outer`: Union of features; use when preservation matters and missing entries are handled explicitly
 
 3. **Track data sources**
 Always use `label` and `keys` to track which observations came from which dataset.

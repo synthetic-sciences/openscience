@@ -117,9 +117,7 @@ export default function Network() {
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
           <h2 class="text-16-medium text-text-strong">{lang.t("settings.network.heading")}</h2>
-          <p class="text-13-regular text-text-weak">
-            {lang.t("settings.network.description")}
-          </p>
+          <p class="text-13-regular text-text-weak">{lang.t("settings.network.description")}</p>
         </div>
       </div>
 
@@ -143,7 +141,10 @@ export default function Network() {
           <Switch checked={state().allowlistEnabled} onChange={toggleAllowlist} />
         </div>
 
-        <Show when={!loading()} fallback={<div class="text-13-regular text-text-weak py-6 text-center">{lang.t("common.loading")}…</div>}>
+        <Show
+          when={!loading()}
+          fallback={<div class="text-13-regular text-text-weak py-6 text-center">{lang.t("common.loading")}…</div>}
+        >
           {/* Domain groups */}
           <div class="flex flex-col gap-2">
             <span class="atlas-section-label px-1">{lang.t("settings.network.domainSets")}</span>
@@ -205,7 +206,11 @@ export default function Network() {
             <div class="rounded-[4px] border border-border-weak-base bg-surface-base/40 overflow-hidden">
               <For
                 each={state().custom}
-                fallback={<span class="block px-4 py-3 text-12-regular text-text-weak/70">{lang.t("settings.network.noCustomDomains")}</span>}
+                fallback={
+                  <span class="block px-4 py-3 text-12-regular text-text-weak/70">
+                    {lang.t("settings.network.noCustomDomains")}
+                  </span>
+                }
               >
                 {(domain) => (
                   <div class="group flex items-center gap-2 px-4 py-2.5 border-b border-border-weak-base/60 last:border-b-0">

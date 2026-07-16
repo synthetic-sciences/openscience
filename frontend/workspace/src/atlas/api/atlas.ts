@@ -87,6 +87,14 @@ export interface GraphTreeResponse {
   node_count?: number
 }
 
+export interface InitProjectResponse {
+  project_id: string | null
+  error?: "unauthenticated" | "unreachable" | "plan" | "backend" | string
+  status?: number
+  message?: string
+  host?: string
+}
+
 export const atlasAPI = {
   listNodes: () => getJSON<NodesListResponse>("/nodes"),
   /** The user's graphs = root nodes; the canvas shows one at a time. */
@@ -100,7 +108,7 @@ export const atlasAPI = {
     getJSON<{ project_id: string | null }>(`/project?directory=${encodeURIComponent(directory)}`),
   /** Find-or-create the OPENED project's root (explicit user action). */
   initProject: (directory: string) =>
-    postJSON<{ project_id: string | null }>(`/project/init?directory=${encodeURIComponent(directory)}`, {}),
+    postJSON<InitProjectResponse>(`/project/init?directory=${encodeURIComponent(directory)}`, {}),
   githubStatus: () => getJSON<unknown>("/github/status"),
   githubRefresh: () => postJSON<unknown>("/github/refresh", {}),
   githubDisconnect: () => postJSON<unknown>("/github/disconnect", {}),

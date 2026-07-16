@@ -1,19 +1,12 @@
 ---
 name: nmr-compound-inference
-description: Analyze 1D 1H or 13C NMR data with nmrglue, generate spectrum plots and peak tables, compare against standard NMR libraries such as BMRB, HMDB, SDBS, and nmrshiftdb2, then produce a ranked candidate-compound report with evidence, caveats, and direct links.
+description: Analyze local 1D 1H or 13C NMR spectra, extract peaks, compare them with local reference exports from BMRB, HMDB, SDBS, nmrshiftdb2, or curated libraries, and produce a ranked candidate report with mismatch evidence. Use for Bruker, NMRPipe, or two-column ppm/intensity data when compound identification or spectrum triage is requested.
 category: chemistry
-license: MIT
-metadata:
-    skill-author: Robin Wu (Yaobin29)
-version: 1.0.0
-author: Robin Wu
-tags: [NMR, Spectroscopy, Cheminformatics, Compound Identification, nmrglue, Bruker, Metabolomics]
-dependencies: ["nmrglue", "numpy", "matplotlib"]
 ---
 
 # NMR Compound Inference
 
-Use this skill to analyze a local 1D NMR dataset, generate a figure and peak list, search standard reference libraries, and infer the most likely compound or a short ranked candidate list.
+Analyze a local 1D spectrum, generate evidence artifacts, and rank compounds from supplied reference data. Treat the result as inference until orthogonal evidence confirms identity.
 
 ## Best fit
 
@@ -29,12 +22,12 @@ Use this skill to analyze a local 1D NMR dataset, generate a figure and peak lis
 
 ## Dependencies
 
-Install dependencies via Conda (recommended) or pip:
+Install dependencies from this skill directory:
 
 ```bash
 # Conda
 conda env create -f environment.yml
-conda activate robin-nmr-compound-inference
+conda activate openscience-nmr
 
 # pip
 python3 -m pip install nmrglue numpy matplotlib
@@ -44,16 +37,19 @@ This skill depends on the upstream `nmrglue` package and does not bundle the `nm
 
 ## Workflow
 
-1. Run the helper script to generate the evidence package:
+1. Read `references/standard-libraries.md`. Obtain candidate peak data from the source most appropriate for the sample, and normalize it to the documented JSON or CSV schema.
+
+2. Run the helper to generate the evidence package and rank the supplied library:
 
 ```bash
 python3 scripts/nmr_candidate_report.py \
   --input "<path-to-spectrum>" \
   --output-dir "./outputs/$(date +%F)" \
-  --nucleus "1H"
+  --nucleus "1H" \
+  --library "<reference-candidates.json>"
 ```
 
-Optional metadata for better matching:
+Pass multiple `--library` arguments when candidates come from several sources. Include metadata for better ranking:
 
 ```bash
 python3 scripts/nmr_candidate_report.py \
@@ -61,33 +57,33 @@ python3 scripts/nmr_candidate_report.py \
   --output-dir "./outputs/$(date +%F)" \
   --nucleus "1H" \
   --solvent "D2O" \
-  --field-mhz 600
+  --field-mhz 600 \
+  --library "<bmrb-export.json>" \
+  --library "<curated-candidates.csv>"
 ```
 
-2. Review the generated outputs:
+3. Review the generated outputs:
    - `spectrum.png` — Plot of the processed spectrum
    - `peak_table.csv` — Extracted peak positions and intensities
    - `analysis_summary.json` — Structured summary for downstream processing
    - `analysis_report.md` — Human-readable report with search recommendations
 
-3. Read `references/standard-libraries.md` and search the relevant library sites:
-   - BMRB Metabolomics: https://bmrb.io/metabolomics/
-   - HMDB 1D NMR: https://hmdb.ca/spectra/nmr_one_d
-   - SDBS: https://sdbs.db.aist.go.jp/SearchResult.aspx
-   - nmrshiftdb2: https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/t1.html
+4. Inspect each candidate's matched peaks, missing reference peaks, unmatched observed peaks, solvent/field metadata, and source URL. Do not report a top hit without discussing the mismatches.
 
-4. Return a report with:
+5. Return a report with:
    - problem type
    - what data was analyzed
    - plot path
    - major peaks
    - library links searched
-   - top 1-3 candidate compounds
+   - top 1-3 ranked candidates, scores, and direct source links
    - confidence, mismatch notes, and what would disambiguate the call
 
 ## Comparison rules
 
-When comparing against reference libraries:
+The helper performs one-to-one ppm matching, uses a default tolerance of `0.08 ppm` for `1H` and `0.8 ppm` for `13C`, and penalizes solvent and field mismatches. Override `--tolerance-ppm` when linewidth, referencing, or acquisition conditions justify it.
+
+When interpreting results:
 
 1. Match nucleus first
 2. Match solvent second
@@ -101,6 +97,7 @@ When comparing against reference libraries:
 - Treat this as ranked inference unless the library match is unusually strong.
 - Penalize mismatches in nucleus, solvent, field strength, or obvious peak pattern.
 - If the input is raw FID and the result is magnitude-mode rather than properly phased, say that explicitly.
+- Use the nucleus-specific pattern hints only as broad heuristics. The `13C` regions are not interpreted with `1H` ranges.
 
 ## Upstream references
 

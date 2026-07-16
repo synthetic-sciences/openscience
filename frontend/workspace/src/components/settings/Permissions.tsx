@@ -20,22 +20,54 @@ interface PermissionInfo {
   grants: Record<string, Scope>
 }
 
-const ACTIONS: { id: string; title: string; description: string }[] = [
-  { id: "create_agent", title: "settings.permissions.registry.createAgent.title", description: "settings.permissions.registry.createAgent.description" },
-  { id: "update_agent", title: "settings.permissions.registry.updateAgent.title", description: "settings.permissions.registry.updateAgent.description" },
-  { id: "publish_skill", title: "settings.permissions.registry.publishSkill.title", description: "settings.permissions.registry.publishSkill.description" },
-  { id: "edit_skill", title: "settings.permissions.registry.editSkill.title", description: "settings.permissions.registry.editSkill.description" },
-  { id: "attach_skill", title: "settings.permissions.registry.attachSkill.title", description: "settings.permissions.registry.attachSkill.description" },
-  { id: "detach_skill", title: "settings.permissions.registry.detachSkill.title", description: "settings.permissions.registry.detachSkill.description" },
-  { id: "attach_connector", title: "settings.permissions.registry.attachConnector.title", description: "settings.permissions.registry.attachConnector.description" },
-  { id: "detach_connector", title: "settings.permissions.registry.detachConnector.title", description: "settings.permissions.registry.detachConnector.description" },
-]
+const ACTIONS = [
+  {
+    id: "create_agent",
+    title: "settings.permissions.registry.createAgent.title",
+    description: "settings.permissions.registry.createAgent.description",
+  },
+  {
+    id: "update_agent",
+    title: "settings.permissions.registry.updateAgent.title",
+    description: "settings.permissions.registry.updateAgent.description",
+  },
+  {
+    id: "publish_skill",
+    title: "settings.permissions.registry.publishSkill.title",
+    description: "settings.permissions.registry.publishSkill.description",
+  },
+  {
+    id: "edit_skill",
+    title: "settings.permissions.registry.editSkill.title",
+    description: "settings.permissions.registry.editSkill.description",
+  },
+  {
+    id: "attach_skill",
+    title: "settings.permissions.registry.attachSkill.title",
+    description: "settings.permissions.registry.attachSkill.description",
+  },
+  {
+    id: "detach_skill",
+    title: "settings.permissions.registry.detachSkill.title",
+    description: "settings.permissions.registry.detachSkill.description",
+  },
+  {
+    id: "attach_connector",
+    title: "settings.permissions.registry.attachConnector.title",
+    description: "settings.permissions.registry.attachConnector.description",
+  },
+  {
+    id: "detach_connector",
+    title: "settings.permissions.registry.detachConnector.title",
+    description: "settings.permissions.registry.detachConnector.description",
+  },
+] as const
 
-const SCOPES: { value: Scope; label: string }[] = [
+const SCOPES = [
   { value: "session", label: "settings.permissions.scope.session" },
   { value: "global", label: "settings.permissions.scope.global" },
   { value: "revoked", label: "settings.permissions.scope.revoked" },
-]
+] as const
 
 const Permissions: Component = () => {
   const lang = useLanguage()
@@ -55,7 +87,10 @@ const Permissions: Component = () => {
     try {
       mutate(await call<PermissionInfo>(`/${id}`, { method: "PUT", body: JSON.stringify({ scope }) }))
     } catch (err) {
-      showToast({ title: lang.t("settings.permissions.toast.updateFailed.title"), description: err instanceof Error ? err.message : String(err) })
+      showToast({
+        title: lang.t("settings.permissions.toast.updateFailed.title"),
+        description: err instanceof Error ? err.message : String(err),
+      })
       refetch()
     }
     setBusy(false)
@@ -71,7 +106,10 @@ const Permissions: Component = () => {
         }),
       )
     } catch (err) {
-      showToast({ title: lang.t("settings.permissions.toast.revokeAllFailed.title"), description: err instanceof Error ? err.message : String(err) })
+      showToast({
+        title: lang.t("settings.permissions.toast.revokeAllFailed.title"),
+        description: err instanceof Error ? err.message : String(err),
+      })
       refetch()
     }
     setBusy(false)
@@ -84,9 +122,7 @@ const Permissions: Component = () => {
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
           <h2 class="text-16-medium text-text-strong">{lang.t("settings.permissions.heading")}</h2>
-          <p class="text-13-regular text-text-weak">
-            {lang.t("settings.permissions.description")}
-          </p>
+          <p class="text-13-regular text-text-weak">{lang.t("settings.permissions.description")}</p>
         </div>
       </div>
 
@@ -95,7 +131,9 @@ const Permissions: Component = () => {
         <div class="flex flex-col gap-3">
           <div class="flex items-end justify-between gap-4">
             <div class="flex flex-col gap-0.5">
-              <h3 class="text-13-medium text-text-weak tracking-wide">{lang.t("settings.permissions.section.registry")}</h3>
+              <h3 class="text-13-medium text-text-weak tracking-wide">
+                {lang.t("settings.permissions.section.registry")}
+              </h3>
               <p class="text-12-regular text-text-weak">
                 {lang.t("settings.permissions.section.registry.description")}
               </p>

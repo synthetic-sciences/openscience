@@ -12,7 +12,7 @@ import { Switch } from "@synsci/ui/switch"
 import { Icon } from "@synsci/ui/icon"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { useLanguage } from "@/context/language"
+import { useLanguage, type TranslationKey } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
 
@@ -49,12 +49,12 @@ interface SelfTest {
 const NETWORK_OPTS = [
   { value: "allow" as const, label: "settings.sandbox.network.allow" },
   { value: "deny" as const, label: "settings.sandbox.network.deny" },
-]
+] as const
 const UNAVAILABLE_OPTS = [
   { value: "warn" as const, label: "settings.sandbox.unavailable.warn" },
   { value: "error" as const, label: "settings.sandbox.unavailable.refuse" },
   { value: "allow" as const, label: "settings.sandbox.unavailable.allow" },
-]
+] as const
 
 const Sandbox: Component = () => {
   const lang = useLanguage()
@@ -76,7 +76,7 @@ const Sandbox: Component = () => {
   const config = () => data()?.config ?? {}
   const status = () => data()?.status
 
-  const patch = async (body: SandboxConfig, failure: string) => {
+  const patch = async (body: SandboxConfig, failure: TranslationKey) => {
     setBusy(true)
     try {
       mutate(await call<Payload>("", { method: "PUT", body: JSON.stringify(body) }))
@@ -92,7 +92,10 @@ const Sandbox: Component = () => {
     try {
       setTest(await call<SelfTest>("/test", { method: "POST" }))
     } catch (err) {
-      showToast({ title: lang.t("settings.sandbox.toast.selfTestFailed"), description: err instanceof Error ? err.message : String(err) })
+      showToast({
+        title: lang.t("settings.sandbox.toast.selfTestFailed"),
+        description: err instanceof Error ? err.message : String(err),
+      })
     }
     setTesting(false)
   }
@@ -101,7 +104,10 @@ const Sandbox: Component = () => {
     const p = newPath().trim()
     if (!p) return
     if (!p.startsWith("/")) {
-      showToast({ title: lang.t("settings.sandbox.toast.absolutePathRequired"), description: lang.t("settings.sandbox.toast.absolutePathRequired.description") })
+      showToast({
+        title: lang.t("settings.sandbox.toast.absolutePathRequired"),
+        description: lang.t("settings.sandbox.toast.absolutePathRequired.description"),
+      })
       return
     }
     const next = [...(config().allowWrite ?? [])]
@@ -110,16 +116,17 @@ const Sandbox: Component = () => {
     patch({ allowWrite: next }, "settings.sandbox.toast.couldNotAddPath")
   }
   const removePath = (p: string) =>
-    patch({ allowWrite: (config().allowWrite ?? []).filter((x) => x !== p) }, "settings.sandbox.toast.couldNotRemovePath")
+    patch(
+      { allowWrite: (config().allowWrite ?? []).filter((x) => x !== p) },
+      "settings.sandbox.toast.couldNotRemovePath",
+    )
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[820px]">
           <h2 class="text-16-medium text-text-strong">{lang.t("settings.sandbox.heading")}</h2>
-          <p class="text-13-regular text-text-weak">
-            {lang.t("settings.sandbox.description")}
-          </p>
+          <p class="text-13-regular text-text-weak">{lang.t("settings.sandbox.description")}</p>
         </div>
       </div>
 
@@ -144,7 +151,11 @@ const Sandbox: Component = () => {
                 }
               >
                 <span>
-                  {lang.t("settings.sandbox.status.backendReady", { backend: s().backend ?? "", tool: s().tool ?? "", platform: s().platform })}
+                  {lang.t("settings.sandbox.status.backendReady", {
+                    backend: s().backend ?? "",
+                    tool: s().tool ?? "",
+                    platform: s().platform,
+                  })}
                 </span>
               </Show>
             </div>
@@ -155,11 +166,11 @@ const Sandbox: Component = () => {
         <section class="flex flex-col gap-3">
           <div class="flex items-center justify-between border border-border-weak-base rounded-[4px] px-4 py-3.5 bg-surface-base/40">
             <div class="flex flex-col gap-0.5 min-w-0 pr-4">
-              <span class="text-14-medium text-text-strong">{lang.t("settings.sandbox.row.sandboxCommands.title")}</span>
+              <span class="text-14-medium text-text-strong">
+                {lang.t("settings.sandbox.row.sandboxCommands.title")}
+              </span>
               <span class="text-12-regular text-text-weak">
-                {config().enabled
-                  ? lang.t("settings.sandbox.status.on")
-                  : lang.t("settings.sandbox.status.off")}
+                {config().enabled ? lang.t("settings.sandbox.status.on") : lang.t("settings.sandbox.status.off")}
               </span>
             </div>
             <Switch
@@ -178,7 +189,9 @@ const Sandbox: Component = () => {
             <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
               <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5 border-b border-border-weak-base">
                 <div class="flex flex-col gap-0.5 min-w-0">
-                  <span class="text-14-medium text-text-strong">{lang.t("settings.sandbox.row.networkEgress.title")}</span>
+                  <span class="text-14-medium text-text-strong">
+                    {lang.t("settings.sandbox.row.networkEgress.title")}
+                  </span>
                   <span class="text-12-regular text-text-weak">
                     {lang.t("settings.sandbox.row.networkEgress.description")}
                   </span>
@@ -207,7 +220,9 @@ const Sandbox: Component = () => {
                   current={unavailableOpts().find((o) => o.value === (config().onUnavailable ?? "warn"))}
                   value={(o) => o.value}
                   label={(o) => o.label}
-                  onSelect={(o) => o && patch({ onUnavailable: o.value }, "settings.sandbox.toast.couldNotUpdateFallback")}
+                  onSelect={(o) =>
+                    o && patch({ onUnavailable: o.value }, "settings.sandbox.toast.couldNotUpdateFallback")
+                  }
                   variant="secondary"
                   size="small"
                   triggerVariant="settings"
@@ -217,7 +232,9 @@ const Sandbox: Component = () => {
 
             {/* extra writable paths */}
             <div class="flex flex-col gap-2">
-              <span class="text-13-medium text-text-strong">{lang.t("settings.sandbox.section.extraWritablePaths")}</span>
+              <span class="text-13-medium text-text-strong">
+                {lang.t("settings.sandbox.section.extraWritablePaths")}
+              </span>
               <span class="text-12-regular text-text-weak/70">
                 {lang.t("settings.sandbox.section.extraWritablePaths.description")}
               </span>
@@ -249,13 +266,17 @@ const Sandbox: Component = () => {
             <div class="flex flex-col gap-3 border border-border-weak-base rounded-[4px] p-4 bg-surface-base/40">
               <div class="flex items-center justify-between gap-4">
                 <div class="flex flex-col gap-0.5">
-                  <span class="text-14-medium text-text-strong">{lang.t("settings.sandbox.row.verifyContainment.title")}</span>
+                  <span class="text-14-medium text-text-strong">
+                    {lang.t("settings.sandbox.row.verifyContainment.title")}
+                  </span>
                   <span class="text-12-regular text-text-weak">
                     {lang.t("settings.sandbox.row.verifyContainment.description")}
                   </span>
                 </div>
                 <Button size="small" variant="secondary" disabled={testing() || !status()?.available} onClick={runTest}>
-                  {testing() ? lang.t("settings.sandbox.status.testing") : lang.t("settings.sandbox.action.runSelfTest")}
+                  {testing()
+                    ? lang.t("settings.sandbox.status.testing")
+                    : lang.t("settings.sandbox.action.runSelfTest")}
                 </Button>
               </div>
               <Show when={test()}>
@@ -279,7 +300,9 @@ const Sandbox: Component = () => {
                       class="text-12-medium pt-1"
                       classList={{ "text-text-success": t().ok, "text-text-danger": !t().ok }}
                     >
-                      {t().ok ? lang.t("settings.sandbox.status.containmentVerified") : lang.t("settings.sandbox.status.containmentFailed")}
+                      {t().ok
+                        ? lang.t("settings.sandbox.status.containmentVerified")
+                        : lang.t("settings.sandbox.status.containmentFailed")}
                     </span>
                   </div>
                 )}

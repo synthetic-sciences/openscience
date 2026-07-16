@@ -160,22 +160,29 @@ export namespace McpOAuthCallback {
 
   export async function isPortInUse(): Promise<boolean> {
     return new Promise((resolve) => {
+      const done = (used: boolean) => {
+        clearTimeout(timeout)
+        resolve(used)
+      }
+      // Bun.connect can remain pending on some headless/CI network stacks.
+      // OAuth startup must still progress and attempt to bind the callback port.
+      const timeout = setTimeout(() => resolve(false), 250)
       Bun.connect({
         hostname: "127.0.0.1",
         port: OAUTH_CALLBACK_PORT,
         socket: {
           open(socket) {
             socket.end()
-            resolve(true)
+            done(true)
           },
           error() {
-            resolve(false)
+            done(false)
           },
           data() {},
           close() {},
         },
       }).catch(() => {
-        resolve(false)
+        done(false)
       })
     })
   }

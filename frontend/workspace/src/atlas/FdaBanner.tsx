@@ -164,7 +164,11 @@ function FdaSheet(props: {
   const url = () => SETTINGS_URL[props.os]
   const [busy, setBusy] = createSignal(false)
   return (
-    <Dialog title={STEP_TITLE[props.os] === "Grant Full Disk Access" ? language.t("fda.title") : language.t("fda.title.nonMac")}>
+    <Dialog
+      title={
+        STEP_TITLE[props.os] === "Grant Full Disk Access" ? language.t("fda.title") : language.t("fda.title.nonMac")
+      }
+    >
       <div
         style={{
           display: "flex",
@@ -182,7 +186,11 @@ function FdaSheet(props: {
             margin: 0,
           }}
         >
-          {props.os === "mac" ? language.t("fda.body.mac") : props.os === "win" ? language.t("fda.body.win") : language.t("fda.body.linux")}
+          {props.os === "mac"
+            ? language.t("fda.body.mac")
+            : props.os === "win"
+              ? language.t("fda.body.win")
+              : language.t("fda.body.linux")}
         </p>
         <Show when={props.os === "mac"}>
           <ol

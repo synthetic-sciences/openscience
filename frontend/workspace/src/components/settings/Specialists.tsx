@@ -73,7 +73,11 @@ export default function Specialists() {
       label: lang.t("settings.specialists.filter.primary"),
       count: (agents() ?? []).filter((a) => a.mode === "primary" || a.mode === "all").length,
     },
-    { id: "subagent", label: lang.t("settings.specialists.filter.subagents"), count: (agents() ?? []).filter((a) => a.mode === "subagent").length },
+    {
+      id: "subagent",
+      label: lang.t("settings.specialists.filter.subagents"),
+      count: (agents() ?? []).filter((a) => a.mode === "subagent").length,
+    },
   ])
 
   async function createAgent(name: string, description: string, prompt: string, mode: Mode) {
@@ -85,7 +89,11 @@ export default function Specialists() {
       showToast({ variant: "success", title: lang.t("settings.specialists.toast.created", { name }) })
       setCreating(false)
     } catch (err) {
-      showToast({ variant: "error", title: lang.t("settings.specialists.toast.createFailed"), description: message(err) })
+      showToast({
+        variant: "error",
+        title: lang.t("settings.specialists.toast.createFailed"),
+        description: message(err),
+      })
     } finally {
       setBusy(false)
     }
@@ -114,7 +122,11 @@ export default function Specialists() {
           <Show when={!creating()}>
             <Toolbar>
               <FilterMenu options={modeOptions()} value={modeFilter()} onSelect={setModeFilter} />
-              <SearchInput value={search()} onInput={setSearch} placeholder={lang.t("settings.specialists.placeholder.search")} />
+              <SearchInput
+                value={search()}
+                onInput={setSearch}
+                placeholder={lang.t("settings.specialists.placeholder.search")}
+              />
               <AddMenu
                 label={lang.t("settings.specialists.action.addSpecialist")}
                 items={[
@@ -139,14 +151,22 @@ export default function Specialists() {
         <Show when={!creating()}>
           <Show
             when={!agents.loading}
-            fallback={<div class="py-12 text-center text-13-regular text-text-weak">{lang.t("settings.specialists.status.loading")}</div>}
+            fallback={
+              <div class="py-12 text-center text-13-regular text-text-weak">
+                {lang.t("settings.specialists.status.loading")}
+              </div>
+            }
           >
             <Show
               when={visible().length > 0}
               fallback={
                 <EmptyState
                   icon="models"
-                  title={search() ? lang.t("settings.specialists.empty.noMatching") : lang.t("settings.specialists.empty.noSpecialists")}
+                  title={
+                    search()
+                      ? lang.t("settings.specialists.empty.noMatching")
+                      : lang.t("settings.specialists.empty.noSpecialists")
+                  }
                   hint={lang.t("settings.specialists.empty.hint")}
                 />
               }
@@ -183,7 +203,11 @@ export default function Specialists() {
 function AgentRow(props: { agent: Agent; onDelete?: () => void; busy: boolean }) {
   const lang = useLanguage()
   const modeLabel = () =>
-    props.agent.mode === "subagent" ? lang.t("settings.specialists.mode.subagent") : props.agent.mode === "all" ? lang.t("settings.specialists.mode.both") : lang.t("settings.specialists.mode.primary")
+    props.agent.mode === "subagent"
+      ? lang.t("settings.specialists.mode.subagent")
+      : props.agent.mode === "all"
+        ? lang.t("settings.specialists.mode.both")
+        : lang.t("settings.specialists.mode.primary")
   return (
     <Row>
       <Avatar monogram={props.agent.name.slice(0, 1)} tint={props.agent.color ?? undefined} />
@@ -251,7 +275,11 @@ function CreateForm(props: {
         />
         <div class="flex items-center gap-2">
           <FormButton
-            label={props.busy ? lang.t("settings.specialists.status.creating") : lang.t("settings.specialists.action.createSpecialist")}
+            label={
+              props.busy
+                ? lang.t("settings.specialists.status.creating")
+                : lang.t("settings.specialists.action.createSpecialist")
+            }
             disabled={props.busy || !valid()}
             onClick={() => props.onCreate(name().trim(), description().trim(), prompt(), mode())}
           />

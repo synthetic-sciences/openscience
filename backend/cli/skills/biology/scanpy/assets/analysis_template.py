@@ -143,14 +143,18 @@ print("\n" + "=" * 80)
 print("NORMALIZATION")
 print("=" * 80)
 
+# Preserve counts before transforming X. This layer follows later var slicing;
+# save the pre-HVG object separately if full-gene counts are required downstream.
+adata.layers['counts'] = adata.X.copy()
+
 # Normalize to 10,000 counts per cell
 sc.pp.normalize_total(adata, target_sum=1e4)
 
 # Log-transform
 sc.pp.log1p(adata)
 
-# Store normalized data
-adata.raw = adata
+# Preserve full-gene log-normalized values for marker lookup after HVG subsetting
+adata.raw = adata.copy()
 
 # ============================================================================
 # 4. FEATURE SELECTION

@@ -26,6 +26,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
+import { Auth } from "../../src/auth"
 
 /* Pinned against the live models.dev catalog. When models.dev delists one of
    these ids, the "pinned catalog models still exist upstream" test below fails
@@ -48,6 +49,28 @@ test("Codex OAuth allowlist includes the GPT-5.6 family", () => {
   ]) {
     expect(Provider.isCodexModel(id)).toBe(true)
   }
+})
+
+test("Codex OAuth synthesizes the GPT-5.6 family from the catalog", async () => {
+  await using tmp = await tmpdir({})
+  await Auth.set("openai-codex", {
+    type: "oauth",
+    refresh: "test-refresh",
+    access: "test-access",
+    expires: Date.now() + 60_000,
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const provider = (await Provider.list())["openai-codex"]
+      expect(provider).toBeDefined()
+      for (const id of ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
+        expect(provider.models[id]?.providerID).toBe("openai-codex")
+        expect(provider.models[id]?.cost).toEqual({ input: 0, output: 0, cache: { read: 0, write: 0 } })
+      }
+    },
+  })
+  await Auth.remove("openai-codex")
 })
 
 test("pinned catalog models are present in the seeded test fixture", async () => {

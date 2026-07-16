@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useModels, type ModelKey } from "@/context/models"
-import { useLanguage } from "@/context/language"
+import { useLanguage, type TranslationKey } from "@/context/language"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import {
   IconArrowUp,
@@ -49,7 +49,7 @@ const PROVIDER_LABEL: Record<string, string> = {
 // is "does this spend money?". Text badges (BYOK/metered) were removed from the
 // bar and rows; the dot carries the signal at near-zero visual weight. Inferred
 // from provider connection state; authoritative resolver is server-side.
-const SOURCE_DOT: Record<ModelSource, { color: string; opacity: number; meters: boolean; titleKey: string }> = {
+const SOURCE_DOT: Record<ModelSource, { color: string; opacity: number; meters: boolean; titleKey: TranslationKey }> = {
   byok: { color: "var(--color-text-faint)", opacity: 0.5, meters: false, titleKey: "composer.source.byok" },
   "signed-in": { color: "var(--color-text-faint)", opacity: 0.5, meters: false, titleKey: "composer.source.signedIn" },
   managed: { color: "var(--color-accent)", opacity: 0.8, meters: true, titleKey: "composer.source.managed" },
@@ -580,7 +580,10 @@ export function Composer(): JSX.Element {
     const next: Attachment[] = []
     for (const file of list) {
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        toast.error(language.t("composer.toast.fileTooLarge", { name: file.name }), language.t("composer.toast.maxAttachmentSize"))
+        toast.error(
+          language.t("composer.toast.fileTooLarge", { name: file.name }),
+          language.t("composer.toast.maxAttachmentSize"),
+        )
         continue
       }
       try {
@@ -961,7 +964,10 @@ export function Composer(): JSX.Element {
                     }}
                     onClick={() => {
                       if (text().trim().length > 0) {
-                        toast.info(language.t("composer.toast.inputNotEmpty"), language.t("composer.toast.clearInputToPull"))
+                        toast.info(
+                          language.t("composer.toast.inputNotEmpty"),
+                          language.t("composer.toast.clearInputToPull"),
+                        )
                         return
                       }
                       setQueue((qs) => qs.filter((x) => x.id !== q.id))
@@ -1180,7 +1186,9 @@ export function Composer(): JSX.Element {
             >
               <Show
                 when={selectedLabel()}
-                fallback={<span style={{ color: "var(--color-text-faint)" }}>{language.t("composer.tooltip.setupModels")}</span>}
+                fallback={
+                  <span style={{ color: "var(--color-text-faint)" }}>{language.t("composer.tooltip.setupModels")}</span>
+                }
               >
                 <Show when={selectedSource()}>
                   {(dot) => (
@@ -1222,7 +1230,7 @@ export function Composer(): JSX.Element {
                     <div
                       class={REDUCE_MOTION ? undefined : a().up ? "atlas-pop-up" : "atlas-fade-in"}
                       role="dialog"
-                       aria-label={language.t("composer.aria.selectModel")}
+                      aria-label={language.t("composer.aria.selectModel")}
                       style={{
                         position: "fixed",
                         left: `${a().left}px`,
@@ -1356,7 +1364,11 @@ export function Composer(): JSX.Element {
                                         ref={(el) => (modelRowRefs[flatIndex()] = el)}
                                         role="option"
                                         aria-selected={active()}
-                                        title={language.t("composer.tooltip.modelRow", { provider: providerLabel(row.provider.id), model: row.id, ctx: formatTokens(row.limit?.context) })}
+                                        title={language.t("composer.tooltip.modelRow", {
+                                          provider: providerLabel(row.provider.id),
+                                          model: row.id,
+                                          ctx: formatTokens(row.limit?.context),
+                                        })}
                                         onClick={() => selectRowAt(flatIndex())}
                                         onMouseEnter={() => setModelIndex(flatIndex())}
                                         style={{
@@ -1522,7 +1534,9 @@ export function Composer(): JSX.Element {
                                     onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-text-muted)")}
                                     onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-faint)")}
                                   >
-                                    {group.open ? language.t("composer.action.showFewer") : language.t("composer.label.nOlder", { n: String(group.folded) })}
+                                    {group.open
+                                      ? language.t("composer.action.showFewer")
+                                      : language.t("composer.label.nOlder", { n: String(group.folded) })}
                                     <span style={{ opacity: 0.7 }}>{group.open ? "▴" : "▾"}</span>
                                   </button>
                                 </Show>
@@ -1773,7 +1787,9 @@ export function Composer(): JSX.Element {
                 color: "var(--color-text-faint)",
               }}
             >
-              {isWorking() || inflight() ? language.t("composer.hint.queueNewline") : language.t("composer.hint.sendNewline")}
+              {isWorking() || inflight()
+                ? language.t("composer.hint.queueNewline")
+                : language.t("composer.hint.sendNewline")}
             </span>
           </Show>
 
@@ -1782,7 +1798,9 @@ export function Composer(): JSX.Element {
               onClick={() => void submit()}
               disabled={submitting()}
               type="button"
-              title={isWorking() || inflight() ? language.t("composer.tooltip.queue") : language.t("composer.tooltip.send")}
+              title={
+                isWorking() || inflight() ? language.t("composer.tooltip.queue") : language.t("composer.tooltip.send")
+              }
               style={{
                 all: "unset",
                 "box-sizing": "border-box",

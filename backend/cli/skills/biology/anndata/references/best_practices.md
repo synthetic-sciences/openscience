@@ -223,30 +223,37 @@ for chunk in adata.chunked_X(chunk_size=1000):
 # More memory efficient than loading full X
 ```
 
-## Working with Raw Data
+## Preserving Counts and Full-Gene Values
 
-### Store raw before filtering
+### Use layers and raw for different guarantees
 ```python
-# Original data with all genes
-adata = ad.AnnData(X=counts)
+import scanpy as sc
 
-# Store raw before filtering
+# Start with counts
+adata = ad.AnnData(X=counts)
+adata.layers['counts'] = adata.X.copy()
+
+# Normalize X and snapshot full-gene log values
+sc.pp.normalize_total(adata, target_sum=1e4)
+sc.pp.log1p(adata)
 adata.raw = adata.copy()
 
 # Filter to highly variable genes
 adata = adata[:, adata.var['highly_variable']]
 
-# Later: access original data
-original_expression = adata.raw.X
+# Later: query non-HVG log expression through raw
+original_expression = adata.raw[:, 'GENE_NAME'].X
 all_genes = adata.raw.var_names
+
+# Layers remain aligned to the retained variables
+retained_counts = adata.layers['counts']
 ```
 
 ### When to use raw
 ```python
-# Use raw for:
-# - Differential expression on filtered genes
-# - Visualization of specific genes not in filtered set
-# - Accessing original counts after normalization
+# Use .raw for downstream APIs that expect it and for genes removed by var filtering.
+# Use named layers for explicit count/log/scaled matrix semantics. Layers are
+# sliced with adata, so save a separate full object if full-gene counts are needed.
 
 # Access raw data
 if adata.raw is not None:
@@ -507,7 +514,10 @@ if not issparse(adata.X):
     if density < 0.5:
         adata.X = csr_matrix(adata.X)
 
-# 6. Store raw before filtering genes
+# 6. Preserve counts, then keep a full-variable log snapshot
+adata.layers['counts'] = adata.X.copy()
+sc.pp.normalize_total(adata, target_sum=1e4)
+sc.pp.log1p(adata)
 adata.raw = adata.copy()
 
 # 7. Filter to highly variable genes

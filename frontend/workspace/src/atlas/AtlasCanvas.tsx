@@ -30,7 +30,7 @@ import { useLanguage } from "@/context/language"
 import { uiStore } from "@/atlas/store/ui"
 import { FONT_MONO, FONT_SANS, FONT_SERIF, sectionTitle } from "@/styles/tokens"
 import { IconRefresh, IconPlus, IconNetwork, IconArrowRight } from "@/atlas/shared/Icon"
-import { atlasAPI, type AtlasNode } from "@/atlas/api/atlas"
+import { atlasAPI, type AtlasNode, type InitProjectResponse } from "@/atlas/api/atlas"
 import { toast } from "@/atlas/Toast"
 import { promptDialog } from "@/atlas/dialogs"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
@@ -531,15 +531,26 @@ export function AtlasCanvas(): JSX.Element {
 
   // Explicitly create the folder's project root, then refetch + select it.
   const [initializing, setInitializing] = createSignal(false)
+  const failure = (result: InitProjectResponse) => {
+    const host = result.host ? ` (${result.host})` : ""
+    if (result.error === "unauthenticated") return `${language.t("atlas.error.login")}${host}`
+    if (result.error === "plan") return `${language.t("atlas.error.plan")}${host}`
+    if (result.error === "unreachable")
+      return `${language.t("atlas.error.unreachable")}${host}${result.message ? `: ${result.message}` : ""}`
+    if (result.error === "backend")
+      return `${language.t("atlas.error.backend")}${host}${result.message ? `: ${result.message}` : ""}`
+    return result.message ?? `${language.t("atlas.error.noProject")}${host}`
+  }
   const initGraph = async () => {
     if (initializing()) return
     setInitializing(true)
     try {
-      const { project_id } = await atlasAPI.initProject(directory())
-      if (!project_id) throw new Error("backend returned no project id")
+      const result = await atlasAPI.initProject(directory())
+      const project = result.project_id
+      if (!project) throw new Error(failure(result))
       settled = true
       await refetchAll()
-      setGraphId(project_id)
+      setGraphId(project)
       toast.info(language.t("atlas.toast.graphInitialized"))
     } catch (err: any) {
       toast.error(language.t("atlas.toast.couldNotInitGraph"), err?.message ?? String(err))
@@ -654,7 +665,10 @@ export function AtlasCanvas(): JSX.Element {
     for (const s of candidates) {
       const node = idmap.get(s.id)
       if (!node) continue
-      const text = truncate(node.title || node.slug_name || language.t("atlas.label.untitled"), m === "timeline" ? 16 : 22)
+      const text = truncate(
+        node.title || node.slug_name || language.t("atlas.label.untitled"),
+        m === "timeline" ? 16 : 22,
+      )
       const w = text.length * 6.6 + 8
       const h = 15
       const x1 = s.x + s.r + 5
@@ -720,7 +734,8 @@ export function AtlasCanvas(): JSX.Element {
               "min-width": 0,
             }}
           >
-            {selectedGraph()?.title || (loading() ? language.t("atlas.status.loading") : language.t("atlas.status.noGraph"))}
+            {selectedGraph()?.title ||
+              (loading() ? language.t("atlas.status.loading") : language.t("atlas.status.noGraph"))}
           </span>
           <Show when={nodes().length > 0}>
             <span
@@ -748,14 +763,24 @@ export function AtlasCanvas(): JSX.Element {
         {/* Actions */}
         <div style={{ display: "flex", "align-items": "center", gap: "1px", "flex-shrink": 0 }}>
           <Show when={mode() === "orbit"}>
-            <CanvasAction title={language.t("atlas.tooltip.resetLayout")} disabled={saved().size === 0} onClick={resetLayout}>
-              <span style={{ "font-size": "10px", "letter-spacing": "0.04em" }}>{language.t("atlas.action.reset")}</span>
+            <CanvasAction
+              title={language.t("atlas.tooltip.resetLayout")}
+              disabled={saved().size === 0}
+              onClick={resetLayout}
+            >
+              <span style={{ "font-size": "10px", "letter-spacing": "0.04em" }}>
+                {language.t("atlas.action.reset")}
+              </span>
             </CanvasAction>
           </Show>
           <CanvasAction title={language.t("atlas.tooltip.fitToView")} onClick={fit}>
             <FitGlyph />
           </CanvasAction>
-          <CanvasAction title={language.t("atlas.tooltip.stageNode")} disabled={creating()} onClick={() => void createNode()}>
+          <CanvasAction
+            title={language.t("atlas.tooltip.stageNode")}
+            disabled={creating()}
+            onClick={() => void createNode()}
+          >
             <IconPlus size={12} strokeWidth={1.7} />
           </CanvasAction>
           <CanvasAction title={language.t("atlas.tooltip.refresh")} onClick={refresh}>
@@ -934,7 +959,10 @@ export function AtlasCanvas(): JSX.Element {
                                     "stroke-linejoin": "round",
                                   }}
                                 >
-                                  {truncate(node()!.title || node()!.slug_name || language.t("atlas.label.untitled"), 22)}
+                                  {truncate(
+                                    node()!.title || node()!.slug_name || language.t("atlas.label.untitled"),
+                                    22,
+                                  )}
                                 </text>
                               </Show>
                             </>
@@ -1137,7 +1165,11 @@ function CardNode(props: { node: AtlasNode; selected: boolean; hovered: boolean 
         style={{ "font-family": FONT_MONO, "letter-spacing": "0.08em", "pointer-events": "none" }}
       >
         {(props.node.kind || language.t("atlas.label.untyped")).toUpperCase()}
-        {props.node.outcome ? ` · ${props.node.outcome}` : props.node.lifecycle === "staged" ? ` · ${language.t("atlas.label.staged")}` : ""}
+        {props.node.outcome
+          ? ` · ${props.node.outcome}`
+          : props.node.lifecycle === "staged"
+            ? ` · ${language.t("atlas.label.staged")}`
+            : ""}
       </text>
       <text
         x={-CARD_W / 2 + 12}
@@ -1213,7 +1245,8 @@ function OrbitTooltip(props: { node: AtlasNode; x: number; y: number; byId: Map<
       >
         {props.node.kind}
         {" · "}
-        {props.node.outcome ?? (props.node.lifecycle === "staged" ? language.t("atlas.label.staged") : language.t("atlas.label.untyped"))}
+        {props.node.outcome ??
+          (props.node.lifecycle === "staged" ? language.t("atlas.label.staged") : language.t("atlas.label.untyped"))}
         {segs().length ? ` · ${done()}/${segs().length} ${language.t("atlas.label.childrenDone")}` : ""}
       </div>
       <Show when={props.node.summary}>
@@ -1348,7 +1381,11 @@ function NodeDetail(props: { node: AtlasNode; onClose: () => void }): JSX.Elemen
       <Show when={props.node.content}>
         <DetailField label={language.t("atlas.label.content")} value={props.node.content} mono />
       </Show>
-      <Suspense fallback={<AsciiSpinner size={10} label={language.t("atlas.status.loadingArtifacts")} color="var(--color-text-faint)" />}>
+      <Suspense
+        fallback={
+          <AsciiSpinner size={10} label={language.t("atlas.status.loadingArtifacts")} color="var(--color-text-faint)" />
+        }
+      >
         <Show when={(artifacts() ?? []).length > 0}>
           <div
             style={{

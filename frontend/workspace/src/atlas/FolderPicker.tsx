@@ -347,7 +347,8 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 "letter-spacing": "0.04em",
               }}
             >
-              {filtered().length} {filtered().length === 1 ? language.t("folder.status.folder") : language.t("folder.status.folders")}
+              {filtered().length}{" "}
+              {filtered().length === 1 ? language.t("folder.status.folder") : language.t("folder.status.folders")}
             </span>
           </div>
 
@@ -410,7 +411,8 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 opacity: pathInput().trim() ? 1 : 0.5,
               }}
             >
-              {language.t("folder.action.go")}</button>
+              {language.t("folder.action.go")}
+            </button>
           </div>
 
           {/* Folder list */}
@@ -520,7 +522,10 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                         gap: "8px",
                       }}
                     >
-                      <Show when={(entries() ?? []).length === 0} fallback={<span>{language.t("folder.status.noMatch")}</span>}>
+                      <Show
+                        when={(entries() ?? []).length === 0}
+                        fallback={<span>{language.t("folder.status.noMatch")}</span>}
+                      >
                         <Show
                           when={
                             /\/Desktop$|\/Documents$|\/Downloads$/.test(cwd()) ||

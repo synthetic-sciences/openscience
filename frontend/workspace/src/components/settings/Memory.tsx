@@ -86,8 +86,7 @@ export default function Memory() {
   }
 
   function clearAll() {
-    if (!window.confirm(lang.t("settings.memory.confirm.clearAll")))
-      return
+    if (!window.confirm(lang.t("settings.memory.confirm.clearAll"))) return
     void persist({ enabled: doc().enabled, categories: [] })
   }
 
@@ -132,9 +131,7 @@ export default function Memory() {
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
           <h2 class="text-16-medium text-text-strong">{lang.t("settings.memory.heading")}</h2>
-          <p class="text-13-regular text-text-weak">
-            {lang.t("settings.memory.description")}
-          </p>
+          <p class="text-13-regular text-text-weak">{lang.t("settings.memory.description")}</p>
         </div>
       </div>
 
@@ -194,7 +191,10 @@ export default function Memory() {
           </div>
         </div>
 
-        <Show when={!loading()} fallback={<div class="text-13-regular text-text-weak py-6 text-center">{lang.t("common.loading")}…</div>}>
+        <Show
+          when={!loading()}
+          fallback={<div class="text-13-regular text-text-weak py-6 text-center">{lang.t("common.loading")}…</div>}
+        >
           {/* Categories */}
           <div class="flex flex-col gap-4">
             <For each={doc().categories}>
@@ -215,7 +215,11 @@ export default function Memory() {
                   <div class="flex flex-col">
                     <For
                       each={category.notes}
-                      fallback={<span class="px-4 py-3 text-12-regular text-text-weak/70">{lang.t("settings.memory.empty.noNotes")}</span>}
+                      fallback={
+                        <span class="px-4 py-3 text-12-regular text-text-weak/70">
+                          {lang.t("settings.memory.empty.noNotes")}
+                        </span>
+                      }
                     >
                       {(note) => (
                         <div class="group flex items-start gap-2 px-4 py-2.5 border-b border-border-weak-base/60 last:border-b-0">

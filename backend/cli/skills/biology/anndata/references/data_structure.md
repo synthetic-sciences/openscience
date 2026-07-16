@@ -74,20 +74,20 @@ print(adata.var.loc['ENSG00001'])
 Dictionary storing alternative matrices with the same dimensions as X.
 
 ```python
-# Store raw counts, normalized data, and scaled data
+# Store counts, log-normalized data, and scaled data
 adata = ad.AnnData(X=np.random.rand(100, 2000))
-adata.layers['raw_counts'] = np.random.randint(0, 100, (100, 2000))
-adata.layers['normalized'] = adata.X / np.sum(adata.X, axis=1, keepdims=True)
-adata.layers['scaled'] = (adata.X - adata.X.mean()) / adata.X.std()
+adata.layers['counts'] = adata.X.copy()
+adata.layers['log1p'] = normalized_log_matrix
+adata.layers['scaled'] = scaled_matrix
 
 # Access layers
-raw_data = adata.layers['raw_counts']
-normalized_data = adata.layers['normalized']
+counts = adata.layers['counts']
+log_normalized = adata.layers['log1p']
 ```
 
 Common layer uses:
-- `raw_counts`: Original count data before normalization
-- `normalized`: Log-normalized or TPM values
+- `counts`: Original count data before normalization
+- `log1p`: Log-normalized expression values
 - `scaled`: Z-scored values for analysis
 - `imputed`: Data after imputation
 
@@ -189,7 +189,7 @@ Common uns uses:
 - Tool-specific metadata
 
 ### raw (Original Data Snapshot)
-Optional attribute preserving the original data matrix and variable annotations before filtering.
+Optional snapshot of `X` and `var`. Unlike layers, `.raw` keeps variables that are later removed by `adata[:, mask]`, so it remains useful for full-gene marker visualization after HVG subsetting.
 
 ```python
 # Create AnnData and store raw state
@@ -207,6 +207,8 @@ adata = adata[:, highly_variable_mask]
 original_matrix = adata.raw.X
 original_var = adata.raw.var
 ```
+
+Use a `counts` layer to make matrix semantics explicit before normalization. Use `.raw` as well when downstream APIs expect it or when filtered variables must remain queryable. Layers always stay aligned to the current AnnData shape.
 
 ## Object Properties
 

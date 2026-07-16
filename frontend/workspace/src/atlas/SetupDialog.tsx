@@ -178,9 +178,7 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
 
         {/* ── Atlas managed: paste key ── */}
         <Show when={view() === "managed"}>
-          <p style={intro()}>
-            {language.t("setup.managed.intro", { host: hostOf(URLS.dashboardCli) })}
-          </p>
+          <p style={intro()}>{language.t("setup.managed.intro", { host: hostOf(URLS.dashboardCli) })}</p>
           <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
             <span style={label()}>{language.t("setup.label.apiKey")}</span>
             <TextField

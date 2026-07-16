@@ -60,15 +60,67 @@ import { showToast } from "@synsci/ui/toast"
 import { base64Encode } from "@synsci/util/encode"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
-const ACCEPTED_TEXT_TYPES = ["text/markdown", "text/plain"]
-const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf", ...ACCEPTED_TEXT_TYPES]
-// Browsers frequently report file.type === "" for .md (and sometimes .txt), so the
-// mime allow-list alone would drop them. Resolve by extension as a fallback.
-const TEXT_EXTENSIONS: Record<string, string> = { md: "text/markdown", markdown: "text/markdown", txt: "text/plain" }
+const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
+const TEXT_TYPES = [
+  "text/markdown",
+  "text/plain",
+  "text/csv",
+  "text/tab-separated-values",
+  "application/json",
+  "application/x-ndjson",
+  "application/toml",
+  "application/x-yaml",
+  "application/yaml",
+  "application/xml",
+  "text/xml",
+]
+const TEXT_EXTENSIONS: Record<string, string> = {
+  md: "text/markdown",
+  markdown: "text/markdown",
+  mdx: "text/markdown",
+  txt: "text/plain",
+  text: "text/plain",
+  rst: "text/plain",
+  json: "application/json",
+  jsonl: "application/x-ndjson",
+  ndjson: "application/x-ndjson",
+  csv: "text/csv",
+  tsv: "text/tab-separated-values",
+  yaml: "application/yaml",
+  yml: "application/yaml",
+  toml: "application/toml",
+  xml: "application/xml",
+  log: "text/plain",
+}
+const TEXT_MAX = 256 * 1024
+const TEXT_SNIFF = 4096
+const TEXT_RATIO = 0.3
 const fileExtension = (name: string) => name.slice(name.lastIndexOf(".") + 1).toLowerCase()
 const resolveMime = (file: File) => file.type || TEXT_EXTENSIONS[fileExtension(file.name)] || ""
-const isAcceptedFile = (file: File) =>
-  ACCEPTED_FILE_TYPES.includes(file.type) || Boolean(TEXT_EXTENSIONS[fileExtension(file.name)])
+const isTextFile = (file: File) =>
+  file.type.startsWith("text/") || TEXT_TYPES.includes(file.type) || Boolean(TEXT_EXTENSIONS[fileExtension(file.name)])
+const isAcceptedFile = (file: File) => ACCEPTED_FILE_TYPES.includes(file.type) || isTextFile(file)
+const ACCEPTED_UPLOAD_TYPES = [
+  ...ACCEPTED_FILE_TYPES,
+  ...TEXT_TYPES,
+  ...Object.keys(TEXT_EXTENSIONS).map((ext) => `.${ext}`),
+]
+const fileLabel = (name: string) => (fileExtension(name) || "file").toUpperCase().slice(0, 4)
+const looksBinary = (bytes: Uint8Array) => {
+  const head = bytes.subarray(0, TEXT_SNIFF)
+  if (head.includes(0)) return true
+  if (head.length === 0) return false
+  const control = Array.from(head).filter(
+    (byte) => byte !== 0x09 && byte !== 0x0a && byte !== 0x0d && (byte < 0x20 || byte === 0x7f),
+  ).length
+  return control / head.length > TEXT_RATIO
+}
+const sanitizeText = (text: string) =>
+  text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
 
 type PendingPrompt = {
   abort: AbortController
@@ -333,13 +385,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
-  const addImageAttachment = async (file: File) => {
-    if (!isAcceptedFile(file)) return
-    const mime = resolveMime(file)
+  const unsupported = () =>
+    showToast({
+      variant: "error",
+      title: language.t("prompt.toast.uploadUnsupported.title"),
+      description: language.t("prompt.toast.uploadUnsupported.description"),
+    })
+  const notText = () =>
+    showToast({
+      variant: "error",
+      title: language.t("prompt.toast.uploadNotText.title"),
+      description: language.t("prompt.toast.uploadNotText.description"),
+    })
+  const addAttachment = async (file: File) => {
+    if (!isAcceptedFile(file)) {
+      unsupported()
+      return
+    }
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = reader.result as string
+    const attach = (dataUrl: string, mime: string) => {
       const attachment: ImageAttachmentPart = {
         type: "image",
         id: crypto.randomUUID(),
@@ -350,7 +414,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const cursorPosition = prompt.cursor() ?? getCursorPosition(editorRef)
       prompt.set([...prompt.current(), attachment], cursorPosition)
     }
-    reader.readAsDataURL(file)
+
+    if (!isTextFile(file)) {
+      const reader = new FileReader()
+      await new Promise<void>((resolve, reject) => {
+        reader.onload = () => {
+          attach(reader.result as string, resolveMime(file))
+          resolve()
+        }
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(file)
+      })
+      return
+    }
+
+    const oversize = file.size > TEXT_MAX
+    const slice = oversize ? file.slice(0, TEXT_MAX) : file
+    const bytes = new Uint8Array(await slice.arrayBuffer())
+    if (looksBinary(bytes)) {
+      notText()
+      return
+    }
+    const decoded = sanitizeText(new TextDecoder("utf-8").decode(bytes))
+    const body = oversize ? decoded.replace(/�+$/, "") : decoded
+    const text = oversize ? `${body}\n\n[openscience: truncated ${file.name} at ${TEXT_MAX / 1024} KB]` : body
+    const url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(new Blob([text], { type: "text/plain" }))
+    })
+    attach(url, "text/plain")
   }
 
   const removeImageAttachment = (id: string) => {
@@ -367,23 +461,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     event.preventDefault()
     event.stopPropagation()
 
-    const items = Array.from(clipboardData.items)
-    const fileItems = items.filter((item) => item.kind === "file")
-    const imageItems = fileItems.filter((item) => ACCEPTED_FILE_TYPES.includes(item.type))
-
-    if (imageItems.length > 0) {
-      for (const item of imageItems) {
-        const file = item.getAsFile()
-        if (file) await addImageAttachment(file)
-      }
-      return
-    }
-
-    if (fileItems.length > 0) {
-      showToast({
-        title: language.t("prompt.toast.pasteUnsupported.title"),
-        description: language.t("prompt.toast.pasteUnsupported.description"),
-      })
+    const files = Array.from(clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => !!file)
+    if (files.length > 0) {
+      for (const file of files) await addAttachment(file)
       return
     }
 
@@ -420,11 +503,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const dropped = event.dataTransfer?.files
     if (!dropped) return
 
-    for (const file of Array.from(dropped)) {
-      if (isAcceptedFile(file)) {
-        await addImageAttachment(file)
-      }
-    }
+    for (const file of Array.from(dropped)) await addAttachment(file)
   }
 
   onMount(() => {
@@ -1850,8 +1929,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Show
                     when={attachment.mime.startsWith("image/")}
                     fallback={
-                      <div class="size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base">
-                        <Icon name="folder" class="size-6 text-text-weak" />
+                      <div
+                        title={attachment.filename}
+                        class="size-16 rounded-md bg-surface-base border border-border-base flex flex-col items-center justify-center gap-1 pb-4"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.75"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          class="size-6 text-text-weak"
+                          aria-hidden="true"
+                        >
+                          <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="8" y1="13" x2="16" y2="13" />
+                          <line x1="8" y1="17" x2="16" y2="17" />
+                        </svg>
+                        <span class="text-10-regular uppercase tracking-wide leading-none text-text-strong">
+                          {fileLabel(attachment.filename)}
+                        </span>
                       </div>
                     }
                   >
@@ -1873,7 +1972,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Icon name="close" class="size-3 text-text-weak" />
                   </button>
                   <div class="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/50 rounded-b-md">
-                    <span class="text-10-regular text-white truncate block">{attachment.filename}</span>
+                    <span class="text-10-regular text-white truncate block text-center">{attachment.filename}</span>
                   </div>
                 </div>
               )}
@@ -2063,11 +2162,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <input
               ref={fileInputRef}
               type="file"
-              accept={[...ACCEPTED_FILE_TYPES, ".md", ".markdown", ".txt"].join(",")}
+              accept={ACCEPTED_UPLOAD_TYPES.join(",")}
               class="hidden"
               onChange={(e) => {
                 const file = e.currentTarget.files?.[0]
-                if (file) addImageAttachment(file)
+                if (file) void addAttachment(file)
                 e.currentTarget.value = ""
               }}
             />

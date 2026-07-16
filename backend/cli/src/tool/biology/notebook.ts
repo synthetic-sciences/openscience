@@ -84,7 +84,7 @@ const kernels = new Map<string, Kernel>()
 // Clean up all kernels on process exit
 function cleanupAll() {
   for (const [id, kernel] of kernels) {
-    Shell.killTreeSync(kernel.process)
+    Shell.killTreeSync(kernel.process, { detached: process.platform !== "win32" })
     try {
       require("fs").unlinkSync(kernel.scriptPath)
     } catch {}
@@ -101,7 +101,10 @@ function cleanupIdle() {
   const idle = 30 * 60 * 1000 // 30 min
   for (const [id, kernel] of kernels) {
     if (now - kernel.lastUsed > idle) {
-      void Shell.killTree(kernel.process, { exited: () => kernel.process.exitCode !== null })
+      void Shell.killTree(kernel.process, {
+        detached: process.platform !== "win32",
+        exited: () => kernel.process.exitCode !== null,
+      })
       try {
         require("fs").unlinkSync(kernel.scriptPath)
       } catch {}
@@ -165,7 +168,7 @@ async function getKernel(sessionID: string): Promise<Kernel> {
   // Wait for ready signal
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      void Shell.killTree(proc, { exited: () => proc.exitCode !== null })
+      void Shell.killTree(proc, { detached: process.platform !== "win32", exited: () => proc.exitCode !== null })
       reject(new Error(`Kernel startup timed out. stderr: ${kernelStderr}`))
     }, 15_000)
 
@@ -202,7 +205,10 @@ function executeInKernel(
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       // Kill the timed-out kernel (and its worker children) — restarted next call
-      void Shell.killTree(kernel.process, { exited: () => kernel.process.exitCode !== null })
+      void Shell.killTree(kernel.process, {
+        detached: process.platform !== "win32",
+        exited: () => kernel.process.exitCode !== null,
+      })
       reject(new Error(`Cell execution timed out after ${Math.round(timeout / 1000)}s`))
     }, timeout)
 

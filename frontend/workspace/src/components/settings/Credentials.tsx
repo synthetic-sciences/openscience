@@ -5,7 +5,7 @@ import { type Component, type JSX, For, Show, createMemo, createSignal, onMount 
 import { Button } from "@synsci/ui/button"
 import type { Provider } from "@synsci/sdk/v2/client"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { useLanguage } from "@/context/language"
+import { useLanguage, type TranslationKey } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useProviders } from "@/hooks/use-providers"
 import { FONT_CODE, FONT_SANS, sectionTitle } from "@/styles/tokens"
@@ -44,7 +44,7 @@ const BYOK_PROVIDERS = ["anthropic", "openai", "google", "openrouter", "groq", "
 
 // Where a connected provider's credential actually lives. Only "api" keys sit in
 // the local auth store — the others reappear after a remove, so remove is gated.
-const SOURCE_INFO: Record<Provider["source"], { label: string; removable: boolean; title: string }> = {
+const SOURCE_INFO: Record<Provider["source"], { label: TranslationKey; removable: boolean; title: TranslationKey }> = {
   api: { label: "settings.credentials.source.api", removable: true, title: "settings.credentials.source.api.title" },
   env: {
     label: "settings.credentials.source.env",
@@ -120,8 +120,7 @@ export const Credentials: Component = () => {
   }
 
   const disconnect = async (id: string) => {
-    if (!window.confirm(lang.t("settings.credentials.confirm.removeService", { id })))
-      return
+    if (!window.confirm(lang.t("settings.credentials.confirm.removeService", { id }))) return
     setError(undefined)
     try {
       const res = await settingsApi<{ services: Service[] }>(
@@ -193,7 +192,14 @@ export const Credentials: Component = () => {
     }
   }
   const removeKey = async (providerID: string) => {
-    if (!window.confirm(lang.t("settings.credentials.confirm.removeProviderKey", { provider: PROVIDER_LABEL[providerID] ?? providerID }))) return
+    if (
+      !window.confirm(
+        lang.t("settings.credentials.confirm.removeProviderKey", {
+          provider: PROVIDER_LABEL[providerID] ?? providerID,
+        }),
+      )
+    )
+      return
     setError(undefined)
     try {
       await sdk.client.auth.remove({ providerID })
@@ -230,9 +236,7 @@ export const Credentials: Component = () => {
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
           <h2 class="text-16-medium text-text-strong">{lang.t("settings.credentials.heading")}</h2>
-          <p class="text-13-regular text-text-weak">
-            {lang.t("settings.credentials.description")}
-          </p>
+          <p class="text-13-regular text-text-weak">{lang.t("settings.credentials.description")}</p>
         </div>
       </div>
 
@@ -258,9 +262,14 @@ export const Credentials: Component = () => {
         <div class="flex flex-col gap-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-col gap-1">
-              <h3 class="text-13-medium text-text-weak tracking-wide">{lang.t("settings.credentials.section.services")}</h3>
+              <h3 class="text-13-medium text-text-weak tracking-wide">
+                {lang.t("settings.credentials.section.services")}
+              </h3>
               <p class="text-12-regular text-text-weak">
-                {lang.t("settings.credentials.section.services.description", { connected: connectedCount(), total: services().length })}
+                {lang.t("settings.credentials.section.services.description", {
+                  connected: connectedCount(),
+                  total: services().length,
+                })}
               </p>
             </div>
             <input
@@ -298,7 +307,11 @@ export const Credentials: Component = () => {
                         variant={svc.connected ? "secondary" : "primary"}
                         onClick={() => openForm(svc)}
                       >
-                        {editing() === svc.id ? lang.t("common.cancel") : svc.connected ? lang.t("settings.credentials.action.update") : lang.t("common.connect")}
+                        {editing() === svc.id
+                          ? lang.t("common.cancel")
+                          : svc.connected
+                            ? lang.t("settings.credentials.action.update")
+                            : lang.t("common.connect")}
                       </Button>
                     </div>
                   </div>
@@ -317,7 +330,10 @@ export const Credentials: Component = () => {
                             <span style={eyebrow()}>
                               {f.label}
                               {f.optional ? lang.t("settings.credentials.form.optional") : ""}
-                              <Show when={svc.set_fields.includes(f.name)}> {lang.t("settings.credentials.status.saved")}</Show>
+                              <Show when={svc.set_fields.includes(f.name)}>
+                                {" "}
+                                {lang.t("settings.credentials.status.saved")}
+                              </Show>
                             </span>
                             <Show
                               when={f.type === "textarea"}
@@ -328,7 +344,9 @@ export const Credentials: Component = () => {
                                   spellcheck={false}
                                   placeholder={
                                     f.placeholder ??
-                                    (svc.set_fields.includes(f.name) ? lang.t("settings.credentials.placeholder.keepExisting") : "")
+                                    (svc.set_fields.includes(f.name)
+                                      ? lang.t("settings.credentials.placeholder.keepExisting")
+                                      : "")
                                   }
                                   value={values()[f.name] ?? ""}
                                   onInput={(e) => setValues({ ...values(), [f.name]: e.currentTarget.value })}
@@ -391,7 +409,9 @@ export const Credentials: Component = () => {
                 void saveCustom()
               }}
             >
-              <span class="text-13-medium text-text-strong">{lang.t("settings.credentials.form.customCredential")}</span>
+              <span class="text-13-medium text-text-strong">
+                {lang.t("settings.credentials.form.customCredential")}
+              </span>
               <div class="flex flex-col sm:flex-row gap-2">
                 <label class="flex flex-col gap-1 flex-1">
                   <span style={eyebrow()}>{lang.t("settings.credentials.form.name")}</span>
@@ -445,7 +465,9 @@ export const Credentials: Component = () => {
         {/* Provider keys (BYOK) */}
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <h3 class="text-13-medium text-text-weak tracking-wide">{lang.t("settings.credentials.section.providerKeys")}</h3>
+            <h3 class="text-13-medium text-text-weak tracking-wide">
+              {lang.t("settings.credentials.section.providerKeys")}
+            </h3>
             <p class="text-12-regular text-text-weak">
               {lang.t("settings.credentials.section.providerKeys.description")}
             </p>
@@ -482,7 +504,9 @@ export const Credentials: Component = () => {
                 disabled={connectingCodex()}
                 onClick={() => void connectCodex()}
               >
-                {connectingCodex() ? lang.t("settings.credentials.status.waitingForChatgpt") : lang.t("settings.credentials.section.chatgpt.title")}
+                {connectingCodex()
+                  ? lang.t("settings.credentials.status.waitingForChatgpt")
+                  : lang.t("settings.credentials.section.chatgpt.title")}
               </Button>
             </Show>
           </div>

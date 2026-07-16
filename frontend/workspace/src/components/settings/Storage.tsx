@@ -63,7 +63,9 @@ export const Storage: Component = () => {
     setStatus(undefined)
     let target: string | undefined
     if (platform.openDirectoryPickerDialog) {
-      const picked = await platform.openDirectoryPickerDialog({ title: lang.t("settings.storage.dialog.chooseDataLocation") }).catch(() => null)
+      const picked = await platform
+        .openDirectoryPickerDialog({ title: lang.t("settings.storage.dialog.chooseDataLocation") })
+        .catch(() => null)
       target = Array.isArray(picked) ? picked[0] : (picked ?? undefined)
     } else {
       target = window.prompt(lang.t("settings.storage.dialog.promptNewPath")) ?? undefined
@@ -109,9 +111,7 @@ export const Storage: Component = () => {
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
           <h2 class="text-16-medium text-text-strong">{lang.t("settings.storage.heading")}</h2>
-          <p class="text-13-regular text-text-weak">
-            {lang.t("settings.storage.description")}
-          </p>
+          <p class="text-13-regular text-text-weak">{lang.t("settings.storage.description")}</p>
         </div>
       </div>
 
@@ -126,7 +126,9 @@ export const Storage: Component = () => {
         {/* Data location */}
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <h3 class="text-13-medium text-text-weak tracking-wide">{lang.t("settings.storage.section.dataLocation")}</h3>
+            <h3 class="text-13-medium text-text-weak tracking-wide">
+              {lang.t("settings.storage.section.dataLocation")}
+            </h3>
             <p class="text-12-regular text-text-weak">{lang.t("settings.storage.section.dataLocation.description")}</p>
           </div>
           <div style={{ border: "1px solid var(--color-border)", "border-radius": "4px", padding: "16px 18px" }}>
@@ -151,7 +153,9 @@ export const Storage: Component = () => {
                   </Button>
                 </Show>
                 <Button size="small" variant="secondary" disabled={busy()} onClick={() => void relocate()}>
-                  {busy() ? lang.t("settings.storage.status.working") : lang.t("settings.storage.action.changeLocation")}
+                  {busy()
+                    ? lang.t("settings.storage.status.working")
+                    : lang.t("settings.storage.action.changeLocation")}
                 </Button>
               </div>
             </div>
@@ -217,13 +221,15 @@ export const Storage: Component = () => {
         {/* Cloud storage */}
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <h3 class="text-13-medium text-text-weak tracking-wide">{lang.t("settings.storage.section.cloudStorage")}</h3>
-            <p class="text-12-regular text-text-weak">
-              {lang.t("settings.storage.section.cloudStorage.description")}
-            </p>
+            <h3 class="text-13-medium text-text-weak tracking-wide">
+              {lang.t("settings.storage.section.cloudStorage")}
+            </h3>
+            <p class="text-12-regular text-text-weak">{lang.t("settings.storage.section.cloudStorage.description")}</p>
           </div>
           <button type="button" onClick={() => navigate("credentials")} style={linkRowStyle()}>
-            <span class="text-13-regular text-text-strong">{lang.t("settings.storage.action.manageCloudCredentials")}</span>
+            <span class="text-13-regular text-text-strong">
+              {lang.t("settings.storage.action.manageCloudCredentials")}
+            </span>
             <span class="text-12-regular text-text-weak">{lang.t("settings.storage.action.credentialsLink")}</span>
           </button>
         </div>

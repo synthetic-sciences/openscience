@@ -162,7 +162,11 @@ export function RightPane(): JSX.Element {
             <button onClick={openSkillLibrary} title={language.t("panel.action.skillLibrary")} style={paneCtl(false)}>
               <IconBraces size={12} strokeWidth={1.5} />
             </button>
-            <button onClick={() => setPanelMenu((v) => !v)} title={language.t("panel.action.settings")} style={paneCtl(panelMenu())}>
+            <button
+              onClick={() => setPanelMenu((v) => !v)}
+              title={language.t("panel.action.settings")}
+              style={paneCtl(panelMenu())}
+            >
               <IconSettings size={12} strokeWidth={1.5} />
             </button>
             <Show when={panelMenu()}>
@@ -213,7 +217,11 @@ export function RightPane(): JSX.Element {
                 </button>
               </div>
             </Show>
-            <button onClick={() => uiStore.setRightPaneOpen(false)} title={language.t("panel.action.hide")} style={paneCtl(false)}>
+            <button
+              onClick={() => uiStore.setRightPaneOpen(false)}
+              title={language.t("panel.action.hide")}
+              style={paneCtl(false)}
+            >
               <IconChevronRight size={13} strokeWidth={1.5} />
             </button>
           </div>
@@ -263,9 +271,9 @@ function TerminalTab(): JSX.Element {
         </span>
         <span style={{ flex: 1 }} />
         <Show when={loopback()}>
-            <button type="button" onClick={() => terminal.new()} style={smallAction()}>
-              {language.t("panel.action.newTerminal")}
-            </button>
+          <button type="button" onClick={() => terminal.new()} style={smallAction()}>
+            {language.t("panel.action.newTerminal")}
+          </button>
         </Show>
       </div>
       <Show
@@ -280,7 +288,7 @@ function TerminalTab(): JSX.Element {
               "line-height": 1.5,
             }}
           >
-              {language.t("panel.terminal.loopbackOnly")}
+            {language.t("panel.terminal.loopbackOnly")}
           </div>
         }
       >

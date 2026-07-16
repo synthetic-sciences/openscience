@@ -2,33 +2,20 @@ import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
 import path from "path"
 import fs from "fs"
-import { spawn, type ChildProcess } from "child_process"
+import { spawn, spawnSync, type ChildProcess } from "child_process"
 
 const SIGKILL_TIMEOUT_MS = 200
 
 export namespace Shell {
-  /** POSIX: true only when `pid` leads its own process group (i.e. was spawned
-   *  `detached`), so a negative-pid signal targets ONLY its group and can never
-   *  reach ours. On Linux we verify via /proc; elsewhere we can't cheaply check,
-   *  so trust the caller. Guards a negative-pid kill against a non-detached child
-   *  whose group is our own (#102). */
-  function leadsOwnGroup(pid: number): boolean {
-    if (process.platform !== "linux") return true
-    try {
-      const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8")
-      // Fields after the ")" that closes comm are: state ppid pgrp session ...
-      const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ")
-      return Number(fields[2]) === pid
-    } catch {
-      return false
-    }
-  }
-
-  export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
+  export async function killTree(
+    proc: ChildProcess,
+    opts?: { detached?: boolean; exited?: () => boolean },
+  ): Promise<void> {
     const pid = proc.pid
-    if (!pid || opts?.exited?.()) return
+    if (!pid) return
 
     if (process.platform === "win32") {
+      if (opts?.exited?.()) return
       await new Promise<void>((resolve) => {
         const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" })
         killer.once("exit", () => resolve())
@@ -37,16 +24,20 @@ export namespace Shell {
       return
     }
 
-    if (leadsOwnGroup(pid)) {
+    if (opts?.detached) {
       try {
         process.kill(-pid, "SIGTERM")
-        await Bun.sleep(SIGKILL_TIMEOUT_MS)
-        if (!opts?.exited?.()) process.kill(-pid, "SIGKILL")
-        return
-      } catch (_e) {
-        // group gone or not permitted — fall through to a single-process kill
-      }
+      } catch {}
+      await Bun.sleep(SIGKILL_TIMEOUT_MS)
+      // The group can outlive its leader. Always escalate against the group so
+      // a worker that ignores SIGTERM cannot survive after `proc` has exited.
+      try {
+        process.kill(-pid, "SIGKILL")
+      } catch {}
+      return
     }
+
+    if (opts?.exited?.()) return
     try {
       proc.kill("SIGTERM")
       await Bun.sleep(SIGKILL_TIMEOUT_MS)
@@ -54,20 +45,17 @@ export namespace Shell {
     } catch {}
   }
 
-  /** Synchronous best-effort group SIGKILL. For process-exit handlers, where the
-   *  event loop is already stopping and the async killTree (which sleeps before
-   *  escalating) cannot complete. Only signals the group when the child leads its
-   *  own (spawned `detached`); otherwise kills just the child (#102). */
-  export function killTreeSync(proc: ChildProcess): void {
+  /** Synchronous best-effort group SIGKILL for process-exit handlers. */
+  export function killTreeSync(proc: ChildProcess, opts?: { detached?: boolean }): void {
     const pid = proc.pid
     if (!pid) return
     if (process.platform === "win32") {
       try {
-        spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" })
+        spawnSync("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" })
       } catch {}
       return
     }
-    if (leadsOwnGroup(pid)) {
+    if (opts?.detached) {
       try {
         process.kill(-pid, "SIGKILL")
         return

@@ -1,7 +1,7 @@
 import { createSignal, createResource, createMemo, onCleanup, type JSX, For, Show } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { useLanguage } from "@/context/language"
+import { useLanguage, type Translate } from "@/context/language"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { centerTabs } from "@/atlas/store/centerTabs"
 import { atlasAPI, type AtlasNode } from "@/atlas/api/atlas"
@@ -77,7 +77,7 @@ function formatSize(bytes?: number): string {
   return `${val < 10 ? val.toFixed(1) : Math.round(val)} ${units[u]}`
 }
 
-function relativeTime(t: (key: string, params?: Record<string, string | number>) => string, mtime?: number): string {
+function relativeTime(t: Translate, mtime?: number): string {
   if (!mtime) return ""
   const diff = Date.now() - mtime
   const s = Math.round(diff / 1000)
@@ -256,7 +256,9 @@ export function FileExplorer(): JSX.Element {
           <button type="button" onClick={() => setMachineMenu((v) => !v)} style={machineBtn()}>
             <IconCpu size={13} strokeWidth={1.5} />
             <span style={{ display: "flex", "flex-direction": "column", "line-height": 1.15, "text-align": "left" }}>
-              <span style={{ "font-size": "11px", color: "var(--color-text)" }}>{language.t("files.label.thisComputer")}</span>
+              <span style={{ "font-size": "11px", color: "var(--color-text)" }}>
+                {language.t("files.label.thisComputer")}
+              </span>
               <span style={{ "font-size": "10px", color: "var(--color-text-faint)" }}>{machineLabel()}</span>
             </span>
             <IconChevronDown size={11} strokeWidth={1.5} />
@@ -306,10 +308,20 @@ export function FileExplorer(): JSX.Element {
         {/* list / grid pill toggle */}
         <Show when={mode() === "host"}>
           <div style={pill()}>
-            <button type="button" title={language.t("files.view.list")} style={pillBtn(view() === "list")} onClick={() => setView("list")}>
+            <button
+              type="button"
+              title={language.t("files.view.list")}
+              style={pillBtn(view() === "list")}
+              onClick={() => setView("list")}
+            >
               <ListGlyph size={12} />
             </button>
-            <button type="button" title={language.t("files.view.grid")} style={pillBtn(view() === "grid")} onClick={() => setView("grid")}>
+            <button
+              type="button"
+              title={language.t("files.view.grid")}
+              style={pillBtn(view() === "grid")}
+              onClick={() => setView("grid")}
+            >
               <IconLayoutGrid size={12} strokeWidth={1.6} />
             </button>
           </div>
@@ -372,7 +384,12 @@ export function FileExplorer(): JSX.Element {
               }}
             />
           </div>
-          <button type="button" title={language.t("files.action.refresh")} style={navBtn(false)} onClick={() => setRefreshKey((k) => k + 1)}>
+          <button
+            type="button"
+            title={language.t("files.action.refresh")}
+            style={navBtn(false)}
+            onClick={() => setRefreshKey((k) => k + 1)}
+          >
             <IconRefresh size={12} strokeWidth={1.6} />
           </button>
         </div>
@@ -408,7 +425,10 @@ export function FileExplorer(): JSX.Element {
 
         {/* body */}
         <div class="atlas-scroll" style={{ flex: 1, "min-height": 0, "overflow-y": "auto", "overflow-x": "hidden" }}>
-          <Show when={!entries.loading || entries.latest} fallback={<div style={emptyMsg()}>{language.t("common.loading")}</div>}>
+          <Show
+            when={!entries.loading || entries.latest}
+            fallback={<div style={emptyMsg()}>{language.t("common.loading")}</div>}
+          >
             <Show
               when={!permissionError()}
               fallback={
@@ -464,7 +484,10 @@ export function FileExplorer(): JSX.Element {
                 </div>
               }
             >
-              <Show when={filtered().length > 0} fallback={<div style={emptyMsg()}>{language.t("files.status.emptyFolder")}</div>}>
+              <Show
+                when={filtered().length > 0}
+                fallback={<div style={emptyMsg()}>{language.t("files.status.emptyFolder")}</div>}
+              >
                 <Show when={view() === "list"} fallback={<GridBody nodes={filtered()} onClick={onRowClick} />}>
                   <ListBody nodes={filtered()} onClick={onRowClick} />
                 </Show>

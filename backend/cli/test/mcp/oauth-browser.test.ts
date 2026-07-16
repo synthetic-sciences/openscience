@@ -1,5 +1,6 @@
 import { test, expect, mock, beforeEach } from "bun:test"
 import { EventEmitter } from "events"
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 
 // Track open() calls and control failure behavior
 let openShouldFail = false
@@ -19,14 +20,6 @@ mock.module("open", () => ({
     return subprocess
   },
 }))
-
-// Mock UnauthorizedError
-class MockUnauthorizedError extends Error {
-  constructor() {
-    super("Unauthorized")
-    this.name = "UnauthorizedError"
-  }
-}
 
 // Track what options were passed to each transport constructor
 const transportCalls: Array<{
@@ -54,7 +47,7 @@ mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
       if (this.authProvider?.redirectToAuthorization) {
         await this.authProvider.redirectToAuthorization(new URL("https://auth.example.com/authorize?client_id=test"))
       }
-      throw new MockUnauthorizedError()
+      throw new UnauthorizedError()
     }
     async finishAuth(_code: string) {
       // Mock successful auth completion
@@ -84,11 +77,6 @@ mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       await transport.start()
     }
   },
-}))
-
-// Mock UnauthorizedError in the auth module
-mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
-  UnauthorizedError: MockUnauthorizedError,
 }))
 
 beforeEach(() => {
@@ -133,20 +121,13 @@ test("BrowserOpenFailed event is published when open() throws", async () => {
       })
 
       // Run authenticate with a timeout to avoid waiting forever for the callback
-      const authPromise = MCP.authenticate("test-oauth-server")
+      void MCP.authenticate("test-oauth-server").catch(() => {})
 
       // Wait for the browser open attempt (error fires at 10ms, but we wait for event to be published)
-      await new Promise((resolve) => setTimeout(resolve, 200))
+      await new Promise((resolve) => setTimeout(resolve, 500))
 
       // Stop the callback server and cancel any pending auth
       await McpOAuthCallback.stop()
-
-      // Wait for authenticate to reject (due to server stopping)
-      try {
-        await authPromise
-      } catch {
-        // Expected to fail
-      }
 
       unsubscribe()
 
@@ -187,20 +168,13 @@ test("BrowserOpenFailed event is NOT published when open() succeeds", async () =
       })
 
       // Run authenticate with a timeout to avoid waiting forever for the callback
-      const authPromise = MCP.authenticate("test-oauth-server-2")
+      void MCP.authenticate("test-oauth-server-2").catch(() => {})
 
       // Wait for the browser open attempt and the 500ms error detection timeout
       await new Promise((resolve) => setTimeout(resolve, 700))
 
       // Stop the callback server and cancel any pending auth
       await McpOAuthCallback.stop()
-
-      // Wait for authenticate to reject (due to server stopping)
-      try {
-        await authPromise
-      } catch {
-        // Expected to fail
-      }
 
       unsubscribe()
 
@@ -237,20 +211,13 @@ test("open() is called with the authorization URL", async () => {
       openCalledWith = undefined
 
       // Run authenticate with a timeout to avoid waiting forever for the callback
-      const authPromise = MCP.authenticate("test-oauth-server-3")
+      void MCP.authenticate("test-oauth-server-3").catch(() => {})
 
       // Wait for the browser open attempt and the 500ms error detection timeout
       await new Promise((resolve) => setTimeout(resolve, 700))
 
       // Stop the callback server and cancel any pending auth
       await McpOAuthCallback.stop()
-
-      // Wait for authenticate to reject (due to server stopping)
-      try {
-        await authPromise
-      } catch {
-        // Expected to fail
-      }
 
       // Verify open was called with a URL
       expect(openCalledWith).toBeDefined()

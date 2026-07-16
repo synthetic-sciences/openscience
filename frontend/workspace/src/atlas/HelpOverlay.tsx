@@ -10,7 +10,7 @@ interface HelpOverlayProps {
   onClose: () => void
 }
 
-const SECTIONS: Array<{ title: string; rows: Array<{ keys: string[]; label: string }> }> = [
+const SECTIONS = [
   {
     title: "help.section.navigation",
     rows: [
@@ -32,7 +32,7 @@ const SECTIONS: Array<{ title: string; rows: Array<{ keys: string[]; label: stri
     title: "help.section.sessions",
     rows: [{ keys: ["dbl-click"], label: "help.action.renameSession" }],
   },
-]
+] as const
 
 export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
   const language = useLanguage()

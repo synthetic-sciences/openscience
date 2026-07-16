@@ -231,7 +231,7 @@ export const BashTool = Tool.define("bash", async () => {
       let aborted = false
       let exited = false
 
-      const kill = () => Shell.killTree(proc, { exited: () => exited })
+      const kill = () => Shell.killTree(proc, { detached: process.platform !== "win32", exited: () => exited })
 
       if (ctx.abort.aborted) {
         aborted = true

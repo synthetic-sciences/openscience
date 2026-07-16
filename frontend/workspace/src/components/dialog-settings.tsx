@@ -135,7 +135,13 @@ export const DialogSettings: Component = () => {
           {/* Header */}
           <header class="flex items-center justify-between gap-2 min-h-[52px] px-3 border-b border-border-weak-base flex-shrink-0">
             <div class="flex items-center gap-1 min-w-0">
-              <IconButton icon="arrow-left" variant="ghost" disabled={!canBack()} onClick={back} aria-label={language.t("settings.dialog.aria.back")} />
+              <IconButton
+                icon="arrow-left"
+                variant="ghost"
+                disabled={!canBack()}
+                onClick={back}
+                aria-label={language.t("settings.dialog.aria.back")}
+              />
               <IconButton
                 icon="arrow-right"
                 variant="ghost"
@@ -150,9 +156,16 @@ export const DialogSettings: Component = () => {
                 icon={expanded() ? "collapse" : "expand"}
                 variant="ghost"
                 onClick={() => setExpanded((v) => !v)}
-                aria-label={expanded() ? language.t("settings.dialog.aria.collapse") : language.t("settings.dialog.aria.expand")}
+                aria-label={
+                  expanded() ? language.t("settings.dialog.aria.collapse") : language.t("settings.dialog.aria.expand")
+                }
               />
-              <IconButton icon="close" variant="ghost" onClick={() => dialog.close()} aria-label={language.t("settings.dialog.aria.close")} />
+              <IconButton
+                icon="close"
+                variant="ghost"
+                onClick={() => dialog.close()}
+                aria-label={language.t("settings.dialog.aria.close")}
+              />
             </div>
           </header>
 
@@ -160,7 +173,9 @@ export const DialogSettings: Component = () => {
           <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
             <Suspense
               fallback={
-                <div class="flex flex-1 items-center justify-center text-13-regular text-text-weak">{language.t("settings.dialog.loading")}</div>
+                <div class="flex flex-1 items-center justify-center text-13-regular text-text-weak">
+                  {language.t("settings.dialog.loading")}
+                </div>
               }
             >
               <SettingsNavContext.Provider value={navigate}>

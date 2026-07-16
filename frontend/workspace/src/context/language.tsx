@@ -30,6 +30,7 @@ export type Locale =
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
+export type TranslationKey = keyof Dictionary
 
 const LOCALES: readonly Locale[] = [
   "en",
@@ -199,3 +200,5 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     }
   },
 })
+
+export type Translate = ReturnType<typeof useLanguage>["t"]

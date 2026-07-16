@@ -212,7 +212,8 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
                 "letter-spacing": "0.08em",
               }}
             >
-              {filtered().length} {filtered().length === 1 ? language.t("palette.status.match") : language.t("palette.status.matches")}
+              {filtered().length}{" "}
+              {filtered().length === 1 ? language.t("palette.status.match") : language.t("palette.status.matches")}
             </span>
           </div>
 

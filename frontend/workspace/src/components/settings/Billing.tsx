@@ -76,15 +76,19 @@ const LLM_MODES = [
     title: "settings.billing.mode.auto.title",
     body: "settings.billing.mode.auto.body",
   },
-]
+] as const
 const COMPUTE_MODES = [
-  { value: "managed" as const, title: "settings.billing.compute.managed.title", body: "settings.billing.compute.managed.body" },
+  {
+    value: "managed" as const,
+    title: "settings.billing.compute.managed.title",
+    body: "settings.billing.compute.managed.body",
+  },
   {
     value: "byok" as const,
     title: "settings.billing.compute.byok.title",
     body: "settings.billing.compute.byok.body",
   },
-]
+] as const
 
 export default function Billing(): JSX.Element {
   const lang = useLanguage()
@@ -190,10 +194,7 @@ export default function Billing(): JSX.Element {
 
   return (
     <PanelScroll>
-      <PanelHeader
-        title={lang.t("settings.billing.heading")}
-        description={lang.t("settings.billing.description")}
-      />
+      <PanelHeader title={lang.t("settings.billing.heading")} description={lang.t("settings.billing.description")} />
       <PanelBody>
         {/* ── Balance ─────────────────────────────────────────────────── */}
         <div class="flex flex-col gap-3">
@@ -206,14 +207,22 @@ export default function Billing(): JSX.Element {
               <div class="flex flex-col gap-0.5">
                 <span class="text-12-regular text-text-weak">{lang.t("settings.billing.status.atlasSession")}</span>
                 <span class="text-13-medium text-text-strong">
-                  {wLoading() ? lang.t("common.loading.ellipsis") : signedIn() ? lang.t("settings.billing.status.signedIn") : lang.t("settings.billing.status.signedOut")}
+                  {wLoading()
+                    ? lang.t("common.loading.ellipsis")
+                    : signedIn()
+                      ? lang.t("settings.billing.status.signedIn")
+                      : lang.t("settings.billing.status.signedOut")}
                 </span>
               </div>
               <div class="flex flex-col gap-0.5">
                 <span class="text-12-regular text-text-weak">{lang.t("settings.billing.status.balance")}</span>
                 <Show
                   when={balanceKnown()}
-                  fallback={<span class="text-16-medium text-text-weak">{wLoading() ? lang.t("common.loading.ellipsis") : "—"}</span>}
+                  fallback={
+                    <span class="text-16-medium text-text-weak">
+                      {wLoading() ? lang.t("common.loading.ellipsis") : "—"}
+                    </span>
+                  }
                 >
                   <span class="text-16-medium text-text-strong">{money(wallet()!.balanceUsd)}</span>
                 </Show>
@@ -222,7 +231,11 @@ export default function Billing(): JSX.Element {
                 <span class="text-12-regular text-text-weak">{lang.t("settings.billing.status.billing")}</span>
                 <Show
                   when={!wLoading() && signedIn() && mode()}
-                  fallback={<span class="text-13-medium text-text-weak">{wLoading() ? lang.t("common.loading.ellipsis") : "—"}</span>}
+                  fallback={
+                    <span class="text-13-medium text-text-weak">
+                      {wLoading() ? lang.t("common.loading.ellipsis") : "—"}
+                    </span>
+                  }
                 >
                   <span class="text-13-medium text-text-strong capitalize">{mode()}</span>
                 </Show>
@@ -234,15 +247,15 @@ export default function Billing(): JSX.Element {
             </Row>
             <Show when={signedIn() && (wallet()?.lifetimeSpentUsd ?? 0) > 0}>
               <Row>
-                <span class="text-12-regular text-text-weak flex-1">{lang.t("settings.billing.status.lifetimeSpent")}</span>
+                <span class="text-12-regular text-text-weak flex-1">
+                  {lang.t("settings.billing.status.lifetimeSpent")}
+                </span>
                 <span class="text-13-medium text-text-strong">{money(wallet()!.lifetimeSpentUsd)}</span>
               </Row>
             </Show>
             <Show when={!wLoading() && !signedIn()}>
               <Row>
-                <p class="text-12-regular text-text-weak">
-                  {lang.t("settings.billing.status.signInHint")}
-                </p>
+                <p class="text-12-regular text-text-weak">{lang.t("settings.billing.status.signInHint")}</p>
               </Row>
             </Show>
           </Card>
@@ -252,9 +265,7 @@ export default function Billing(): JSX.Element {
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
             <SectionLabel label={lang.t("settings.billing.section.spendRouting")} />
-            <p class="text-12-regular text-text-weak">
-              {lang.t("settings.billing.section.spendRouting.description")}
-            </p>
+            <p class="text-12-regular text-text-weak">{lang.t("settings.billing.section.spendRouting.description")}</p>
           </div>
           <Show when={billingError()}>
             <div style={errorBanner()}>{billingError()}</div>
@@ -298,7 +309,8 @@ export default function Billing(): JSX.Element {
           <div class="flex items-baseline justify-between">
             <SectionLabel label={lang.t("settings.billing.section.thisWeek")} />
             <span class="text-12-regular text-text-weak">
-              {money(weekTotal())} · {compact(usage()?.weekly.reduce((a, d) => a + d.tokens, 0) ?? 0)} {lang.t("settings.billing.status.tokens")}
+              {money(weekTotal())} · {compact(usage()?.weekly.reduce((a, d) => a + d.tokens, 0) ?? 0)}{" "}
+              {lang.t("settings.billing.status.tokens")}
             </span>
           </div>
           <Show when={usageError()}>
@@ -334,9 +346,7 @@ export default function Billing(): JSX.Element {
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
             <SectionLabel label={lang.t("settings.billing.section.extraBudget")} />
-            <p class="text-12-regular text-text-weak">
-              {lang.t("settings.billing.section.extraBudget.description")}
-            </p>
+            <p class="text-12-regular text-text-weak">{lang.t("settings.billing.section.extraBudget.description")}</p>
           </div>
           <div class="border border-border-weak-base rounded-[4px] bg-surface-base/40 px-4 py-4 flex flex-col gap-3">
             <form
@@ -397,7 +407,9 @@ export default function Billing(): JSX.Element {
               <div class="border border-border-weak-base rounded-[4px] bg-surface-base/40 px-4 py-4 flex items-center justify-between gap-4">
                 <div class="flex flex-col gap-0.5 min-w-0">
                   <span class="text-13-medium text-text-strong truncate">{latest().title}</span>
-                  <span class="text-12-regular text-text-weak">{compact(tokenSum(latest().tokens))} {lang.t("settings.billing.status.tokens")}</span>
+                  <span class="text-12-regular text-text-weak">
+                    {compact(tokenSum(latest().tokens))} {lang.t("settings.billing.status.tokens")}
+                  </span>
                 </div>
                 <span class="text-14-medium text-text-strong">{money(latest().cost)}</span>
               </div>
@@ -484,35 +496,37 @@ const ModeCard: Component<{ active: boolean; disabled: boolean; title: string; b
 ) => {
   const lang = useLanguage()
   return (
-  <button
-    type="button"
-    disabled={props.disabled}
-    onClick={props.onClick}
-    style={{
-      all: "unset",
-      cursor: props.disabled ? "default" : "pointer",
-      opacity: props.disabled ? 0.6 : 1,
-      display: "flex",
-      "flex-direction": "column",
-      gap: "5px",
-      padding: "14px 16px",
-      "border-radius": "4px",
-      border: "1px solid var(--color-border)",
-      "box-shadow": props.active ? "inset 0 0 0 1px var(--color-text-interactive-base, var(--color-text))" : "none",
-      background: props.active ? "var(--color-surface-interactive-weak, var(--color-accent-subtle))" : "transparent",
-      transition: "border-color 120ms, box-shadow 120ms, background 120ms",
-    }}
-  >
-    <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
-      <span class="text-14-medium text-text-strong">{props.title}</span>
-      <Show when={props.active}>
-        <span style={{ "font-family": FONT_SANS, "font-size": "11px", color: "var(--color-text-muted)" }}>{lang.t("settings.billing.status.active")}</span>
-      </Show>
-    </div>
-    <span class="text-12-regular text-text-weak" style={{ "line-height": 1.5 }}>
-      {props.body}
-    </span>
-  </button>
+    <button
+      type="button"
+      disabled={props.disabled}
+      onClick={props.onClick}
+      style={{
+        all: "unset",
+        cursor: props.disabled ? "default" : "pointer",
+        opacity: props.disabled ? 0.6 : 1,
+        display: "flex",
+        "flex-direction": "column",
+        gap: "5px",
+        padding: "14px 16px",
+        "border-radius": "4px",
+        border: "1px solid var(--color-border)",
+        "box-shadow": props.active ? "inset 0 0 0 1px var(--color-text-interactive-base, var(--color-text))" : "none",
+        background: props.active ? "var(--color-surface-interactive-weak, var(--color-accent-subtle))" : "transparent",
+        transition: "border-color 120ms, box-shadow 120ms, background 120ms",
+      }}
+    >
+      <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+        <span class="text-14-medium text-text-strong">{props.title}</span>
+        <Show when={props.active}>
+          <span style={{ "font-family": FONT_SANS, "font-size": "11px", color: "var(--color-text-muted)" }}>
+            {lang.t("settings.billing.status.active")}
+          </span>
+        </Show>
+      </div>
+      <span class="text-12-regular text-text-weak" style={{ "line-height": 1.5 }}>
+        {props.body}
+      </span>
+    </button>
   )
 }
 

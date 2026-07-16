@@ -90,7 +90,9 @@ export default function General() {
     try {
       const res = await sdk.client.account.logout()
       if (res.error)
-        throw new Error(typeof res.error === "string" ? res.error : lang.t("settings.general.toast.couldNotClearSession"))
+        throw new Error(
+          typeof res.error === "string" ? res.error : lang.t("settings.general.toast.couldNotClearSession"),
+        )
       setAccount({ session: false })
     } catch (err) {
       showToast({ variant: "error", title: lang.t("settings.general.toast.signOutFailed"), description: message(err) })
@@ -107,6 +109,7 @@ export default function General() {
       .sort((a, b) => a.label.localeCompare(b.label)),
   )
   const reasoningOpts = createMemo(() => REASONING.map((r) => ({ value: r.value, label: lang.t(r.label) })))
+  const defaultModel = () => sync.data.config.model
   const subagentModel = () => sync.data.config.small_model
   const setDefaultModel = (value: string) => void sync.updateConfig({ model: value })
   const setSubagentModel = (value: string) => void sync.updateConfig({ small_model: value })
@@ -143,27 +146,39 @@ export default function General() {
         </Show>
 
         {/* Account */}
-        <Section title={lang.t("settings.general.section.account")} description={lang.t("settings.general.section.account.description")}>
+        <Section
+          title={lang.t("settings.general.section.account")}
+          description={lang.t("settings.general.section.account.description")}
+        >
           <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
             <Row title={lang.t("settings.general.row.email.title")}>
               <span class="text-13-regular text-text-strong">
-                {(account()?.user?.email as string) ?? (account()?.session === false ? lang.t("settings.general.status.notConnected") : "—")}
+                {(account()?.user?.email as string) ??
+                  (account()?.session === false ? lang.t("settings.general.status.notConnected") : "—")}
               </span>
             </Row>
             <Row title={lang.t("settings.general.row.plan.title")}>
-              <span class="text-13-regular text-text-strong capitalize">{plan() ?? lang.t("settings.general.status.free")}</span>
+              <span class="text-13-regular text-text-strong capitalize">
+                {plan() ?? lang.t("settings.general.status.free")}
+              </span>
             </Row>
             <Show when={org()}>
               <Row title={lang.t("settings.general.row.organization.title")}>
                 <span class="text-13-regular text-text-strong">{org()}</span>
               </Row>
             </Show>
-            <Row title={lang.t("settings.general.row.billing.title")} description={lang.t("settings.general.row.billing.description")}>
+            <Row
+              title={lang.t("settings.general.row.billing.title")}
+              description={lang.t("settings.general.row.billing.description")}
+            >
               <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardCli)}>
                 {lang.t("settings.general.action.manageBilling")}
               </Button>
             </Row>
-            <Row title={lang.t("settings.general.row.session.title")} description={lang.t("settings.general.row.session.description")}>
+            <Row
+              title={lang.t("settings.general.row.session.title")}
+              description={lang.t("settings.general.row.session.description")}
+            >
               <Button
                 size="small"
                 variant="secondary"
@@ -186,9 +201,15 @@ export default function General() {
         </Section>
 
         {/* Model */}
-        <Section title={lang.t("settings.general.section.model")} description={lang.t("settings.general.section.model.description")}>
+        <Section
+          title={lang.t("settings.general.section.model")}
+          description={lang.t("settings.general.section.model.description")}
+        >
           <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
-            <Row title={lang.t("settings.general.row.defaultModel.title")} description={lang.t("settings.general.row.defaultModel.description")}>
+            <Row
+              title={lang.t("settings.general.row.defaultModel.title")}
+              description={lang.t("settings.general.row.defaultModel.description")}
+            >
               <Select
                 options={modelOptions()}
                 current={modelOptions().find((o) => o.value === defaultModel())}
@@ -201,7 +222,10 @@ export default function General() {
                 placeholder={lang.t("common.default")}
               />
             </Row>
-            <Row title={lang.t("settings.general.row.subagentModel.title")} description={lang.t("settings.general.row.subagentModel.description")}>
+            <Row
+              title={lang.t("settings.general.row.subagentModel.title")}
+              description={lang.t("settings.general.row.subagentModel.description")}
+            >
               <Select
                 options={modelOptions()}
                 current={modelOptions().find((o) => o.value === subagentModel())}
@@ -214,7 +238,10 @@ export default function General() {
                 placeholder={lang.t("common.default")}
               />
             </Row>
-            <Row title={lang.t("settings.general.row.reasoningEffort.title")} description={lang.t("settings.general.row.reasoningEffort.description")}>
+            <Row
+              title={lang.t("settings.general.row.reasoningEffort.title")}
+              description={lang.t("settings.general.row.reasoningEffort.description")}
+            >
               <Select
                 options={reasoningOpts()}
                 current={reasoningOpts().find((o) => o.value === prefs()?.reasoning_effort) ?? reasoningOpts()[2]}
@@ -230,7 +257,10 @@ export default function General() {
         </Section>
 
         {/* Licensing */}
-        <Section title={lang.t("settings.general.section.licensing")} description={lang.t("settings.general.section.licensing.description")}>
+        <Section
+          title={lang.t("settings.general.section.licensing")}
+          description={lang.t("settings.general.section.licensing.description")}
+        >
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <IntentCard
               active={prefs()?.intent === "non-commercial"}
@@ -285,32 +315,34 @@ const Row: Component<{ title: string; description?: string; children: JSX.Elemen
 const IntentCard: Component<{ active: boolean; title: string; body: string; onClick: () => void }> = (props) => {
   const lang = useLanguage()
   return (
-  <button
-    type="button"
-    onClick={props.onClick}
-    style={{
-      all: "unset",
-      cursor: "pointer",
-      display: "flex",
-      "flex-direction": "column",
-      gap: "5px",
-      padding: "14px 16px",
-      "border-radius": "4px",
-      border: "1px solid var(--color-border)",
-      "box-shadow": props.active ? "inset 0 0 0 1px var(--color-text-interactive-base, var(--color-text))" : "none",
-      background: props.active ? "var(--color-surface-interactive-weak, var(--color-accent-subtle))" : "transparent",
-      transition: "border-color 120ms, box-shadow 120ms, background 120ms",
-    }}
-  >
-    <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
-      <span class="text-14-medium text-text-strong">{props.title}</span>
-      <Show when={props.active}>
-        <span style={{ "font-family": FONT_SANS, "font-size": "11px", color: "var(--color-text-muted)" }}>{lang.t("settings.billing.status.active")}</span>
-      </Show>
-    </div>
-    <span class="text-12-regular text-text-weak" style={{ "line-height": 1.5 }}>
-      {props.body}
-    </span>
-  </button>
+    <button
+      type="button"
+      onClick={props.onClick}
+      style={{
+        all: "unset",
+        cursor: "pointer",
+        display: "flex",
+        "flex-direction": "column",
+        gap: "5px",
+        padding: "14px 16px",
+        "border-radius": "4px",
+        border: "1px solid var(--color-border)",
+        "box-shadow": props.active ? "inset 0 0 0 1px var(--color-text-interactive-base, var(--color-text))" : "none",
+        background: props.active ? "var(--color-surface-interactive-weak, var(--color-accent-subtle))" : "transparent",
+        transition: "border-color 120ms, box-shadow 120ms, background 120ms",
+      }}
+    >
+      <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+        <span class="text-14-medium text-text-strong">{props.title}</span>
+        <Show when={props.active}>
+          <span style={{ "font-family": FONT_SANS, "font-size": "11px", color: "var(--color-text-muted)" }}>
+            {lang.t("settings.billing.status.active")}
+          </span>
+        </Show>
+      </div>
+      <span class="text-12-regular text-text-weak" style={{ "line-height": 1.5 }}>
+        {props.body}
+      </span>
+    </button>
   )
 }

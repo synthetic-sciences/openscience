@@ -99,9 +99,7 @@ export function SessionShellTab(props: SessionShellTabProps) {
         fallback={
           <div class="h-full flex flex-col items-center justify-center text-center gap-4 px-6">
             <Icon name="console" class="text-text-weaker opacity-30" />
-            <div class="text-13-regular text-text-weak max-w-56">
-              {language.t("session.shell.noCommands")}
-            </div>
+            <div class="text-13-regular text-text-weak max-w-56">{language.t("session.shell.noCommands")}</div>
           </div>
         }
       >

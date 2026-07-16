@@ -270,7 +270,7 @@ class PythonKernel implements Kernel {
 
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        void Shell.killTree(proc, { exited: () => proc.exitCode !== null })
+        void Shell.killTree(proc, { detached: process.platform !== "win32", exited: () => proc.exitCode !== null })
         reject(new Error(`Python kernel startup timed out. stderr: ${this.stderrTail}`))
       }, 15_000)
       let buf = ""
@@ -303,13 +303,13 @@ class PythonKernel implements Kernel {
     const payload = await new Promise<RawPayload>((resolve, reject) => {
       const timer = setTimeout(() => {
         cleanup()
-        void Shell.killTree(proc, { exited: () => proc.exitCode !== null })
+        void Shell.killTree(proc, { detached: process.platform !== "win32", exited: () => proc.exitCode !== null })
         reject(new Error(`Cell execution timed out after ${Math.round(timeout / 1000)}s`))
       }, timeout)
 
       const onAbort = () => {
         cleanup()
-        void Shell.killTree(proc, { exited: () => proc.exitCode !== null })
+        void Shell.killTree(proc, { detached: process.platform !== "win32", exited: () => proc.exitCode !== null })
         reject(new Error("Execution aborted"))
       }
 
@@ -359,13 +359,14 @@ class PythonKernel implements Kernel {
 
   async shutdown(): Promise<void> {
     const proc = this.proc
-    if (proc) await Shell.killTree(proc, { exited: () => proc.exitCode !== null })
+    if (proc)
+      await Shell.killTree(proc, { detached: process.platform !== "win32", exited: () => proc.exitCode !== null })
     this.cleanupScript()
   }
 
   /** Synchronous group kill for process-exit handlers (async shutdown can't run there). */
   killSync(): void {
-    if (this.proc) Shell.killTreeSync(this.proc)
+    if (this.proc) Shell.killTreeSync(this.proc, { detached: process.platform !== "win32" })
     this.cleanupScript()
   }
 

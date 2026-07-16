@@ -108,7 +108,11 @@ export default function SkillsPage(): JSX.Element {
       { id: "all", label: language.t("skills.filter.all"), count: all().length },
       ...[...counts.entries()]
         .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([id, count]) => ({ id, label: id === "uncategorized" ? language.t("skills.category.uncategorized") : id, count })),
+        .map(([id, count]) => ({
+          id,
+          label: id === "uncategorized" ? language.t("skills.category.uncategorized") : id,
+          count,
+        })),
     ]
   })
 
@@ -196,13 +200,15 @@ export default function SkillsPage(): JSX.Element {
               }}
             >
               <span>
-                <span style={{ color: "var(--color-text)" }}>{enabledCount()}</span> {language.t("skills.count.enabled")}
+                <span style={{ color: "var(--color-text)" }}>{enabledCount()}</span>{" "}
+                {language.t("skills.count.enabled")}
               </span>
               <span>
                 <span style={{ color: "var(--color-text)" }}>{all().length}</span> {language.t("skills.count.total")}
               </span>
               <span>
-                <span style={{ color: "var(--color-text)" }}>{Math.max(0, categories().length - 1)}</span> {language.t("skills.count.categories")}
+                <span style={{ color: "var(--color-text)" }}>{Math.max(0, categories().length - 1)}</span>{" "}
+                {language.t("skills.count.categories")}
               </span>
             </div>
           </div>
@@ -269,7 +275,11 @@ export default function SkillsPage(): JSX.Element {
                   showToast({ variant: "success", title: language.t("skills.toast.created", { name }) })
                   setView("list")
                 } catch (err) {
-                  showToast({ variant: "error", title: language.t("skills.toast.couldNotCreate"), description: message(err) })
+                  showToast({
+                    variant: "error",
+                    title: language.t("skills.toast.couldNotCreate"),
+                    description: message(err),
+                  })
                 } finally {
                   setBusy(false)
                 }
@@ -290,12 +300,19 @@ export default function SkillsPage(): JSX.Element {
                   const r = res.rejected.length
                   showToast({
                     variant: n > 0 ? "success" : "error",
-                    title: n > 0 ? language.t("skills.toast.installed", { count: String(n) }) : language.t("skills.toast.noInstalled"),
+                    title:
+                      n > 0
+                        ? language.t("skills.toast.installed", { count: String(n) })
+                        : language.t("skills.toast.noInstalled"),
                     description: r > 0 ? language.t("skills.toast.rejected", { count: String(r) }) : undefined,
                   })
                   if (n > 0) setView("list")
                 } catch (err) {
-                  showToast({ variant: "error", title: language.t("skills.toast.installFailed"), description: message(err) })
+                  showToast({
+                    variant: "error",
+                    title: language.t("skills.toast.installFailed"),
+                    description: message(err),
+                  })
                 } finally {
                   setBusy(false)
                 }
@@ -304,14 +321,21 @@ export default function SkillsPage(): JSX.Element {
           </Show>
 
           <Show when={view() === "list"}>
-            <Show when={!skills.loading} fallback={<div style={loadingStyle()}>{language.t("skills.status.loading")}</div>}>
+            <Show
+              when={!skills.loading}
+              fallback={<div style={loadingStyle()}>{language.t("skills.status.loading")}</div>}
+            >
               <Show
                 when={filtered().length > 0}
                 fallback={
                   <div style={{ "padding-top": "36px" }}>
                     <EmptyState
                       icon="brain"
-                      title={search() || category() !== "all" ? language.t("skills.empty.noMatch") : language.t("skills.empty.noSkills")}
+                      title={
+                        search() || category() !== "all"
+                          ? language.t("skills.empty.noMatch")
+                          : language.t("skills.empty.noSkills")
+                      }
                       hint={language.t("skills.empty.hint")}
                     />
                   </div>
@@ -492,7 +516,12 @@ function ScratchForm(props: {
     <div class="flex flex-col gap-4 max-w-[680px]">
       <span class="atlas-section-label">{language.t("skills.scratch.heading")}</span>
       <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[8px] bg-surface-base/40">
-        <FormField label={language.t("skills.scratch.name")} value={name()} onInput={setName} placeholder={language.t("skills.scratch.namePlaceholder")} />
+        <FormField
+          label={language.t("skills.scratch.name")}
+          value={name()}
+          onInput={setName}
+          placeholder={language.t("skills.scratch.namePlaceholder")}
+        />
         <FormField
           label={language.t("skills.scratch.description")}
           value={description()}
@@ -513,7 +542,12 @@ function ScratchForm(props: {
             disabled={props.busy || !valid()}
             onClick={() => props.onCreate(name().trim(), description().trim(), body())}
           />
-          <FormButton label={language.t("skills.action.cancel")} variant="ghost" onClick={props.onCancel} disabled={props.busy} />
+          <FormButton
+            label={language.t("skills.action.cancel")}
+            variant="ghost"
+            onClick={props.onCancel}
+            disabled={props.busy}
+          />
         </div>
       </div>
     </div>
@@ -527,7 +561,12 @@ function GithubForm(props: { busy: boolean; onCancel: () => void; onInstall: (ur
     <div class="flex flex-col gap-4 max-w-[680px]">
       <span class="atlas-section-label">{language.t("skills.github.heading")}</span>
       <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[8px] bg-surface-base/40">
-        <FormField label={language.t("skills.github.url")} value={url()} onInput={setUrl} placeholder={language.t("skills.github.urlPlaceholder")} />
+        <FormField
+          label={language.t("skills.github.url")}
+          value={url()}
+          onInput={setUrl}
+          placeholder={language.t("skills.github.urlPlaceholder")}
+        />
         <p class="text-12-regular text-text-weak flex items-start gap-1.5">
           <Icon name="check-small" size="small" class="text-icon-weak-base mt-0.5" />
           {language.t("skills.github.securityNotice")}
@@ -538,7 +577,12 @@ function GithubForm(props: { busy: boolean; onCancel: () => void; onInstall: (ur
             disabled={props.busy || !url().trim()}
             onClick={() => props.onInstall(url().trim())}
           />
-          <FormButton label={language.t("skills.action.cancel")} variant="ghost" onClick={props.onCancel} disabled={props.busy} />
+          <FormButton
+            label={language.t("skills.action.cancel")}
+            variant="ghost"
+            onClick={props.onCancel}
+            disabled={props.busy}
+          />
         </div>
       </div>
     </div>

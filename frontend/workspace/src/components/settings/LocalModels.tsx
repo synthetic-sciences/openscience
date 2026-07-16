@@ -8,7 +8,7 @@ import { Icon } from "@synsci/ui/icon"
 import { showToast } from "@synsci/ui/toast"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { useLanguage } from "@/context/language"
+import { useLanguage, type TranslationKey } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { uiStore } from "@/atlas/store/ui"
 import { settingsApi } from "./api"
@@ -68,7 +68,7 @@ const LocalModels: Component = () => {
   }
 
   const [busy, setBusy] = createSignal(false)
-  const guard = async (fn: () => Promise<unknown>, failure: string) => {
+  const guard = async (fn: () => Promise<unknown>, failure: TranslationKey) => {
     setBusy(true)
     try {
       await fn()
@@ -105,22 +105,37 @@ const LocalModels: Component = () => {
         models?: string[]
       }>("/start", { method: "POST", body: JSON.stringify({ id: rt.id }) })
       if (r.installed === false) {
-        showToast({ title: lang.t("settings.localModels.toast.notInstalled", { name: rt.name }), description: lang.t("settings.localModels.toast.notInstalled.description") })
+        showToast({
+          title: lang.t("settings.localModels.toast.notInstalled", { name: rt.name }),
+          description: lang.t("settings.localModels.toast.notInstalled.description"),
+        })
         window.open(r.install ?? rt.install, "_blank", "noopener")
       } else if (r.running && r.models?.length) {
         await call("/", {
           method: "POST",
           body: JSON.stringify({ url: rt.baseURL, id: rt.id, name: `${rt.name} (local)`, models: r.models }),
         })
-        showToast({ title: lang.t("settings.localModels.toast.running", { name: rt.name }), description: lang.t("settings.localModels.toast.running.description", { count: r.models.length }) })
+        showToast({
+          title: lang.t("settings.localModels.toast.running", { name: rt.name }),
+          description: lang.t("settings.localModels.toast.running.description", { count: r.models.length }),
+        })
       } else if (r.running) {
-        showToast({ title: lang.t("settings.localModels.toast.runningNoModels", { name: rt.name }), description: lang.t("settings.localModels.toast.runningNoModels.description") })
+        showToast({
+          title: lang.t("settings.localModels.toast.runningNoModels", { name: rt.name }),
+          description: lang.t("settings.localModels.toast.runningNoModels.description"),
+        })
       } else {
-        showToast({ title: lang.t("settings.localModels.toast.couldNotStart", { name: rt.name }), description: lang.t("settings.localModels.toast.couldNotStart.description") })
+        showToast({
+          title: lang.t("settings.localModels.toast.couldNotStart", { name: rt.name }),
+          description: lang.t("settings.localModels.toast.couldNotStart.description"),
+        })
       }
       refetch()
     } catch (err) {
-      showToast({ title: lang.t("settings.localModels.toast.couldNotStart", { name: rt.name }), description: err instanceof Error ? err.message : String(err) })
+      showToast({
+        title: lang.t("settings.localModels.toast.couldNotStart", { name: rt.name }),
+        description: err instanceof Error ? err.message : String(err),
+      })
     }
     setStarting(undefined)
   }
@@ -157,7 +172,10 @@ const LocalModels: Component = () => {
         body: JSON.stringify({ url: url().trim(), key: key().trim() || undefined }),
       })
       if (r.error || !r.models.length) {
-        showToast({ title: lang.t("settings.localModels.toast.noModelsFound"), description: r.error ?? lang.t("settings.localModels.toast.noModelsFound.description") })
+        showToast({
+          title: lang.t("settings.localModels.toast.noModelsFound"),
+          description: r.error ?? lang.t("settings.localModels.toast.noModelsFound.description"),
+        })
       }
       setFound(r.models)
       setSelected(new Set(r.models))
@@ -190,9 +208,7 @@ const LocalModels: Component = () => {
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[820px]">
           <h2 class="text-16-medium text-text-strong">{lang.t("settings.localModels.heading")}</h2>
-          <p class="text-13-regular text-text-weak">
-            {lang.t("settings.localModels.description")}
-          </p>
+          <p class="text-13-regular text-text-weak">{lang.t("settings.localModels.description")}</p>
         </div>
       </div>
 
@@ -216,7 +232,11 @@ const LocalModels: Component = () => {
                   <span class="text-11-regular text-text-weak">
                     <Show
                       when={!rt.installed}
-                      fallback={rt.running ? lang.t("settings.localModels.status.runningWithModels", { count: rt.models.length }) : lang.t("settings.localModels.status.installedNotRunning")}
+                      fallback={
+                        rt.running
+                          ? lang.t("settings.localModels.status.runningWithModels", { count: rt.models.length })
+                          : lang.t("settings.localModels.status.installedNotRunning")
+                      }
                     >
                       {lang.t("settings.localModels.status.notInstalled")} — <code>{rt.serveHint}</code>
                     </Show>
@@ -243,7 +263,9 @@ const LocalModels: Component = () => {
                         disabled={busy() || !!starting()}
                         onClick={() => startRuntime(rt)}
                       >
-                        {starting() === rt.id ? lang.t("settings.localModels.status.starting") : lang.t("settings.localModels.action.start")}
+                        {starting() === rt.id
+                          ? lang.t("settings.localModels.status.starting")
+                          : lang.t("settings.localModels.action.start")}
                       </Button>
                     }
                   >
@@ -302,9 +324,7 @@ const LocalModels: Component = () => {
           <Show
             when={(detected()?.length ?? 0) > 0}
             fallback={
-              <p class="text-12-regular text-text-weak/70">
-                {lang.t("settings.localModels.empty.nothingRunning")}
-              </p>
+              <p class="text-12-regular text-text-weak/70">{lang.t("settings.localModels.empty.nothingRunning")}</p>
             }
           >
             <For each={detected()}>
@@ -374,7 +394,9 @@ const LocalModels: Component = () => {
           <h3 class="text-13-medium text-text-strong">{lang.t("settings.localModels.section.configured")}</h3>
           <Show
             when={(configured()?.length ?? 0) > 0}
-            fallback={<p class="text-12-regular text-text-weak/70">{lang.t("settings.localModels.empty.noProviders")}</p>}
+            fallback={
+              <p class="text-12-regular text-text-weak/70">{lang.t("settings.localModels.empty.noProviders")}</p>
+            }
           >
             <For each={configured()}>
               {(p) => (
@@ -391,9 +413,9 @@ const LocalModels: Component = () => {
                     icon="trash"
                     disabled={busy()}
                     onClick={() => removeProvider(p.id)}
-                    >
-                      {lang.t("common.remove")}
-                    </Button>
+                  >
+                    {lang.t("common.remove")}
+                  </Button>
                 </div>
               )}
             </For>

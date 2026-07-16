@@ -83,7 +83,13 @@ export default function Connectors() {
       else await sdk.client.mcp.disconnect({ name })
       await refresh()
     } catch (err) {
-      showToast({ variant: "error", title: lang.t("settings.connectors.toast.toggleFailed", { action: lang.t(on ? "common.connect" : "common.disconnect") }), description: message(err) })
+      showToast({
+        variant: "error",
+        title: lang.t("settings.connectors.toast.toggleFailed", {
+          action: lang.t(on ? "common.connect" : "common.disconnect"),
+        }),
+        description: message(err),
+      })
     } finally {
       setBusy(false)
     }
@@ -102,7 +108,11 @@ export default function Connectors() {
       await refresh()
       if (editing() === name) closeForm()
     } catch (err) {
-      showToast({ variant: "error", title: lang.t("settings.connectors.toast.removeFailed"), description: message(err) })
+      showToast({
+        variant: "error",
+        title: lang.t("settings.connectors.toast.removeFailed"),
+        description: message(err),
+      })
     } finally {
       setBusy(false)
     }
@@ -178,7 +188,11 @@ export default function Connectors() {
         toolbar={
           <Show when={!form()}>
             <Toolbar>
-              <SearchInput value={search()} onInput={setSearch} placeholder={lang.t("settings.connectors.placeholder.search")} />
+              <SearchInput
+                value={search()}
+                onInput={setSearch}
+                placeholder={lang.t("settings.connectors.placeholder.search")}
+              />
               <AddMenu
                 label={lang.t("settings.connectors.action.addConnector")}
                 items={[
@@ -221,7 +235,11 @@ export default function Connectors() {
             fallback={
               <EmptyState
                 icon="mcp"
-                title={search() ? lang.t("settings.connectors.empty.noMatching") : lang.t("settings.connectors.empty.noConnectors")}
+                title={
+                  search()
+                    ? lang.t("settings.connectors.empty.noMatching")
+                    : lang.t("settings.connectors.empty.noConnectors")
+                }
                 hint={lang.t("settings.connectors.empty.hint")}
               />
             }
@@ -399,10 +417,20 @@ function ConnectorForm(props: {
 }) {
   const lang = useLanguage()
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    props.onChange({ ...props.state, [key]: value });
+    props.onChange({ ...props.state, [key]: value })
   return (
     <div class="flex flex-col gap-4">
-      <SectionLabel label={props.editing ? lang.t("settings.connectors.form.editConnector") : lang.t("settings.connectors.form.addConnector", { type: lang.t(props.state.type === "remote" ? "settings.connectors.type.remote" : "settings.connectors.type.local") })} />
+      <SectionLabel
+        label={
+          props.editing
+            ? lang.t("settings.connectors.form.editConnector")
+            : lang.t("settings.connectors.form.addConnector", {
+                type: lang.t(
+                  props.state.type === "remote" ? "settings.connectors.type.remote" : "settings.connectors.type.local",
+                ),
+              })
+        }
+      />
       <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[4px] bg-surface-base/40">
         <FormField
           label={lang.t("settings.connectors.form.name")}
@@ -460,19 +488,35 @@ function ConnectorForm(props: {
             placeholder={'{ "Authorization": "Bearer ..." }'}
           />
           <Show when={props.state.oauth === "client"}>
-            <FormField label={lang.t("settings.connectors.form.clientId")} value={props.state.clientId} onInput={(v) => set("clientId", v)} mono />
+            <FormField
+              label={lang.t("settings.connectors.form.clientId")}
+              value={props.state.clientId}
+              onInput={(v) => set("clientId", v)}
+              mono
+            />
             <FormField
               label={lang.t("settings.connectors.form.clientSecret")}
               value={props.state.clientSecret}
               onInput={(v) => set("clientSecret", v)}
               mono
             />
-            <FormField label={lang.t("settings.connectors.form.scope")} value={props.state.scope} onInput={(v) => set("scope", v)} mono />
+            <FormField
+              label={lang.t("settings.connectors.form.scope")}
+              value={props.state.scope}
+              onInput={(v) => set("scope", v)}
+              mono
+            />
           </Show>
         </Show>
         <div class="flex items-center gap-2">
           <FormButton
-            label={props.busy ? lang.t("common.saving") : props.editing ? lang.t("settings.connectors.action.saveConnector") : lang.t("settings.connectors.action.addConnector")}
+            label={
+              props.busy
+                ? lang.t("common.saving")
+                : props.editing
+                  ? lang.t("settings.connectors.action.saveConnector")
+                  : lang.t("settings.connectors.action.addConnector")
+            }
             disabled={props.busy}
             onClick={props.onSave}
           />
