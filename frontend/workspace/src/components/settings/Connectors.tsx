@@ -5,6 +5,8 @@ import { IconButton } from "@synsci/ui/icon-button"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useLanguage } from "@/context/language"
+import { StatusDot } from "@/atlas/shared/StatusDot"
 import type { Config, McpStatus } from "@synsci/sdk/v2/client"
 import {
   PanelScroll,
@@ -33,6 +35,7 @@ function isConfigured(value: McpConfig | undefined): value is ConfiguredMcp {
 }
 
 export default function Connectors() {
+  const lang = useLanguage()
   const sync = useGlobalSync()
   const sdk = useGlobalSDK()
 
@@ -80,14 +83,14 @@ export default function Connectors() {
       else await sdk.client.mcp.disconnect({ name })
       await refresh()
     } catch (err) {
-      showToast({ variant: "error", title: `Could not ${on ? "connect" : "disconnect"}`, description: message(err) })
+      showToast({ variant: "error", title: lang.t("settings.connectors.toast.toggleFailed", { action: lang.t(on ? "common.connect" : "common.disconnect") }), description: message(err) })
     } finally {
       setBusy(false)
     }
   }
 
   async function remove(name: string) {
-    if (!window.confirm(`Remove connector "${name}"? It will be disconnected and deleted from config.`)) return
+    if (!window.confirm(lang.t("settings.connectors.confirm.remove", { name }))) return
     setBusy(true)
     try {
       await sdk.client.mcp.config.remove({ name, scope: "global" })
@@ -99,7 +102,7 @@ export default function Connectors() {
       await refresh()
       if (editing() === name) closeForm()
     } catch (err) {
-      showToast({ variant: "error", title: "Remove failed", description: message(err) })
+      showToast({ variant: "error", title: lang.t("settings.connectors.toast.removeFailed"), description: message(err) })
     } finally {
       setBusy(false)
     }
@@ -111,12 +114,12 @@ export default function Connectors() {
       const started = await sdk.client.mcp.auth.start({ name })
       const authUrl = started.data?.authorizationUrl
       if (authUrl) window.open(authUrl, "_blank", "noopener,noreferrer")
-      const code = window.prompt("Authorize in the opened tab, then paste the authorization code here.")
+      const code = window.prompt(lang.t("settings.connectors.dialog.authPrompt"))
       if (!code) return
       await sdk.client.mcp.auth.callback({ name, code })
       await refresh()
     } catch (err) {
-      showToast({ variant: "error", title: "Authentication failed", description: message(err) })
+      showToast({ variant: "error", title: lang.t("settings.connectors.toast.authFailed"), description: message(err) })
     } finally {
       setBusy(false)
     }
@@ -140,7 +143,7 @@ export default function Connectors() {
     if (!state) return
     const name = state.name.trim()
     if (!name) {
-      showToast({ variant: "error", title: "Connector name is required" })
+      showToast({ variant: "error", title: lang.t("settings.connectors.toast.nameRequired") })
       return
     }
     setBusy(true)
@@ -158,10 +161,10 @@ export default function Connectors() {
       }
       sync.set("config", "mcp", name, config)
       await refresh()
-      showToast({ variant: "success", title: `Connector "${name}" saved` })
+      showToast({ variant: "success", title: lang.t("settings.connectors.toast.saved", { name }) })
       closeForm()
     } catch (err) {
-      showToast({ variant: "error", title: "Save failed", description: message(err) })
+      showToast({ variant: "error", title: lang.t("settings.connectors.toast.saveFailed"), description: message(err) })
     } finally {
       setBusy(false)
     }
@@ -170,25 +173,25 @@ export default function Connectors() {
   return (
     <PanelScroll>
       <PanelHeader
-        title="Connectors"
-        description="Model Context Protocol servers give your agents extra tools. Remote servers can use OAuth; local servers run a command on this machine."
+        title={lang.t("settings.connectors.heading")}
+        description={lang.t("settings.connectors.description")}
         toolbar={
           <Show when={!form()}>
             <Toolbar>
-              <SearchInput value={search()} onInput={setSearch} placeholder="Search connectors" />
+              <SearchInput value={search()} onInput={setSearch} placeholder={lang.t("settings.connectors.placeholder.search")} />
               <AddMenu
-                label="add connector"
+                label={lang.t("settings.connectors.action.addConnector")}
                 items={[
                   {
                     icon: "link",
-                    label: "remote URL",
-                    description: "Connect a hosted MCP server over HTTP",
+                    label: lang.t("settings.connectors.type.remoteUrl"),
+                    description: lang.t("settings.connectors.type.remoteUrl.description"),
                     onSelect: () => openForm("remote"),
                   },
                   {
                     icon: "console",
-                    label: "local command",
-                    description: "Run an MCP server process locally",
+                    label: lang.t("settings.connectors.type.localCommand"),
+                    description: lang.t("settings.connectors.type.localCommand.description"),
                     onSelect: () => openForm("local"),
                   },
                 ]}
@@ -218,13 +221,13 @@ export default function Connectors() {
             fallback={
               <EmptyState
                 icon="mcp"
-                title={search() ? "No matching connectors" : "No connectors yet"}
-                hint="Add a remote MCP URL like https://mcp.example.com/mcp or a local command like npx -y @modelcontextprotocol/server-filesystem ."
+                title={search() ? lang.t("settings.connectors.empty.noMatching") : lang.t("settings.connectors.empty.noConnectors")}
+                hint={lang.t("settings.connectors.empty.hint")}
               />
             }
           >
             <div class="flex flex-col gap-2">
-              <SectionLabel label="Connectors" count={entries().length} />
+              <SectionLabel label={lang.t("settings.connectors.section.connectors")} count={entries().length} />
               <Card>
                 <For each={entries()}>
                   {(entry) => {
@@ -287,7 +290,7 @@ export default function Connectors() {
                 disabled={busy()}
                 onClick={() => void refresh()}
               >
-                <Icon name="enter" size="small" /> refresh status
+                <Icon name="enter" size="small" /> {lang.t("settings.connectors.action.refreshStatus")}
               </button>
             </div>
           </Show>
@@ -394,14 +397,15 @@ function ConnectorForm(props: {
   onSave: () => void
   onCancel: () => void
 }) {
+  const lang = useLanguage()
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    props.onChange({ ...props.state, [key]: value })
+    props.onChange({ ...props.state, [key]: value });
   return (
     <div class="flex flex-col gap-4">
-      <SectionLabel label={props.editing ? "Edit connector" : `Add ${props.state.type} connector`} />
+      <SectionLabel label={props.editing ? lang.t("settings.connectors.form.editConnector") : lang.t("settings.connectors.form.addConnector", { type: lang.t(props.state.type === "remote" ? "settings.connectors.type.remote" : "settings.connectors.type.local") })} />
       <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[4px] bg-surface-base/40">
         <FormField
-          label="Name"
+          label={lang.t("settings.connectors.form.name")}
           value={props.state.name}
           onInput={(v) => set("name", v)}
           placeholder="linear, filesystem…"
@@ -411,14 +415,14 @@ function ConnectorForm(props: {
           fallback={
             <>
               <FormField
-                label="Command"
+                label={lang.t("settings.connectors.form.command")}
                 value={props.state.command}
                 onInput={(v) => set("command", v)}
                 mono
                 placeholder="npx -y @modelcontextprotocol/server-filesystem ."
               />
               <FormField
-                label="Environment (JSON)"
+                label={lang.t("settings.connectors.form.environment")}
                 value={props.state.env}
                 onInput={(v) => set("env", v)}
                 multiline
@@ -448,7 +452,7 @@ function ConnectorForm(props: {
             </select>
           </label>
           <FormField
-            label="Headers (JSON)"
+            label={lang.t("settings.connectors.form.headers")}
             value={props.state.headers}
             onInput={(v) => set("headers", v)}
             multiline
@@ -456,23 +460,23 @@ function ConnectorForm(props: {
             placeholder={'{ "Authorization": "Bearer ..." }'}
           />
           <Show when={props.state.oauth === "client"}>
-            <FormField label="Client ID" value={props.state.clientId} onInput={(v) => set("clientId", v)} mono />
+            <FormField label={lang.t("settings.connectors.form.clientId")} value={props.state.clientId} onInput={(v) => set("clientId", v)} mono />
             <FormField
-              label="Client secret"
+              label={lang.t("settings.connectors.form.clientSecret")}
               value={props.state.clientSecret}
               onInput={(v) => set("clientSecret", v)}
               mono
             />
-            <FormField label="Scope" value={props.state.scope} onInput={(v) => set("scope", v)} mono />
+            <FormField label={lang.t("settings.connectors.form.scope")} value={props.state.scope} onInput={(v) => set("scope", v)} mono />
           </Show>
         </Show>
         <div class="flex items-center gap-2">
           <FormButton
-            label={props.busy ? "saving…" : props.editing ? "save connector" : "add connector"}
+            label={props.busy ? lang.t("common.saving") : props.editing ? lang.t("settings.connectors.action.saveConnector") : lang.t("settings.connectors.action.addConnector")}
             disabled={props.busy}
             onClick={props.onSave}
           />
-          <FormButton label="cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
+          <FormButton label={lang.t("common.cancel")} variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
     </div>

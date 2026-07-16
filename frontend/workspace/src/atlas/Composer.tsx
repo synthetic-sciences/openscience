@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useModels, type ModelKey } from "@/context/models"
+import { useLanguage } from "@/context/language"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import {
   IconArrowUp,
@@ -48,10 +49,10 @@ const PROVIDER_LABEL: Record<string, string> = {
 // is "does this spend money?". Text badges (BYOK/metered) were removed from the
 // bar and rows; the dot carries the signal at near-zero visual weight. Inferred
 // from provider connection state; authoritative resolver is server-side.
-const SOURCE_DOT: Record<ModelSource, { color: string; opacity: number; meters: boolean; title: string }> = {
-  byok: { color: "var(--color-text-faint)", opacity: 0.5, meters: false, title: "your key — free" },
-  "signed-in": { color: "var(--color-text-faint)", opacity: 0.5, meters: false, title: "signed-in account — free" },
-  managed: { color: "var(--color-accent)", opacity: 0.8, meters: true, title: "metered — debits your wallet" },
+const SOURCE_DOT: Record<ModelSource, { color: string; opacity: number; meters: boolean; titleKey: string }> = {
+  byok: { color: "var(--color-text-faint)", opacity: 0.5, meters: false, titleKey: "composer.source.byok" },
+  "signed-in": { color: "var(--color-text-faint)", opacity: 0.5, meters: false, titleKey: "composer.source.signedIn" },
+  managed: { color: "var(--color-accent)", opacity: 0.8, meters: true, titleKey: "composer.source.managed" },
 }
 
 // The effort control renders a model's OWN reasoning-effort variant keys
@@ -181,6 +182,7 @@ export function Composer(): JSX.Element {
   const providers = useProviders()
   const globalSync = useGlobalSync()
   const dialog = useDialog()
+  const language = useLanguage()
 
   const [text, setText] = createSignal("")
   const [model, setModel] = createSignal<ModelKey | undefined>(undefined)
@@ -565,10 +567,10 @@ export function Composer(): JSX.Element {
     if (!sid) return
     try {
       await sdk.client.session.abort({ sessionID: sid } as any)
-      toast.info("aborted", "stopped streaming for this session")
+      toast.info(language.t("composer.toast.aborted"), language.t("composer.toast.stopped"))
     } catch (e: any) {
       console.error("session.abort failed", e)
-      toast.error("could not stop", e?.message ?? String(e))
+      toast.error(language.t("composer.toast.couldNotStop"), e?.message ?? String(e))
     }
   }
 
@@ -578,7 +580,7 @@ export function Composer(): JSX.Element {
     const next: Attachment[] = []
     for (const file of list) {
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        toast.error(`${file.name} too large`, "max 12MB per attachment")
+        toast.error(language.t("composer.toast.fileTooLarge", { name: file.name }), language.t("composer.toast.maxAttachmentSize"))
         continue
       }
       try {
@@ -591,7 +593,7 @@ export function Composer(): JSX.Element {
           dataUrl,
         })
       } catch (err: any) {
-        toast.error(`could not read ${file.name}`, err?.message ?? String(err))
+        toast.error(language.t("composer.toast.couldNotRead", { name: file.name }), err?.message ?? String(err))
       }
     }
     if (next.length > 0) setAttachments((prev) => [...prev, ...next])
@@ -744,7 +746,7 @@ export function Composer(): JSX.Element {
         const data = res?.data ?? res
         sessionID = data?.id ?? data?.sessionID
         if (!sessionID) {
-          toast.error("could not start session", "session.create returned no id")
+          toast.error(language.t("composer.toast.couldNotStartSession"), language.t("composer.toast.noSessionId"))
           return
         }
         navigate(`/${params.dir}/session/${sessionID}`, { replace: true })
@@ -803,14 +805,14 @@ export function Composer(): JSX.Element {
         } as any)
         .catch((e: any) => {
           console.error("session.prompt failed", e)
-          toast.error("send failed", e?.message ?? String(e))
+          toast.error(language.t("composer.toast.sendFailed"), e?.message ?? String(e))
         })
         .finally(() => setInflight(false))
 
       models.recent.push(p.model)
     } catch (e: any) {
       console.error("session.prompt failed", e)
-      toast.error("send failed", e?.message ?? String(e))
+      toast.error(language.t("composer.toast.sendFailed"), e?.message ?? String(e))
     } finally {
       setSubmitting(false)
     }
@@ -930,7 +932,7 @@ export function Composer(): JSX.Element {
                 "text-transform": "lowercase",
               }}
             >
-              queued · {queue().length}
+              {language.t("composer.status.queued")} · {queue().length}
             </span>
             <For each={queue()}>
               {(q) => (
@@ -950,7 +952,7 @@ export function Composer(): JSX.Element {
                   }}
                 >
                   <span
-                    title="click to edit — moves back into the input"
+                    title={language.t("composer.tooltip.clickToEdit")}
                     style={{
                       overflow: "hidden",
                       "text-overflow": "ellipsis",
@@ -959,7 +961,7 @@ export function Composer(): JSX.Element {
                     }}
                     onClick={() => {
                       if (text().trim().length > 0) {
-                        toast.info("input not empty", "clear the input to pull a queued message back")
+                        toast.info(language.t("composer.toast.inputNotEmpty"), language.t("composer.toast.clearInputToPull"))
                         return
                       }
                       setQueue((qs) => qs.filter((x) => x.id !== q.id))
@@ -967,11 +969,11 @@ export function Composer(): JSX.Element {
                       grow(q.text)
                     }}
                   >
-                    {q.text || "(attachments)"}
+                    {q.text || language.t("composer.label.attachments")}
                   </span>
                   <button
                     type="button"
-                    aria-label="remove from queue"
+                    aria-label={language.t("composer.aria.removeFromQueue")}
                     onClick={() => setQueue((qs) => qs.filter((x) => x.id !== q.id))}
                     style={{
                       all: "unset",
@@ -1015,10 +1017,10 @@ export function Composer(): JSX.Element {
             onPaste={onPaste}
             placeholder={
               agent() === "plan"
-                ? "describe the plan to think through…"
+                ? language.t("composer.placeholder.plan")
                 : agent().startsWith("research")
-                  ? "ask a research question · / for skills"
-                  : "ask the agent · drop or paste a file · / for skills"
+                  ? language.t("composer.placeholder.research")
+                  : language.t("composer.placeholder.default")
             }
             style={{
               all: "unset",
@@ -1073,7 +1075,7 @@ export function Composer(): JSX.Element {
                   "text-transform": "uppercase",
                 }}
               >
-                skills
+                {language.t("composer.label.skills")}
               </div>
               <Show
                 when={slashItems().length > 0}
@@ -1086,7 +1088,7 @@ export function Composer(): JSX.Element {
                       color: "var(--color-text-faint)",
                     }}
                   >
-                    no matching skills
+                    {language.t("composer.label.noSkillsMatch")}
                   </div>
                 }
               >
@@ -1152,9 +1154,9 @@ export function Composer(): JSX.Element {
               title={
                 selectedLabel()
                   ? `${providerLabel(selectedLabel()!.providerID)} · ${selectedLabel()!.name}${
-                      selectedSource() ? ` — ${selectedSource()!.title}` : ""
+                      selectedSource() ? ` — ${language.t(selectedSource()!.titleKey)}` : ""
                     }`
-                  : "set up models"
+                  : language.t("composer.tooltip.setupModels")
               }
               style={{
                 all: "unset",
@@ -1178,7 +1180,7 @@ export function Composer(): JSX.Element {
             >
               <Show
                 when={selectedLabel()}
-                fallback={<span style={{ color: "var(--color-text-faint)" }}>set up models</span>}
+                fallback={<span style={{ color: "var(--color-text-faint)" }}>{language.t("composer.tooltip.setupModels")}</span>}
               >
                 <Show when={selectedSource()}>
                   {(dot) => (
@@ -1220,7 +1222,7 @@ export function Composer(): JSX.Element {
                     <div
                       class={REDUCE_MOTION ? undefined : a().up ? "atlas-pop-up" : "atlas-fade-in"}
                       role="dialog"
-                      aria-label="Select model"
+                       aria-label={language.t("composer.aria.selectModel")}
                       style={{
                         position: "fixed",
                         left: `${a().left}px`,
@@ -1260,7 +1262,7 @@ export function Composer(): JSX.Element {
                             setModelIndex(0)
                           }}
                           onKeyDown={onModelSearchKey}
-                          placeholder="search models"
+                          placeholder={language.t("composer.placeholder.searchModels")}
                           spellcheck={false}
                           autocomplete="off"
                           style={{
@@ -1283,7 +1285,7 @@ export function Composer(): JSX.Element {
                             "flex-shrink": 0,
                           }}
                         >
-                          esc
+                          {language.t("composer.key.esc")}
                         </kbd>
                       </div>
 
@@ -1291,7 +1293,7 @@ export function Composer(): JSX.Element {
                       <div
                         class="atlas-scroll"
                         role="listbox"
-                        aria-label="Models"
+                        aria-label={language.t("composer.aria.modelsList")}
                         style={{ overflow: "auto", padding: "4px", "min-height": 0, flex: 1 }}
                       >
                         <Show
@@ -1306,9 +1308,9 @@ export function Composer(): JSX.Element {
                                 "line-height": 1.5,
                               }}
                             >
-                              no models match “{modelQuery()}”.
+                              {language.t("composer.label.noModelsMatch", { query: modelQuery() })}
                               <br />
-                              add a provider key in settings, then refresh.
+                              {language.t("composer.label.addProviderKey")}
                             </div>
                           }
                         >
@@ -1354,7 +1356,7 @@ export function Composer(): JSX.Element {
                                         ref={(el) => (modelRowRefs[flatIndex()] = el)}
                                         role="option"
                                         aria-selected={active()}
-                                        title={`${providerLabel(row.provider.id)} · ${row.id} · ${formatTokens(row.limit?.context)} ctx`}
+                                        title={language.t("composer.tooltip.modelRow", { provider: providerLabel(row.provider.id), model: row.id, ctx: formatTokens(row.limit?.context) })}
                                         onClick={() => selectRowAt(flatIndex())}
                                         onMouseEnter={() => setModelIndex(flatIndex())}
                                         style={{
@@ -1393,7 +1395,7 @@ export function Composer(): JSX.Element {
                                           >
                                             <Show when={dot.meters}>
                                               <span
-                                                title={dot.title}
+                                                title={language.t(dot.titleKey)}
                                                 style={{
                                                   width: "5px",
                                                   height: "5px",
@@ -1426,7 +1428,7 @@ export function Composer(): JSX.Element {
                                                   color: "var(--color-text-faint)",
                                                 }}
                                               >
-                                                latest
+                                                {language.t("composer.label.latest")}
                                               </span>
                                             </Show>
                                             <Show when={isCodexModel(row.provider.id, row.id)}>
@@ -1439,7 +1441,7 @@ export function Composer(): JSX.Element {
                                                   opacity: 0.85,
                                                 }}
                                               >
-                                                codex
+                                                {language.t("composer.label.codex")}
                                               </span>
                                             </Show>
                                           </span>
@@ -1462,12 +1464,12 @@ export function Composer(): JSX.Element {
                                                   color: "var(--color-text-faint)",
                                                 }}
                                               >
-                                                free
+                                                {language.t("composer.label.free")}
                                               </span>
                                             }
                                           >
                                             <span
-                                              title="$ per 1M tokens · input / output"
+                                              title={language.t("composer.tooltip.perMillionTokens")}
                                               style={{
                                                 "font-family": FONT_MONO,
                                                 "font-size": "11px",
@@ -1520,7 +1522,7 @@ export function Composer(): JSX.Element {
                                     onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-text-muted)")}
                                     onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-faint)")}
                                   >
-                                    {group.open ? "show fewer" : `${group.folded} older`}
+                                    {group.open ? language.t("composer.action.showFewer") : language.t("composer.label.nOlder", { n: String(group.folded) })}
                                     <span style={{ opacity: 0.7 }}>{group.open ? "▴" : "▾"}</span>
                                   </button>
                                 </Show>
@@ -1547,7 +1549,7 @@ export function Composer(): JSX.Element {
                         >
                           <Show when={variantKeys().length > 0}>
                             <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
-                              <span style={CONTROL_LABEL}>effort</span>
+                              <span style={CONTROL_LABEL}>{language.t("composer.label.effort")}</span>
                               <Segmented
                                 options={variantKeys().map((k) => ({ id: k, label: k }))}
                                 value={effort() ?? ""}
@@ -1557,7 +1559,7 @@ export function Composer(): JSX.Element {
                           </Show>
                           <Show when={hasLongTier()}>
                             <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
-                              <span style={CONTROL_LABEL}>context</span>
+                              <span style={CONTROL_LABEL}>{language.t("composer.label.context")}</span>
                               <Segmented
                                 options={[
                                   { id: "std", label: "≤200k" },
@@ -1589,7 +1591,7 @@ export function Composer(): JSX.Element {
                           "flex-shrink": 0,
                         }}
                       >
-                        <span>manage models</span>
+                        <span>{language.t("composer.action.manageModels")}</span>
                         <span style={{ color: "var(--color-text-faint)" }}>↗</span>
                       </a>
                     </div>
@@ -1603,7 +1605,7 @@ export function Composer(): JSX.Element {
             <button
               type="button"
               onClick={() => setAgentOpen((v) => !v)}
-              title="choose agent mode"
+              title={language.t("composer.tooltip.chooseAgent")}
               style={{
                 all: "unset",
                 "box-sizing": "border-box",
@@ -1691,7 +1693,7 @@ export function Composer(): JSX.Element {
                           color: "var(--color-text-faint)",
                         }}
                       >
-                        {opt.hint}
+                        {language.t(`composer.agentHint.${opt.name}`)}
                       </span>
                     </button>
                   )}
@@ -1702,7 +1704,7 @@ export function Composer(): JSX.Element {
 
           <button
             type="button"
-            title="attach file (or drop / paste)"
+            title={language.t("composer.tooltip.attachFile")}
             onClick={() => fileInputRef?.click()}
             style={{
               all: "unset",
@@ -1727,7 +1729,7 @@ export function Composer(): JSX.Element {
 
           <button
             type="button"
-            title="browse skills (or type / in the prompt)"
+            title={language.t("composer.tooltip.browseSkills")}
             onClick={() => setSkillsOpen((v) => !v)}
             style={{
               all: "unset",
@@ -1759,7 +1761,7 @@ export function Composer(): JSX.Element {
               }}
             >
               <AsciiSpinner size={10} />
-              streaming
+              {language.t("composer.status.streaming")}
             </span>
           </Show>
 
@@ -1771,7 +1773,7 @@ export function Composer(): JSX.Element {
                 color: "var(--color-text-faint)",
               }}
             >
-              {isWorking() || inflight() ? "↵ to queue · ⇧↵ newline" : "↵ to send · ⇧↵ newline"}
+              {isWorking() || inflight() ? language.t("composer.hint.queueNewline") : language.t("composer.hint.sendNewline")}
             </span>
           </Show>
 
@@ -1780,7 +1782,7 @@ export function Composer(): JSX.Element {
               onClick={() => void submit()}
               disabled={submitting()}
               type="button"
-              title={isWorking() || inflight() ? "queue — sends when the agent finishes" : "send"}
+              title={isWorking() || inflight() ? language.t("composer.tooltip.queue") : language.t("composer.tooltip.send")}
               style={{
                 all: "unset",
                 "box-sizing": "border-box",
@@ -1800,7 +1802,7 @@ export function Composer(): JSX.Element {
               }}
             >
               <IconArrowUp size={12} strokeWidth={2} />
-              {isWorking() || inflight() ? "queue" : "send"}
+              {isWorking() || inflight() ? language.t("composer.action.queue") : language.t("composer.action.send")}
             </button>
           </Show>
 
@@ -1808,7 +1810,7 @@ export function Composer(): JSX.Element {
             <button
               onClick={() => void stop()}
               type="button"
-              title="stop streaming"
+              title={language.t("composer.tooltip.stop")}
               style={{
                 all: "unset",
                 "box-sizing": "border-box",
@@ -1828,7 +1830,7 @@ export function Composer(): JSX.Element {
               }}
             >
               <IconStop size={12} strokeWidth={2} />
-              stop
+              {language.t("composer.action.stop")}
             </button>
           </Show>
         </div>
@@ -1899,6 +1901,7 @@ function Segmented(props: {
 
 function AttachmentChip(props: { att: Attachment; onRemove: () => void }): JSX.Element {
   const isImage = () => props.att.mime.startsWith("image/")
+  const language = useLanguage()
   const sizeLabel = () => {
     const s = props.att.size
     if (s < 1024) return `${s}B`
@@ -1907,7 +1910,7 @@ function AttachmentChip(props: { att: Attachment; onRemove: () => void }): JSX.E
   }
   return (
     <div
-      title={`${props.att.filename} · ${sizeLabel()} · saved to .context/`}
+      title={language.t("composer.tooltip.attachment", { filename: props.att.filename, size: sizeLabel() })}
       style={{
         display: "inline-flex",
         "align-items": "center",
@@ -1948,7 +1951,7 @@ function AttachmentChip(props: { att: Attachment; onRemove: () => void }): JSX.E
       <span style={{ color: "var(--color-text-faint)", "font-size": "10px" }}>{sizeLabel()}</span>
       <button
         type="button"
-        title="remove"
+        title={language.t("composer.tooltip.remove")}
         onClick={(e) => {
           e.stopPropagation()
           props.onRemove()

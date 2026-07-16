@@ -5,6 +5,7 @@ import { type Component, type JSX, For, Show, createMemo, createSignal, onMount 
 import { Button } from "@synsci/ui/button"
 import type { Provider } from "@synsci/sdk/v2/client"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useProviders } from "@/hooks/use-providers"
 import { FONT_CODE, FONT_SANS, sectionTitle } from "@/styles/tokens"
@@ -44,25 +45,26 @@ const BYOK_PROVIDERS = ["anthropic", "openai", "google", "openrouter", "groq", "
 // Where a connected provider's credential actually lives. Only "api" keys sit in
 // the local auth store — the others reappear after a remove, so remove is gated.
 const SOURCE_INFO: Record<Provider["source"], { label: string; removable: boolean; title: string }> = {
-  api: { label: "local", removable: true, title: "API key stored in the local auth store on this machine" },
+  api: { label: "settings.credentials.source.api", removable: true, title: "settings.credentials.source.api.title" },
   env: {
-    label: "env",
+    label: "settings.credentials.source.env",
     removable: false,
-    title: "API key from an environment variable or dashboard sync — unset it where it is defined to remove it",
+    title: "settings.credentials.source.env.title",
   },
   config: {
-    label: "config",
+    label: "settings.credentials.source.config",
     removable: false,
-    title: "API key set in openscience.json — edit the config file to remove it",
+    title: "settings.credentials.source.config.title",
   },
   custom: {
-    label: "custom",
+    label: "settings.credentials.source.custom",
     removable: false,
-    title: "Custom provider defined in openscience.json — edit the config file to remove it",
+    title: "settings.credentials.source.custom.title",
   },
 }
 
 export const Credentials: Component = () => {
+  const lang = useLanguage()
   const sdk = useGlobalSDK()
   const platform = usePlatform()
   const providers = useProviders()
@@ -118,7 +120,7 @@ export const Credentials: Component = () => {
   }
 
   const disconnect = async (id: string) => {
-    if (!window.confirm(`Remove stored credentials for ${id}? This deletes the encrypted secrets from this machine.`))
+    if (!window.confirm(lang.t("settings.credentials.confirm.removeService", { id })))
       return
     setError(undefined)
     try {
@@ -191,7 +193,7 @@ export const Credentials: Component = () => {
     }
   }
   const removeKey = async (providerID: string) => {
-    if (!window.confirm(`Remove the ${PROVIDER_LABEL[providerID] ?? providerID} key from this machine?`)) return
+    if (!window.confirm(lang.t("settings.credentials.confirm.removeProviderKey", { provider: PROVIDER_LABEL[providerID] ?? providerID }))) return
     setError(undefined)
     try {
       await sdk.client.auth.remove({ providerID })
@@ -227,10 +229,9 @@ export const Credentials: Component = () => {
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
-          <h2 class="text-16-medium text-text-strong">Credentials</h2>
+          <h2 class="text-16-medium text-text-strong">{lang.t("settings.credentials.heading")}</h2>
           <p class="text-13-regular text-text-weak">
-            Connect external services and provider keys. Secrets are encrypted on this machine and never shown again
-            after you save them.
+            {lang.t("settings.credentials.description")}
           </p>
         </div>
       </div>
@@ -257,15 +258,15 @@ export const Credentials: Component = () => {
         <div class="flex flex-col gap-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-col gap-1">
-              <h3 class="text-13-medium text-text-weak tracking-wide">Services</h3>
+              <h3 class="text-13-medium text-text-weak tracking-wide">{lang.t("settings.credentials.section.services")}</h3>
               <p class="text-12-regular text-text-weak">
-                Keys for the tools and clouds your research uses. {connectedCount()} of {services().length} connected.
+                {lang.t("settings.credentials.section.services.description", { connected: connectedCount(), total: services().length })}
               </p>
             </div>
             <input
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
-              placeholder="Search services…"
+              placeholder={lang.t("settings.credentials.placeholder.search")}
               style={{ ...fieldStyle(), width: "180px" }}
             />
           </div>
@@ -281,7 +282,7 @@ export const Credentials: Component = () => {
                         <span class="text-13-medium text-text-strong truncate">{svc.label}</span>
                         <span class="text-12-regular text-text-weak truncate">
                           <Show when={svc.connected} fallback={svc.description}>
-                            Connected · {svc.set_fields.join(", ")}
+                            {lang.t("settings.credentials.status.connected")} · {svc.set_fields.join(", ")}
                           </Show>
                         </span>
                       </div>
@@ -289,7 +290,7 @@ export const Credentials: Component = () => {
                     <div class="flex gap-2 flex-shrink-0">
                       <Show when={svc.connected}>
                         <Button size="small" variant="secondary" onClick={() => void disconnect(svc.id)}>
-                          remove
+                          {lang.t("common.remove")}
                         </Button>
                       </Show>
                       <Button
@@ -297,7 +298,7 @@ export const Credentials: Component = () => {
                         variant={svc.connected ? "secondary" : "primary"}
                         onClick={() => openForm(svc)}
                       >
-                        {editing() === svc.id ? "cancel" : svc.connected ? "update" : "connect"}
+                        {editing() === svc.id ? lang.t("common.cancel") : svc.connected ? lang.t("settings.credentials.action.update") : lang.t("common.connect")}
                       </Button>
                     </div>
                   </div>
@@ -315,8 +316,8 @@ export const Credentials: Component = () => {
                           <label class="flex flex-col gap-1">
                             <span style={eyebrow()}>
                               {f.label}
-                              {f.optional ? " (optional)" : ""}
-                              <Show when={svc.set_fields.includes(f.name)}> · saved</Show>
+                              {f.optional ? lang.t("settings.credentials.form.optional") : ""}
+                              <Show when={svc.set_fields.includes(f.name)}> {lang.t("settings.credentials.status.saved")}</Show>
                             </span>
                             <Show
                               when={f.type === "textarea"}
@@ -327,7 +328,7 @@ export const Credentials: Component = () => {
                                   spellcheck={false}
                                   placeholder={
                                     f.placeholder ??
-                                    (svc.set_fields.includes(f.name) ? "•••••• (leave blank to keep)" : "")
+                                    (svc.set_fields.includes(f.name) ? lang.t("settings.credentials.placeholder.keepExisting") : "")
                                   }
                                   value={values()[f.name] ?? ""}
                                   onInput={(e) => setValues({ ...values(), [f.name]: e.currentTarget.value })}
@@ -354,7 +355,7 @@ export const Credentials: Component = () => {
                           disabled={saving()}
                           onClick={() => void save(svc.id)}
                         >
-                          {saving() ? "saving…" : "save"}
+                          {saving() ? lang.t("common.saving") : lang.t("common.save")}
                         </Button>
                         <Button
                           type="button"
@@ -363,7 +364,7 @@ export const Credentials: Component = () => {
                           disabled={saving()}
                           onClick={() => setEditing(undefined)}
                         >
-                          cancel
+                          {lang.t("common.cancel")}
                         </Button>
                       </div>
                     </form>
@@ -378,7 +379,7 @@ export const Credentials: Component = () => {
             when={customOpen()}
             fallback={
               <button type="button" onClick={() => setCustomOpen(true)} style={addRowStyle()}>
-                + add custom key
+                + {lang.t("settings.credentials.action.addCustomKey")}
               </button>
             }
           >
@@ -390,19 +391,19 @@ export const Credentials: Component = () => {
                 void saveCustom()
               }}
             >
-              <span class="text-13-medium text-text-strong">Custom credential</span>
+              <span class="text-13-medium text-text-strong">{lang.t("settings.credentials.form.customCredential")}</span>
               <div class="flex flex-col sm:flex-row gap-2">
                 <label class="flex flex-col gap-1 flex-1">
-                  <span style={eyebrow()}>Name</span>
+                  <span style={eyebrow()}>{lang.t("settings.credentials.form.name")}</span>
                   <input
                     value={customName()}
                     onInput={(e) => setCustomName(e.currentTarget.value)}
-                    placeholder="My service"
+                    placeholder={lang.t("settings.credentials.form.name.placeholder")}
                     style={fieldStyle()}
                   />
                 </label>
                 <label class="flex flex-col gap-1 sm:w-[160px]">
-                  <span style={eyebrow()}>Field</span>
+                  <span style={eyebrow()}>{lang.t("settings.credentials.form.field")}</span>
                   <input
                     value={customField()}
                     onInput={(e) => setCustomField(e.currentTarget.value)}
@@ -412,14 +413,14 @@ export const Credentials: Component = () => {
                 </label>
               </div>
               <label class="flex flex-col gap-1">
-                <span style={eyebrow()}>Value</span>
+                <span style={eyebrow()}>{lang.t("settings.credentials.form.value")}</span>
                 <input
                   type="password"
                   autocomplete="off"
                   spellcheck={false}
                   value={customValue()}
                   onInput={(e) => setCustomValue(e.currentTarget.value)}
-                  placeholder="secret value"
+                  placeholder={lang.t("settings.credentials.placeholder.secretValue")}
                   style={fieldStyle()}
                 />
               </label>
@@ -431,10 +432,10 @@ export const Credentials: Component = () => {
                   disabled={saving() || !customName().trim() || !customValue().trim()}
                   onClick={() => void saveCustom()}
                 >
-                  save
+                  {lang.t("common.save")}
                 </Button>
                 <Button type="button" size="small" variant="secondary" onClick={() => setCustomOpen(false)}>
-                  cancel
+                  {lang.t("common.cancel")}
                 </Button>
               </div>
             </form>
@@ -444,10 +445,9 @@ export const Credentials: Component = () => {
         {/* Provider keys (BYOK) */}
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <h3 class="text-13-medium text-text-weak tracking-wide">Provider keys</h3>
+            <h3 class="text-13-medium text-text-weak tracking-wide">{lang.t("settings.credentials.section.providerKeys")}</h3>
             <p class="text-12-regular text-text-weak">
-              Bring your own model-provider API keys. Stored on this machine, billed directly by each provider — free
-              and unmetered here.
+              {lang.t("settings.credentials.section.providerKeys.description")}
             </p>
           </div>
 
@@ -457,9 +457,9 @@ export const Credentials: Component = () => {
             style={{ border: "1px solid var(--color-border)", "border-radius": "4px", padding: "14px 18px" }}
           >
             <div class="flex flex-col gap-0.5 min-w-0">
-              <span class="text-13-medium text-text-base">Sign in with ChatGPT</span>
+              <span class="text-13-medium text-text-base">{lang.t("settings.credentials.section.chatgpt.title")}</span>
               <span class="text-12-regular text-text-weak">
-                Use your ChatGPT Plus / Pro / Business plan (Codex) — no API key needed.
+                {lang.t("settings.credentials.section.chatgpt.description")}
               </span>
             </div>
             <Show
@@ -467,9 +467,9 @@ export const Credentials: Component = () => {
               fallback={
                 <div class="flex items-center gap-2 shrink-0">
                   <StatusDot status="active" size={8} />
-                  <span class="text-12-regular text-text-weak">Connected</span>
+                  <span class="text-12-regular text-text-weak">{lang.t("settings.credentials.status.connected")}</span>
                   <Button size="small" variant="secondary" onClick={() => void removeKey("openai-codex")}>
-                    disconnect
+                    {lang.t("common.disconnect")}
                   </Button>
                 </div>
               }
@@ -482,7 +482,7 @@ export const Credentials: Component = () => {
                 disabled={connectingCodex()}
                 onClick={() => void connectCodex()}
               >
-                {connectingCodex() ? "waiting for ChatGPT…" : "Sign in with ChatGPT"}
+                {connectingCodex() ? lang.t("settings.credentials.status.waitingForChatgpt") : lang.t("settings.credentials.section.chatgpt.title")}
               </Button>
             </Show>
           </div>
@@ -496,7 +496,7 @@ export const Credentials: Component = () => {
             }}
           >
             <label class="flex flex-col gap-1 sm:w-[180px]">
-              <span style={eyebrow()}>Provider</span>
+              <span style={eyebrow()}>{lang.t("settings.credentials.form.provider")}</span>
               <select
                 value={keyProvider()}
                 onChange={(e) => setKeyProvider(e.currentTarget.value)}
@@ -506,7 +506,7 @@ export const Credentials: Component = () => {
               </select>
             </label>
             <label class="flex flex-col gap-1 flex-1 min-w-0">
-              <span style={eyebrow()}>API key</span>
+              <span style={eyebrow()}>{lang.t("settings.credentials.form.apiKey")}</span>
               <input
                 type="password"
                 autocomplete="off"
@@ -524,7 +524,7 @@ export const Credentials: Component = () => {
               disabled={savingKey() || !keyValue().trim()}
               onClick={() => void saveKey()}
             >
-              {savingKey() ? "saving…" : "save key"}
+              {savingKey() ? lang.t("common.saving") : lang.t("settings.credentials.action.saveKey")}
             </Button>
           </form>
 
@@ -543,23 +543,23 @@ export const Credentials: Component = () => {
                           "border-color": "var(--color-border)",
                           background: "transparent",
                         }}
-                        title={sourceInfo(p).title}
+                        title={lang.t(sourceInfo(p).title)}
                       >
-                        {sourceInfo(p).label}
+                        {lang.t(sourceInfo(p).label)}
                       </span>
                     </div>
                     <Show
                       when={sourceInfo(p).removable}
                       fallback={
-                        <span title={sourceInfo(p).title}>
+                        <span title={lang.t(sourceInfo(p).title)}>
                           <Button size="small" variant="secondary" disabled>
-                            remove
+                            {lang.t("common.remove")}
                           </Button>
                         </span>
                       }
                     >
                       <Button size="small" variant="secondary" onClick={() => void removeKey(p.id)}>
-                        remove
+                        {lang.t("common.remove")}
                       </Button>
                     </Show>
                   </div>

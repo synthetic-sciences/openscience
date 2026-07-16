@@ -39,11 +39,14 @@ import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
 
 const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
-const Loading = () => (
-  <div class="size-full" style={{ display: "flex", "align-items": "center", "justify-content": "center" }}>
-    <AsciiSpinner label="loading…" color="var(--color-text-faint)" />
-  </div>
-)
+const Loading = () => {
+  const language = useLanguage()
+  return (
+    <div class="size-full" style={{ display: "flex", "align-items": "center", "justify-content": "center" }}>
+      <AsciiSpinner label={language.t("app.loading")} color="var(--color-text-faint)" />
+    </div>
+  )
+}
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()

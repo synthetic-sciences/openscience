@@ -2,6 +2,7 @@ import { createSignal, createMemo, type JSX, Show, For, onMount, onCleanup } fro
 import { Portal } from "solid-js/web"
 import { useNavigate } from "@solidjs/router"
 import { useDialog } from "@synsci/ui/context/dialog"
+import { useLanguage } from "@/context/language"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { base64Encode } from "@synsci/util/encode"
 import { useGlobalSync } from "@/context/global-sync"
@@ -29,6 +30,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
   const navigate = useNavigate()
   const dialog = useDialog()
   const sync = useGlobalSync()
+  const language = useLanguage()
   let inputRef: HTMLInputElement | undefined
 
   const goTo = (directory: string) => navigate(`/${base64Encode(directory)}/session`)
@@ -60,18 +62,18 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
 
     list.push({
       id: "new-project",
-      label: "Open folder…",
-      hint: "Click-to-navigate folder picker",
+      label: language.t("palette.action.openFolder"),
+      hint: language.t("palette.hint.openFolder"),
       icon: IconPlus,
-      category: "actions",
+      category: language.t("palette.group.actions"),
       run: openFolderPicker,
     })
     list.push({
       id: "open-settings",
-      label: "Settings",
-      hint: "Models · keys · MCP · appearance",
+      label: language.t("palette.action.settings"),
+      hint: language.t("palette.hint.settings"),
       icon: IconSettings,
-      category: "actions",
+      category: language.t("palette.group.actions"),
       run: () => {
         props.onClose()
         dialog.show(() => <DialogSettings />)
@@ -79,10 +81,10 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
     })
     list.push({
       id: "back-home",
-      label: "Back to projects",
-      hint: "Return to the project grid",
+      label: language.t("palette.action.backToProjects"),
+      hint: language.t("palette.hint.backToProjects"),
       icon: IconHome,
-      category: "actions",
+      category: language.t("palette.group.actions"),
       run: () => {
         props.onClose()
         navigate("/")
@@ -97,7 +99,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
         label: name,
         hint: p.worktree,
         icon: IconFolder,
-        category: "projects",
+        category: language.t("palette.group.projects"),
         run: () => {
           props.onClose()
           goTo(p.worktree)
@@ -191,7 +193,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
                 setQuery(e.currentTarget.value)
                 setHighlighted(0)
               }}
-              placeholder="search projects, sessions, actions…"
+              placeholder={language.t("palette.search.placeholderFull")}
               autofocus
               style={{
                 all: "unset",
@@ -210,7 +212,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
                 "letter-spacing": "0.08em",
               }}
             >
-              {filtered().length} match{filtered().length === 1 ? "" : "es"}
+              {filtered().length} {filtered().length === 1 ? language.t("palette.status.match") : language.t("palette.status.matches")}
             </span>
           </div>
 
@@ -227,7 +229,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
                     color: "var(--color-text-faint)",
                   }}
                 >
-                  no matches
+                  {language.t("palette.emptyFull")}
                 </div>
               }
             >
@@ -332,9 +334,9 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
               color: "var(--color-text-faint)",
             }}
           >
-            <Hint k="↑↓" l="navigate" />
-            <Hint k="↵" l="select" />
-            <Hint k="esc" l="close" />
+            <Hint k="↑↓" l={language.t("palette.key.navigate")} />
+            <Hint k="↵" l={language.t("palette.key.select")} />
+            <Hint k="esc" l={language.t("palette.key.close")} />
             <span style={{ flex: 1 }} />
             <span style={{ "letter-spacing": "0.04em" }}>⌘K</span>
           </div>

@@ -4,6 +4,7 @@
 import { type Component, type JSX, For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { FONT_CODE, FONT_SANS } from "@/styles/tokens"
 import { settingsApi } from "./api"
@@ -33,6 +34,7 @@ function fmt(bytes: number): string {
 }
 
 export const Storage: Component = () => {
+  const lang = useLanguage()
   const sdk = useGlobalSDK()
   const platform = usePlatform()
   const navigate = useSettingsNav()
@@ -61,10 +63,10 @@ export const Storage: Component = () => {
     setStatus(undefined)
     let target: string | undefined
     if (platform.openDirectoryPickerDialog) {
-      const picked = await platform.openDirectoryPickerDialog({ title: "Choose a new data location" }).catch(() => null)
+      const picked = await platform.openDirectoryPickerDialog({ title: lang.t("settings.storage.dialog.chooseDataLocation") }).catch(() => null)
       target = Array.isArray(picked) ? picked[0] : (picked ?? undefined)
     } else {
-      target = window.prompt("New absolute path for the data directory:") ?? undefined
+      target = window.prompt(lang.t("settings.storage.dialog.promptNewPath")) ?? undefined
     }
     if (!target?.trim()) return
     setBusy(true)
@@ -75,7 +77,7 @@ export const Storage: Component = () => {
         "/settings/storage/location",
         { method: "POST", body: JSON.stringify({ path: target.trim() }) },
       )
-      setStatus(`Data copied to ${res.target}. Restart OpenScience to use the new location.`)
+      setStatus(lang.t("settings.storage.toast.relocated", { target: res.target }))
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -91,7 +93,7 @@ export const Storage: Component = () => {
     setStatus(undefined)
     try {
       await settingsApi(base(), fetchFn(), "/settings/storage/location", { method: "DELETE" })
-      setStatus("Custom location cleared. Restart to return to the default directory.")
+      setStatus(lang.t("settings.storage.toast.locationCleared"))
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -106,9 +108,9 @@ export const Storage: Component = () => {
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
-          <h2 class="text-16-medium text-text-strong">Storage</h2>
+          <h2 class="text-16-medium text-text-strong">{lang.t("settings.storage.heading")}</h2>
           <p class="text-13-regular text-text-weak">
-            Where OpenScience keeps data on disk, and how much space it uses.
+            {lang.t("settings.storage.description")}
           </p>
         </div>
       </div>
@@ -124,8 +126,8 @@ export const Storage: Component = () => {
         {/* Data location */}
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <h3 class="text-13-medium text-text-weak tracking-wide">Data location</h3>
-            <p class="text-12-regular text-text-weak">The directory holding sessions, credentials, skills, and logs.</p>
+            <h3 class="text-13-medium text-text-weak tracking-wide">{lang.t("settings.storage.section.dataLocation")}</h3>
+            <p class="text-12-regular text-text-weak">{lang.t("settings.storage.section.dataLocation.description")}</p>
           </div>
           <div style={{ border: "1px solid var(--color-border)", "border-radius": "4px", padding: "16px 18px" }}>
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -138,18 +140,18 @@ export const Storage: Component = () => {
                   {usage()?.data_dir ?? "…"}
                 </span>
                 <span class="text-12-regular text-text-weak">
-                  {fmt(usage()?.total_bytes ?? 0)} total
-                  <Show when={usage()?.pointer}> · custom location</Show>
+                  {fmt(usage()?.total_bytes ?? 0)} {lang.t("settings.storage.status.total")}
+                  <Show when={usage()?.pointer}> · {lang.t("settings.storage.status.customLocation")}</Show>
                 </span>
               </div>
               <div class="flex gap-2 flex-shrink-0">
                 <Show when={usage()?.pointer}>
                   <Button size="small" variant="secondary" disabled={busy()} onClick={() => void resetLocation()}>
-                    reset
+                    {lang.t("common.reset")}
                   </Button>
                 </Show>
                 <Button size="small" variant="secondary" disabled={busy()} onClick={() => void relocate()}>
-                  {busy() ? "working…" : "change location"}
+                  {busy() ? lang.t("settings.storage.status.working") : lang.t("settings.storage.action.changeLocation")}
                 </Button>
               </div>
             </div>
@@ -159,8 +161,8 @@ export const Storage: Component = () => {
         {/* Disk usage */}
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <h3 class="text-13-medium text-text-weak tracking-wide">Disk usage</h3>
-            <p class="text-12-regular text-text-weak">Top-level entries inside the data directory, largest first.</p>
+            <h3 class="text-13-medium text-text-weak tracking-wide">{lang.t("settings.storage.section.diskUsage")}</h3>
+            <p class="text-12-regular text-text-weak">{lang.t("settings.storage.section.diskUsage.description")}</p>
           </div>
           <Show
             when={usage() && usage()!.entries.length > 0}
@@ -173,7 +175,7 @@ export const Storage: Component = () => {
                   padding: "14px 16px",
                 }}
               >
-                {usage() ? "Nothing stored yet." : "Loading…"}
+                {usage() ? lang.t("settings.storage.empty.nothingStored") : lang.t("common.loading") + "…"}
               </div>
             }
           >
@@ -215,15 +217,14 @@ export const Storage: Component = () => {
         {/* Cloud storage */}
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
-            <h3 class="text-13-medium text-text-weak tracking-wide">Cloud storage</h3>
+            <h3 class="text-13-medium text-text-weak tracking-wide">{lang.t("settings.storage.section.cloudStorage")}</h3>
             <p class="text-12-regular text-text-weak">
-              Object-storage buckets (S3 and GCS) are configured through service credentials — the matching CLI (aws /
-              gcloud / rclone) must be installed for the agent to use them.
+              {lang.t("settings.storage.section.cloudStorage.description")}
             </p>
           </div>
           <button type="button" onClick={() => navigate("credentials")} style={linkRowStyle()}>
-            <span class="text-13-regular text-text-strong">manage cloud credentials</span>
-            <span class="text-12-regular text-text-weak">Credentials →</span>
+            <span class="text-13-regular text-text-strong">{lang.t("settings.storage.action.manageCloudCredentials")}</span>
+            <span class="text-12-regular text-text-weak">{lang.t("settings.storage.action.credentialsLink")}</span>
           </button>
         </div>
       </div>

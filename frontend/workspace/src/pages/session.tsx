@@ -107,13 +107,13 @@ export default function Page(): JSX.Element {
     const next = sessions().find((s) => s.id !== sessionID)?.id
     try {
       await sync.session.delete(sessionID)
-      toast.info("session deleted")
+      toast.info(language.t("session.toast.deleted"))
       if (active) {
         navigate(next ? `/${params.dir}/session/${next}` : `/${params.dir}/session/new`)
       }
     } catch (e: any) {
       console.error("session.delete failed", e)
-      toast.error("could not delete", e?.message ?? String(e))
+      toast.error(language.t("session.toast.couldNotDelete"), e?.message ?? String(e))
     }
   }
 
@@ -124,7 +124,7 @@ export default function Page(): JSX.Element {
       await sync.session.rename(sessionID, trimmed)
     } catch (e: any) {
       console.error("session.rename failed", e)
-      toast.error("could not rename", e?.message ?? String(e))
+      toast.error(language.t("session.toast.couldNotRename"), e?.message ?? String(e))
     }
   }
 
@@ -267,18 +267,17 @@ export default function Page(): JSX.Element {
     const id = params.id
     if (!id) return
     const ok = await confirmDialog(dialog, {
-      title: "Undo from here?",
-      message:
-        "Hides this message and everything after it, and rolls back the file changes they made. You can restore until you send the next message.",
-      confirmLabel: "undo",
+      title: language.t("session.revert.confirmTitle"),
+      message: language.t("session.revert.confirmMessage"),
+      confirmLabel: language.t("session.revert.confirmLabel"),
       danger: true,
     })
     if (!ok) return
     try {
       await sync.session.revert(id, messageID)
-      toast.success("reverted", "files rolled back. send a message to continue from here")
+      toast.success(language.t("session.revert.success"), language.t("session.revert.successDescription"))
     } catch (e: any) {
-      toast.error("undo failed", e?.message ?? String(e))
+      toast.error(language.t("session.revert.failed"), e?.message ?? String(e))
     }
   }
 
@@ -287,9 +286,9 @@ export default function Page(): JSX.Element {
     if (!id) return
     try {
       await sync.session.unrevert(id)
-      toast.success("messages restored")
+      toast.success(language.t("session.restore.success"))
     } catch (e: any) {
-      toast.error("restore failed", e?.message ?? String(e))
+      toast.error(language.t("session.restore.failed"), e?.message ?? String(e))
     }
   }
 
@@ -331,8 +330,8 @@ export default function Page(): JSX.Element {
     // menu's custom list by its `menu` flag.
     list.push({
       id: "session.compact",
-      title: "Compact conversation",
-      description: "Summarize the conversation so far to free up context",
+        title: language.t("session.command.compact"),
+        description: language.t("session.command.compact.description"),
       category: language.t("command.category.session"),
       slash: "compact",
       onSelect: () => {
@@ -340,15 +339,15 @@ export default function Page(): JSX.Element {
           .command({ sessionID: id, command: "compact", arguments: "" } as any)
           .catch((e: unknown) => {
             console.error("compact failed", e)
-            toast.error("could not compact", e instanceof Error ? e.message : String(e))
+            toast.error(language.t("session.toast.couldNotCompact"), e instanceof Error ? e.message : String(e))
           })
       },
     })
     // /handoff — write a self-contained handoff.md for another agent, then compact.
     list.push({
       id: "session.handoff",
-      title: "Write handoff & compact",
-      description: "Write a self-contained handoff.md for another agent, then compact",
+        title: language.t("session.command.handoff"),
+        description: language.t("session.command.handoff.description"),
       category: language.t("command.category.session"),
       slash: "handoff",
       onSelect: () => {
@@ -356,7 +355,7 @@ export default function Page(): JSX.Element {
           .command({ sessionID: id, command: "handoff", arguments: "" } as any)
           .catch((e: unknown) => {
             console.error("handoff failed", e)
-            toast.error("could not write handoff", e instanceof Error ? e.message : String(e))
+            toast.error(language.t("session.toast.couldNotWriteHandoff"), e instanceof Error ? e.message : String(e))
           })
       },
     })
@@ -374,7 +373,7 @@ export default function Page(): JSX.Element {
   // when opened from the explorer and unmount on close.
   const chatTitle = createMemo(() => {
     const s = sessions().find((x) => x.id === params.id)
-    return s?.title || "Chat"
+    return s?.title || language.t("session.tab.chat")
   })
   const [visitedFiles, setVisitedFiles] = createSignal(false)
   createEffect(() => {
@@ -562,7 +561,7 @@ export default function Page(): JSX.Element {
                                 <button
                                   type="button"
                                   class="flex items-center justify-center size-7 shrink-0 rounded-md text-text-weak hover:text-text-base hover:bg-surface-base-hover transition-colors"
-                                  aria-label="Back to parent session"
+                                  aria-label={language.t("session.backToParent")}
                                   onClick={() => navigate(`/${params.dir}/session/${activeSession()!.parentID}`)}
                                 >
                                   <IconChevronLeft />
@@ -606,7 +605,7 @@ export default function Page(): JSX.Element {
                                         }}
                                       >
                                         <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
-                                        <span>context compacted</span>
+                                        <span>{language.t("session.compacted")}</span>
                                         <div style={{ flex: 1, height: "1px", background: "var(--color-border)" }} />
                                       </div>
                                     }
@@ -626,7 +625,7 @@ export default function Page(): JSX.Element {
                                       }}
                                     >
                                       <AsciiSpinner size={10} />
-                                      <span>compacting conversation…</span>
+                                      <span>{language.t("session.compacting")}</span>
                                     </div>
                                   </Show>
                                 }
@@ -662,7 +661,8 @@ export default function Page(): JSX.Element {
                       <button
                         type="button"
                         onClick={() => chatScroll.forceScrollToBottom()}
-                        title="Jump to latest"
+                        title={language.t("session.jumpToLatest")}
+
                         style={{
                           position: "absolute",
                           // The content column reserves calc(10rem + 64px) of bottom
@@ -688,7 +688,7 @@ export default function Page(): JSX.Element {
                         }}
                       >
                         <IconChevronDown size={13} strokeWidth={1.6} />
-                        jump to latest
+                        {language.t("session.jumpToLatest")}
                       </button>
                     </Show>
                   </div>
@@ -718,8 +718,7 @@ export default function Page(): JSX.Element {
                       }}
                     >
                       <span style={{ flex: 1, "min-width": 0 }}>
-                        Conversation reverted. {revertedCount()} turn{revertedCount() === 1 ? "" : "s"} hidden and file
-                        changes rolled back. Sending a new message makes this permanent.
+                        Conversation reverted. {revertedCount()} {revertedCount() === 1 ? language.t("session.revert.banner.one") : language.t("session.revert.banner.other", { count: revertedCount() })}
                       </span>
                       <button
                         type="button"
@@ -735,7 +734,7 @@ export default function Page(): JSX.Element {
                           "white-space": "nowrap",
                         }}
                       >
-                        restore
+                        {language.t("session.restore.restore")}
                       </button>
                     </div>
                   </Show>
@@ -799,7 +798,7 @@ export default function Page(): JSX.Element {
                     <FileView
                       path={doc.path}
                       directory={doc.directory}
-                      subtitle={`This computer · ${doc.directory.replace(/\/$/, "")}/${doc.path}`}
+                      subtitle={`${language.t("session.file.thisComputer")} \u00b7 ${doc.directory.replace(/\/$/, "")}/${doc.path}`}
                       onClose={() => centerTabs.closeDoc(doc.id)}
                     />
                   </Suspense>
@@ -819,14 +818,16 @@ export default function Page(): JSX.Element {
 // interaction-mounted pane (a file view, the Skills catalog) loads its data,
 // so the load can't reach the route-level boundary and blank the whole session.
 function PaneLoading(): JSX.Element {
+  const language = useLanguage()
   return (
     <div style={{ flex: 1, display: "flex", "align-items": "center", "justify-content": "center" }}>
-      <AsciiSpinner size={10} label="loading…" color="var(--color-text-faint)" />
+      <AsciiSpinner size={10} label={language.t("session.paneLoading")} color="var(--color-text-faint)" />
     </div>
   )
 }
 
 function CenterTabStrip(props: { chatTitle: string }): JSX.Element {
+  const language = useLanguage()
   const active = centerTabs.active
   return (
     <div
@@ -845,10 +846,10 @@ function CenterTabStrip(props: { chatTitle: string }): JSX.Element {
       <CenterTab active={active() === "chat"} label={props.chatTitle} onClick={() => centerTabs.setActive("chat")}>
         <IconMessageSquare size={12} strokeWidth={1.6} />
       </CenterTab>
-      <CenterTab active={active() === "files"} label="Files" onClick={() => centerTabs.setActive("files")}>
+      <CenterTab active={active() === "files"} label={language.t("session.tab.files")} onClick={() => centerTabs.setActive("files")}>
         <IconFolderTree size={12} strokeWidth={1.6} />
       </CenterTab>
-      <CenterTab active={active() === "skills"} label="Skills" onClick={() => centerTabs.setActive("skills")}>
+      <CenterTab active={active() === "skills"} label={language.t("session.tab.skills")} onClick={() => centerTabs.setActive("skills")}>
         <IconBrain size={12} strokeWidth={1.6} />
       </CenterTab>
       <For each={centerTabs.docs()}>
@@ -874,6 +875,7 @@ function CenterTab(props: {
   onClose?: () => void
   children: JSX.Element
 }): JSX.Element {
+  const language = useLanguage()
   return (
     <div
       role="tab"
@@ -918,7 +920,7 @@ function CenterTab(props: {
       <Show when={props.onClose}>
         <span
           role="button"
-          aria-label="close tab"
+          aria-label={language.t("session.tab.close")}
           onClick={(e) => {
             e.stopPropagation()
             props.onClose!()
@@ -959,11 +961,12 @@ function Header(props: {
   onOpenSettings: () => void
   onToggleTheme: () => void
 }): JSX.Element {
+  const language = useLanguage()
   return (
     <AppHeader>
       <button
         onClick={props.onBack}
-        title="back to projects"
+        title={language.t("session.header.backToProjects")}
         style={{
           all: "unset",
           cursor: "pointer",
@@ -981,7 +984,7 @@ function Header(props: {
         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       >
         <IconChevronLeft size={11} strokeWidth={1.5} />
-        projects
+        {language.t("session.header.projects")}
       </button>
       <HeaderDivider />
       <Wordmark size="sm" />
@@ -1010,16 +1013,16 @@ function Header(props: {
         {props.projectPath}
       </span>
       <span style={{ flex: 1 }} />
-      <HeaderIconButton onClick={props.onOpenPalette} title="command palette">
+      <HeaderIconButton onClick={props.onOpenPalette} title={language.t("session.header.commandPalette")}>
         <IconSearch size={13} strokeWidth={1.5} />
       </HeaderIconButton>
-      <HeaderIconButton onClick={props.onOpenHelp} title="help">
+      <HeaderIconButton onClick={props.onOpenHelp} title={language.t("session.header.help")}>
         <IconBookOpen size={13} strokeWidth={1.5} />
       </HeaderIconButton>
-      <HeaderIconButton onClick={props.onOpenSettings} title="settings">
+      <HeaderIconButton onClick={props.onOpenSettings} title={language.t("session.header.settings")}>
         <IconSettings size={13} strokeWidth={1.5} />
       </HeaderIconButton>
-      <HeaderIconButton onClick={props.onToggleTheme} title="toggle theme">
+      <HeaderIconButton onClick={props.onToggleTheme} title={language.t("session.header.toggleTheme")}>
         <Show when={props.isDark} fallback={<IconMoon size={13} strokeWidth={1.5} />}>
           <IconSun size={13} strokeWidth={1.5} />
         </Show>
@@ -1031,6 +1034,7 @@ function Header(props: {
 // The conversation title in the sticky chat header — double-click to rename,
 // mirroring the sidebar's SessionRow. Enter/blur commits, Esc cancels.
 function EditableTitle(props: { title: string; onRename: (t: string) => void }): JSX.Element {
+  const language = useLanguage()
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal("")
   const start = () => {
@@ -1050,7 +1054,7 @@ function EditableTitle(props: { title: string; onRename: (t: string) => void }):
         <h1
           class="text-14-medium text-text-strong truncate"
           style={{ cursor: "text" }}
-          title="Double-click to rename"
+          title={language.t("session.renameHint")}
           onDblClick={start}
         >
           {props.title}
@@ -1108,6 +1112,7 @@ function SessionsSidebar(props: {
   onDelete: (id: string) => void
   onRename: (id: string, title: string) => void
 }): JSX.Element {
+  const language = useLanguage()
   const [query, setQuery] = createSignal("")
   const searching = () => query().trim().length > 0
   const filtered = createMemo(() => {
@@ -1162,7 +1167,7 @@ function SessionsSidebar(props: {
           onFocusOut={(e) => (e.currentTarget.style.background = "var(--color-surface-solid)")}
         >
           <IconPlus size={12} strokeWidth={2} />
-          {props.creating ? "creating…" : "New session"}
+          {props.creating ? language.t("session.sidebar.creating") : language.t("session.sidebar.newSession")}
         </button>
 
         {/* Search — filters the loaded list live; Esc clears. */}
@@ -1189,7 +1194,7 @@ function SessionsSidebar(props: {
                 e.currentTarget.blur()
               }
             }}
-            placeholder="Search sessions"
+            placeholder={language.t("session.sidebar.searchPlaceholder")}
             spellcheck={false}
             autocomplete="off"
             style={{
@@ -1211,8 +1216,8 @@ function SessionsSidebar(props: {
           <Show when={searching()}>
             <button
               type="button"
-              title="clear search"
-              aria-label="clear search"
+              title={language.t("session.sidebar.clearSearch")}
+              aria-label={language.t("session.sidebar.clearSearch")}
               onClick={() => setQuery("")}
               style={{
                 all: "unset",
@@ -1248,7 +1253,7 @@ function SessionsSidebar(props: {
           color: "var(--color-text-faint)",
         }}
       >
-        <span>{searching() ? "Results" : "Sessions"}</span>
+        <span>{searching() ? language.t("session.sidebar.results") : language.t("session.sidebar.sessions")}</span>
         <span style={{ "font-variant-numeric": "tabular-nums" }}>
           {searching() ? `${filtered().length} of ${props.sessions.length}` : props.sessions.length}
         </span>
@@ -1276,7 +1281,7 @@ function SessionsSidebar(props: {
               "line-height": 1.55,
             }}
           >
-            No sessions yet — click <span style={{ color: "var(--color-text-muted)" }}>New session</span> above.
+            {language.t("session.sidebar.noSessions")}
           </div>
         </Show>
         <Show when={props.sessions.length > 0 && filtered().length === 0}>
@@ -1289,7 +1294,7 @@ function SessionsSidebar(props: {
               "line-height": 1.55,
             }}
           >
-            No sessions match “{query().trim()}”.
+            {language.t("session.sidebar.noMatch", { query: query().trim() })}
           </div>
         </Show>
       </div>
@@ -1304,6 +1309,7 @@ function SessionRow(props: {
   onDelete: () => void
   onRename: (title: string) => void
 }): JSX.Element {
+  const language = useLanguage()
   const [hover, setHover] = createSignal(false)
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal("")
@@ -1365,7 +1371,7 @@ function SessionRow(props: {
           when={editing()}
           fallback={
             <span
-              title="Double-click to rename"
+              title={language.t("session.renameHint")}
               style={{
                 "font-family": FONT_MONO,
                 "font-size": "12.5px",
@@ -1377,7 +1383,7 @@ function SessionRow(props: {
                 "white-space": "nowrap",
               }}
             >
-              {props.session.title || "session"}
+              {props.session.title || language.t("session.sidebar.sessionFallback")}
             </span>
           }
         >
@@ -1436,8 +1442,8 @@ function SessionRow(props: {
       <Show when={hover() && !editing()}>
         <button
           type="button"
-          title="delete session"
-          aria-label="delete session"
+          title={language.t("session.sidebar.deleteSession")}
+          aria-label={language.t("session.sidebar.deleteSession")}
           onPointerDown={(e) => {
             // Stop pointerdown on the parent row before its own click
             // can fire — Solid runs the row's onClick first otherwise.

@@ -3,6 +3,7 @@ import { IconButton } from "@synsci/ui/icon-button"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
 import type { Agent, Config } from "@synsci/sdk/v2/client"
 import {
   PanelScroll,
@@ -27,6 +28,7 @@ const SYSTEM_AGENTS = new Set(["title", "compaction"])
 type Mode = "primary" | "subagent" | "all"
 
 export default function Specialists() {
+  const lang = useLanguage()
   const sdk = useGlobalSDK()
   const globalSDK = useGlobalSDK()
   const sync = useGlobalSync()
@@ -65,13 +67,13 @@ export default function Specialists() {
   )
 
   const modeOptions = createMemo(() => [
-    { id: "all", label: "All", count: (agents() ?? []).length },
+    { id: "all", label: lang.t("settings.specialists.filter.all"), count: (agents() ?? []).length },
     {
       id: "primary",
-      label: "Primary",
+      label: lang.t("settings.specialists.filter.primary"),
       count: (agents() ?? []).filter((a) => a.mode === "primary" || a.mode === "all").length,
     },
-    { id: "subagent", label: "Subagents", count: (agents() ?? []).filter((a) => a.mode === "subagent").length },
+    { id: "subagent", label: lang.t("settings.specialists.filter.subagents"), count: (agents() ?? []).filter((a) => a.mode === "subagent").length },
   ])
 
   async function createAgent(name: string, description: string, prompt: string, mode: Mode) {
@@ -80,22 +82,22 @@ export default function Specialists() {
       const agent: Config["agent"] = { [name]: { description, prompt: prompt || undefined, mode } }
       await sync.updateConfig({ agent } as Config)
       await agentsCtl.refetch()
-      showToast({ variant: "success", title: `Specialist "${name}" created` })
+      showToast({ variant: "success", title: lang.t("settings.specialists.toast.created", { name }) })
       setCreating(false)
     } catch (err) {
-      showToast({ variant: "error", title: "Could not create specialist", description: message(err) })
+      showToast({ variant: "error", title: lang.t("settings.specialists.toast.createFailed"), description: message(err) })
     } finally {
       setBusy(false)
     }
   }
 
   async function deleteAgent(name: string) {
-    if (!window.confirm(`Delete custom specialist "${name}"? This removes it from your config.`)) return
+    if (!window.confirm(lang.t("settings.specialists.confirm.delete", { name }))) return
     setBusy(true)
     try {
       await globalSDK.client.global.configUnset({ path: ["agent", name] })
       await agentsCtl.refetch()
-      showToast({ variant: "success", title: `Deleted "${name}"` })
+      showToast({ variant: "success", title: lang.t("settings.specialists.toast.deleted", { name }) })
     } catch (err) {
       showToast({ variant: "error", title: "Delete failed", description: message(err) })
     } finally {
@@ -106,20 +108,20 @@ export default function Specialists() {
   return (
     <PanelScroll>
       <PanelHeader
-        title="Specialists"
-        description="The specialist modes you can switch between while you work. Built-in specialists ship with OpenScience; custom ones are defined in your config."
+        title={lang.t("settings.specialists.heading")}
+        description={lang.t("settings.specialists.description")}
         toolbar={
           <Show when={!creating()}>
             <Toolbar>
               <FilterMenu options={modeOptions()} value={modeFilter()} onSelect={setModeFilter} />
-              <SearchInput value={search()} onInput={setSearch} placeholder="Search specialists" />
+              <SearchInput value={search()} onInput={setSearch} placeholder={lang.t("settings.specialists.placeholder.search")} />
               <AddMenu
-                label="add specialist"
+                label={lang.t("settings.specialists.action.addSpecialist")}
                 items={[
                   {
                     icon: "pencil-line",
-                    label: "write from scratch",
-                    description: "Define a custom agent persisted to config",
+                    label: lang.t("settings.specialists.action.writeFromScratch"),
+                    description: lang.t("settings.specialists.action.writeFromScratch.description"),
                     onSelect: () => setCreating(true),
                   },
                 ]}
@@ -137,21 +139,21 @@ export default function Specialists() {
         <Show when={!creating()}>
           <Show
             when={!agents.loading}
-            fallback={<div class="py-12 text-center text-13-regular text-text-weak">Loading specialists…</div>}
+            fallback={<div class="py-12 text-center text-13-regular text-text-weak">{lang.t("settings.specialists.status.loading")}</div>}
           >
             <Show
               when={visible().length > 0}
               fallback={
                 <EmptyState
                   icon="models"
-                  title={search() ? "No matching specialists" : "No specialists"}
-                  hint="Create a custom specialist to tailor an agent to your workflow."
+                  title={search() ? lang.t("settings.specialists.empty.noMatching") : lang.t("settings.specialists.empty.noSpecialists")}
+                  hint={lang.t("settings.specialists.empty.hint")}
                 />
               }
             >
               <Show when={custom().length > 0}>
                 <div class="flex flex-col gap-2">
-                  <SectionLabel label="Custom" count={custom().length} />
+                  <SectionLabel label={lang.t("settings.specialists.section.custom")} count={custom().length} />
                   <Card>
                     <For each={custom()}>
                       {(agent) => (
@@ -164,7 +166,7 @@ export default function Specialists() {
 
               <Show when={builtIn().length > 0}>
                 <div class="flex flex-col gap-2">
-                  <SectionLabel label="Built-in" count={builtIn().length} />
+                  <SectionLabel label={lang.t("settings.specialists.section.builtIn")} count={builtIn().length} />
                   <Card>
                     <For each={builtIn()}>{(agent) => <AgentRow agent={agent} busy={busy()} />}</For>
                   </Card>
@@ -179,8 +181,9 @@ export default function Specialists() {
 }
 
 function AgentRow(props: { agent: Agent; onDelete?: () => void; busy: boolean }) {
+  const lang = useLanguage()
   const modeLabel = () =>
-    props.agent.mode === "subagent" ? "subagent" : props.agent.mode === "all" ? "primary · subagent" : "primary"
+    props.agent.mode === "subagent" ? lang.t("settings.specialists.mode.subagent") : props.agent.mode === "all" ? lang.t("settings.specialists.mode.both") : lang.t("settings.specialists.mode.primary")
   return (
     <Row>
       <Avatar monogram={props.agent.name.slice(0, 1)} tint={props.agent.color ?? undefined} />
@@ -205,6 +208,7 @@ function CreateForm(props: {
   onCancel: () => void
   onCreate: (name: string, description: string, prompt: string, mode: Mode) => void
 }) {
+  const lang = useLanguage()
   const [name, setName] = createSignal("")
   const [description, setDescription] = createSignal("")
   const [prompt, setPrompt] = createSignal("")
@@ -212,46 +216,46 @@ function CreateForm(props: {
   const valid = () => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(name().trim()) && description().trim().length > 0
   return (
     <div class="flex flex-col gap-4">
-      <SectionLabel label="Create a custom specialist" />
+      <SectionLabel label={lang.t("settings.specialists.form.createHeading")} />
       <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[4px] bg-surface-base/40">
         <FormField
-          label="Name"
+          label={lang.t("settings.specialists.form.name")}
           value={name()}
           onInput={setName}
-          placeholder="my-specialist (letters, digits, - and _)"
+          placeholder={lang.t("settings.specialists.form.name.placeholder")}
         />
         <FormField
-          label="Description"
+          label={lang.t("settings.specialists.form.description")}
           value={description()}
           onInput={setDescription}
-          placeholder="When should this specialist be used?"
+          placeholder={lang.t("settings.specialists.form.description.placeholder")}
         />
         <label class="flex flex-col gap-1.5">
-          <span class="text-12-medium text-text-strong">Mode</span>
+          <span class="text-12-medium text-text-strong">{lang.t("settings.specialists.form.mode")}</span>
           <select
             value={mode()}
             class="h-9 px-3 rounded-xs border border-border-weak-base bg-surface-base text-13-regular text-text-strong outline-none focus:border-border-strong-base"
             onInput={(e) => setMode(e.currentTarget.value as Mode)}
           >
-            <option value="subagent">Subagent (invoked by other agents)</option>
-            <option value="primary">Primary (user-selectable)</option>
-            <option value="all">Both</option>
+            <option value="subagent">{lang.t("settings.specialists.form.mode.subagent")}</option>
+            <option value="primary">{lang.t("settings.specialists.form.mode.primary")}</option>
+            <option value="all">{lang.t("settings.specialists.form.mode.both")}</option>
           </select>
         </label>
         <FormField
-          label="System prompt"
+          label={lang.t("settings.specialists.form.systemPrompt")}
           value={prompt()}
           onInput={setPrompt}
           multiline
-          placeholder="Instructions that define this specialist's behavior…"
+          placeholder={lang.t("settings.specialists.form.systemPrompt.placeholder")}
         />
         <div class="flex items-center gap-2">
           <FormButton
-            label={props.busy ? "creating…" : "create specialist"}
+            label={props.busy ? lang.t("settings.specialists.status.creating") : lang.t("settings.specialists.action.createSpecialist")}
             disabled={props.busy || !valid()}
             onClick={() => props.onCreate(name().trim(), description().trim(), prompt(), mode())}
           />
-          <FormButton label="cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
+          <FormButton label={lang.t("common.cancel")} variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
     </div>

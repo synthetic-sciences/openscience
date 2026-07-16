@@ -317,7 +317,7 @@ export const Terminal = (props: TerminalProps) => {
         if (once.value) return
         once.value = true
         console.error("WebSocket error:", error)
-        local.onConnectError?.(connectionError(error))
+        local.onConnectError?.(connectionError(error, language.t("terminal.connectionLost.description")))
       }
       socket.addEventListener("error", handleError)
       cleanups.push(() => socket.removeEventListener("error", handleError))
@@ -343,7 +343,7 @@ export const Terminal = (props: TerminalProps) => {
         title: language.t("terminal.connectionLost.title"),
         description: err instanceof Error ? err.message : language.t("terminal.connectionLost.description"),
       })
-      local.onConnectError?.(connectionError(err))
+      local.onConnectError?.(connectionError(err, language.t("terminal.connectionLost.description")))
     })
   })
 

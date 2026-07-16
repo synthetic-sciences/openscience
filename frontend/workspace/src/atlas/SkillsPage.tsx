@@ -11,6 +11,7 @@ import { currentDirectory } from "@/utils/base64"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconBrain } from "@/atlas/shared/Icon"
 import type { Config } from "@synsci/sdk/v2/client"
@@ -57,6 +58,7 @@ export default function SkillsPage(): JSX.Element {
   const sdk = useGlobalSDK()
   const platform = usePlatform()
   const sync = useGlobalSync()
+  const language = useLanguage()
 
   const [skills, skillsCtl] = createResource(async () => {
     const res = await sdk.client.app.skills()
@@ -89,7 +91,7 @@ export default function SkillsPage(): JSX.Element {
     try {
       await sync.updateConfig({ permission: { skill: map } } as Config)
     } catch (err) {
-      showToast({ variant: "error", title: "Failed to update skill", description: message(err) })
+      showToast({ variant: "error", title: language.t("skills.toast.failedUpdate"), description: message(err) })
     }
   }
 
@@ -103,10 +105,10 @@ export default function SkillsPage(): JSX.Element {
       counts.set(cat, (counts.get(cat) ?? 0) + 1)
     }
     return [
-      { id: "all", label: "All", count: all().length },
+      { id: "all", label: language.t("skills.filter.all"), count: all().length },
       ...[...counts.entries()]
         .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([id, count]) => ({ id, label: id, count })),
+        .map(([id, count]) => ({ id, label: id === "uncategorized" ? language.t("skills.category.uncategorized") : id, count })),
     ]
   })
 
@@ -170,7 +172,7 @@ export default function SkillsPage(): JSX.Element {
             <h1
               style={{ "font-family": FONT_SANS, "font-size": "19px", "font-weight": 600, color: "var(--color-text)" }}
             >
-              Skills
+              {language.t("skills.heading")}
             </h1>
             <p
               style={{
@@ -181,8 +183,7 @@ export default function SkillsPage(): JSX.Element {
                 "max-width": "560px",
               }}
             >
-              Expert playbooks your agents load on demand — bundled, learned, and installed. Toggle one off to hide it
-              from every agent.
+              {language.t("skills.description")}
             </p>
             <div
               style={{
@@ -195,13 +196,13 @@ export default function SkillsPage(): JSX.Element {
               }}
             >
               <span>
-                <span style={{ color: "var(--color-text)" }}>{enabledCount()}</span> enabled
+                <span style={{ color: "var(--color-text)" }}>{enabledCount()}</span> {language.t("skills.count.enabled")}
               </span>
               <span>
-                <span style={{ color: "var(--color-text)" }}>{all().length}</span> total
+                <span style={{ color: "var(--color-text)" }}>{all().length}</span> {language.t("skills.count.total")}
               </span>
               <span>
-                <span style={{ color: "var(--color-text)" }}>{Math.max(0, categories().length - 1)}</span> categories
+                <span style={{ color: "var(--color-text)" }}>{Math.max(0, categories().length - 1)}</span> {language.t("skills.count.categories")}
               </span>
             </div>
           </div>
@@ -211,26 +212,26 @@ export default function SkillsPage(): JSX.Element {
           <div style={{ "margin-top": "14px", "max-width": "1080px" }}>
             <Toolbar>
               <FilterMenu options={categories()} value={category()} onSelect={setCategory} />
-              <SearchInput value={search()} onInput={setSearch} placeholder="Search skills" />
+              <SearchInput value={search()} onInput={setSearch} placeholder={language.t("skills.search.placeholder")} />
               <AddMenu
-                label="add skill"
+                label={language.t("skills.action.add")}
                 items={[
                   {
                     icon: "pencil-line",
-                    label: "write from scratch",
-                    description: "Author a new SKILL.md in the editor",
+                    label: language.t("skills.action.writeFromScratch"),
+                    description: language.t("skills.action.writeFromScratchDesc"),
                     onSelect: () => setView("scratch"),
                   },
                   {
                     icon: "cloud-upload",
-                    label: "upload a skill",
-                    description: "Import a SKILL.md file from disk",
+                    label: language.t("skills.action.upload"),
+                    description: language.t("skills.action.uploadDesc"),
                     onSelect: () => fileInput?.click(),
                   },
                   {
                     icon: "github",
-                    label: "import from GitHub",
-                    description: "Install from a public git repo URL",
+                    label: language.t("skills.action.import"),
+                    description: language.t("skills.action.importDesc"),
                     onSelect: () => setView("github"),
                   },
                 ]}
@@ -265,10 +266,10 @@ export default function SkillsPage(): JSX.Element {
                   const content = `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`
                   await sdk.client.app.skill.write({ name, content })
                   await skillsCtl.refetch()
-                  showToast({ variant: "success", title: `Skill "${name}" created` })
+                  showToast({ variant: "success", title: language.t("skills.toast.created", { name }) })
                   setView("list")
                 } catch (err) {
-                  showToast({ variant: "error", title: "Could not create skill", description: message(err) })
+                  showToast({ variant: "error", title: language.t("skills.toast.couldNotCreate"), description: message(err) })
                 } finally {
                   setBusy(false)
                 }
@@ -289,12 +290,12 @@ export default function SkillsPage(): JSX.Element {
                   const r = res.rejected.length
                   showToast({
                     variant: n > 0 ? "success" : "error",
-                    title: n > 0 ? `Installed ${n} skill${n === 1 ? "" : "s"}` : "No skills installed",
-                    description: r > 0 ? `${r} rejected by security review` : undefined,
+                    title: n > 0 ? language.t("skills.toast.installed", { count: String(n) }) : language.t("skills.toast.noInstalled"),
+                    description: r > 0 ? language.t("skills.toast.rejected", { count: String(r) }) : undefined,
                   })
                   if (n > 0) setView("list")
                 } catch (err) {
-                  showToast({ variant: "error", title: "Install failed", description: message(err) })
+                  showToast({ variant: "error", title: language.t("skills.toast.installFailed"), description: message(err) })
                 } finally {
                   setBusy(false)
                 }
@@ -303,15 +304,15 @@ export default function SkillsPage(): JSX.Element {
           </Show>
 
           <Show when={view() === "list"}>
-            <Show when={!skills.loading} fallback={<div style={loadingStyle()}>Loading skills…</div>}>
+            <Show when={!skills.loading} fallback={<div style={loadingStyle()}>{language.t("skills.status.loading")}</div>}>
               <Show
                 when={filtered().length > 0}
                 fallback={
                   <div style={{ "padding-top": "36px" }}>
                     <EmptyState
                       icon="brain"
-                      title={search() || category() !== "all" ? "No matching skills" : "No skills yet"}
-                      hint="Write one from scratch, upload a SKILL.md, or import from a public GitHub repo."
+                      title={search() || category() !== "all" ? language.t("skills.empty.noMatch") : language.t("skills.empty.noSkills")}
+                      hint={language.t("skills.empty.hint")}
                     />
                   </div>
                 }
@@ -363,13 +364,13 @@ export default function SkillsPage(): JSX.Element {
       const content = await file.text()
       const name = frontmatterName(content) ?? file.name.replace(/\.md$/i, "")
       if (!frontmatterName(content)) {
-        throw new Error("The SKILL.md must start with a frontmatter block containing `name:` and `description:`.")
+        throw new Error(language.t("skills.error.frontmatter"))
       }
       await sdk.client.app.skill.write({ name, content })
       await skillsCtl.refetch()
-      showToast({ variant: "success", title: `Skill "${name}" uploaded` })
+      showToast({ variant: "success", title: language.t("skills.toast.uploaded", { name }) })
     } catch (err) {
-      showToast({ variant: "error", title: "Upload failed", description: message(err) })
+      showToast({ variant: "error", title: language.t("skills.toast.uploadFailed"), description: message(err) })
     } finally {
       setBusy(false)
     }
@@ -482,36 +483,37 @@ function ScratchForm(props: {
   onCancel: () => void
   onCreate: (name: string, description: string, body: string) => void
 }): JSX.Element {
+  const language = useLanguage()
   const [name, setName] = createSignal("")
   const [description, setDescription] = createSignal("")
   const [body, setBody] = createSignal("")
   const valid = () => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(name().trim()) && description().trim().length > 0
   return (
     <div class="flex flex-col gap-4 max-w-[680px]">
-      <span class="atlas-section-label">Write a new skill</span>
+      <span class="atlas-section-label">{language.t("skills.scratch.heading")}</span>
       <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[8px] bg-surface-base/40">
-        <FormField label="Name" value={name()} onInput={setName} placeholder="my-skill (letters, digits, - and _)" />
+        <FormField label={language.t("skills.scratch.name")} value={name()} onInput={setName} placeholder={language.t("skills.scratch.namePlaceholder")} />
         <FormField
-          label="Description"
+          label={language.t("skills.scratch.description")}
           value={description()}
           onInput={setDescription}
-          placeholder="When should an agent load this skill?"
+          placeholder={language.t("skills.scratch.descriptionPlaceholder")}
         />
         <FormField
-          label="Instructions (Markdown)"
+          label={language.t("skills.scratch.instructions")}
           value={body()}
           onInput={setBody}
           multiline
           mono
-          placeholder="Step-by-step guidance, code examples, pitfalls…"
+          placeholder={language.t("skills.scratch.instructionsPlaceholder")}
         />
         <div class="flex items-center gap-2">
           <FormButton
-            label={props.busy ? "creating…" : "create skill"}
+            label={props.busy ? language.t("skills.action.creating") : language.t("skills.action.createSkill")}
             disabled={props.busy || !valid()}
             onClick={() => props.onCreate(name().trim(), description().trim(), body())}
           />
-          <FormButton label="cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
+          <FormButton label={language.t("skills.action.cancel")} variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
     </div>
@@ -519,23 +521,24 @@ function ScratchForm(props: {
 }
 
 function GithubForm(props: { busy: boolean; onCancel: () => void; onInstall: (url: string) => void }): JSX.Element {
+  const language = useLanguage()
   const [url, setUrl] = createSignal("")
   return (
     <div class="flex flex-col gap-4 max-w-[680px]">
-      <span class="atlas-section-label">Import from GitHub</span>
+      <span class="atlas-section-label">{language.t("skills.github.heading")}</span>
       <div class="flex flex-col gap-4 p-5 border border-border-weak-base rounded-[8px] bg-surface-base/40">
-        <FormField label="Repository URL" value={url()} onInput={setUrl} placeholder="https://github.com/owner/repo" />
+        <FormField label={language.t("skills.github.url")} value={url()} onInput={setUrl} placeholder={language.t("skills.github.urlPlaceholder")} />
         <p class="text-12-regular text-text-weak flex items-start gap-1.5">
           <Icon name="check-small" size="small" class="text-icon-weak-base mt-0.5" />
-          Skills are fetched, screened by a multi-layer security review, and only installed if they pass.
+          {language.t("skills.github.securityNotice")}
         </p>
         <div class="flex items-center gap-2">
           <FormButton
-            label={props.busy ? "installing…" : "install"}
+            label={props.busy ? language.t("skills.action.installing") : language.t("skills.action.install")}
             disabled={props.busy || !url().trim()}
             onClick={() => props.onInstall(url().trim())}
           />
-          <FormButton label="cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
+          <FormButton label={language.t("skills.action.cancel")} variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
     </div>

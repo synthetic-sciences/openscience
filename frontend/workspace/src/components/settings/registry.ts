@@ -56,42 +56,42 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   // first-class catalog now, not a settings row.
   {
     id: "connectors",
-    title: "Connectors",
+    title: "settings.panel.connectors",
     icon: "mcp",
     section: "capabilities",
     component: lazy(() => import("./Connectors")),
   },
   {
     id: "specialists",
-    title: "Specialists",
+    title: "settings.panel.specialists",
     icon: "models",
     section: "capabilities",
     component: lazy(() => import("./Specialists")),
   },
   {
     id: "memory",
-    title: "Memory",
+    title: "settings.panel.memory",
     icon: "archive",
     section: "capabilities",
     component: lazy(() => import("./Memory")),
   },
   {
     id: "compute",
-    title: "Compute",
+    title: "settings.panel.compute",
     icon: "server",
     section: "capabilities",
     component: lazy(() => import("./Compute")),
   },
   {
     id: "local-models",
-    title: "Local models",
+    title: "settings.panel.localModels",
     icon: "models",
     section: "capabilities",
     component: lazy(() => import("./LocalModels")),
   },
   {
     id: "network",
-    title: "Network",
+    title: "settings.panel.network",
     icon: "share",
     section: "capabilities",
     component: lazy(() => import("./Network")),
@@ -99,21 +99,21 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   // ── Workspace ──
   {
     id: "permissions",
-    title: "Permissions",
+    title: "settings.panel.permissions",
     icon: "check",
     section: "workspace",
     component: lazy(() => import("./Permissions")),
   },
   {
     id: "sandbox",
-    title: "Sandbox",
+    title: "settings.panel.sandbox",
     icon: "console",
     section: "workspace",
     component: lazy(() => import("./Sandbox")),
   },
   {
     id: "credentials",
-    title: "Credentials",
+    title: "settings.panel.credentials",
     icon: "providers",
     section: "workspace",
     component: lazy(() => import("./Credentials")),
@@ -122,15 +122,15 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   // duplicate balance card). Balance · Spend routing · Usage · Ledger.
   {
     id: "billing",
-    title: "Billing",
+    title: "settings.panel.billing",
     icon: "sliders",
     section: "workspace",
     component: lazy(() => import("./Billing")),
   },
-  { id: "storage", title: "Storage", icon: "folder", section: "workspace", component: lazy(() => import("./Storage")) },
+  { id: "storage", title: "settings.panel.storage", icon: "folder", section: "workspace", component: lazy(() => import("./Storage")) },
   {
     id: "general",
-    title: "General",
+    title: "settings.panel.general",
     icon: "settings-gear",
     section: "workspace",
     component: lazy(() => import("./General")),
@@ -138,8 +138,8 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
 ]
 
 export const SETTINGS_SECTIONS: { id: SettingsSection; label: string }[] = [
-  { id: "capabilities", label: "Capabilities" },
-  { id: "workspace", label: "Workspace" },
+  { id: "capabilities", label: "settings.section.capabilities" },
+  { id: "workspace", label: "settings.section.workspace" },
 ]
 
 export function findPanel(id: SettingsPanelId): SettingsPanel {
