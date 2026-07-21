@@ -39,8 +39,8 @@ function contentType(reqPath: string): string {
  * 404 over the SPA index.html fallback — SPA-falling-back a data call makes the
  * client JSON.parse `<!doctype html>` and crash (#180/#197/#189).
  */
-export function wantsJson(accept: string | null, contentType: string | null): boolean {
-  if (contentType?.includes("application/json")) return true
+export function wantsJson(accept: string | null, contentTypeHeader: string | null): boolean {
+  if (contentTypeHeader?.includes("application/json")) return true
   const a = accept ?? ""
   return a.includes("application/json") && !a.includes("text/html")
 }

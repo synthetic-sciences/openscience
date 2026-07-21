@@ -38,6 +38,7 @@ describe("spa fallback", () => {
 
         expect(response.status).toBe(200)
         expect(response.headers.get("content-type")).toContain("text/html")
+        expect(response.headers.get("content-security-policy")).toContain("default-src 'self'")
 
         const text = await response.text()
         expect(text.toLowerCase().startsWith("<!doctype")).toBe(true)
