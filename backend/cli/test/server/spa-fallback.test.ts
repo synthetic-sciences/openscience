@@ -57,4 +57,22 @@ describe("spa fallback", () => {
       },
     })
   })
+
+  test("GET /settings/local/ (trailing slash) resolves to the real route, not the catch-all", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const fetch = Server.internalFetch()
+        const response = await fetch("http://openscience.internal/settings/local/", {
+          headers: { "content-type": "application/json" },
+        })
+
+        expect(response.status).toBe(200)
+        expect(response.headers.get("content-type")).toContain("application/json")
+
+        const body = await response.json()
+        expect(Array.isArray(body.presets)).toBe(true)
+      },
+    })
+  })
 })

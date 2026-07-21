@@ -54,7 +54,7 @@ const LocalModels: Component = () => {
     call<{ detected: Detected[] }>("/detect").then((r) => r.detected),
   )
   const [configured, { refetch: refetchConfigured }] = createResource(() =>
-    call<{ providers: Configured[] }>("/").then((r) => r.providers),
+    call<{ providers: Configured[] }>("").then((r) => r.providers),
   )
   const [status, { refetch: refetchStatus }] = createResource(() =>
     call<{ runtimes: Runtime[] }>("/status").then((r) => r.runtimes),
@@ -80,7 +80,7 @@ const LocalModels: Component = () => {
   const addRuntime = (d: Detected) =>
     guard(
       () =>
-        call("/", {
+        call("", {
           method: "POST",
           body: JSON.stringify({ url: d.baseURL, id: d.id, name: `${d.name} (local)`, models: d.models }),
         }),

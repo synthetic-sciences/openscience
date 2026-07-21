@@ -80,7 +80,7 @@ export namespace Server {
     return _server?.requestIP(req)?.address
   }
 
-  const app = new Hono()
+  const app = new Hono({ strict: false })
   export const App: () => Hono = lazy(
     () =>
       // TODO: Break server.ts into smaller route files to fix type inference
