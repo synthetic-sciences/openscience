@@ -5,7 +5,7 @@ import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler 
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
-import { serveWebAsset } from "../web/serve"
+import { serveWebAsset, wantsJson } from "../web/serve"
 import { isAllowedHost, isAllowedOrigin, isCrossOrigin } from "./host-guard"
 import { timingSafeEqual } from "../util/timing-safe"
 import { FolderResolveRoutes } from "./routes/folder-resolve"
@@ -639,6 +639,11 @@ export namespace Server {
           // Unmatched /api/* must 404 — never SPA-fallback (the SPA would
           // try to JSON.parse `<!doctype`) and never proxy upstream.
           if (c.req.path.startsWith("/api/")) return c.notFound()
+
+          if (wantsJson(c.req.header("accept") ?? null, c.req.header("content-type") ?? null)) {
+            log.warn("unmatched API-shaped request", { method: c.req.method, path: c.req.path })
+            return c.json({ error: "not_found", path: c.req.path }, 404)
+          }
 
           const local = await serveWebAsset(c)
           if (local) {
