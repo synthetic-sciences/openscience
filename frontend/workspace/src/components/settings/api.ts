@@ -17,5 +17,9 @@ export async function settingsApi<T>(
     throw new Error(text || `${res.status} ${res.statusText}`)
   }
   if (res.status === 204) return undefined as T
+  const contentType = res.headers.get("content-type") ?? ""
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Expected JSON from ${path}, but got ${res.status} (${contentType || "no content-type"})`)
+  }
   return (await res.json()) as T
 }
