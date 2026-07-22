@@ -1018,6 +1018,185 @@ describe("ProviderTransform.message - unsupported file attachments", () => {
   })
 })
 
+describe("ProviderTransform.message - image/pdf attachment fallback (#192)", () => {
+  // #192: images were falsely rejected as "this model doesn't support image
+  // input" for vision-capable models whose fine-grained input.image/input.pdf
+  // flag was missing/wrong in the catalog (notably the synthetic OpenRouter
+  // model, which hardcoded these false). The gate must fall back to the
+  // coarse `attachment` capability for image/pdf so it isn't blocked purely
+  // on a missing modality flag — but a model with attachment:false is
+  // genuinely incapable and must still get the ERROR text.
+  const b64 = (s: string) => Buffer.from(s).toString("base64")
+  const validImageBase64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+  const createModel = (capabilityOverrides: Record<string, unknown>) =>
+    ({
+      id: "openrouter/some-vision-model",
+      providerID: "openrouter",
+      api: { id: "some-vision-model", url: "https://openrouter.ai/api/v1", npm: "@openrouter/ai-sdk-provider" },
+      name: "Some Vision Model",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+        ...capabilityOverrides,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 128000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "",
+    }) as any
+
+  test("image part survives when input.image=false but attachment=true (fallback)", () => {
+    const model = createModel({
+      attachment: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+    })
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What is in this image?" },
+          { type: "image", image: `data:image/png;base64,${validImageBase64}` },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].content[1]).toEqual({ type: "image", image: `data:image/png;base64,${validImageBase64}` })
+  })
+
+  test("image part still replaced with ERROR when input.image=false and attachment=false (genuinely incapable model)", () => {
+    const model = createModel({
+      attachment: false,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+    })
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What is in this image?" },
+          { type: "image", image: `data:image/png;base64,${validImageBase64}` },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].content[1]).toEqual({
+      type: "text",
+      text: "ERROR: Cannot read image (this model does not support image input). Inform the user.",
+    })
+  })
+
+  test("image part survives when input.image=true regardless of attachment (regression)", () => {
+    const model = createModel({
+      attachment: false,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+    })
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "image", image: `data:image/png;base64,${validImageBase64}` }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].content[0]).toEqual({ type: "image", image: `data:image/png;base64,${validImageBase64}` })
+  })
+
+  test("pdf file part survives when input.pdf=false but attachment=true (fallback)", () => {
+    const model = createModel({
+      attachment: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+    })
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            filename: "doc.pdf",
+            data: `data:application/pdf;base64,${b64("%PDF-1.4 fake")}`,
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect((result[0].content as any[]).some((p: any) => p.type === "file")).toBe(true)
+  })
+
+  test("pdf file part replaced with ERROR when input.pdf=false and attachment=false", () => {
+    const model = createModel({
+      attachment: false,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+    })
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            filename: "doc.pdf",
+            data: `data:application/pdf;base64,${b64("%PDF-1.4 fake")}`,
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    const content = result[0].content as any[]
+    expect(content.some((p: any) => p.type === "file")).toBe(false)
+    expect(content[0]).toEqual({
+      type: "text",
+      text: 'ERROR: Cannot read "doc.pdf" (this model does not support pdf input). Inform the user.',
+    })
+  })
+
+  test("audio file part is NOT broadened by the attachment fallback (image/pdf only)", () => {
+    const model = createModel({
+      attachment: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+    })
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "file",
+            mediaType: "audio/mpeg",
+            filename: "clip.mp3",
+            data: `data:audio/mpeg;base64,${b64("fake audio bytes")}`,
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    const content = result[0].content as any[]
+    expect(content.some((p: any) => p.type === "file")).toBe(false)
+    expect(content[0]).toEqual({
+      type: "text",
+      text: 'ERROR: Cannot read "clip.mp3" (this model does not support audio input). Inform the user.',
+    })
+  })
+})
+
 describe("ProviderTransform.message - providerOptions key remapping", () => {
   const createModel = (providerID: string, npm: string) =>
     ({
