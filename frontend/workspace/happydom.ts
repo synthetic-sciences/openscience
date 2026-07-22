@@ -1,3 +1,10 @@
+// WARNING: happy-dom is NOT sound for tests that mutate the DOM while iterating
+// it — most importantly DOMPurify. happy-dom's NodeIterator does not perform the
+// DOM spec's live-mutation adjustment, so when a node is removed mid-walk,
+// iteration stops early and later nodes go unvisited. DOMPurify sanitizes via
+// exactly that pattern, so under happy-dom it silently under-sanitizes and a
+// broken sanitizer can false-pass (verified — see #202). For sanitizer /
+// NodeIterator-mutation tests use jsdom instead (see frontend/ui/jsdom.ts, #194).
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 
 GlobalRegistrator.register()

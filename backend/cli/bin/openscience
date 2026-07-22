@@ -31,6 +31,16 @@ function run(target) {
     console.error(result.error.message)
     process.exit(1)
   }
+  if (result.signal) {
+    console.error(
+      `openscience was terminated by ${result.signal}. The prebuilt native binary may be ` +
+        `incompatible with this host (platform ${os.platform()}, arch ${os.arch()}). ` +
+        `Some ARM64 hosts (e.g. 64KB page-size kernels) cannot run the prebuilt binary. ` +
+        `Try reinstalling, set OPENSCIENCE_BIN_PATH to a compatible binary, or report at ` +
+        `https://github.com/synthetic-sciences/openscience/issues`,
+    )
+    process.exit(1)
+  }
   const code = typeof result.status === "number" ? result.status : 0
   process.exit(code)
 }
