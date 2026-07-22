@@ -33,6 +33,18 @@ function contentType(reqPath: string): string {
   return MIME[reqPath.slice(dot).toLowerCase()] ?? "application/octet-stream"
 }
 
+/**
+ * True when a request is an API/data call (expects JSON), not a browser
+ * navigation (expects an HTML page). The catch-all uses this to choose a JSON
+ * 404 over the SPA index.html fallback — SPA-falling-back a data call makes the
+ * client JSON.parse `<!doctype html>` and crash (#180/#197/#189).
+ */
+export function wantsJson(accept: string | null, contentTypeHeader: string | null): boolean {
+  if (contentTypeHeader?.includes("application/json")) return true
+  const a = accept ?? ""
+  return a.includes("application/json") && !a.includes("text/html")
+}
+
 export async function serveWebAsset(c: Context): Promise<Response | undefined> {
   if (!WEB_INDEX) return undefined
 

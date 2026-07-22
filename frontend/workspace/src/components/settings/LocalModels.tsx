@@ -54,7 +54,7 @@ const LocalModels: Component = () => {
     call<{ detected: Detected[] }>("/detect").then((r) => r.detected),
   )
   const [configured, { refetch: refetchConfigured }] = createResource(() =>
-    call<{ providers: Configured[] }>("/").then((r) => r.providers),
+    call<{ providers: Configured[] }>("").then((r) => r.providers),
   )
   const [status, { refetch: refetchStatus }] = createResource(() =>
     call<{ runtimes: Runtime[] }>("/status").then((r) => r.runtimes),
@@ -80,7 +80,7 @@ const LocalModels: Component = () => {
   const addRuntime = (d: Detected) =>
     guard(
       () =>
-        call("/", {
+        call("", {
           method: "POST",
           body: JSON.stringify({ url: d.baseURL, id: d.id, name: `${d.name} (local)`, models: d.models }),
         }),
@@ -106,7 +106,7 @@ const LocalModels: Component = () => {
         showToast({ title: `${rt.name} isn't installed`, description: `Install it, then start it here.` })
         window.open(r.install ?? rt.install, "_blank", "noopener")
       } else if (r.running && r.models?.length) {
-        await call("/", {
+        await call("", {
           method: "POST",
           body: JSON.stringify({ url: rt.baseURL, id: rt.id, name: `${rt.name} (local)`, models: r.models }),
         })
@@ -126,7 +126,7 @@ const LocalModels: Component = () => {
   const addRunning = (rt: Runtime) =>
     guard(
       () =>
-        call("/", {
+        call("", {
           method: "POST",
           body: JSON.stringify({ url: rt.baseURL, id: rt.id, name: `${rt.name} (local)`, models: rt.models }),
         }),
@@ -172,7 +172,7 @@ const LocalModels: Component = () => {
     guard(async () => {
       const models = [...selected()]
       if (!models.length) throw new Error("Select at least one model.")
-      await call("/", {
+      await call("", {
         method: "POST",
         body: JSON.stringify({ url: url().trim(), key: key().trim() || undefined, models }),
       })
