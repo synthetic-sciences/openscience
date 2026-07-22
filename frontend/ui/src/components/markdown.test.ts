@@ -38,4 +38,12 @@ describe("sanitize (KaTeX MathML annotation)", () => {
     expect(safe).not.toContain("onerror")
     expect(safe).not.toContain("<script")
   })
+
+  test("regression guard: neutralizes payloads nested in the annotation-xml HTML integration point (#194)", () => {
+    const safe = sanitize(
+      '<math><semantics><annotation-xml encoding="text/html"><img src=x onerror=alert(1)><script>evil()</script></annotation-xml></semantics></math>',
+    )
+    expect(safe).not.toContain("onerror")
+    expect(safe).not.toContain("<script")
+  })
 })
