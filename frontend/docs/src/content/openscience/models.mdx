@@ -28,6 +28,34 @@ openscience run --model ollama/llama3.1 "hello"
 
 Local models are free and never metered. See **[Local models](/openscience/local-models)** for the full guide.
 
+## Hosted OpenAI-compatible gateways (EU data residency)
+
+Any hosted OpenAI-compatible gateway works the same way — add it as a provider block in `openscience.json`. For example, [Eden AI](https://www.edenai.co/) is a French, EU-based gateway that reaches many upstream vendors through one key:
+
+```jsonc
+{
+  "provider": {
+    "edenai": {
+      "name": "Eden AI",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://api.edenai.run/v3",
+        "apiKey": "your-edenai-key"
+      },
+      "models": {
+        "openai/gpt-4o-mini": {},
+        "anthropic/claude-sonnet-4-5": {},
+        "mistral/mistral-small-latest": {}
+      }
+    }
+  }
+}
+```
+
+Model ids are vendor-prefixed (`<vendor>/<model>`), so you run them as `edenai/openai/gpt-4o-mini`, `edenai/anthropic/claude-sonnet-4-5`, and so on.
+
+For teams under EU data-protection requirements, Eden AI also exposes a dedicated EU endpoint (`https://api.eu.edenai.run/v3`) that processes and routes prompts and outputs within the European Union, with zero data retention by default (SOC 2 / ISO 27001, DPA as standard). Point `baseURL` at it to keep traffic in-region. See [Eden AI data compliance](https://www.edenai.co/data-compliancy).
+
 ## List what is configured
 
 ```bash
