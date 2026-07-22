@@ -47,6 +47,16 @@ openscience skill list
 
 Each skill in the repo passes a static safety check and an LLM safety review before it installs; rejected skills are skipped and reported. Installed skills are namespaced by repo, so `remove <namespace>` uninstalls the whole set.
 
+### Community skills
+
+Skills contributed by the community that install with the command above:
+
+- **1000 Genomes genotypes** — [`dnaerys/onekgpd-skill`](https://github.com/dnaerys/onekgpd-skill) (MIT). Individual-level queries over the 1000 Genomes cohort (3,202 WGS samples, GRCh38): which individuals carry variants matching given criteria and zygosity, kinship between individuals, and cohort population/pedigree metadata. Queries a public, keyless [Dnaerys](https://dnaerys.org) endpoint (an external service the maintainers don't control), with an offline metadata tier.
+
+  ```bash
+  openscience skill add gh:dnaerys/onekgpd-skill
+  ```
+
 ## Write your own
 
 ```bash
