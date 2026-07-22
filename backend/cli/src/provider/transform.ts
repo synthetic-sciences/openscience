@@ -290,7 +290,16 @@ export namespace ProviderTransform {
           if (part.type === "file") return fileToText(part)
           return part
         }
-        if (model.capabilities.input[modality]) return part
+        // #192: fine-grained input.image/input.pdf can be missing/wrong in the
+        // catalog (e.g. the synthetic OpenRouter model) even though the model
+        // is flagged attachment-capable. Fall back to the coarse `attachment`
+        // capability for image/pdf only — audio/video stay gated on their own
+        // modality flag.
+        if (
+          model.capabilities.input[modality] ||
+          (model.capabilities.attachment && (modality === "image" || modality === "pdf"))
+        )
+          return part
 
         const name = filename ? `"${filename}"` : modality
         return {

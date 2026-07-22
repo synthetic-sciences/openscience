@@ -811,9 +811,14 @@ export namespace Provider {
       capabilities: {
         temperature: true,
         reasoning: true,
-        attachment: false,
+        // #192: this is a placeholder for a whitelisted model NOT in the
+        // local catalog — guessing `false` here silently drops images/PDFs
+        // for what may well be a vision-capable model. Guess permissive
+        // instead: a genuinely-unsupported attachment surfaces a real
+        // provider error rather than a fabricated "unsupported" one.
+        attachment: true,
         toolcall: true,
-        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
         interleaved: false,
       },
