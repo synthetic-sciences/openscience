@@ -14,7 +14,7 @@ export const WalletCommand = cmd({
 
 const BillingShowCommand = cmd({
   command: ["show", "$0"],
-  describe: "show CLI wallet balance and key routing",
+  describe: "show Atlas wallet balance and key routing",
   async handler() {
     UI.empty()
     prompts.intro("openscience billing")
@@ -26,14 +26,21 @@ const BillingShowCommand = cmd({
       return
     }
 
-    const mode = await OpenScience.getBillingMode()
+    const [mode, balanceUsd] = await Promise.all([
+      OpenScience.getBillingMode(),
+      OpenScience.getBalance().catch(() => null),
+    ])
     if (!mode) {
       prompts.log.error("Couldn't fetch billing state. Check your connection or visit " + PLAN_URL)
       prompts.outro("Done")
       return
     }
-    prompts.log.info(`CLI wallet  : $${mode.balance_usd.toFixed(2)}`)
-    prompts.log.info("Key routing : per-provider (auto). BYOK key if set, else Atlas managed (debits wallet).")
+    // Managed mode spends the unified wallet (subscription + Atlas ledger + CLI
+    // ledger), so show that spendable balance. Fall back to billing-mode's
+    // CLI-only figure only when /api/credits is briefly unavailable.
+    const walletUsd = balanceUsd ?? mode.balance_usd
+    prompts.log.info(`Atlas wallet : $${walletUsd.toFixed(2)}`)
+    prompts.log.info("Key routing  : per-provider (auto). BYOK key if set, else Atlas managed (debits wallet).")
     if (!mode.managed_supported) {
       prompts.log.warn(
         "Atlas managed fallback is not provisioned on this deployment — set a BYOK key for each provider.",

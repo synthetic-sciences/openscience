@@ -1253,18 +1253,28 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return null
     try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/balance`, {
+      // Managed mode spends the UNIFIED wallet (Atlas charges category="unified"),
+      // so the spendable balance is /api/credits' unified figure — not the
+      // CLI-only /api/cli/balance, which stays flat while the Atlas ledger drains
+      // and made managed spend look like it debited nothing. See cliSpendableCents.
+      const res = await atlasFetch(`${API_BASE}/api/credits`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
       if (!res.ok) return null
-      const data = await res.json()
-      const usd =
-        typeof data.balance_usd === "number"
-          ? data.balance_usd
-          : typeof data.balance_cents === "number"
-            ? data.balance_cents / 100
-            : null
-      if (usd === null) return null
+      const data = (await res.json()) as {
+        unified_balance_cents?: number
+        balance_cents?: number
+        cli_balance_cents?: number
+      }
+      // Distinguish "couldn't determine" (null) from a real zero balance: only
+      // trust the figure when the response actually carried a balance field.
+      if (
+        typeof data.unified_balance_cents !== "number" &&
+        typeof data.balance_cents !== "number" &&
+        typeof data.cli_balance_cents !== "number"
+      )
+        return null
+      const usd = cliSpendableCents(data) / 100
       cachedBalance = { value: usd, at: Date.now() }
       return usd
     } catch {
@@ -1646,20 +1656,25 @@ export namespace OpenScience {
   /**
    * The wallet balance the CLI can actually spend, in cents.
    *
-   * Atlas `/api/credits` also returns `unified_balance_cents` — the sum of every
-   * pool: the CLI wallet + the Atlas-web wallet + the subscription cycle pool +
-   * gifted credits. But OpenScience managed mode debits ONLY the CLI wallet
-   * (Atlas `cli.py`: `category="cli"`; an Atlas plan grants BYOK + library quota,
-   * not CLI spending credits). Showing the unified pool made the wallet read
-   * e.g. $160 when the CLI could actually spend far less. Prefer the CLI wallet;
-   * fall back to the older aggregate fields only if a backend omits it.
+   * Managed mode debits the UNIFIED wallet: Atlas charges every managed LLM call
+   * with `category="unified"`, draining the subscription cycle pool, then the
+   * Atlas-web ledger, then the CLI ledger — one spendable balance across web and
+   * CLI (Atlas `usage_service.charge`; `llm_proxy_service` passes
+   * `category="unified"`). So the spendable figure is `unified_balance_cents`,
+   * NOT the CLI-only ledger.
+   *
+   * Reporting only the CLI ledger (the earlier behaviour) froze the number: a
+   * user with any Atlas-ledger balance saw managed calls drain that pool first
+   * while the displayed CLI wallet never moved — the "my credits aren't being
+   * deducted" report. Prefer the unified balance; fall back to the aggregate,
+   * then the CLI ledger, only if a backend omits it.
    */
   export function cliSpendableCents(d: {
     cli_balance_cents?: number
     unified_balance_cents?: number
     balance_cents?: number
   }): number {
-    return d.cli_balance_cents ?? d.unified_balance_cents ?? d.balance_cents ?? 0
+    return d.unified_balance_cents ?? d.balance_cents ?? d.cli_balance_cents ?? 0
   }
 
   export async function getCredits(): Promise<Credits | null> {
