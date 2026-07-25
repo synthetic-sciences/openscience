@@ -1,6 +1,8 @@
 import { test, expect, mock, beforeEach } from "bun:test"
 import { EventEmitter } from "events"
 
+const auth = await import("@modelcontextprotocol/sdk/client/auth.js")
+
 // Track open() calls and control failure behavior
 let openShouldFail = false
 let openCalledWith: string | undefined
@@ -88,6 +90,7 @@ mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 
 // Mock UnauthorizedError in the auth module
 mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
+  ...auth,
   UnauthorizedError: MockUnauthorizedError,
 }))
 

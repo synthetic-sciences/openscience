@@ -4,7 +4,7 @@
   "description": "AI-powered CLI for ML research and development workflows",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.3.5",
   "scripts": {
     "dev": "bun run --cwd backend/cli --conditions=browser src/index.ts",
     "dev:local": "SYNSC_API_BASE=http://localhost:8001 SYNSC_AUTH_URL=http://localhost:8001/auth/cli bun run --cwd backend/cli --conditions=browser src/index.ts",
@@ -26,7 +26,7 @@
       "tooling/sdk/js"
     ],
     "catalog": {
-      "@types/bun": "1.3.14",
+      "@types/bun": "1.3.5",
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
       "ulid": "3.0.1",
