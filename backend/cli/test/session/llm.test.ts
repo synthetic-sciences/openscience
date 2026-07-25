@@ -88,3 +88,49 @@ describe("session.llm.hasToolCalls", () => {
     expect(LLM.hasToolCalls(messages)).toBe(true)
   })
 })
+
+describe("session.llm.isCodexSubscriptionModel", () => {
+  test("recognizes the synthesized Codex OAuth provider", () => {
+    expect(
+      LLM.isCodexSubscriptionModel(
+        {
+          providerID: "openai-codex",
+        },
+        {
+          type: "oauth",
+        },
+      ),
+    ).toBe(true)
+  })
+
+  test("does not treat plain OpenAI OAuth as a Codex subscription", () => {
+    expect(
+      LLM.isCodexSubscriptionModel(
+        {
+          providerID: "openai",
+        },
+        {
+          type: "oauth",
+        },
+      ),
+    ).toBe(false)
+  })
+
+  test("requires OAuth credentials for the Codex provider", () => {
+    expect(
+      LLM.isCodexSubscriptionModel(
+        {
+          providerID: "openai-codex",
+        },
+        {
+          type: "api",
+        },
+      ),
+    ).toBe(false)
+    expect(
+      LLM.isCodexSubscriptionModel({
+        providerID: "openai-codex",
+      }),
+    ).toBe(false)
+  })
+})
