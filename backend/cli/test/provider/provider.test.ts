@@ -26,33 +26,104 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
+import { Auth } from "../../src/auth"
 
-/* Pinned against the live models.dev catalog. When models.dev delists one of
-   these ids, the "pinned catalog models still exist upstream" test below fails
-   with instructions — update the pin here and every test follows. Previous
-   pin claude-sonnet-4-20250514 was delisted upstream on 2026-07-05 and broke
-   10 tests at once. */
+/* Keep this list aligned with live-catalog.test.ts. The committed fixture makes
+   PR CI deterministic; the scheduled live check catches upstream delistings. */
+const FRONTIER_MODELS = {
+  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-fable-5"],
+  openai: ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+  xai: [
+    "grok-4.3",
+    "grok-4.5",
+    "grok-build-0.1",
+    "grok-4.20-0309-reasoning",
+    "grok-4.20-0309-non-reasoning",
+    "grok-4.20-multi-agent-0309",
+  ],
+  moonshotai: ["kimi-k3"],
+  vercel: ["meta/muse-spark-1.1"],
+  openrouter: [
+    "anthropic/claude-opus-5",
+    "anthropic/claude-sonnet-5",
+    "anthropic/claude-fable-5",
+    "openai/gpt-5.6-sol",
+    "x-ai/grok-4.5",
+    "moonshotai/kimi-k3",
+    "meta/muse-spark-1.1",
+  ],
+}
 const SONNET = "claude-sonnet-4-6"
 const OPUS = "claude-opus-4-5"
 
-test("pinned catalog models are present in the seeded test fixture", async () => {
-  await using tmp = await tmpdir({})
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      Env.set("ANTHROPIC_API_KEY", "test-api-key")
-    },
-    fn: async () => {
-      const providers = await Provider.list()
-      const models = Object.keys(providers["anthropic"]?.models ?? {})
-      for (const id of [SONNET, OPUS]) {
-        if (!models.includes(id))
-          throw new Error(
-            `test fixture is missing anthropic/${id} — regenerate test/fixture/models-catalog.json.gz or update the SONNET/OPUS pins here (a live models.dev delisting is caught separately by the scheduled catalog job)`,
-          )
-      }
+test("current frontier models are routable from the seeded catalog", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      provider: Object.fromEntries(Object.keys(FRONTIER_MODELS).map((id) => [id, {}])),
     },
   })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      for (const [provider, expected] of Object.entries(FRONTIER_MODELS)) {
+        const models = Object.keys(providers[provider]?.models ?? {})
+        for (const id of expected) {
+          if (models.includes(id)) continue
+          throw new Error(
+            `test fixture is missing ${provider}/${id} — regenerate test/fixture/models-catalog.json.gz or update FRONTIER_MODELS (the scheduled live-catalog job catches upstream delistings)`,
+          )
+        }
+      }
+      expect(Object.keys(providers["moonshotai"].models["kimi-k3"].variants ?? {})).toEqual(["low", "high", "max"])
+      expect(Object.keys(providers["xai"].models["grok-4.3"].variants ?? {})).toEqual(["none", "low", "medium", "high"])
+      expect(Object.keys(providers["xai"].models["grok-4.5"].variants ?? {})).toEqual(["low", "medium", "high"])
+      expect(Object.keys(providers["xai"].models["grok-4.20-multi-agent-0309"].variants ?? {})).toEqual([
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+      ])
+    },
+  })
+})
+
+test("Codex OAuth exposes the GPT-5.6 family as subscription models", async () => {
+  await Auth.set("openai-codex", {
+    type: "oauth",
+    refresh: "test-refresh",
+    access: "test-access",
+    expires: Date.now() + 60_000,
+  })
+  await using tmp = await tmpdir({
+    config: {
+      provider: {
+        "openai-codex": {},
+      },
+    },
+  })
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await Provider.list()
+        const codex = providers["openai-codex"]
+        expect(codex).toBeDefined()
+        for (const id of FRONTIER_MODELS.openai) {
+          expect(codex.models[id]).toBeDefined()
+          expect(codex.models[id].providerID).toBe("openai-codex")
+          expect(codex.models[id].cost).toEqual({
+            input: 0,
+            output: 0,
+            cache: { read: 0, write: 0 },
+          })
+        }
+      },
+    })
+  } finally {
+    await Auth.remove("openai-codex")
+    Provider.invalidate()
+  }
 })
 
 function clearManagedLLMEnv() {

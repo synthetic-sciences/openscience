@@ -441,6 +441,7 @@ export namespace ProviderTransform {
   //   gpt-5.1 (2025-11-13) none/low/medium/high         (none replaces minimal)
   //   gpt-5.2 (2025-12-11) none/low/medium/high/xhigh
   //   gpt-5.5 (2026-04) none/low/medium/high/xhigh
+  //   gpt-5.6 (2026-07) none/low/medium/high/xhigh/max
   //   *-codex           low/medium/high (+xhigh on 5.2-codex); never none/minimal
   //   gpt-5-pro         high only (fixed) → [] (no effort dial)
   //   gpt-5.2-pro       medium/high/xhigh
@@ -457,6 +458,7 @@ export namespace ProviderTransform {
     if (model.release_date >= "2025-11-13") arr.unshift("none")
     else if (id.includes("gpt-5")) arr.unshift("minimal")
     if (model.release_date >= "2025-12-11") arr.push("xhigh")
+    if (/gpt-5[.-]6(?:\b|[.-])/.test(id)) arr.push("max")
     return arr
   }
 
@@ -466,32 +468,37 @@ export namespace ProviderTransform {
     const id = model.id.toLowerCase()
 
     // Reasoning-effort coverage for families that previously had none. On
-    // OpenRouter the unified `reasoning.effort` works for ANY reasoning model (it
-    // normalizes effort to a token budget where the native API is on/off only), so
-    // these fall through to the OpenRouter case below. Natively: DeepSeek (v4) and
-    // GLM-5.2+ expose `reasoning_effort` through their OpenAI-compatible API
-    // (handled in the openai-compatible case); Kimi rejects `reasoning_effort`
-    // alongside its `thinking` param, and MiniMax/Mistral have no effort dial — so
-    // those get no *native* effort variants (they still get them on OpenRouter).
+    // OpenRouter the unified `reasoning.effort` works for reasoning models; native
+    // OpenAI-compatible providers receive `reasoningEffort`. Kimi K3 is handled
+    // explicitly below because its low/high/max ladder differs from the common
+    // low/medium/high set. Older Kimi models reject `reasoning_effort` alongside
+    // `thinking`, and MiniMax/Mistral have no effort dial.
     if (model.api.npm !== "@openrouter/ai-sdk-provider") {
-      if (id.includes("minimax") || id.includes("mistral") || id.includes("kimi")) return {}
+      if (id.includes("minimax") || id.includes("mistral")) return {}
+      if (id.includes("kimi") && !/kimi-k3\b/.test(id)) return {}
       if (id.includes("glm") && !/glm-[5-9]/.test(id)) return {}
       if (id.includes("deepseek") && !/deepseek-v[4-9]/.test(id)) return {}
     }
 
+    const efforts = (values: string[]) =>
+      Object.fromEntries(
+        values.map((effort) => [
+          effort,
+          model.api.npm === "@openrouter/ai-sdk-provider" ? { reasoning: { effort } } : { reasoningEffort: effort },
+        ]),
+      )
+
+    // https://www.kimi.com/help/kimi-api/api-model-selection
+    if (/kimi-k3\b/.test(id)) return efforts(["low", "high", "max"])
+
     // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
     if (id.includes("grok") && id.includes("grok-3-mini")) {
-      if (model.api.npm === "@openrouter/ai-sdk-provider") {
-        return {
-          low: { reasoning: { effort: "low" } },
-          high: { reasoning: { effort: "high" } },
-        }
-      }
-      return {
-        low: { reasoningEffort: "low" },
-        high: { reasoningEffort: "high" },
-      }
+      return efforts(["low", "high"])
     }
+    // https://docs.x.ai/developers/model-capabilities/text/reasoning
+    if (/grok-4[.-]5\b/.test(id)) return efforts(WIDELY_SUPPORTED_EFFORTS)
+    if (/grok-4[.-]3\b/.test(id)) return efforts(["none", ...WIDELY_SUPPORTED_EFFORTS])
+    if (/grok-4[.-]20/.test(id) && id.includes("multi-agent")) return efforts([...WIDELY_SUPPORTED_EFFORTS, "xhigh"])
     if (id.includes("grok")) return {}
 
     switch (model.api.npm) {

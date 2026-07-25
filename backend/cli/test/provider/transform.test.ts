@@ -1477,6 +1477,18 @@ describe("ProviderTransform.variants", () => {
       expect(result).toEqual({})
     })
 
+    test("Kimi K3 exposes its low/high/max effort ladder", () => {
+      const result = ProviderTransform.variants(
+        createMockModel({
+          id: "openrouter/kimi-k3",
+          providerID: "openrouter",
+          api: { id: "moonshotai/kimi-k3", url: "https://openrouter.ai", npm: "@openrouter/ai-sdk-provider" },
+        }),
+      )
+      expect(Object.keys(result)).toEqual(["low", "high", "max"])
+      expect(result.max).toEqual({ reasoning: { effort: "max" } })
+    })
+
     test("gemini-3 returns WIDELY_SUPPORTED_EFFORTS with reasoning", () => {
       const model = createMockModel({
         id: "openrouter/gemini-3-5-pro",
@@ -1507,6 +1519,25 @@ describe("ProviderTransform.variants", () => {
       })
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({})
+    })
+
+    test("current Grok models expose their documented effort ladders", () => {
+      const cases = {
+        "grok-4.3": ["none", "low", "medium", "high"],
+        "grok-4.5": ["low", "medium", "high"],
+        "grok-4.20-multi-agent-0309": ["low", "medium", "high", "xhigh"],
+      }
+      for (const [id, expected] of Object.entries(cases)) {
+        const result = ProviderTransform.variants(
+          createMockModel({
+            id: `openrouter/${id}`,
+            providerID: "openrouter",
+            api: { id: `x-ai/${id}`, url: "https://openrouter.ai", npm: "@openrouter/ai-sdk-provider" },
+          }),
+        )
+        expect(Object.keys(result)).toEqual(expected)
+        expect(result[expected.at(-1)!]).toEqual({ reasoning: { effort: expected.at(-1) } })
+      }
     })
 
     test("grok-3-mini returns low and high with reasoning", () => {
@@ -1707,6 +1738,29 @@ describe("ProviderTransform.variants", () => {
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
+
+    test("current Grok models return their documented reasoningEffort variants", () => {
+      const cases = {
+        "grok-4.3": ["none", "low", "medium", "high"],
+        "grok-4.5": ["low", "medium", "high"],
+        "grok-4.20-multi-agent-0309": ["low", "medium", "high", "xhigh"],
+      }
+      for (const [id, expected] of Object.entries(cases)) {
+        const result = ProviderTransform.variants(
+          createMockModel({
+            id,
+            providerID: "xai",
+            api: {
+              id,
+              url: "https://api.x.ai",
+              npm: "@ai-sdk/xai",
+            },
+          }),
+        )
+        expect(Object.keys(result)).toEqual(expected)
+        expect(result[expected.at(-1)!]).toEqual({ reasoningEffort: expected.at(-1) })
+      }
+    })
   })
 
   describe("@ai-sdk/deepinfra", () => {
@@ -1742,6 +1796,21 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["low", "medium", "high"])
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+
+    test("Kimi K3 uses its native low/high/max reasoning_effort ladder", () => {
+      const model = createMockModel({
+        id: "kimi-k3",
+        providerID: "moonshotai",
+        api: {
+          id: "kimi-k3",
+          url: "https://api.moonshot.ai/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "high", "max"])
+      expect(result.max).toEqual({ reasoningEffort: "max" })
     })
   })
 
@@ -1858,6 +1927,29 @@ describe("ProviderTransform.variants", () => {
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "xhigh"])
+    })
+
+    test("GPT-5.6 models include the max reasoning effort", () => {
+      for (const id of ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
+        const model = createMockModel({
+          id,
+          providerID: "openai",
+          api: {
+            id,
+            url: "https://api.openai.com",
+            npm: "@ai-sdk/openai",
+          },
+          release_date: "2026-07-09",
+        })
+        expect(Object.keys(ProviderTransform.variants(model))).toEqual([
+          "none",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+        ])
+      }
     })
   })
 

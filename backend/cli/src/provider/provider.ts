@@ -42,6 +42,27 @@ import { ProviderTransform } from "./transform"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
+  const CODEX_MODELS = new Set([
+    "gpt-5.6",
+    "gpt-5-6",
+    "gpt-5.6-sol",
+    "gpt-5-6-sol",
+    "gpt-5.6-terra",
+    "gpt-5-6-terra",
+    "gpt-5.6-luna",
+    "gpt-5-6-luna",
+    "gpt-5.5",
+    "gpt-5-5",
+    "gpt-5.4",
+    "gpt-5-4",
+    "gpt-5.4-mini",
+    "gpt-5-4-mini",
+    "gpt-5.3-codex",
+    "gpt-5-3-codex",
+    "gpt-5.2",
+    "gpt-5-2",
+  ])
+
   function isGpt5OrLater(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
     if (!match) {
@@ -1100,22 +1121,10 @@ export namespace Provider {
       // snapshot normalizes dots to dashes (e.g. `gpt-5-5`) while the
       // OpenAI API expects dots (`gpt-5.5`). We pick up whichever the
       // snapshot ships and route it through the codex provider.
-      const codexModelIds = new Set<string>([
-        "gpt-5.5",
-        "gpt-5-5",
-        "gpt-5.4",
-        "gpt-5-4",
-        "gpt-5.4-mini",
-        "gpt-5-4-mini",
-        "gpt-5.3-codex",
-        "gpt-5-3-codex",
-        "gpt-5.2",
-        "gpt-5-2",
-      ])
       const baseOpenai = database["openai"]
       const codexModels: Record<string, (typeof baseOpenai.models)[string]> = {}
       for (const [id, model] of Object.entries(baseOpenai.models)) {
-        if (codexModelIds.has(id)) {
+        if (CODEX_MODELS.has(id)) {
           codexModels[id] = {
             ...model,
             providerID: "openai-codex",

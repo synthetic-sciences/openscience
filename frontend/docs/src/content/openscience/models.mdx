@@ -17,6 +17,18 @@ openscience
 
 Keys stay on your machine. Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, DeepSeek, and dozens more work the same way — the catalogue is models.dev-backed, so any `provider/model` id a provider currently exposes is addressable. You can also paste keys into the Credentials panel in the [workspace](/openscience/workspace) instead of exporting them, and OpenAI Codex signs in via OAuth.
 
+Current frontier families include:
+
+| Provider | Model IDs |
+| --- | --- |
+| Anthropic | `claude-opus-5`, `claude-sonnet-5`, `claude-fable-5` |
+| OpenAI | `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` |
+| xAI | `grok-4.5`, `grok-4.3`, `grok-build-0.1`, and Grok 4.20 reasoning, non-reasoning, and multi-agent models |
+| Moonshot AI | `kimi-k3` |
+| Vercel AI Gateway | `meta/muse-spark-1.1` |
+
+This is not a hardcoded allowlist for your own provider keys. OpenScience refreshes models.dev at startup and hourly, so newly published models appear without waiting for an OpenScience release. The OpenAI Codex OAuth provider is the exception: it only shows models verified to work through a ChatGPT subscription, currently including the full GPT-5.6 family.
+
 ## Local models
 
 Prefer to run offline? OpenScience talks to any OpenAI-compatible endpoint on your machine — Ollama, LM Studio, llama.cpp, vLLM, and more:
@@ -40,11 +52,13 @@ Each provider is labeled `your key`, `managed`, `local`, `Signed in with Codex`,
 ## Pick a model per run
 
 ```bash
-openscience run --model anthropic/claude-opus-4-8 --variant xhigh "Design the ablation study"
+openscience run --model anthropic/claude-opus-5 --variant xhigh "Design the ablation study"
 openscience run --model anthropic/claude-sonnet-5 "Clean up the plotting code"
+openscience run --model openai/gpt-5.6-terra --variant max "Review the analysis"
+openscience run --model moonshotai/kimi-k3 "Implement the pipeline"
 ```
 
-`--model <provider>/<model>` overrides the default for one run; in the workspace, use the model selector per session. `--variant` picks a reasoning-effort tier — `minimal`, `high`, `max`, and so on. Available tiers depend on the model: Claude Opus 4.8 exposes the full range up to `xhigh` and `max`; other adaptive Claude models cap at `max`.
+`--model <provider>/<model>` overrides the default for one run; in the workspace, use the model selector per session. `--variant` picks a reasoning-effort tier — `minimal`, `high`, `max`, and so on. Available tiers depend on the model: Claude Opus 5 and GPT-5.6 extend through `xhigh` and `max`, Kimi K3 supports `low`, `high`, and `max`, and current Grok models expose their provider-supported ladders.
 
 ## Atlas managed (optional)
 
