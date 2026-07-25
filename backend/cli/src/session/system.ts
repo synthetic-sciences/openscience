@@ -10,6 +10,8 @@ import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_CODEX from "./prompt/codex_header.txt"
 import type { Provider } from "@/provider/provider"
 import { Config } from "../config/config"
+import { Skill } from "../skill"
+import { PermissionNext } from "../permission/next"
 
 export namespace SystemPrompt {
   export function instructions() {
@@ -58,6 +60,41 @@ If <name> is NOT a known skill, treat the / as literal text and respond
 normally.
 </slash-skill-invocation>`,
     ]
+  }
+
+  export async function availableSkills(permission: PermissionNext.Ruleset) {
+    const skills = (await Skill.all()).filter(
+      (skill) => PermissionNext.evaluate("skill", skill.name, permission).action !== "deny",
+    )
+    if (skills.length === 0) {
+      return [
+        "<available-skills>",
+        "No skills are currently available. Static skill routing tables are guidance only.",
+        "Do not call the skill tool because no skill name will resolve.",
+        "</available-skills>",
+      ].join("\n")
+    }
+
+    const groups = new Map<string, string[]>()
+    for (const skill of skills) {
+      const category = skill.category ?? "other"
+      groups.set(category, [...(groups.get(category) ?? []), skill.name])
+    }
+
+    const list = [...groups.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .flatMap(([category, names]) => [
+        `### ${category}`,
+        ...names.sort((a, b) => a.localeCompare(b)).map((name) => `- ${name}`),
+      ])
+
+    return [
+      "<available-skills>",
+      "Only the skill names below are currently loaded and callable.",
+      "Static skill routing tables are guidance only. Never call a skill absent from this list.",
+      ...list,
+      "</available-skills>",
+    ].join("\n")
   }
 
   export async function planModeInstructions(): Promise<string[]> {

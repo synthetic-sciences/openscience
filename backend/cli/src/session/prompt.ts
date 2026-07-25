@@ -71,6 +71,7 @@ export namespace SessionPrompt {
   const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml"]
   // Science agents that dispatch GPU/compute work and should honor billing.compute.
   const COMPUTE_AGENTS = new Set(["research", "biology", "physics", "ml"])
+  const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
 
   const state = Instance.state(
     () => {
@@ -855,6 +856,7 @@ export namespace SessionPrompt {
         ...(await SystemPrompt.environment(model)),
         ...(await InstructionPrompt.system()),
         ...(await Memory.recall()),
+        ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),
         ...artifactContext,
       ]
 
