@@ -6,7 +6,7 @@ version: 1.0.0
 author: Synthetic Sciences
 license: MIT
 tags: [Ray Train, Distributed Training, Synthetic Sciencestion, Ray, Hyperparameter Tuning, Fault Tolerance, Elastic Scaling, Multi-Node, PyTorch, TensorFlow]
-dependencies: [ray[train], torch, transformers]
+dependencies: ["ray[train]", torch, transformers]
 ---
 
 # Ray Train - Distributed Training Synthetic Sciencestion
@@ -403,5 +403,4 @@ dataloader = DataLoader(dataset, num_workers=8)
 - Examples: https://docs.ray.io/en/latest/train/examples.html
 - Slack: https://forms.gle/9TSdDYUgxYs8SA9e8
 - Used by: OpenAI, Uber, Spotify, Shopify, Instacart
-
 
