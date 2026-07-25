@@ -1,3 +1,6 @@
+// Do not use this preload for DOMPurify tests. happy-dom's NodeIterator does
+// not adjust after live DOM removals, so sanitization can stop after the first
+// rejected node and false-pass. Sanitizer tests use frontend/ui/jsdom.ts.
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 
 GlobalRegistrator.register()
