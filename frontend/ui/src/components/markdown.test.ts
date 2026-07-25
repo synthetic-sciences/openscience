@@ -32,9 +32,7 @@ describe("sanitize (KaTeX MathML annotation)", () => {
   })
 
   test("regression guard: still strips script-injection attributes across every node (sanitizer stays active)", () => {
-    const safe = sanitize(
-      "<img src=x onerror=alert(1)><img src=y onerror=alert(2)><script>evil()</script>",
-    )
+    const safe = sanitize("<img src=x onerror=alert(1)><img src=y onerror=alert(2)><script>evil()</script>")
     expect(safe).not.toContain("onerror")
     expect(safe).not.toContain("<script")
   })
