@@ -1525,8 +1525,8 @@ export namespace SessionPrompt {
         sessionID: userMessage.info.sessionID,
         type: "text",
         text: managed
-          ? "<system-reminder>Compute spend is set to MANAGED. Run GPU/training work through the bundled `atlas compute` CLI (e.g. `atlas compute:up`), which bills the Atlas wallet. Do not fall back to the user's own GPU providers unless `atlas doctor` reports managed compute unavailable.</system-reminder>"
-          : "<system-reminder>Compute spend is set to BYOK. Run GPU/training work on the user's own connected providers (Modal, Tinker, TensorPool, …) via the cloud-compute skills — do not launch managed `atlas compute` leases that bill the Atlas wallet.</system-reminder>",
+          ? "<system-reminder>Compute spend is set to MANAGED. Run GPU/training work through the bundled `atlas compute` CLI (e.g. `atlas compute:up`), which bills Credits. Do not fall back to the user's own GPU providers unless `atlas doctor` reports managed compute unavailable.</system-reminder>"
+          : "<system-reminder>Compute spend is set to BYOK. Run GPU/training work on the user's own connected providers (Modal, Tinker, TensorPool, …) via the cloud-compute skills — do not launch managed `atlas compute` leases that bill Credits.</system-reminder>",
         synthetic: true,
       })
     }

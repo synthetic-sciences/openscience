@@ -158,7 +158,7 @@ const Compute: Component = () => {
           <h2 class="text-16-medium text-text-strong">Compute</h2>
           <p class="text-13-regular text-text-weak">
             GPU providers for sandboxes and training. Add your own key to run on your account for free — or skip the key
-            and provision from the Compute tab, funded by your CLI wallet.
+            and provision from the Compute tab, funded by Credits.
           </p>
         </div>
       </div>

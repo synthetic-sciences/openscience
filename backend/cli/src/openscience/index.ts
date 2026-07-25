@@ -187,7 +187,7 @@ function describeReason(provider: string, reason: SyncedServiceReason | undefine
     case "missing_key":
       return `${provider}: no key set — add one in the dashboard or top up credits.`
     case "no_credits":
-      return `${provider}: Atlas wallet is out of credits — top up at https://app.syntheticsciences.ai/cli.`
+      return `${provider}: Credits are empty - top up at https://app.syntheticsciences.ai/billing.`
     case "ineligible_plan":
       return `${provider}: BYOK requires an active paid plan (starter $20, pro $50, or max $200).`
     case "proxy_disabled":
@@ -206,11 +206,11 @@ function describeReason(provider: string, reason: SyncedServiceReason | undefine
  * out of credits (managed mode) or has no active subscription. Halts
  * the session so the agent loop doesn't keep racking up calls the
  * user can't pay for. Caught at the session boundary; surfaced to the
- * user as "Insufficient credits — top up at app.syntheticsciences.ai/cli".
+ * user as "Insufficient credits - top up at app.syntheticsciences.ai/billing".
  */
 export class InsufficientCreditsError extends Error {
   constructor(
-    message: string = "Insufficient Atlas credits. Top up at app.syntheticsciences.ai/cli (Plan tab) or switch back to your own keys.",
+    message: string = "Credits are empty. Top up at app.syntheticsciences.ai/billing or switch back to your own keys.",
   ) {
     super(message)
     this.name = "InsufficientCreditsError"
@@ -826,7 +826,7 @@ export namespace OpenScience {
           // No active Atlas subscription. Don't clear the session
           // (the auth itself is fine) — surface the message so the
           // user knows to subscribe.
-          log.warn("no active CLI subscription — visit app.syntheticsciences.ai/cli (Plan tab)")
+          log.warn("no active Atlas plan - visit app.syntheticsciences.ai/billing")
           return null
         }
         log.warn("sync failed", { status: res.status })
@@ -1016,7 +1016,7 @@ export namespace OpenScience {
   }
 
   /** Whether a value is a managed Atlas proxy token (thk_*). Managed calls are
-   *  the only ones that debit the CLI wallet. */
+   *  the only ones that debit Credits. */
   export function isManagedKeyValue(value: string | undefined): boolean {
     return typeof value === "string" && isManagedAtlasKey(value)
   }
@@ -1358,7 +1358,7 @@ export namespace OpenScience {
           log.warn(
             `Insufficient balance for this call — need $${need.toFixed(2)}, ` +
               `have $${have.toFixed(2)} available. Top up at ` +
-              `https://app.syntheticsciences.ai/cli or switch to BYOK.`,
+              `https://app.syntheticsciences.ai/billing or switch to BYOK.`,
           )
         } else {
           log.warn("usage report 402 — subscription required or balance empty")
@@ -1638,28 +1638,20 @@ export namespace OpenScience {
 
   export interface Credits {
     balanceUsd: number
+    balanceCents: number
+    /** @deprecated Use balanceCents. */
     cliBalanceCents: number
     cycleCreditsRemainingCents: number
     lifetimeSpentCents: number
   }
 
-  /**
-   * The wallet balance the CLI can actually spend, in cents.
-   *
-   * Atlas `/api/credits` also returns `unified_balance_cents` — the sum of every
-   * pool: the CLI wallet + the Atlas-web wallet + the subscription cycle pool +
-   * gifted credits. But OpenScience managed mode debits ONLY the CLI wallet
-   * (Atlas `cli.py`: `category="cli"`; an Atlas plan grants BYOK + library quota,
-   * not CLI spending credits). Showing the unified pool made the wallet read
-   * e.g. $160 when the CLI could actually spend far less. Prefer the CLI wallet;
-   * fall back to the older aggregate fields only if a backend omits it.
-   */
-  export function cliSpendableCents(d: {
+  /** Resolve the canonical wallet while accepting older Atlas responses. */
+  export function walletCents(d: {
     cli_balance_cents?: number
     unified_balance_cents?: number
     balance_cents?: number
   }): number {
-    return d.cli_balance_cents ?? d.unified_balance_cents ?? d.balance_cents ?? 0
+    return d.balance_cents ?? d.cli_balance_cents ?? d.unified_balance_cents ?? 0
   }
 
   export async function getCredits(): Promise<Credits | null> {
@@ -1677,10 +1669,11 @@ export namespace OpenScience {
         cycle_credits_remaining_cents?: number
         lifetime_spent_cents?: number
       }
-      const cents = cliSpendableCents(d)
+      const cents = walletCents(d)
       return {
         balanceUsd: cents / 100,
-        cliBalanceCents: d.cli_balance_cents ?? d.balance_cents ?? 0,
+        balanceCents: cents,
+        cliBalanceCents: cents,
         cycleCreditsRemainingCents: d.cycle_credits_remaining_cents ?? 0,
         lifetimeSpentCents: d.lifetime_spent_cents ?? 0,
       }

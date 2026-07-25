@@ -9,7 +9,7 @@ import { Log } from "../../../util/log"
 const log = Log.create({ service: "settings-billing" })
 
 // The two independent spend toggles (Settings → Spend), backed by the strict
-// config (`billing.llm` / `billing.compute`). "managed" runs on the Atlas wallet;
+// config (`billing.llm` / `billing.compute`). "managed" runs on Credits;
 // "byok" runs on the user's own keys/OAuth and is never billed. LLM is nullable
 // (unset = auto-detect from the resolved credential); compute defaults to byok.
 export const BillingState = z.object({
@@ -17,7 +17,7 @@ export const BillingState = z.object({
   compute: z.enum(["managed", "byok"]),
   wallet: z.object({
     signedIn: z.boolean().describe("Whether an Atlas session (thk_ key) is available"),
-    balanceUsd: z.number().describe("CLI wallet balance in USD; -1 when signed out or unavailable"),
+    balanceUsd: z.number().describe("Credit balance in USD; -1 when signed out or unavailable"),
   }),
 })
 export type BillingState = z.infer<typeof BillingState>

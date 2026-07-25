@@ -96,7 +96,7 @@ async function onboardManaged(): Promise<void> {
 
   const mode = await OpenScience.getBillingMode().catch(() => null)
   const balance = mode?.balance_usd ?? (await OpenScience.getBalance().catch(() => null)) ?? 0
-  prompts.log.info(`Atlas wallet: $${balance.toFixed(2)}`)
+  prompts.log.info(`Credits: $${balance.toFixed(2)}`)
 
   if (balance <= 0) {
     const add = await prompts.confirm({

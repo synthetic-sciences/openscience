@@ -1,7 +1,7 @@
 /**
  * Billing gate predicates for LLM calls.
  *
- * The openscience CLI wallet only pays for *managed-proxy* calls. Everything else —
+ * Credits only pay for *managed-proxy* calls. Everything else -
  * a user's own key (BYOK) or a first-party OAuth subscription (Claude Pro/Max,
  * Sign in with ChatGPT, Copilot) — costs the wallet nothing and must never be
  * blocked by it or reported for billing.
@@ -36,7 +36,7 @@ export async function computeBillingMode(): Promise<BillingMode> {
 }
 
 /** First-party providers whose OAuth path runs on the user's own subscription
- *  and never debits the CLI wallet. */
+ *  and never debits Credits. */
 const OAUTH_FREE_PROVIDERS = new Set([
   "anthropic",
   "openai",
@@ -99,7 +99,7 @@ export async function resolveCredentialSource(providerID: string, _modelID: stri
 }
 
 /**
- * Whether the pre-flight CLI-wallet balance check should run for this call.
+ * Whether the pre-flight credit balance check should run for this call.
  * Only managed-proxy credentials draw down the wallet, so BYOK and OAuth-free
  * calls must skip the check entirely — an empty wallet never blocks them.
  */

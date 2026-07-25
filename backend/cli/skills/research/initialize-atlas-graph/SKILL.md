@@ -47,7 +47,7 @@ Run this skill when:
      connectivity and any `OPENSCIENCE_API_BASE`/`SYNSC_API_BASE` override, then
      retrying — not re-authenticating.
    - `"plan"` — authenticated, but the account has no active Atlas plan. Point
-     the user at https://app.syntheticsciences.ai/cli (Plan tab); include the
+     the user at https://app.syntheticsciences.ai/billing; include the
      backend `message` if present.
    - `"backend"` — anything else; show the backend's `status`/`message` verbatim.
 

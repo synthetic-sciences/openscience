@@ -4,9 +4,9 @@ import z from "zod"
 import { OpenScience } from "../../../openscience"
 import { lazy } from "../../../util/lazy"
 
-// Settings → Wallet. Read-only view of the Atlas prepaid wallet: balance, plan
+// Settings → Billing. Read-only view of Credits: balance, plan
 // billing mode, lifetime spend, and the recent credit ledger. Adding funds is a
-// hand-off to app.syntheticsciences.ai/cli (the frontend opens the Plan tab) —
+// hand-off to app.syntheticsciences.ai/billing -
 // no payment UI in-app. Degrades to a signed-out shape when there's no Atlas
 // session, and to empty sections when an Atlas endpoint is unavailable.
 export const WalletState = z.object({
@@ -64,7 +64,7 @@ export const WalletSettingsRoutes = lazy(() =>
   new Hono().get(
     "/",
     describeRoute({
-      summary: "Get Atlas wallet balance, plan mode, and recent transactions",
+      summary: "Get credit balance, plan mode, and recent transactions",
       operationId: "settings.wallet.get",
       responses: {
         200: {

@@ -63,7 +63,7 @@ const LLM_MODES = [
   {
     value: "managed" as const,
     title: "Managed",
-    body: "LLM calls route through your Atlas wallet — metered credits, no API keys needed.",
+    body: "LLM calls route through Credits — no API keys needed.",
   },
   {
     value: "byok" as const,
@@ -190,7 +190,7 @@ export default function Billing(): JSX.Element {
     <PanelScroll>
       <PanelHeader
         title="Billing"
-        description="Your Atlas wallet, what runs on it, and where the spend goes — balance, spend routing, usage, and the credit ledger."
+        description="Credits, spend routing, usage, and the transaction ledger in one place."
       />
       <PanelBody>
         {/* ── Balance ─────────────────────────────────────────────────── */}
@@ -226,7 +226,7 @@ export default function Billing(): JSX.Element {
                 </Show>
               </div>
               <div class="flex-1" />
-              <Button size="small" variant="primary" onClick={() => platform.openLink(URLS.dashboardCli)}>
+              <Button size="small" variant="primary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
                 Add funds
               </Button>
             </Row>

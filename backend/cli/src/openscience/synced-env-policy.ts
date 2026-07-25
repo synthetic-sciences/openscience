@@ -2,7 +2,7 @@
  * Which Atlas-synced env vars the CLI is allowed to apply.
  *
  * OpenScience routes every *managed* LLM call through OpenRouter — that is the
- * one provider the Atlas wallet pays for, via the proxy `OPENROUTER_BASE_URL` +
+ * one provider Credits pay for, via the proxy `OPENROUTER_BASE_URL` +
  * a `thk_*` `OPENROUTER_API_KEY`. Every other model provider (Anthropic, OpenAI,
  * Gemini, Together, Groq, Fireworks, xAI, Mistral, DeepSeek, Cerebras, and
  * Codex) is BYOK-only, configured locally with a shell `export`,

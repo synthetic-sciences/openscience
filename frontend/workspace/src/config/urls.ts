@@ -20,6 +20,8 @@ export const URLS = {
   dashboard: "https://app.syntheticsciences.ai",
   /** CLI plan + wallet tab. */
   dashboardCli: "https://app.syntheticsciences.ai/cli",
+  /** Plans and shared wallet. */
+  dashboardBilling: "https://app.syntheticsciences.ai/billing",
   /** GitHub integration settings. */
   githubIntegration: "https://app.syntheticsciences.ai/settings/integrations",
   /** Notification favicon. */

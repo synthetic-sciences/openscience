@@ -120,7 +120,7 @@ export namespace SessionProcessor {
             // wallet, so they are NOT gated here.
             if ((await llmBillingMode()) === "managed" && credentialSource === "byok") {
               throw new Error(
-                `Managed LLM spend is on, but ${input.model.providerID} isn't available through your Atlas wallet — it resolved to a non-managed key. Switch LLM spend to BYOK in Settings → Spend to use your own key, or pick a managed model.`,
+                `Managed LLM spend is on, but ${input.model.providerID} isn't available through Credits - it resolved to a non-managed key. Switch LLM spend to BYOK in Settings → Spend to use your own key, or pick a managed model.`,
               )
             }
 
@@ -136,7 +136,7 @@ export namespace SessionProcessor {
                 // attempt instead of blocking until the TTL expires.
                 OpenScience.invalidateBalance()
                 throw new Error(
-                  "Your Atlas wallet is empty. Top up at app.syntheticsciences.ai/cli, or switch LLM spend to BYOK in Settings → Spend — BYOK uses your own key and is never billed.",
+                  "Your Credits balance is empty. Top up at app.syntheticsciences.ai/billing, or switch LLM spend to BYOK in Settings → Spend - BYOK uses your own key and is never billed.",
                 )
               }
             }
@@ -340,7 +340,7 @@ export namespace SessionProcessor {
 
                   // Report usage ONLY for managed-proxy credentials. BYOK keys
                   // and first-party OAuth subscriptions are billed to the user's
-                  // own account, not the openscience CLI wallet, so they are never
+                  // own account, not Credits, so they are never
                   // reported (regardless of the model's nominal models.dev price).
                   const usageResult = !shouldReportUsage(credentialSource)
                     ? null
