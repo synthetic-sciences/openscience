@@ -44,6 +44,10 @@ jobs:
           git config --global user.email "ci@openscience.dev"
           git config --global user.name "OpenScience CI"
           git config --global init.defaultBranch main
+      - name: Build embedded web assets for server tests
+        run: |
+          bun run --cwd frontend/workspace build
+          bun run --cwd backend/cli script/generate-web-assets.ts
       - run: bun run --cwd backend/cli test
 
   build:
