@@ -11,7 +11,5 @@ const RDKIT_WORKER_CONTENT_SECURITY_POLICY =
 const RDKIT_WORKER_ASSET = /^\/assets\/rdkit\.worker-[A-Za-z0-9_-]+\.js$/
 
 export function webAssetContentSecurityPolicy(path: string): string {
-  return RDKIT_WORKER_ASSET.test(path)
-    ? RDKIT_WORKER_CONTENT_SECURITY_POLICY
-    : APP_CONTENT_SECURITY_POLICY
+  return RDKIT_WORKER_ASSET.test(path) ? RDKIT_WORKER_CONTENT_SECURITY_POLICY : APP_CONTENT_SECURITY_POLICY
 }

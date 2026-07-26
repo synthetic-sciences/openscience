@@ -28,7 +28,9 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = layout.view(sessionKey)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
-  const visibleUserMessages = createMemo(() => messages().filter((message): message is UserMessage => message.role === "user"))
+  const visibleUserMessages = createMemo(() =>
+    messages().filter((message): message is UserMessage => message.role === "user"),
+  )
 
   const usd = createMemo(
     () =>

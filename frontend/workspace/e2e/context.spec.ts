@@ -16,9 +16,7 @@ test("context panel can be opened from the prompt", async ({ page, sdk, gotoSess
       // requires a model id. Pass the suite model explicitly so this setup does
       // not depend on a connected provider or on host-machine credentials.
       model: (() => {
-        const [providerID = "e2e", modelID = "echo"] = (process.env.OPENSCIENCE_E2E_MODEL ?? "e2e/echo").split(
-          "/",
-        )
+        const [providerID = "e2e", modelID = "echo"] = (process.env.OPENSCIENCE_E2E_MODEL ?? "e2e/echo").split("/")
         return { providerID, modelID }
       })(),
       parts: [

@@ -235,9 +235,7 @@ export function AtlasCanvas(): JSX.Element {
         }),
   )
   const nodes = createMemo<AtlasNode[]>(() => graphTree.latest ?? [])
-  const atlasError = createMemo<Error | undefined>(
-    () => graphListError() ?? folderProjectError() ?? graphTreeError(),
-  )
+  const atlasError = createMemo<Error | undefined>(() => graphListError() ?? folderProjectError() ?? graphTreeError())
   const byId = createMemo(() => new Map(nodes().map((n) => [n.node_id, n])))
   const loading = createMemo(() => graphList.loading || (graphId() !== undefined && graphTree.loading))
   const refetchAll = () => {

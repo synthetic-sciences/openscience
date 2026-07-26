@@ -59,12 +59,7 @@ export interface InitProjectResponse {
   host?: string
 }
 
-async function requestJSON<T>(
-  server: string,
-  method: "GET" | "POST",
-  path: string,
-  body?: unknown,
-): Promise<T> {
+async function requestJSON<T>(server: string, method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
   const route = `/api/atlas${path}`
   const res = await fetch(resolveServerRoute(route, server, window.location.origin), {
     method,
@@ -112,7 +107,6 @@ export function createAtlasAPI(server: () => string) {
     /** Find or create the opened project's root after explicit user action. */
     initProject: (directory: string) =>
       post<InitProjectResponse>(`/project/init?directory=${encodeURIComponent(directory)}`, {}),
-    listArtifacts: (nodeID: string) =>
-      get<ArtifactsListResponse | AtlasArtifact[]>(`/nodes/${nodeID}/artifacts`),
+    listArtifacts: (nodeID: string) => get<ArtifactsListResponse | AtlasArtifact[]>(`/nodes/${nodeID}/artifacts`),
   }
 }

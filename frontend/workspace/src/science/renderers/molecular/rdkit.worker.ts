@@ -15,9 +15,11 @@ async function getRDKit(): Promise<RDKitModule> {
     rdkitPromise = (async () => {
       try {
         const init = ((await import("@rdkit/rdkit")) as unknown as { default: RDKitLoader }).default
-        const wasmUrl = ((await import("@rdkit/rdkit/dist/RDKit_minimal.wasm?url")) as unknown as {
-          default: string
-        }).default
+        const wasmUrl = (
+          (await import("@rdkit/rdkit/dist/RDKit_minimal.wasm?url")) as unknown as {
+            default: string
+          }
+        ).default
         return await init({ locateFile: () => wasmUrl })
       } catch (error) {
         rdkitPromise = undefined

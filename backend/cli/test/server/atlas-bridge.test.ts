@@ -113,9 +113,11 @@ describe("pinMatchesKey", () => {
 
 describe("stage node bridge", () => {
   test("validates and trims the mutation payload", () => {
-    expect(
-      parseStageNodeInput({ title: "  result  ", directory: " /repo ", parent_id: " parent-1 " }),
-    ).toEqual({ title: "result", directory: "/repo", parentID: "parent-1" })
+    expect(parseStageNodeInput({ title: "  result  ", directory: " /repo ", parent_id: " parent-1 " })).toEqual({
+      title: "result",
+      directory: "/repo",
+      parentID: "parent-1",
+    })
     expect(() => parseStageNodeInput({ title: "x", directory: "/repo" })).toThrow("parent_id is required")
   })
 

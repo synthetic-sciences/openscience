@@ -10,9 +10,7 @@ const base = {
 
 describe("resolveDefaultServerUrl", () => {
   test("uses a configured API server in production builds", () => {
-    expect(resolveDefaultServerUrl({ ...base, configured: "http://127.0.0.1:4100" })).toBe(
-      "http://127.0.0.1:4100",
-    )
+    expect(resolveDefaultServerUrl({ ...base, configured: "http://127.0.0.1:4100" })).toBe("http://127.0.0.1:4100")
   })
 
   test("keeps an explicit user default ahead of the build default", () => {
@@ -43,11 +41,7 @@ describe("resolveServerRoute", () => {
 
   test("preserves query parameters", () => {
     expect(
-      resolveServerRoute(
-        "/api/atlas/project?directory=%2Ftmp%2Fresearch",
-        "http://127.0.0.1:4100",
-        base.origin,
-      ),
+      resolveServerRoute("/api/atlas/project?directory=%2Ftmp%2Fresearch", "http://127.0.0.1:4100", base.origin),
     ).toBe("http://127.0.0.1:4100/api/atlas/project?directory=%2Ftmp%2Fresearch")
   })
 })

@@ -34,11 +34,7 @@ test("can set a default server on web", async ({ page }) => {
   await expect(dialog).toHaveCount(0)
 
   await trigger.click()
-  const serverRow = page
-    .getByRole("dialog")
-    .locator('[data-slot="list-item"]')
-    .filter({ hasText: serverName })
-    .first()
+  const serverRow = page.getByRole("dialog").locator('[data-slot="list-item"]').filter({ hasText: serverName }).first()
   await expect(serverRow).toBeVisible()
   await expect(serverRow.getByText("default", { exact: true })).toBeVisible()
 })
