@@ -2,8 +2,6 @@ import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import { existsSync, readFileSync, writeFileSync, chmodSync } from "fs"
-import { createRequire } from "module"
-import { fileURLToPath } from "url"
 import { randomUUID, createHash } from "crypto"
 import { Global } from "../global"
 import { Log } from "../util/log"
@@ -11,6 +9,7 @@ import { Lock } from "../util/lock"
 import { Env } from "../env"
 import { Auth } from "../auth"
 import { isSyncedEnvAllowed, BYOK_LLM_ENV_KEYS } from "./synced-env-policy"
+import { resolveAtlasPackageDir } from "./atlas-package"
 import { DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 
 const log = Log.create({ service: "openscience" })
@@ -228,34 +227,6 @@ export class InsufficientCreditsError extends Error {
 // best-effort and never throws — if atlas can't be found the agent's
 // `atlas doctor` gate degrades gracefully.
 let atlasBinDirCache: string | null | undefined
-
-function resolveAtlasPackageDir(): string | null {
-  try {
-    const req = createRequire(import.meta.url)
-    return path.dirname(req.resolve("@synsci/atlas/package.json"))
-  } catch {}
-  const starts = [
-    (() => {
-      try {
-        return path.dirname(fileURLToPath(import.meta.url))
-      } catch {
-        return ""
-      }
-    })(),
-    process.cwd(),
-  ].filter(Boolean)
-  for (const start of starts) {
-    let dir = start
-    while (true) {
-      const candidate = path.join(dir, "node_modules", "@synsci", "atlas", "package.json")
-      if (existsSync(candidate)) return path.dirname(candidate)
-      const parent = path.dirname(dir)
-      if (parent === dir) break
-      dir = parent
-    }
-  }
-  return null
-}
 
 /** Resolve (and cache) the directory that should be prepended to a subprocess
  *  PATH so `atlas` resolves to the bundled CLI. Returns null when the package

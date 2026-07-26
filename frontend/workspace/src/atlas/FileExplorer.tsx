@@ -577,21 +577,25 @@ function ArtifactsPanel(): JSX.Element {
   const sdk = useSDK()
   const atlas = createAtlasAPI(() => sdk.url)
   const directory = () => sync.project?.worktree || sync.data.path.directory || sdk.directory
+  const [loadError, setLoadError] = createSignal<Error>()
   const [data] = createResource(directory, async (dir) => {
     try {
       const pid = (await atlas.resolveProject(dir)).project_id
-      if (!pid) return [] as ArtifactRow[]
+      if (!pid) {
+        setLoadError(undefined)
+        return [] as ArtifactRow[]
+      }
       const tree = await atlas.getGraphTree(pid)
       const rows: ArtifactRow[] = []
       for (const node of tree.nodes ?? []) {
-        try {
-          const res = await atlas.listArtifacts(node.node_id)
-          const items = Array.isArray(res) ? res : (res.artifacts ?? [])
-          for (const a of items) rows.push({ node, artifact: a })
-        } catch {}
+        const res = await atlas.listArtifacts(node.node_id)
+        const items = Array.isArray(res) ? res : (res.artifacts ?? [])
+        for (const a of items) rows.push({ node, artifact: a })
       }
+      setLoadError(undefined)
       return rows
-    } catch {
+    } catch (error) {
+      setLoadError(error instanceof Error ? error : new Error(String(error)))
       return [] as ArtifactRow[]
     }
   })
@@ -601,7 +605,11 @@ function ArtifactsPanel(): JSX.Element {
         when={(data.latest ?? []).length > 0}
         fallback={
           <div style={emptyMsg()}>
-            {data.loading ? "loading artifacts…" : "no artifacts yet · attach a file to seed one"}
+            {loadError()
+              ? `artifacts unavailable · ${loadError()!.message}`
+              : data.loading
+                ? "loading artifacts…"
+                : "no artifacts yet · attach a file to seed one"}
           </div>
         }
       >

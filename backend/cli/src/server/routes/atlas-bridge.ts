@@ -8,9 +8,8 @@
  * the same contract the `atlas` CLI binary speaks (`nodes:list`,
  * `nodes:commit-new`, `auth/github/*`).
  *
- * Unauthenticated (or backend-unreachable) reads degrade to empty payloads so
- * the canvas stays quiet while signed out. Mutations never fake success: the
- * caller receives an actionable HTTP error and can keep the user's input.
+ * Reads and mutations both preserve failure semantics. A signed-out or
+ * unreachable Atlas account must not look like a legitimately empty graph.
  */
 import { Hono } from "hono"
 import crypto from "crypto"
@@ -21,10 +20,6 @@ import { OpenScience, API_BASE } from "../../openscience"
 import { Log } from "../../util/log"
 
 const log = Log.create({ service: "atlas-bridge" })
-
-const EMPTY_NODES = { nodes: [] as unknown[], total: 0, page: 1, per_page: 50, has_more: false }
-const EMPTY_ARTIFACTS = { artifacts: [] as unknown[], has_more: false }
-const EMPTY_GITHUB = { connected: false }
 
 /** Deterministic local placeholder id for unauthenticated callers — lets
  *  the SPA cache a project/session mapping without minting real Atlas state. */
@@ -249,6 +244,22 @@ function mutationError(error: unknown): { status: number; detail: string } {
   }
   if (error instanceof Error && error.message === "unauthenticated") {
     return { status: 401, detail: "Sign in to Atlas before changing the graph." }
+  }
+  return {
+    status: 502,
+    detail: error instanceof Error ? error.message : "Atlas is unavailable",
+  }
+}
+
+function readError(error: unknown): { status: number; detail: string } {
+  if (error instanceof BackendHttpError) {
+    return {
+      status: error.status,
+      detail: backendMessage(error.body) ?? `Atlas request failed with HTTP ${error.status}`,
+    }
+  }
+  if (error instanceof Error && error.message === "unauthenticated") {
+    return { status: 401, detail: "Sign in to Atlas to load the graph." }
   }
   return {
     status: 502,
@@ -538,10 +549,11 @@ export const AtlasBridgeRoutes = lazy(() =>
     .get("/nodes", async (c) => {
       try {
         const res = await atlas("GET", "/api/v1/nodes")
-        if (!res.ok) return c.json(EMPTY_NODES)
+        if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
         return c.json(await res.json())
-      } catch {
-        return c.json(EMPTY_NODES)
+      } catch (error) {
+        const failure = readError(error)
+        return c.json({ detail: failure.detail }, failure.status as any)
       }
     })
     // List the user's graphs (= root nodes). The canvas shows one graph at a
@@ -549,10 +561,11 @@ export const AtlasBridgeRoutes = lazy(() =>
     .get("/graphs", async (c) => {
       try {
         const res = await atlas("GET", "/api/v1/nodes?root_only=true")
-        if (!res.ok) return c.json(EMPTY_NODES)
+        if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
         return c.json(await res.json())
-      } catch {
-        return c.json(EMPTY_NODES)
+      } catch (error) {
+        const failure = readError(error)
+        return c.json({ detail: failure.detail }, failure.status as any)
       }
     })
     // Full subgraph (nodes) for a single graph/root, matching Atlas web's
@@ -561,10 +574,11 @@ export const AtlasBridgeRoutes = lazy(() =>
       const id = c.req.param("id")
       try {
         const res = await atlas("GET", `/api/v1/nodes/${encodeURIComponent(id)}/tree?projection=full`)
-        if (!res.ok) return c.json({ nodes: [], node_count: 0 })
+        if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
         return c.json(await res.json())
-      } catch {
-        return c.json({ nodes: [], node_count: 0 })
+      } catch (error) {
+        const failure = readError(error)
+        return c.json({ detail: failure.detail }, failure.status as any)
       }
     })
     .post("/nodes", async (c) => {
@@ -577,39 +591,46 @@ export const AtlasBridgeRoutes = lazy(() =>
       }
     })
     // Proxy a node's real artifacts/evidence so the detail drawer shows the
-    // run's outputs. Falls back to empty on auth/backend failure (like /nodes).
+    // run's outputs without conflating a failed request with "no artifacts".
     .get("/nodes/:id/artifacts", async (c) => {
       const id = c.req.param("id")
       try {
         const res = await atlas("GET", `/api/v1/nodes/${encodeURIComponent(id)}/artifacts`)
-        if (!res.ok) return c.json(EMPTY_ARTIFACTS)
+        if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
         return c.json(await res.json())
-      } catch {
-        return c.json(EMPTY_ARTIFACTS)
+      } catch (error) {
+        const failure = readError(error)
+        return c.json({ detail: failure.detail }, failure.status as any)
       }
     })
     .get("/github/status", async (c) => {
       try {
         const res = await atlas("GET", "/api/v1/auth/github/status")
-        return c.json(res.ok ? await res.json() : EMPTY_GITHUB)
-      } catch {
-        return c.json(EMPTY_GITHUB)
+        if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
+        return c.json(await res.json())
+      } catch (error) {
+        const failure = readError(error)
+        return c.json({ detail: failure.detail }, failure.status as any)
       }
     })
     .post("/github/refresh", async (c) => {
       try {
         const res = await atlas("POST", "/api/v1/auth/github/refresh-repos", {})
-        return c.json(res.ok ? await res.json() : EMPTY_GITHUB)
-      } catch {
-        return c.json(EMPTY_GITHUB)
+        if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
+        return c.json(await res.json())
+      } catch (error) {
+        const failure = mutationError(error)
+        return c.json({ detail: failure.detail }, failure.status as any)
       }
     })
     .post("/github/disconnect", async (c) => {
       try {
         const res = await atlas("DELETE", "/api/v1/auth/github/disconnect")
-        return c.json(res.ok ? await res.json() : EMPTY_GITHUB)
-      } catch {
-        return c.json(EMPTY_GITHUB)
+        if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
+        return c.json(await res.json())
+      } catch (error) {
+        const failure = mutationError(error)
+        return c.json({ detail: failure.detail }, failure.status as any)
       }
     })
     // Resolve / init the OPENED folder's project root, so the canvas scopes to
@@ -631,6 +652,5 @@ export const AtlasBridgeRoutes = lazy(() =>
           : {}),
       })
     })
-    // Quiet 200 for any other atlas path the SPA probes.
-    .all("/*", (c) => c.json({}, 200)),
+    .all("/*", (c) => c.json({ detail: "Atlas bridge route not found" }, 404)),
 )

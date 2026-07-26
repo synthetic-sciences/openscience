@@ -1,7 +1,8 @@
 import { defineConfig, devices } from "@playwright/test"
+import { resolvePlaywrightTarget } from "./script/e2e-mode"
 
-const port = Number(process.env.PLAYWRIGHT_PORT ?? 3000)
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${port}`
+const target = resolvePlaywrightTarget(process.env)
+const baseURL = target.baseURL
 const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "localhost"
 const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
 // Basic-Auth creds for the in-process openscience server. e2e-local.ts pins both
@@ -9,8 +10,7 @@ const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
 // the same value so the Playwright-hosted frontend can authenticate.
 const serverUsername = process.env.VITE_OPENSCIENCE_SERVER_USERNAME ?? "openscience"
 const serverPassword = process.env.VITE_OPENSCIENCE_SERVER_PASSWORD ?? ""
-const command = `bun run dev -- --host 0.0.0.0 --port ${port}`
-const reuse = !process.env.CI
+const command = `bun run dev -- --host 0.0.0.0 --port ${target.port}`
 
 export default defineConfig({
   testDir: "./e2e",
@@ -28,18 +28,24 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: [["html", { outputFolder: "e2e/playwright-report", open: "never" }], ["line"]],
-  webServer: {
-    command,
-    url: baseURL,
-    reuseExistingServer: reuse,
-    timeout: 120_000,
-    env: {
-      VITE_OPENSCIENCE_SERVER_HOST: serverHost,
-      VITE_OPENSCIENCE_SERVER_PORT: serverPort,
-      VITE_OPENSCIENCE_SERVER_USERNAME: serverUsername,
-      VITE_OPENSCIENCE_SERVER_PASSWORD: serverPassword,
-    },
-  },
+  ...(target.startWebServer
+    ? {
+        webServer: {
+          command,
+          url: baseURL,
+          // The isolated harness owns a freshly allocated port. Reusing any
+          // listener would make it possible to test a different checkout.
+          reuseExistingServer: target.reuseExistingServer,
+          timeout: 120_000,
+          env: {
+            VITE_OPENSCIENCE_SERVER_HOST: serverHost,
+            VITE_OPENSCIENCE_SERVER_PORT: serverPort,
+            VITE_OPENSCIENCE_SERVER_USERNAME: serverUsername,
+            VITE_OPENSCIENCE_SERVER_PASSWORD: serverPassword,
+          },
+        },
+      }
+    : {}),
   use: {
     baseURL,
     trace: "on-first-retry",

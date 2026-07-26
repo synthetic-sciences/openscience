@@ -31,24 +31,33 @@ Your app is ready to be deployed!
 
 ## E2E Testing
 
-Playwright starts the Vite dev server automatically via `webServer`, and UI tests need an openscience backend (defaults to `localhost:4096`).
-Use the local runner to create a temp sandbox, seed data, and run the tests.
+`bun run test:e2e` is the safe default: it allocates fresh backend, Vite, and
+model ports, creates a temp sandbox, seeds data, and never reuses an existing
+port-3000 listener. `test:e2e:local` is an equivalent compatibility alias.
 It also starts a loopback-only deterministic model so prompt/reply coverage never
-uses developer credentials or an external inference service. A direct
-`playwright test` run skips that one model-dependent spec unless the CI harness
-provides the same `OPENSCIENCE_E2E_FAKE_MODEL=1` contract.
+uses developer credentials or an external inference service. Raw
+`playwright test` is intentionally rejected because it cannot establish which
+backend or checkout owns an existing listener.
 
 ```bash
 bunx playwright install
-bun run test:e2e:local
-bun run test:e2e:local -- --grep "settings"
+bun run test:e2e
+bun run test:e2e -- --grep "settings"
 ```
 
-Environment options:
+To test an already-running or packaged OpenScience server, opt in explicitly.
+The external command requires `PLAYWRIGHT_BASE_URL`, does not start Vite, and
+derives the SDK backend host/port from that URL unless separately overridden:
 
-- `PLAYWRIGHT_SERVER_HOST` / `PLAYWRIGHT_SERVER_PORT` (backend address, default: `localhost:4096`)
-- `PLAYWRIGHT_PORT` (Vite dev server port, default: `3000`)
-- `PLAYWRIGHT_BASE_URL` (override base URL, default: `http://localhost:<PLAYWRIGHT_PORT>`)
+```bash
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:4112 bun run test:e2e:external
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:4112 bun run test:e2e:packaged
+```
+
+Environment options for explicit external runs:
+
+- `PLAYWRIGHT_BASE_URL` (required server URL)
+- `PLAYWRIGHT_SERVER_HOST` / `PLAYWRIGHT_SERVER_PORT` (optional SDK backend override)
 
 ## Deployment
 

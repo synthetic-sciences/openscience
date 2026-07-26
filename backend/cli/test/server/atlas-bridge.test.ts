@@ -190,6 +190,34 @@ describe("stage node bridge", () => {
   })
 })
 
+describe("read bridge failures", () => {
+  test("reports a missing Atlas session instead of impersonating an empty account", async () => {
+    const response = await AtlasBridgeRoutes().request("/nodes")
+
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({ detail: "Sign in to Atlas to load the graph." })
+  })
+
+  test("propagates an Atlas backend failure instead of impersonating an empty account", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    globalThis.fetch = (async () =>
+      Response.json({ detail: "database unavailable" }, { status: 503 })) as unknown as typeof fetch
+
+    const response = await AtlasBridgeRoutes().request("/graphs")
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ detail: "database unavailable" })
+  })
+
+  test("returns 404 for an unknown bridge route", async () => {
+    const response = await AtlasBridgeRoutes().request("/not-a-real-route")
+
+    expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({ detail: "Atlas bridge route not found" })
+  })
+})
+
 describe("initProjectDetailed", () => {
   // The XDG data dir is isolated per-process, not per-test, so an earlier test
   // in the suite may leave a session file behind — that makes token() non-null

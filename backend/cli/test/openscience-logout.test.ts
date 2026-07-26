@@ -13,6 +13,7 @@ const snapshot = path.join(synced, "synced-env.json")
 const managed = path.join(synced, "openscience-synced.json")
 const queue = path.join(Global.Path.data, "usage-queue.jsonl")
 const atlas = path.join(os.tmpdir(), `openscience-test-atlas-${process.pid}`, "config.json")
+const sandboxAtlasConfig = process.env.ATLAS_CLI_CONFIG_PATH
 
 const INJECTED = "OPENSCIENCE_TEST_SYNCED_VAR"
 const EXPORTED = "OPENSCIENCE_TEST_EXPORTED_VAR"
@@ -20,7 +21,8 @@ const EXPORTED = "OPENSCIENCE_TEST_EXPORTED_VAR"
 afterEach(async () => {
   delete process.env[INJECTED]
   delete process.env[EXPORTED]
-  delete process.env.ATLAS_CLI_CONFIG_PATH
+  if (sandboxAtlasConfig) process.env.ATLAS_CLI_CONFIG_PATH = sandboxAtlasConfig
+  else delete process.env.ATLAS_CLI_CONFIG_PATH
   for (const file of [session, snapshot, managed, queue, atlas]) {
     await fs.rm(file, { force: true }).catch(() => {})
   }

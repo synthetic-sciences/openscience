@@ -223,6 +223,12 @@ export const DoctorCommand = cmd({
     UI.empty()
     prompts.intro("openscience doctor")
 
+    if (Global.LegacyConflicts.length) {
+      prompts.log.warn(
+        `Legacy data directories are ignored because current directories exist: ${Global.LegacyConflicts.map((item) => item.legacy).join(", ")}. Merge or remove them.`,
+      )
+    }
+
     const session = await OpenScience.getSession()
     if (session) {
       prompts.log.success("Atlas account: connected")

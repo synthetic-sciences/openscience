@@ -3,6 +3,7 @@ import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@synsci/script"
 import { fileURLToPath } from "url"
+import { createWrapperPackageManifest } from "./publish-manifest"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -26,30 +27,7 @@ await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
-  JSON.stringify(
-    {
-      name: pkg.name,
-      bin: {
-        openscience: `./bin/openscience`,
-      },
-      scripts: {
-        // best-effort: clears a stale global @synsci/cli whose `openscience`
-        // bin link would make npm refuse the install (EEXIST); never fails
-        preinstall: "node ./preinstall.mjs || exit 0",
-        postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
-      },
-      version: version,
-      // npm provenance refuses packages whose repository.url doesn't match
-      // the repo the workflow ran from (case-sensitive)
-      repository: {
-        type: "git",
-        url: "git+https://github.com/synthetic-sciences/openscience.git",
-      },
-      optionalDependencies: binaries,
-    },
-    null,
-    2,
-  ),
+  JSON.stringify(createWrapperPackageManifest({ source: pkg, version, binaries }), null, 2),
 )
 
 // Publish platform packages SEQUENTIALLY with retries. Each tarball is ~90MB;

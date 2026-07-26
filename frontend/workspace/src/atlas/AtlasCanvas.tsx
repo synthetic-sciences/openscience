@@ -148,11 +148,18 @@ export function AtlasCanvas(): JSX.Element {
   const GRAPH_KEY = "thesis-graph-id-v1"
   // Root list — just the graph roots (fast, root_only=true). Powers the dropdown
   // and default-selection logic without loading every node in the account.
+  const [graphListError, setGraphListError] = createSignal<Error>()
   const [graphList, { refetch: refetchGraphs }] = createResource(() =>
     atlas
       .listGraphs()
-      .then((r) => r.nodes ?? [])
-      .catch(() => [] as AtlasNode[]),
+      .then((r) => {
+        setGraphListError(undefined)
+        return r.nodes ?? []
+      })
+      .catch((error) => {
+        setGraphListError(error instanceof Error ? error : new Error(String(error)))
+        return [] as AtlasNode[]
+      }),
   )
   const graphs = createMemo<AtlasNode[]>(() =>
     [...(graphList.latest ?? [])].sort((a, b) => (a.title || "").localeCompare(b.title || "")),
@@ -160,11 +167,18 @@ export function AtlasCanvas(): JSX.Element {
   // Resolve THIS folder's project root so the canvas defaults to its own graph
   // instead of another project's. `null` = unlinked (offer Initialize); read via
   // `.latest` so it never suspends. `undefined` = still resolving.
+  const [folderProjectError, setFolderProjectError] = createSignal<Error>()
   const [folderProject, { refetch: refetchFolderProject }] = createResource(directory, (dir) =>
     atlas
       .resolveProject(dir)
-      .then((r) => r.project_id)
-      .catch(() => null),
+      .then((r) => {
+        setFolderProjectError(undefined)
+        return r.project_id
+      })
+      .catch((error) => {
+        setFolderProjectError(error instanceof Error ? error : new Error(String(error)))
+        return null
+      }),
   )
   const [graphId, setGraphIdRaw] = createSignal<string | undefined>(
     (() => {
@@ -205,19 +219,30 @@ export function AtlasCanvas(): JSX.Element {
 
   // Selected project's subtree — the ONLY node set we load (server-scoped).
   // Keyed on graphId() so switching graphs triggers a fresh fetch automatically.
+  const [graphTreeError, setGraphTreeError] = createSignal<Error>()
   const [graphTree, { refetch: refetchTree }] = createResource(
     () => graphId(),
     (id) =>
       atlas
         .getGraphTree(id)
-        .then((r) => r.nodes ?? [])
-        .catch(() => [] as AtlasNode[]),
+        .then((r) => {
+          setGraphTreeError(undefined)
+          return r.nodes ?? []
+        })
+        .catch((error) => {
+          setGraphTreeError(error instanceof Error ? error : new Error(String(error)))
+          return [] as AtlasNode[]
+        }),
   )
   const nodes = createMemo<AtlasNode[]>(() => graphTree.latest ?? [])
+  const atlasError = createMemo<Error | undefined>(
+    () => graphListError() ?? folderProjectError() ?? graphTreeError(),
+  )
   const byId = createMemo(() => new Map(nodes().map((n) => [n.node_id, n])))
   const loading = createMemo(() => graphList.loading || (graphId() !== undefined && graphTree.loading))
   const refetchAll = () => {
     void refetchGraphs()
+    void refetchFolderProject()
     void refetchTree()
   }
 
@@ -788,41 +813,48 @@ export function AtlasCanvas(): JSX.Element {
             }}
           >
             <Show
-              when={loading()}
+              when={atlasError()}
               fallback={
                 <Show
-                  when={selectedGraph()}
+                  when={loading()}
                   fallback={
-                    <InitHero
-                      // Primary: hit the deterministic find-or-create endpoint
-                      // directly (POST /api/atlas/project/init via the selected server) so
-                      // the button reliably creates the graph without depending on
-                      // the agent or the `atlas` binary. initGraph() refetches and
-                      // selects the new root, and toasts a typed error on failure.
-                      onInit={() => void initGraph()}
-                      // Secondary: route through the agent — drop the
-                      // initialize-atlas-graph skill invocation in the composer
-                      // WITHOUT sending, so the user can review/run it (useful when
-                      // the direct call reports a plan/auth issue to resolve in chat).
-                      onChat={() => uiStore.setPrefill("/initialize-atlas-graph")}
-                      busy={initializing()}
-                    />
+                    <Show
+                      when={selectedGraph()}
+                      fallback={
+                        <InitHero
+                          // Primary: hit the deterministic find-or-create endpoint
+                          // directly (POST /api/atlas/project/init via the selected server) so
+                          // the button reliably creates the graph without depending on
+                          // the agent or the `atlas` binary. initGraph() refetches and
+                          // selects the new root, and toasts a typed error on failure.
+                          onInit={() => void initGraph()}
+                          // Secondary: route through the agent — drop the
+                          // initialize-atlas-graph skill invocation in the composer
+                          // WITHOUT sending, so the user can review/run it (useful when
+                          // the direct call reports a plan/auth issue to resolve in chat).
+                          onChat={() => uiStore.setPrefill("/initialize-atlas-graph")}
+                          busy={initializing()}
+                        />
+                      }
+                    >
+                      <EmptyHero onCreate={() => void createNode()} />
+                    </Show>
                   }
                 >
-                  <EmptyHero onCreate={() => void createNode()} />
+                  <span
+                    style={{
+                      "font-family": FONT_MONO,
+                      "font-size": "10px",
+                      color: "var(--color-text-faint)",
+                      "letter-spacing": "0.04em",
+                    }}
+                  >
+                    loading atlas nodes…
+                  </span>
                 </Show>
               }
             >
-              <span
-                style={{
-                  "font-family": FONT_MONO,
-                  "font-size": "10px",
-                  color: "var(--color-text-faint)",
-                  "letter-spacing": "0.04em",
-                }}
-              >
-                loading atlas nodes…
-              </span>
+              {(error) => <AtlasErrorHero message={error().message} onRetry={refresh} />}
             </Show>
           </div>
         }
@@ -1247,14 +1279,17 @@ function OrbitTooltip(props: { node: AtlasNode; x: number; y: number; byId: Map<
 function NodeDetail(props: { node: AtlasNode; onClose: () => void }): JSX.Element {
   const sdk = useSDK()
   const atlas = createAtlasAPI(() => sdk.url)
+  const [artifactError, setArtifactError] = createSignal<Error>()
   const [artifacts] = createResource(
     () => props.node.node_id,
     async (id) => {
       try {
         const res = await atlas.listArtifacts(id)
         const list = Array.isArray(res) ? res : ((res as any)?.artifacts ?? [])
+        setArtifactError(undefined)
         return list as Array<{ name?: string; kind?: string; uri?: string }>
-      } catch {
+      } catch (error) {
+        setArtifactError(error instanceof Error ? error : new Error(String(error)))
         return []
       }
     },
@@ -1357,7 +1392,14 @@ function NodeDetail(props: { node: AtlasNode; onClose: () => void }): JSX.Elemen
         <DetailField label="content" value={props.node.content} mono />
       </Show>
       <Suspense fallback={<AsciiSpinner size={10} label="loading artifacts…" color="var(--color-text-faint)" />}>
-        <Show when={(artifacts() ?? []).length > 0}>
+        <Show when={artifactError()}>
+          {(error) => (
+            <div role="alert" style={{ "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-error)" }}>
+              artifacts unavailable · {error().message}
+            </div>
+          )}
+        </Show>
+        <Show when={!artifactError() && (artifacts.latest ?? []).length > 0}>
           <div
             style={{
               "font-family": FONT_MONO,
@@ -1369,9 +1411,9 @@ function NodeDetail(props: { node: AtlasNode; onClose: () => void }): JSX.Elemen
               "margin-top": "2px",
             }}
           >
-            artifacts · {(artifacts() ?? []).length}
+            artifacts · {(artifacts.latest ?? []).length}
           </div>
-          <For each={artifacts() ?? []}>
+          <For each={artifacts.latest ?? []}>
             {(a) => (
               <div
                 style={{
@@ -1408,6 +1450,60 @@ function DetailField(props: { label: string; value: string; mono?: boolean }): J
       >
         {props.value}
       </span>
+    </div>
+  )
+}
+
+function AtlasErrorHero(props: { message: string; onRetry: () => void }): JSX.Element {
+  return (
+    <div
+      role="alert"
+      style={{
+        display: "flex",
+        "flex-direction": "column",
+        "align-items": "center",
+        gap: "12px",
+        "text-align": "center",
+        padding: "20px",
+      }}
+    >
+      <div
+        style={{
+          "font-family": FONT_MONO,
+          "font-size": "11px",
+          color: "var(--color-text-muted)",
+          "letter-spacing": "0.06em",
+        }}
+      >
+        atlas is unavailable
+      </div>
+      <div
+        style={{
+          "font-family": FONT_SANS,
+          "font-size": "12px",
+          color: "var(--color-text-faint)",
+          "max-width": "360px",
+          "line-height": 1.55,
+        }}
+      >
+        {props.message}
+      </div>
+      <button
+        type="button"
+        onClick={props.onRetry}
+        style={{
+          all: "unset",
+          cursor: "pointer",
+          padding: "6px 14px",
+          "border-radius": "4px",
+          border: "1px solid var(--color-border-strong)",
+          color: "var(--color-text-muted)",
+          "font-family": FONT_MONO,
+          "font-size": "11px",
+        }}
+      >
+        retry
+      </button>
     </div>
   )
 }

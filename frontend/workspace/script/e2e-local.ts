@@ -3,6 +3,7 @@ import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { fakeModelConfig, fakeModelID, startFakeModelServer } from "./e2e-fake-model"
+import { E2E_MODE_ENV, forwardedPlaywrightArgs, playwrightCommand } from "./e2e-mode"
 
 async function freePort() {
   return await new Promise<number>((resolve, reject) => {
@@ -47,11 +48,7 @@ const appDir = process.cwd()
 const repoDir = path.resolve(appDir, "../..")
 const openscienceDir = path.join(repoDir, "backend", "cli")
 
-const extraArgs = (() => {
-  const args = process.argv.slice(2)
-  if (args[0] === "--") return args.slice(1)
-  return args
-})()
+const extraArgs = forwardedPlaywrightArgs(process.argv.slice(2))
 
 const [serverPort, webPort, modelPort] = await Promise.all([freePort(), freePort(), freePort()])
 const fakeModelServer = startFakeModelServer(modelPort)
@@ -90,6 +87,7 @@ const serverEnv = {
 
 const runnerEnv = {
   ...serverEnv,
+  [E2E_MODE_ENV]: "isolated",
   PLAYWRIGHT_SERVER_HOST: "127.0.0.1",
   PLAYWRIGHT_SERVER_PORT: String(serverPort),
   VITE_OPENSCIENCE_SERVER_HOST: "127.0.0.1",
@@ -147,7 +145,7 @@ const result = await (async () => {
     const healthAuth = `Basic ${Buffer.from(`${e2eServerUsername}:${e2eServerPassword}`).toString("base64")}`
     await waitForHealth(`http://127.0.0.1:${serverPort}/global/health`, healthAuth)
 
-    const runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
+    const runner = Bun.spawn(playwrightCommand(extraArgs), {
       cwd: appDir,
       env: runnerEnv,
       stdout: "inherit",

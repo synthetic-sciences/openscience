@@ -11,6 +11,7 @@ const app = "openscience"
 // exist yet and the legacy one does, move it into place; if the move fails
 // (permissions, cross-device), keep reading the legacy dir so nothing is lost.
 const legacy = "synsc"
+const detectedLegacyConflicts: Array<{ legacy: string; current: string }> = []
 
 function migrateDir(base: string): string {
   const next = path.join(base, app)
@@ -23,10 +24,10 @@ function migrateDir(base: string): string {
     }
   }
   // Both dirs existing means the legacy one was restored (backup, dotfiles)
-  // after the new dir was created. It will never be read or migrated — say
-  // so instead of silently stranding whatever auth/config lives in it.
+  // after the new dir was created. Record the conflict for `openscience
+  // doctor`; printing here spammed every command, including `--version`.
   if (existsSync(next) && existsSync(old)) {
-    console.error(`openscience: ignoring legacy config at ${old} (${next} already exists) — merge or remove it`)
+    detectedLegacyConflicts.push({ legacy: old, current: next })
   }
   return next
 }
@@ -68,6 +69,7 @@ migrateFile(config, "synsc.jsonc", "openscience.jsonc")
 migrateFile(config, "synsc.json", "openscience.json")
 
 export namespace Global {
+  export const LegacyConflicts = detectedLegacyConflicts as readonly { legacy: string; current: string }[]
   export const Path = {
     // Allow override via OPENSCIENCE_TEST_HOME for test isolation
     get home() {

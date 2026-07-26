@@ -25,6 +25,10 @@ process.env["XDG_DATA_HOME"] = path.join(dir, "share")
 process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
+// The Atlas CLI does not use XDG_CONFIG_HOME for this override; OpenScience's
+// session writer otherwise falls back to the real ~/.config/atlas-cli path.
+// Keep the companion CLI credential inside the same throwaway test sandbox.
+process.env["ATLAS_CLI_CONFIG_PATH"] = path.join(dir, "atlas-cli-config.json")
 
 // Write the cache version file to prevent global/index.ts from wiping the cache
 // dir on import. MUST match CACHE_VERSION in src/global/index.ts — otherwise the

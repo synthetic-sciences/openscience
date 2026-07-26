@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import { OpenScience } from "../../src/openscience"
 
 // Test env is XDG-isolated (see test/preload.ts), so the session file lives in a
@@ -16,6 +17,16 @@ describe("OpenScience session file", () => {
     const s = await OpenScience.getSession()
     expect(s?.api_key).toBe("thk_test.secret")
     expect(s?.user_id).toBe("u1")
+
+    const atlasConfigPath = process.env["ATLAS_CLI_CONFIG_PATH"]
+    expect(atlasConfigPath).toBeTruthy()
+    expect(atlasConfigPath).toContain("openscience-test-data-")
+    const atlasConfig = JSON.parse(await fs.readFile(atlasConfigPath!, "utf8"))
+    expect(atlasConfig.profiles.default).toMatchObject({
+      api_key: "thk_test.secret",
+      base_url: "http://127.0.0.1:9/api/v1",
+    })
+
     await OpenScience.clearSession()
     expect(await OpenScience.getSession()).toBeNull()
   })
