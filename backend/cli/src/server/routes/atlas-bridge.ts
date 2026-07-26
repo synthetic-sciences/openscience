@@ -113,6 +113,10 @@ export async function repoRoot(directory: string): Promise<string> {
   }
 }
 
+export function repoBranchName(branch: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  return branch.trim() || env["GITHUB_HEAD_REF"]?.trim() || env["GITHUB_REF_NAME"]?.trim() || null
+}
+
 async function repoContext(directory: string) {
   const empty = {
     repo_url: null as string | null,
@@ -139,7 +143,7 @@ async function repoContext(directory: string) {
   return {
     ...empty,
     repo_url: repo,
-    branch_name: branch || null,
+    branch_name: repoBranchName(branch),
     head_commit_sha: head || null,
     origin_host: host,
     updated_by: user || null,

@@ -9,6 +9,7 @@ import {
   initProjectDetailed,
   parseStageNodeInput,
   pinMatchesKey,
+  repoBranchName,
 } from "../../src/server/routes/atlas-bridge"
 
 const realFetch = globalThis.fetch
@@ -46,6 +47,15 @@ describe("computeDedupeKey", () => {
     const a = computeDedupeKey("/x", "https://github.com/o/n")
     const b = computeDedupeKey("/y", "https://github.com/o/n")
     expect(a).toBe(b)
+  })
+})
+
+describe("repoBranchName", () => {
+  test("prefers the git branch and falls back to CI ref names", () => {
+    expect(repoBranchName("feature/local", { GITHUB_HEAD_REF: "feature/pr" })).toBe("feature/local")
+    expect(repoBranchName("", { GITHUB_HEAD_REF: "feature/pr" })).toBe("feature/pr")
+    expect(repoBranchName("", { GITHUB_REF_NAME: "feature/ref" })).toBe("feature/ref")
+    expect(repoBranchName("", {})).toBeNull()
   })
 })
 
