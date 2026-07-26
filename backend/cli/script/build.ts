@@ -14,6 +14,7 @@ process.chdir(dir)
 
 import pkg from "../package.json"
 import { Script } from "@synsci/script"
+import { assertLinuxArm64PageSize } from "./linux-arm64-page-size"
 
 // Fetch and generate models.dev snapshot. Runtime refreshes stale snapshots
 // when current frontier IDs are missing, so avoid inventing model aliases here.
@@ -179,6 +180,11 @@ for (const item of targets) {
       OPENSCIENCE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
     },
   })
+
+  if (item.os === "linux" && item.arch === "arm64") {
+    const report = await assertLinuxArm64PageSize(`dist/${name}/bin/openscience`)
+    console.log(`verified ${name} has ${report.loads} ELF load segments compatible with 64KB-page kernels`)
+  }
 
   // Skills are served via API — no longer copied into dist
 
