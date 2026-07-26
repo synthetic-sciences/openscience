@@ -4,6 +4,7 @@ import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
+import { compress } from "hono/compress"
 import { streamSSE } from "hono/streaming"
 import { serveWebAsset, wantsJson } from "../web/serve"
 import { isAllowedHost, isAllowedOrigin, isCrossOrigin } from "./host-guard"
@@ -81,6 +82,7 @@ export namespace Server {
   }
 
   const app = new Hono({ strict: false })
+  const compressResponse = compress({ threshold: 1024 })
   export const App: () => Hono = lazy(
     () =>
       // TODO: Break server.ts into smaller route files to fix type inference
@@ -152,6 +154,12 @@ export namespace Server {
             },
           }),
         )
+        .use((c, next) => {
+          // CompressionStream may buffer tiny SSE chunks. Keep both event
+          // feeds byte-for-byte streaming while compressing normal JSON/text.
+          if (c.req.path.endsWith("/event")) return next()
+          return compressResponse(c, next)
+        })
         .route("/global", GlobalRoutes())
         .route("/account", AccountRoutes())
         // Settings panels backed by global (project-independent) stores, so

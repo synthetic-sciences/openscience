@@ -2,7 +2,6 @@ import "@/index.css"
 import { ErrorBoundary, Show, lazy, type ParentProps } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
-import { Font } from "@synsci/ui/font"
 import { MarkedProvider } from "@synsci/ui/context/marked"
 import { DiffComponentProvider } from "@synsci/ui/context/diff"
 import { CodeComponentProvider } from "@synsci/ui/context/code"
@@ -31,6 +30,7 @@ import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
 import { URLS } from "@/config/urls"
+import { resolveDefaultServerUrl } from "@/config/server-url"
 // Side effect: registers the inline science-artifact tool renderer + pulls in
 // the renderer registry so `metadata.artifact` envelopes render in chat.
 import "@/science/tool-renderer"
@@ -65,7 +65,6 @@ function MarkedProviderWithNativeParser(props: ParentProps) {
 export function AppBaseProviders(props: ParentProps) {
   return (
     <MetaProvider>
-      <Font />
       <ThemeProvider>
         <LanguageProvider>
           <UiI18nBridge>
@@ -106,13 +105,25 @@ export function AppInterface(props: { defaultUrl?: string }) {
   })()
 
   const defaultServerUrl = () => {
-    if (props.defaultUrl) return props.defaultUrl
-    if (stored) return stored
-    if (location.hostname.includes(URLS.host)) return "http://localhost:4096"
-    if (import.meta.env.DEV)
-      return `http://${import.meta.env.VITE_OPENSCIENCE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENSCIENCE_SERVER_PORT ?? "4096"}`
+    const configured = (() => {
+      const direct = normalizeServerUrl(import.meta.env.VITE_OPENSCIENCE_SERVER_URL ?? "")
+      if (direct) return direct
 
-    return window.location.origin
+      const host = import.meta.env.VITE_OPENSCIENCE_SERVER_HOST
+      const port = import.meta.env.VITE_OPENSCIENCE_SERVER_PORT
+      if (!host && !port) return
+      return normalizeServerUrl(`http://${host ?? "localhost"}:${port ?? "4096"}`)
+    })()
+
+    return resolveDefaultServerUrl({
+      explicit: normalizeServerUrl(props.defaultUrl ?? ""),
+      stored,
+      configured,
+      hostname: location.hostname,
+      origin: window.location.origin,
+      hostedDomain: URLS.host,
+      dev: import.meta.env.DEV,
+    })
   }
 
   return (
