@@ -47,8 +47,6 @@ export namespace Provider {
   // dash spellings because older models.dev snapshots normalized version dots
   // while current snapshots preserve the upstream ids.
   const CODEX_MODEL_IDS = new Set([
-    "gpt-5.6",
-    "gpt-5-6",
     "gpt-5.6-sol",
     "gpt-5-6-sol",
     "gpt-5.6-terra",
@@ -61,10 +59,6 @@ export namespace Provider {
     "gpt-5-4",
     "gpt-5.4-mini",
     "gpt-5-4-mini",
-    "gpt-5.3-codex",
-    "gpt-5-3-codex",
-    "gpt-5.2",
-    "gpt-5-2",
   ])
 
   export function isCodexOAuthModel(modelID: string): boolean {
@@ -960,6 +954,10 @@ export namespace Provider {
   }
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
+    // models.dev can lag a just-launched model's authoritative provider
+    // contract. Normalize Muse at the ingestion seam so cached, bundled, and
+    // freshly fetched catalogs all drive the same token budgeting.
+    const isMetaMuse11 = provider.id === "meta" && /muse-spark-1[.-]1\b/.test(model.id.toLowerCase())
     const m: Model = {
       id: model.id,
       providerID: provider.id,
@@ -992,9 +990,9 @@ export namespace Provider {
           : undefined,
       },
       limit: {
-        context: model.limit.context,
+        context: isMetaMuse11 ? 1_048_576 : model.limit.context,
         input: model.limit.input,
-        output: model.limit.output,
+        output: isMetaMuse11 ? 131_072 : model.limit.output,
       },
       capabilities: {
         temperature: model.temperature,
@@ -1017,7 +1015,7 @@ export namespace Provider {
         },
         interleaved: model.interleaved ?? false,
       },
-      release_date: model.release_date,
+      release_date: isMetaMuse11 ? "2026-07-09" : model.release_date,
       variants: {},
     }
 
@@ -1233,11 +1231,19 @@ export namespace Provider {
       const codexModels: Record<string, (typeof baseOpenai.models)[string]> = {}
       for (const [id, model] of Object.entries(baseOpenai.models)) {
         if (isCodexOAuthModel(id)) {
-          codexModels[id] = {
+          const codexModel = {
             ...model,
             providerID: "openai-codex",
             cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+            // Codex OAuth advertises a separate 272k window even when the
+            // copied public-API entry has a million-token context.
+            limit: { ...model.limit, context: 272_000 },
           }
+          // The public API and ChatGPT/Codex expose different GPT-5.6 effort
+          // ladders. Recompute after changing providerID instead of copying the
+          // API model's pre-built variants (`none` is not a Codex picker option).
+          codexModel.variants = ProviderTransform.variants(codexModel)
+          codexModels[id] = codexModel
         }
       }
       database["openai-codex"] = {

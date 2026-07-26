@@ -192,18 +192,84 @@ describe("new model reasoning effort contracts", () => {
     expect(ProviderTransform.variants(managed).max).toEqual({ reasoning: { effort: "max" } })
   })
 
+  test("GPT-5.6 OpenRouter Pro routes keep the full effort ladder", () => {
+    const pro = orModel("openai/gpt-5.6-sol-pro", "openai/gpt-5.6-sol-pro", {
+      release_date: "2026-07-09",
+    })
+    expect(Object.keys(ProviderTransform.variants(pro))).toEqual(["none", "low", "medium", "high", "xhigh", "max"])
+  })
+
+  test("Codex OAuth exposes each model's exact live effort ladder", () => {
+    const codex = (id: string) =>
+      model({
+        id,
+        providerID: "openai-codex",
+        release_date: "2026-07-09",
+        api: { id, url: "https://chatgpt.com/backend-api/codex", npm: "@ai-sdk/openai" },
+      })
+    expect(Object.keys(ProviderTransform.variants(codex("gpt-5.6-sol")))).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ])
+    expect(Object.keys(ProviderTransform.variants(codex("gpt-5.6-terra")))).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ])
+    expect(Object.keys(ProviderTransform.variants(codex("gpt-5.6-luna")))).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ])
+    expect(Object.keys(ProviderTransform.variants(codex("gpt-5.5")))).toEqual(["low", "medium", "high", "xhigh"])
+    expect(ProviderTransform.variants(codex("gpt-5.6-sol")).none).toBeUndefined()
+    expect(ProviderTransform.variants(codex("gpt-5.6-sol")).ultra).toEqual({
+      reasoningEffort: "ultra",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    })
+
+    expect(
+      ProviderTransform.options({ model: codex("gpt-5.6-sol"), sessionID, providerOptions: {} }).reasoningEffort,
+    ).toBe("low")
+    expect(
+      ProviderTransform.options({ model: codex("gpt-5.6-terra"), sessionID, providerOptions: {} }).reasoningEffort,
+    ).toBe("medium")
+    expect(ProviderTransform.options({ model: codex("gpt-5.4"), sessionID, providerOptions: {} }).reasoningEffort).toBe(
+      "medium",
+    )
+  })
+
+  test("public OpenAI defaults GPT-5.4 to none but GPT-5.5 and GPT-5.6 to medium", () => {
+    const openai = (id: string) =>
+      model({
+        id,
+        providerID: "openai",
+        api: { id, url: "https://api.openai.com/v1", npm: "@ai-sdk/openai" },
+      })
+    for (const id of ["gpt-5.4", "gpt-5-4", "gpt-5.4-mini", "gpt-5-4-mini"]) {
+      expect(ProviderTransform.options({ model: openai(id), sessionID, providerOptions: {} }).reasoningEffort).toBe(
+        "none",
+      )
+    }
+    for (const id of ["gpt-5.5", "gpt-5.6", "gpt-5.6-sol"]) {
+      expect(ProviderTransform.options({ model: openai(id), sessionID, providerOptions: {} }).reasoningEffort).toBe(
+        "medium",
+      )
+    }
+  })
+
   test("dash-normalized versioned GPT-5 Codex ids use a supported small-call effort", () => {
-    for (const id of [
-      "gpt-5-6",
-      "gpt-5-6-sol",
-      "gpt-5-6-terra",
-      "gpt-5-6-luna",
-      "gpt-5-5",
-      "gpt-5-4",
-      "gpt-5-4-mini",
-      "gpt-5-3-codex",
-      "gpt-5-2",
-    ]) {
+    for (const id of ["gpt-5-6-sol", "gpt-5-6-terra", "gpt-5-6-luna", "gpt-5-5", "gpt-5-4", "gpt-5-4-mini"]) {
       const codex = model({
         id,
         providerID: "openai-codex",
@@ -225,11 +291,19 @@ describe("new model reasoning effort contracts", () => {
       medium: { reasoningEffort: "medium" },
       high: { reasoningEffort: "high" },
     })
+    // Direct xAI's documented default is high. Omit the option so the provider
+    // owns that default; a selected variant still serializes an explicit effort.
+    expect(ProviderTransform.options({ model: direct, sessionID, providerOptions: {} }).reasoningEffort).toBeUndefined()
     expect(ProviderTransform.variants(managed)).toEqual({
       low: { reasoning: { effort: "low" } },
       medium: { reasoning: { effort: "medium" } },
       high: { reasoning: { effort: "high" } },
     })
+    expect(
+      ProviderTransform.options({ model: managed, sessionID, providerOptions: { baseURL: PROXY_OR } }).reasoning,
+    ).toEqual({ effort: "high" })
+    expect(ProviderTransform.smallOptions(direct)).toEqual({ reasoningEffort: "low" })
+    expect(ProviderTransform.smallOptions(managed)).toEqual({ reasoning: { effort: "low" } })
   })
 
   test("Muse Spark 1.1 exposes its exact effort ladder on BYOK and managed Meta", () => {
@@ -239,7 +313,6 @@ describe("new model reasoning effort contracts", () => {
       api: { id: "muse-spark-1.1", url: "https://api.meta.ai/v1", npm: "@ai-sdk/openai" },
     })
     expect(ProviderTransform.variants(muse)).toEqual({
-      none: { reasoningEffort: "none" },
       minimal: { reasoningEffort: "minimal" },
       low: { reasoningEffort: "low" },
       medium: { reasoningEffort: "medium" },
@@ -252,8 +325,9 @@ describe("new model reasoning effort contracts", () => {
         sessionID,
         providerOptions: { baseURL: "https://atlas.test/api/llm/proxy/meta/v1" },
       }),
-    ).toMatchObject({ store: false, reasoningEffort: "medium" })
-    expect(ProviderTransform.smallOptions(muse)).toEqual({ reasoningEffort: "none" })
+    ).toEqual({ store: false, include: ["reasoning.encrypted_content"] })
+    expect(ProviderTransform.options({ model: muse, sessionID, providerOptions: {} }).reasoningEffort).toBeUndefined()
+    expect(ProviderTransform.smallOptions(muse)).toEqual({ reasoningEffort: "minimal" })
     // @ai-sdk/openai's Responses implementation parses the literal `openai`
     // options namespace even when createOpenAI({ name: "meta" }) reports its
     // provider as `meta.responses`. Keep this pinned-SDK seam explicit so a

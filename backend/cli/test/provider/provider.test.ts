@@ -56,19 +56,62 @@ const FRONTIER_MODELS = {
 }
 const SONNET = "claude-sonnet-4-6"
 const OPUS = "claude-opus-4-5"
+const CODEX_MODELS = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]
 
 test("Codex OAuth allowlist includes the GPT-5.6 family", () => {
-  for (const id of [
-    "gpt-5.6",
-    "gpt-5-6",
-    "gpt-5.6-sol",
-    "gpt-5-6-sol",
-    "gpt-5.6-terra",
-    "gpt-5-6-terra",
-    "gpt-5.6-luna",
-    "gpt-5-6-luna",
-  ]) {
+  for (const id of [...CODEX_MODELS, ...CODEX_MODELS.map((id) => id.replaceAll(".", "-"))]) {
     expect(Provider.isCodexOAuthModel(id)).toBe(true)
+  }
+  for (const unsupported of ["gpt-5.6", "gpt-5-6", "gpt-5.2", "gpt-5-2", "gpt-5.3-codex", "gpt-5-3-codex"]) {
+    expect(Provider.isCodexOAuthModel(unsupported)).toBe(false)
+  }
+})
+
+test("synthesized Codex OAuth models use Codex variants and context instead of public API metadata", async () => {
+  const previous = await Auth.get("openai-codex")
+  await using tmp = await tmpdir({
+    config: {
+      // The real Codex plugin performs this provider merge after OAuth. Force
+      // the same catalog entry active while default plugins are disabled in
+      // the hermetic test preload.
+      provider: {
+        openai: { options: { apiKey: "openai-test" } },
+        "openai-codex": { options: { apiKey: "codex-test" } },
+      },
+    },
+  })
+  try {
+    await Auth.set("openai-codex", {
+      type: "oauth",
+      refresh: "refresh-test",
+      access: "access-test",
+      expires: Date.now() + 60_000,
+    })
+    Provider.invalidate()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await Provider.list()
+        const codex = providers["openai-codex"]
+        expect(codex).toBeDefined()
+
+        const sol = codex.models["gpt-5.6-sol"]
+        expect(sol.providerID).toBe("openai-codex")
+        expect(sol.limit.context).toBe(272_000)
+        expect(sol.cost).toEqual({ input: 0, output: 0, cache: { read: 0, write: 0 } })
+        expect(Object.keys(sol.variants ?? {})).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"])
+
+        const codex54 = codex.models["gpt-5.4"]
+        expect(Object.keys(codex54.variants ?? {})).toEqual(["low", "medium", "high", "xhigh"])
+
+        const publicSol = providers.openai?.models["gpt-5.6-sol"]
+        expect(Object.keys(publicSol?.variants ?? {})).toEqual(["none", "low", "medium", "high", "xhigh", "max"])
+      },
+    })
+  } finally {
+    if (previous) await Auth.set("openai-codex", previous)
+    else await Auth.remove("openai-codex")
+    Provider.invalidate()
   }
 })
 
@@ -125,7 +168,7 @@ test("Codex OAuth exposes the GPT-5.6 family as subscription models", async () =
         const providers = await Provider.list()
         const codex = providers["openai-codex"]
         expect(codex).toBeDefined()
-        for (const id of FRONTIER_MODELS.openai) {
+        for (const id of CODEX_MODELS) {
           expect(codex.models[id]).toBeDefined()
           expect(codex.models[id].providerID).toBe("openai-codex")
           expect(codex.models[id].cost).toEqual({
@@ -164,6 +207,8 @@ test("seeded catalog exposes GPT-5.6, Grok 4.5, and Muse Spark 1.1 for direct BY
         expect(grokLanguage.provider).toBe("xai.responses")
         const muse = providers["meta"]?.models["muse-spark-1.1"]
         expect(muse).toBeDefined()
+        expect(muse?.release_date).toBe("2026-07-09")
+        expect(muse?.limit).toMatchObject({ context: 1_048_576, output: 131_072 })
         const language = await Provider.getLanguage(muse!)
         expect(language.provider).toBe("meta.responses")
       },

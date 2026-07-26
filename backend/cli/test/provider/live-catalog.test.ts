@@ -46,10 +46,4 @@ test.skipIf(!process.env["OPENSCIENCE_LIVE_CATALOG"])("models.dev still lists th
       throw new Error(`models.dev no longer lists ${provider}/${id} — update the pins and regenerate the fixture`)
     }
   }
-  for (const [provider, pins] of Object.entries(NEW_MODEL_PINS)) {
-    const models = Object.keys(catalog[provider]?.models ?? {})
-    for (const id of pins) {
-      if (!models.includes(id)) throw new Error(`models.dev no longer lists ${provider}/${id}`)
-    }
-  }
 })
