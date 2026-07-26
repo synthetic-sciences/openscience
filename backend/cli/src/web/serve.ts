@@ -45,16 +45,37 @@ export function wantsJson(accept: string | null, contentTypeHeader: string | nul
   return a.includes("application/json") && !a.includes("text/html")
 }
 
-export async function serveWebAsset(c: Context): Promise<Response | undefined> {
-  if (!WEB_INDEX) return undefined
+const IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
+const REVALIDATE_CACHE = "no-cache"
+const CONTENT_HASHED_ASSET = /^\/assets\/(?:[^/]+\/)*[^/]+-[A-Za-z0-9_-]{8,}\.[^/]+$/
+
+function cacheControl(reqPath: string) {
+  return CONTENT_HASHED_ASSET.test(reqPath) ? IMMUTABLE_CACHE : REVALIDATE_CACHE
+}
+
+export interface WebAssetSource {
+  assets: Record<string, string>
+  index?: string
+}
+
+const embedded: WebAssetSource = {
+  assets: WEB_ASSETS,
+  index: WEB_INDEX,
+}
+
+export async function serveWebAsset(c: Context, source: WebAssetSource = embedded): Promise<Response | undefined> {
+  if (!source.index) return undefined
 
   let reqPath = c.req.path
   if (reqPath === "/") reqPath = "/index.html"
 
-  const direct = WEB_ASSETS[reqPath]
+  const direct = source.assets[reqPath]
   if (direct) {
     return new Response(Bun.file(direct), {
-      headers: { "Content-Type": contentType(reqPath) },
+      headers: {
+        "Content-Type": contentType(reqPath),
+        "Cache-Control": cacheControl(reqPath),
+      },
     })
   }
 
@@ -70,7 +91,10 @@ export async function serveWebAsset(c: Context): Promise<Response | undefined> {
     return c.notFound()
   }
 
-  return new Response(Bun.file(WEB_INDEX), {
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+  return new Response(Bun.file(source.index), {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": REVALIDATE_CACHE,
+    },
   })
 }
