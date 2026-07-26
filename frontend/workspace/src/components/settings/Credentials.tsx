@@ -37,9 +37,20 @@ const PROVIDER_LABEL: Record<string, string> = {
   groq: "Groq",
   mistral: "Mistral",
   xai: "xAI",
+  meta: "Meta",
   deepseek: "DeepSeek",
 }
-const BYOK_PROVIDERS = ["anthropic", "openai", "google", "openrouter", "groq", "mistral", "xai", "deepseek"] as const
+const BYOK_PROVIDERS = [
+  "anthropic",
+  "openai",
+  "google",
+  "openrouter",
+  "xai",
+  "meta",
+  "groq",
+  "mistral",
+  "deepseek",
+] as const
 
 // Where a connected provider's credential actually lives. Only "api" keys sit in
 // the local auth store — the others reappear after a remove, so remove is gated.

@@ -936,8 +936,9 @@ export namespace ProviderTransform {
     if (model.api.npm === "@openrouter/ai-sdk-provider" || model.providerID === "openrouter") {
       return { reasoning: { enabled: false } }
     }
-    if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("5.")) {
+    const apiID = model.api.id.toLowerCase()
+    if (model.providerID === "openai" || apiID.includes("gpt-5")) {
+      if (apiID.includes("5.") || /gpt-5-\d+\b/.test(apiID)) {
         return { reasoningEffort: "low" }
       }
       return { reasoningEffort: "minimal" }

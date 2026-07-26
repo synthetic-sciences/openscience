@@ -13,7 +13,8 @@ import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
-import { API_BASE, OpenScience } from "../openscience"
+import { OpenScience } from "../openscience"
+import { isAtlasProxyURL } from "../openscience/synced-env-policy"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -111,25 +112,52 @@ export namespace Provider {
     return typeof key === "string" && key.startsWith("thk_")
   }
 
-  export function isManagedProxyBaseURL(baseURL: unknown): baseURL is string {
+  export function isAtlasProxyBaseURL(baseURL: unknown): baseURL is string {
+    return isAtlasProxyURL(baseURL)
+  }
+
+  const PUBLIC_PROVIDER_BASE_URLS: Record<string, string> = {
+    anthropic: "https://api.anthropic.com/v1",
+    openai: "https://api.openai.com/v1",
+    google: "https://generativelanguage.googleapis.com/v1beta",
+    xai: "https://api.x.ai/v1",
+  }
+
+  /** Detect a stale managed-proxy path without trusting its origin. This is
+   * used only to keep a user's BYOK secret away from any old proxy URL. Managed
+   * Atlas tokens still require isAtlasProxyBaseURL's exact configured origin. */
+  function hasManagedProxyPath(baseURL: unknown): baseURL is string {
     if (typeof baseURL !== "string") return false
     try {
-      const url = new URL(baseURL)
-      return url.pathname.startsWith("/api/llm/proxy/") && !url.search && !url.hash
+      // Atlas may be hosted below a path prefix (for example
+      // https://host/control/api/llm/proxy/...). Match the exact proxy path
+      // segments anywhere in the normalized pathname so a stale prefixed URL
+      // can never receive a user-owned key. Collapsing repeated slashes and
+      // decoding escaped separators is deliberately conservative: custom
+      // gateways with an Atlas-proxy-shaped path are pinned to the provider's
+      // public endpoint instead of risking credential disclosure.
+      let path = new URL(baseURL).pathname
+      for (let pass = 0; pass < 3 && path.includes("%"); pass++) {
+        let decoded: string
+        try {
+          decoded = decodeURIComponent(path)
+        } catch {
+          // Keep checking the undecoded path. A malformed escape before a
+          // plain /api/llm/proxy suffix must not disable the leak guard.
+          break
+        }
+        if (decoded === path) break
+        path = decoded
+      }
+      path = path.replace(/\/+/g, "/").replace(/\/+$/, "")
+      return /\/api\/llm\/proxy(?:\/|$)/.test(path)
     } catch {
       return false
     }
   }
 
-  export function isAtlasProxyBaseURL(baseURL: unknown): baseURL is string {
-    if (typeof baseURL !== "string") return false
-    try {
-      const url = new URL(baseURL)
-      const proxy = new URL(`${API_BASE}/api/llm/proxy/`)
-      return url.origin === proxy.origin && url.pathname.startsWith(proxy.pathname) && !url.search && !url.hash
-    } catch {
-      return false
-    }
+  export function isManagedProxyBaseURL(baseURL: unknown): baseURL is string {
+    return hasManagedProxyPath(baseURL)
   }
 
   // Explicit apiKey for a provider routed through the Atlas managed proxy: force
@@ -237,11 +265,22 @@ export namespace Provider {
     // Managed (thk_*) keys must keep their Atlas proxy routing.
     if (isAtlasApiKey(effective)) return
     if (!isByokKey(effective)) return
-    if (isAtlasProxyBaseURL(options["baseURL"])) {
+    if (hasManagedProxyPath(options["baseURL"])) {
       log.warn("refusing to route BYOK key through Atlas proxy — pinning to public endpoint", {
         provider: provider.id,
       })
-      options["baseURL"] = publicURL
+      const modelURL = typeof publicURL === "string" && !hasManagedProxyPath(publicURL) ? publicURL : undefined
+      const safeURL = modelURL ?? PUBLIC_PROVIDER_BASE_URLS[provider.id]
+      if (!safeURL) {
+        throw new Error(
+          `${provider.id} is using a user-owned key with an Atlas proxy URL, but no safe public endpoint is known. ` +
+            "Remove the managed proxy base URL and try again.",
+        )
+      }
+      // Set an explicit value even when the catalog omitted model.api.url.
+      // Leaving this undefined lets several provider SDKs re-read the stale
+      // *_BASE_URL directly from process.env and defeats the guard.
+      options["baseURL"] = safeURL
     }
   }
 
@@ -302,6 +341,18 @@ export namespace Provider {
           return sdk.responses(modelID)
         },
         options: baseURL ? { baseURL, ...(await managedProxyKey("openai", baseURL)) } : {},
+      }
+    },
+    xai: async () => {
+      return {
+        autoload: false,
+        // Grok 4.5's low/medium/high effort ladder is implemented by xAI's
+        // Responses API. The pinned chat adapter accepts only low/high and
+        // rejects medium before sending a request, so route just this family
+        // through responses while preserving chat behavior for older models.
+        async getModel(sdk: any, modelID: string) {
+          return /grok-4[.-]5\b/i.test(modelID) ? sdk.responses(modelID) : sdk.languageModel(modelID)
+        },
       }
     },
     "github-copilot": async () => {
@@ -514,7 +565,7 @@ export namespace Provider {
         // OPENROUTER_BASE_URL); only the Atlas proxy is swapped for the public
         // endpoint, since a BYOK key must never be sent to the managed proxy.
         const envBase = Env.get("OPENROUTER_BASE_URL")
-        const baseURL = envBase && !isManagedProxyBaseURL(envBase) ? envBase : "https://openrouter.ai/api/v1"
+        const baseURL = envBase && !hasManagedProxyPath(envBase) ? envBase : "https://openrouter.ai/api/v1"
         return { autoload: false, options: { apiKey: ownKey, baseURL, headers } }
       }
 
@@ -545,7 +596,7 @@ export namespace Provider {
       const ownKey = isByokKey(authKey) ? authKey : isByokKey(envKey) ? envKey : undefined
       if (ownKey) {
         const envBase = Env.get("META_MODEL_BASE_URL")
-        const baseURL = envBase && !isAtlasProxyBaseURL(envBase) ? envBase : "https://api.meta.ai/v1"
+        const baseURL = envBase && !hasManagedProxyPath(envBase) ? envBase : "https://api.meta.ai/v1"
         return {
           autoload: false,
           options: { apiKey: ownKey, baseURL },

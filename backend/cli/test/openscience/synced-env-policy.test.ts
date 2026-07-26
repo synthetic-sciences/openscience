@@ -49,9 +49,21 @@ test("allows the OpenRouter + Meta managed routes and compute / ML-service keys"
 })
 
 test("managed provider sync accepts only thk tokens and matching Atlas proxy urls", () => {
+  const atlasBase = "https://atlas.test"
   expect(isSyncedEnvAllowed("META_MODEL_API_KEY", "thk_user.scoped")).toBe(true)
   expect(isSyncedEnvAllowed("META_MODEL_API_KEY", "meta-shared-secret")).toBe(false)
-  expect(isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://atlas.test/api/llm/proxy/meta/v1")).toBe(true)
-  expect(isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://api.meta.ai/v1")).toBe(false)
-  expect(isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://atlas.test/api/llm/proxy/openrouter/v1")).toBe(false)
+  expect(isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://atlas.test/api/llm/proxy/meta/v1", atlasBase)).toBe(true)
+  expect(isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://api.meta.ai/v1", atlasBase)).toBe(false)
+  expect(isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://atlas.test/api/llm/proxy/openrouter/v1", atlasBase)).toBe(
+    false,
+  )
+  expect(
+    isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://evil.test/https://atlas.test/api/llm/proxy/meta/v1", atlasBase),
+  ).toBe(false)
+  expect(
+    isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://atlas.test.evil.test/api/llm/proxy/meta/v1", atlasBase),
+  ).toBe(false)
+  expect(
+    isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://atlas.test/api/llm/proxy/meta/%2e%2e/openrouter", atlasBase),
+  ).toBe(false)
 })

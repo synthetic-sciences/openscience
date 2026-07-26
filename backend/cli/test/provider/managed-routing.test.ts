@@ -96,7 +96,7 @@ describe("Provider.isManagedProxyBaseURL (pure)", () => {
     expect(Provider.isManagedProxyBaseURL(`${PROXY}/openrouter/v1`)).toBe(true)
     expect(Provider.isManagedProxyBaseURL("https://legacy.example/api/llm/proxy/openrouter/v1")).toBe(true)
     expect(Provider.isManagedProxyBaseURL("https://openrouter.ai/api/v1")).toBe(false)
-    expect(Provider.isManagedProxyBaseURL(`${PROXY}/openrouter/v1?key=value`)).toBe(false)
+    expect(Provider.isManagedProxyBaseURL(`${PROXY}/openrouter/v1?key=value`)).toBe(true)
   })
 })
 
@@ -136,7 +136,7 @@ describe("managed session availability", () => {
     })
   })
 
-  test("Meta BYOK overrides a stale managed proxy and bypasses the managed whitelist", async () => {
+  test("Meta BYOK overrides a path-prefixed stale managed proxy and bypasses the managed whitelist", async () => {
     await using tmp = await tmpdir({
       config: {
         billing: { llm: "byok" },
@@ -148,7 +148,7 @@ describe("managed session availability", () => {
       init: async () => {
         clearManagedLLMEnv()
         Env.set("META_MODEL_API_KEY", "meta-user-owned")
-        Env.set("META_MODEL_BASE_URL", `${PROXY}/meta/v1`)
+        Env.set("META_MODEL_BASE_URL", "https://atlas.example/control/api/llm/proxy/meta/v1")
         Provider.invalidate()
       },
       fn: async () => {

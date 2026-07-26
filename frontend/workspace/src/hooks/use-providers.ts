@@ -6,7 +6,17 @@ import { createMemo } from "solid-js"
 // Provider-agnostic ordering: lead with the mainstream BYOK/OAuth providers.
 // `synsci` (the managed Atlas provider) stays selectable but is not forced to the front — the
 // OSS client is BYOK-first and must not privilege the managed provider by default.
-export const popularProviders = ["anthropic", "openai", "google", "github-copilot", "openrouter", "vercel", "synsci"]
+export const popularProviders = [
+  "anthropic",
+  "openai",
+  "google",
+  "github-copilot",
+  "openrouter",
+  "xai",
+  "meta",
+  "vercel",
+  "synsci",
+]
 
 export function useProviders() {
   const globalSync = useGlobalSync()

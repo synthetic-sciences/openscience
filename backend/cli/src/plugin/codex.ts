@@ -481,7 +481,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         // Provider models + cost-zeroing are handled at database
         // synthesis time in provider/provider.ts. By the time the
         // loader runs, database["openai-codex"] already has the
-        // 5 Codex-routable models with zero cost.
+        // Curated Codex-routable models with zero cost.
 
         return {
           apiKey: OAUTH_DUMMY_KEY,

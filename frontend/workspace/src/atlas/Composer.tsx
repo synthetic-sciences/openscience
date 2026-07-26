@@ -40,6 +40,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   groq: "Groq",
   mistral: "Mistral",
   xai: "xAI",
+  meta: "Meta",
   cohere: "Cohere",
   synsci: "Atlas",
 }

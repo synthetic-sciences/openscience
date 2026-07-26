@@ -2,6 +2,7 @@ import { test, expect, afterEach } from "bun:test"
 import path from "path"
 import { OpenScience } from "../../src/openscience"
 import { Global } from "../../src/global"
+import { managedApiBase } from "../../src/endpoints"
 
 // syncServices must respect credential precedence: a user's own shell-exported
 // (or BYOK) OpenRouter key must survive a background sync — never be overwritten
@@ -61,15 +62,16 @@ test("a synced managed OpenRouter key IS applied when the slot is empty", async 
 
 test("Meta sync applies only a scoped thk token plus the matching Atlas proxy", async () => {
   await seedSession()
+  const proxyURL = `${managedApiBase()}/api/llm/proxy/meta/v1`
   stubSync({
     meta: {
       META_MODEL_API_KEY: "thk_managed.value",
-      META_MODEL_BASE_URL: "https://app.syntheticsciences.ai/api/llm/proxy/meta/v1",
+      META_MODEL_BASE_URL: proxyURL,
     },
   })
   await OpenScience.syncServices()
   expect(process.env["META_MODEL_API_KEY"]).toBe("thk_managed.value")
-  expect(process.env["META_MODEL_BASE_URL"]).toBe("https://app.syntheticsciences.ai/api/llm/proxy/meta/v1")
+  expect(process.env["META_MODEL_BASE_URL"]).toBe(proxyURL)
 })
 
 test("Meta sync rejects an upstream shared key or public endpoint", async () => {

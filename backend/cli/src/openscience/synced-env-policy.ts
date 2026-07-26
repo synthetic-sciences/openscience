@@ -15,9 +15,11 @@
  * would shadow the user's own local key — the exact bug this policy fixes.
  * Compute / ML-service integrations and OpenRouter are unaffected.
  *
- * Kept dependency-free on purpose: imported by preload-env.ts, which runs its
- * side effect at module init before the rest of the app is loaded.
+ * Kept lightweight on purpose: imported by preload-env.ts, which runs its side
+ * effect at module init before the rest of the app is loaded.
  */
+
+import { managedApiBase } from "../endpoints"
 
 /** The model-provider LLM env vars whose values are the user's OWN (BYOK)
  *  credential. Single source of truth — openscience/index.ts imports this for
@@ -47,6 +49,32 @@ const MANAGED_SYNCED_BASE_URLS: Record<string, string> = {
   META_MODEL_BASE_URL: "/api/llm/proxy/meta/",
 }
 
+/** Match a proxy URL to the configured Atlas origin and an exact route prefix.
+ * A path substring alone is not enough: an attacker-controlled origin could
+ * otherwise place `/api/llm/proxy/` in its path and receive the scoped token. */
+export function isAtlasProxyURL(
+  value: unknown,
+  route = "/api/llm/proxy/",
+  atlasBase = managedApiBase(),
+): value is string {
+  if (typeof value !== "string") return false
+  try {
+    const candidate = new URL(value)
+    const atlas = new URL(atlasBase)
+    if (candidate.protocol !== "http:" && candidate.protocol !== "https:") return false
+    if (candidate.origin !== atlas.origin) return false
+    if (candidate.username || candidate.password || candidate.search || candidate.hash) return false
+    if (candidate.pathname.includes("%")) return false
+
+    const basePath = atlas.pathname.replace(/\/+$/, "")
+    const routePath = route.startsWith("/") ? route : `/${route}`
+    const expected = `${basePath}${routePath}`.replace(/\/{2,}/g, "/").replace(/\/+$/, "")
+    return candidate.pathname === expected || candidate.pathname.startsWith(`${expected}/`)
+  } catch {
+    return false
+  }
+}
+
 /** Env vars the CLI drops from Atlas sync: every BYOK model provider EXCEPT
  *  OpenRouter and Meta, each with its `*_BASE_URL` companion. Derived from
  *  BYOK_LLM_ENV_KEYS so a newly-added provider is covered automatically. */
@@ -61,7 +89,7 @@ export const BLOCKED_SYNCED_ENV = new Set<string>(
  *  OpenRouter + Meta managed routing vars and all compute / ML-service keys pass
  *  through; every other model-provider LLM credential is dropped because that
  *  provider is BYOK-local-only. */
-export function isSyncedEnvAllowed(key: string, value?: string): boolean {
+export function isSyncedEnvAllowed(key: string, value?: string, atlasBase = managedApiBase()): boolean {
   if (BLOCKED_SYNCED_ENV.has(key)) return false
   // A managed provider secret delivered to the open-source client must be the
   // user's scoped Atlas token, never an upstream/shared provider credential.
@@ -69,6 +97,6 @@ export function isSyncedEnvAllowed(key: string, value?: string): boolean {
   // Likewise, managed routing may only target the provider-specific Atlas
   // proxy. A mismatched/public URL is dropped before it reaches process.env.
   const route = MANAGED_SYNCED_BASE_URLS[key]
-  if (value !== undefined && route) return value.includes(route)
+  if (value !== undefined && route) return isAtlasProxyURL(value, route, atlasBase)
   return true
 }

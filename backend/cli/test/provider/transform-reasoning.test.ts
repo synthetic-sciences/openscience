@@ -192,6 +192,27 @@ describe("new model reasoning effort contracts", () => {
     expect(ProviderTransform.variants(managed).max).toEqual({ reasoning: { effort: "max" } })
   })
 
+  test("dash-normalized versioned GPT-5 Codex ids use a supported small-call effort", () => {
+    for (const id of [
+      "gpt-5-6",
+      "gpt-5-6-sol",
+      "gpt-5-6-terra",
+      "gpt-5-6-luna",
+      "gpt-5-5",
+      "gpt-5-4",
+      "gpt-5-4-mini",
+      "gpt-5-3-codex",
+      "gpt-5-2",
+    ]) {
+      const codex = model({
+        id,
+        providerID: "openai-codex",
+        api: { id, url: "https://chatgpt.com/backend-api/codex", npm: "@ai-sdk/openai" },
+      })
+      expect(ProviderTransform.smallOptions(codex)).toEqual({ reasoningEffort: "low" })
+    }
+  })
+
   test("Grok 4.5 exposes low/medium/high with provider-specific wire shapes", () => {
     const direct = model({
       id: "grok-4.5",
