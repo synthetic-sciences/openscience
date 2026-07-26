@@ -20,6 +20,10 @@ test("Vite keeps the complete Molstar package in one explicit chunk", () => {
   expect(output.manualChunks).toBe(workspaceManualChunks)
 })
 
+test("Vite pre-bundles RDKit before a module worker requests it", () => {
+  expect(config.optimizeDeps?.include).toContain("@rdkit/rdkit")
+})
+
 function packageName(node: ts.Expression | undefined) {
   return node && ts.isStringLiteral(node) ? node.text : undefined
 }

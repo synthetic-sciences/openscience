@@ -924,18 +924,27 @@ ToolRegistry.register({
       return permissions[0]
     })
 
-    const childToolPart = createMemo(() => {
-      const perm = childPermission()
-      if (!perm || !perm.tool) return undefined
+    const childQuestion = createMemo(() => {
       const sessionId = childSessionId()
       if (!sessionId) return undefined
-      // Find the tool part that matches the permission's callID
+      const questions = data.store.question?.[sessionId] ?? []
+      return questions[0]
+    })
+
+    const childRequest = createMemo(() => childPermission() ?? childQuestion())
+
+    const childToolPart = createMemo(() => {
+      const request = childRequest()
+      if (!request || !request.tool) return undefined
+      const sessionId = childSessionId()
+      if (!sessionId) return undefined
+      // Find the tool part that owns the pending permission or question.
       const messages = data.store.message[sessionId] ?? []
-      const message = findLast(messages, (m) => m.id === perm.tool!.messageID)
+      const message = findLast(messages, (m) => m.id === request.tool!.messageID)
       if (!message) return undefined
       const parts = data.store.part[message.id] ?? []
       for (const part of parts) {
-        if (part.type === "tool" && (part as ToolPart).callID === perm.tool!.callID) {
+        if (part.type === "tool" && (part as ToolPart).callID === request.tool!.callID) {
           return { part: part as ToolPart, message }
         }
       }
@@ -983,7 +992,7 @@ ToolRegistry.register({
     }
 
     return (
-      <div data-component="tool-part-wrapper" data-permission={!!childPermission()}>
+      <div data-component="tool-part-wrapper" data-permission={!!childPermission()} data-question={!!childQuestion()}>
         <Switch>
           <Match when={childPermission()}>
             <>
@@ -1018,6 +1027,30 @@ ToolRegistry.register({
                 </div>
               </div>
             </>
+          </Match>
+          <Match when={childQuestion()}>
+            {(request) => (
+              <>
+                <Show
+                  when={childToolPart()}
+                  fallback={
+                    <BasicTool
+                      icon="task"
+                      defaultOpen={true}
+                      trigger={{
+                        title: i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }),
+                        titleClass: "capitalize",
+                        subtitle: props.input.description,
+                      }}
+                      onSubtitleClick={handleSubtitleClick}
+                    />
+                  }
+                >
+                  {renderChildToolPart()}
+                </Show>
+                <QuestionPrompt request={request()} />
+              </>
+            )}
           </Match>
           <Match when={true}>
             <BasicTool

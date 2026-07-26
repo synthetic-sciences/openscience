@@ -17,6 +17,13 @@ export default defineConfig({
   resolve: {
     dedupe: ["shiki"],
   },
+  // Vite's dependency scanner does not traverse module workers. Without an
+  // explicit include, the first RDKit render discovers and optimizes the
+  // Emscripten bundle on demand, which can exceed the worker's timeout on a
+  // cold checkout. Pre-bundle it while the dev server starts instead.
+  optimizeDeps: {
+    include: ["@rdkit/rdkit"],
+  },
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
