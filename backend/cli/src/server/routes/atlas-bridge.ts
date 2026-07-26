@@ -348,33 +348,29 @@ function writeProjectPin(root: string, projectId: string, key: string): void {
   }
 }
 
-// Find-only: the repo's dedupe-key → its Atlas project root id (null when
-// unlinked/offline). Honours the local pin first, then the API; caches an API
+// Find-only: the repo's dedupe-key → its Atlas project root id (null only when
+// the backend confirms it is unlinked). Honours the local pin first, then the API; caches an API
 // hit back to the pin. The directory is the folder the SPA has open (query
 // param), NOT the serve launch dir.
 async function resolveProjectId(directory: string): Promise<string | null> {
   if (!directory) return null
-  try {
-    // Root to the git repo top-level so a subfolder / a clone at a different
-    // path resolves to the SAME project + graph as the repo itself.
-    const root = await repoRoot(directory)
-    const ctx = await repoContext(root)
-    const key = computeDedupeKey(root, ctx.repo_url)
-    // Honour the local pin first (instant + offline) — but ONLY when it was
-    // resolved for THIS repo identity, so a stale pin can't shadow the right
-    // project (or block find-or-create from ever creating it).
-    const pin = readProjectPin(root)
-    if (pin && pinMatchesKey(pin, key)) return pin.project_id
-    const res = await atlas("GET", `/api/agent/projects?dedupe_key=${encodeURIComponent(key)}`)
-    if (!res.ok) return null
-    const data = await res.json()
-    const existing = Array.isArray(data?.projects) ? data.projects[0] : undefined
-    const id = projectIdOf(existing)
-    if (id) writeProjectPin(root, id, key)
-    return id
-  } catch {
-    return null
-  }
+  // Root to the git repo top-level so a subfolder / a clone at a different
+  // path resolves to the SAME project + graph as the repo itself.
+  const root = await repoRoot(directory)
+  const ctx = await repoContext(root)
+  const key = computeDedupeKey(root, ctx.repo_url)
+  // Honour the local pin first (instant + offline) — but ONLY when it was
+  // resolved for THIS repo identity, so a stale pin can't shadow the right
+  // project (or block find-or-create from ever creating it).
+  const pin = readProjectPin(root)
+  if (pin && pinMatchesKey(pin, key)) return pin.project_id
+  const res = await atlas("GET", `/api/agent/projects?dedupe_key=${encodeURIComponent(key)}`)
+  if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
+  const data = await res.json()
+  const existing = Array.isArray(data?.projects) ? data.projects[0] : undefined
+  const id = projectIdOf(existing)
+  if (id) writeProjectPin(root, id, key)
+  return id
 }
 
 // ── graph-init failure classification ────────────────────────────────────
@@ -482,8 +478,17 @@ export async function initProjectDetailed(directory: string): Promise<InitProjec
   // Fail fast offline: no managed session means no request can succeed —
   // don't turn a missing `openscience login` into a network error.
   if (!(await token())) return { projectId: null, failure: { kind: "unauthenticated", host: API_BASE } }
-  const existing = await resolveProjectId(directory)
-  if (existing) return { projectId: existing }
+  // Resolution is a useful fast path, not a prerequisite for the idempotent
+  // find-or-create call below. Preserve its failure for logs, then keep going:
+  // a temporarily unavailable GET endpoint must not crash this never-throw API.
+  try {
+    const existing = await resolveProjectId(directory)
+    if (existing) return { projectId: existing }
+  } catch (e) {
+    log.warn("project lookup failed before init, continuing with find-or-create", {
+      error: e instanceof Error ? e.message : String(e),
+    })
+  }
   const root = await repoRoot(directory)
   const ctx = await repoContext(root)
   const key = computeDedupeKey(root, ctx.repo_url)
@@ -635,12 +640,17 @@ export const AtlasBridgeRoutes = lazy(() =>
     })
     // Resolve / init the OPENED folder's project root, so the canvas scopes to
     // the folder the SPA has open (not the serve launch dir).
-    .get("/project", async (c) => c.json({ project_id: await resolveProjectId(c.req.query("directory") || "") }))
+    .get("/project", async (c) => {
+      try {
+        return c.json({ project_id: await resolveProjectId(c.req.query("directory") || "") })
+      } catch (error) {
+        const failure = readError(error)
+        return c.json({ detail: failure.detail }, failure.status as any)
+      }
+    })
     .post("/project/init", async (c) => {
       const result = await initProjectDetailed(c.req.query("directory") || "")
-      // Additive shape: the SPA reads project_id; error/message/host let it
-      // (and any curl-debugging user) see WHY init failed instead of a bare null.
-      return c.json({
+      const payload = {
         project_id: result.projectId,
         ...(result.failure
           ? {
@@ -650,7 +660,28 @@ export const AtlasBridgeRoutes = lazy(() =>
               host: result.failure.host,
             }
           : {}),
-      })
+      }
+      if (!result.failure) return c.json(payload)
+
+      const status =
+        result.failure.status ??
+        (result.failure.kind === "unauthenticated"
+          ? 401
+          : result.failure.kind === "plan"
+            ? 402
+            : result.failure.kind === "backend" && result.failure.message === "no directory provided"
+              ? 400
+              : 502)
+      const detail =
+        result.failure.message ??
+        (result.failure.kind === "unauthenticated"
+          ? "Sign in to Atlas before initializing the project graph."
+          : result.failure.kind === "plan"
+            ? "An active Atlas plan is required to initialize the project graph."
+            : result.failure.kind === "unreachable"
+              ? `Atlas is unavailable at ${result.failure.host}.`
+              : "Atlas could not initialize the project graph.")
+      return c.json({ ...payload, detail }, status as any)
     })
     .all("/*", (c) => c.json({ detail: "Atlas bridge route not found" }, 404)),
 )

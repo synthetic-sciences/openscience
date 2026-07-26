@@ -210,6 +210,19 @@ describe("read bridge failures", () => {
     expect(await response.json()).toEqual({ detail: "database unavailable" })
   })
 
+  test("project resolution propagates an Atlas outage instead of reporting an unlinked folder", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    globalThis.fetch = (async () =>
+      Response.json({ detail: "project service unavailable" }, { status: 503 })) as unknown as typeof fetch
+
+    const directory = `/tmp/openscience-atlas-project-route-${process.pid}`
+    const response = await AtlasBridgeRoutes().request(`/project?directory=${encodeURIComponent(directory)}`)
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ detail: "project service unavailable" })
+  })
+
   test("returns 404 for an unknown bridge route", async () => {
     const response = await AtlasBridgeRoutes().request("/not-a-real-route")
 
@@ -239,5 +252,43 @@ describe("initProjectDetailed", () => {
     const result = await initProjectDetailed("")
     expect(result.projectId).toBeNull()
     expect(result.failure?.kind).toBe("backend")
+  })
+})
+
+describe("project init route", () => {
+  test("returns an authenticated HTTP error with actionable detail instead of a 200 null", async () => {
+    const directory = `/tmp/openscience-atlas-init-route-${process.pid}`
+    const response = await AtlasBridgeRoutes().request(`/project/init?directory=${encodeURIComponent(directory)}`, {
+      method: "POST",
+    })
+
+    expect(response.status).toBe(401)
+    expect(await response.json()).toMatchObject({
+      project_id: null,
+      error: "unauthenticated",
+      detail: "Sign in to Atlas before initializing the project graph.",
+    })
+  })
+
+  test("preserves a classified plan error and backend message", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    globalThis.fetch = (async () =>
+      Response.json(
+        { detail: { code: "plan_quota_exhausted", message: "monthly quota exhausted" } },
+        { status: 402 },
+      )) as unknown as typeof fetch
+
+    const directory = `/tmp/openscience-atlas-init-plan-${process.pid}`
+    const response = await AtlasBridgeRoutes().request(`/project/init?directory=${encodeURIComponent(directory)}`, {
+      method: "POST",
+    })
+
+    expect(response.status).toBe(402)
+    expect(await response.json()).toMatchObject({
+      project_id: null,
+      error: "plan",
+      detail: "monthly quota exhausted",
+    })
   })
 })

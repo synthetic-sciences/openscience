@@ -8,9 +8,10 @@
  * renderer, mounting `ScienceArtifact` (which lazily resolves the concrete
  * renderer for the artifact kind, with a graceful JSON fallback).
  *
- * Imported for its side effect from `app.tsx`. Importing `ScienceArtifact` here
- * also pulls in the renderer registry barrel, so every renderer is registered
- * before the first artifact is dispatched.
+ * Imported for its side effect from the lazy session shell. Importing
+ * `ScienceArtifact` here also pulls in the renderer registry barrel, so every
+ * renderer is registered before the first artifact is dispatched without
+ * adding the session-only render path to the home entry bundle.
  */
 import { Show } from "solid-js"
 import { ARTIFACT_TOOL, ToolRegistry } from "@synsci/ui/message-part"

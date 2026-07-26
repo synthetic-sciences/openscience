@@ -5,7 +5,7 @@
 //
 //   • Atlas managed → open the dashboard sign-in in a new tab, paste the `thk_`
 //     key, POST /account/login-key, then resync so managed models light up.
-//   • Your own keys → the real Credentials add-key flow (auth.set + global.sync).
+//   • Your own keys → the real Credentials add-key flow (auth.set + global.dispose).
 //   • Not now → dismiss + persist a localStorage marker so we don't re-prompt.
 //
 // The one hosted checkout that leaves the app is "add funds"; everything else
@@ -117,7 +117,7 @@ export function SetupDialog(props: { onDismiss?: () => void }): JSX.Element {
     setError(undefined)
     try {
       await sdk.client.auth.set({ providerID: provider(), auth: { type: "api", key: k } })
-      await sdk.client.global.sync()
+      await sdk.client.global.dispose()
       dialog.close()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

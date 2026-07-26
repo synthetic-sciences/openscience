@@ -1,4 +1,5 @@
 import { test, expect } from "./fixtures"
+import { promptSelector, sessionPath } from "./utils"
 
 const VIEW_KEY = "thesis-projects-view-v1"
 const FAVORITES_KEY = "thesis-project-favorites-v1"
@@ -44,4 +45,18 @@ test("home project search, view, favorite, and hide state are functional", async
   await page.evaluate((key) => localStorage.removeItem(key), HIDDEN_KEY)
   await page.reload()
   await expect(project).toBeVisible()
+})
+
+test("new project opens a folder through the in-app picker", async ({ page, directory }) => {
+  await page.goto("/")
+  await page.getByRole("button", { name: "new project", exact: true }).first().click()
+
+  const path = page.getByPlaceholder(/paste any absolute path/)
+  await expect(path).toBeVisible()
+  await path.fill(directory)
+  await path.press("Enter")
+  await page.getByRole("button", { name: "open this folder", exact: true }).click()
+
+  await expect(page).toHaveURL(sessionPath(directory))
+  await expect(page.locator(promptSelector)).toBeVisible()
 })

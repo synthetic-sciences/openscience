@@ -565,8 +565,15 @@ export function AtlasCanvas(): JSX.Element {
     if (initializing()) return
     setInitializing(true)
     try {
-      const { project_id } = await atlas.initProject(directory())
-      if (!project_id) throw new Error("backend returned no project id")
+      const result = await atlas.initProject(directory())
+      const { project_id } = result
+      // Backward compatibility for an older bridge that returned a structured
+      // 200 failure. Current bridges use non-2xx + detail, which requestJSON
+      // throws before this point.
+      if (!project_id)
+        throw new Error(
+          result.message ?? `atlas project initialization failed${result.error ? `: ${result.error}` : ""}`,
+        )
       settled = true
       await refetchAll()
       setGraphId(project_id)

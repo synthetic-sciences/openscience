@@ -2,12 +2,7 @@ import "@/index.css"
 import { ErrorBoundary, Show, lazy, type ParentProps } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
-import { MarkedProvider } from "@synsci/ui/context/marked"
-import { DiffComponentProvider } from "@synsci/ui/context/diff"
-import { CodeComponentProvider } from "@synsci/ui/context/code"
 import { I18nProvider } from "@synsci/ui/context"
-import { Diff } from "@synsci/ui/diff"
-import { Code } from "@synsci/ui/code"
 import { ThemeProvider } from "@synsci/ui/theme"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { PermissionProvider } from "@/context/permission"
@@ -31,14 +26,11 @@ import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
 import { URLS } from "@/config/urls"
 import { resolveDefaultServerUrl } from "@/config/server-url"
-// Side effect: registers the inline science-artifact tool renderer + pulls in
-// the renderer registry so `metadata.artifact` envelopes render in chat.
-import "@/science/tool-renderer"
 import { Suspense } from "solid-js"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
 
 const Home = lazy(() => import("@/pages/home"))
-const Session = lazy(() => import("@/pages/session"))
+const Session = lazy(() => import("@/pages/session-shell"))
 const Loading = () => (
   <div class="size-full" style={{ display: "flex", "align-items": "center", "justify-content": "center" }}>
     <AsciiSpinner label="loading…" color="var(--color-text-faint)" />
@@ -57,11 +49,6 @@ declare global {
   }
 }
 
-function MarkedProviderWithNativeParser(props: ParentProps) {
-  const platform = usePlatform()
-  return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
-}
-
 export function AppBaseProviders(props: ParentProps) {
   return (
     <MetaProvider>
@@ -69,13 +56,7 @@ export function AppBaseProviders(props: ParentProps) {
         <LanguageProvider>
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-              <DialogProvider>
-                <MarkedProviderWithNativeParser>
-                  <DiffComponentProvider component={Diff}>
-                    <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
-                  </DiffComponentProvider>
-                </MarkedProviderWithNativeParser>
-              </DialogProvider>
+              <DialogProvider>{props.children}</DialogProvider>
             </ErrorBoundary>
           </UiI18nBridge>
         </LanguageProvider>

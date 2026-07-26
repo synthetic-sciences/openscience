@@ -28,6 +28,24 @@ const INLINE_PDB = [
   "END",
 ].join("\n")
 
+const INLINE_SDF = [
+  "methane",
+  "  OpenScience 3D",
+  "",
+  "  5  4  0  0  0  0  0  0  0  0999 V2000",
+  "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+  "    0.6291    0.6291    0.6291 H   0  0  0  0  0  0  0  0  0  0  0  0",
+  "   -0.6291   -0.6291    0.6291 H   0  0  0  0  0  0  0  0  0  0  0  0",
+  "   -0.6291    0.6291   -0.6291 H   0  0  0  0  0  0  0  0  0  0  0  0",
+  "    0.6291   -0.6291   -0.6291 H   0  0  0  0  0  0  0  0  0  0  0  0",
+  "  1  2  1  0  0  0  0",
+  "  1  3  1  0  0  0  0",
+  "  1  4  1  0  0  0  0",
+  "  1  5  1  0  0  0  0",
+  "M  END",
+  "$$$$",
+].join("\n")
+
 type Sdk = ReturnType<typeof createSdk>
 
 interface ArtifactFixture {
@@ -92,6 +110,8 @@ async function seedArtifact(sdk: Sdk, fixture: ArtifactFixture) {
   expect(storedPart?.type).toBe("tool")
   if (storedPart?.type !== "tool") throw new Error("Updated tool part was not persisted")
   expect(storedPart.tool).toBe(fixture.tool ?? "__artifact__")
+  expect(storedPart.state.status).toBe("completed")
+  if (storedPart.state.status !== "completed") throw new Error("Updated tool part did not complete")
   expect(storedPart.state.metadata).toMatchObject({ artifact: { kind: fixture.kind } })
 
   return sessionID
@@ -230,6 +250,17 @@ test("renders an inline protein structure without RCSB access", async ({ page, s
       await expect.poll(() => canvas.evaluate((node: HTMLCanvasElement) => node.width * node.height)).toBeGreaterThan(0)
     },
   )
+})
+
+test("renders an inline 3D molecule without network access", async ({ page, sdk, gotoSession }) => {
+  await withArtifact({ page, sdk, gotoSession }, { kind: "chem-3d", data: { sdf: INLINE_SDF } }, async (artifact) => {
+    const structure = artifact.locator('[data-component="mol-structure"][data-kind="chem-3d"]')
+    await expect(structure.getByText("Loading 3D structure…")).toBeHidden({ timeout: 30_000 })
+    await expect(structure.getByText(/Could not render structure/)).toHaveCount(0)
+    const canvas = structure.locator("canvas").first()
+    await expect(canvas).toBeVisible()
+    await expect.poll(() => canvas.evaluate((node: HTMLCanvasElement) => node.width * node.height)).toBeGreaterThan(0)
+  })
 })
 
 test("rasterizes an inline one-page PDF", async ({ page, sdk, gotoSession }) => {

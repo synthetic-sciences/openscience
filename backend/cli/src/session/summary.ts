@@ -83,10 +83,27 @@ export namespace SessionSummary {
     }),
     async (input) => {
       const all = await Session.messages({ sessionID: input.sessionID })
-      await Promise.all([
+      const message = all.find((item) => item.info.id === input.messageID)
+      if (!message || message.info.role !== "user") {
+        log.warn("skipping summary for missing user message", input)
+        return
+      }
+
+      const results = await Promise.allSettled([
         summarizeSession({ sessionID: input.sessionID, messages: all }),
-        summarizeMessage({ messageID: input.messageID, messages: all }),
+        summarizeMessage({ message, messages: all }),
       ])
+      const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected")
+      if (!failure) return
+
+      const sessionExists = await Session.get(input.sessionID)
+        .then(() => true)
+        .catch((error) => {
+          if (error instanceof Storage.NotFoundError) return false
+          throw error
+        })
+      if (sessionExists) throw failure.reason
+      log.warn("skipping summary for deleted session", input)
     },
   )
 
@@ -117,18 +134,23 @@ export namespace SessionSummary {
     })
   }
 
-  async function summarizeMessage(input: { messageID: string; messages: MessageV2.WithParts[] }) {
+  async function summarizeMessage(input: { message: MessageV2.WithParts; messages: MessageV2.WithParts[] }) {
     const messages = input.messages.filter(
-      (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+      (m) =>
+        m.info.id === input.message.info.id ||
+        (m.info.role === "assistant" && m.info.parentID === input.message.info.id),
     )
-    const msgWithParts = messages.find((m) => m.info.id === input.messageID)!
-    const userMsg = msgWithParts.info as MessageV2.User
+    const msgWithParts = input.message
+    let userMsg = msgWithParts.info as MessageV2.User
     const diffs = await computeDiff({ messages })
-    userMsg.summary = {
-      ...userMsg.summary,
-      diffs,
-    }
-    await Session.updateMessage(userMsg)
+    const updated = await updateUserMessage(userMsg, (draft) => {
+      draft.summary = {
+        ...draft.summary,
+        diffs,
+      }
+    })
+    if (!updated) return
+    userMsg = updated
 
     const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
@@ -161,8 +183,28 @@ export namespace SessionSummary {
       })
       const result = await stream.text
       log.info("title", { title: result })
-      userMsg.summary.title = result
-      await Session.updateMessage(userMsg)
+      await updateUserMessage(userMsg, (draft) => {
+        draft.summary = {
+          ...draft.summary,
+          diffs: draft.summary?.diffs ?? diffs,
+          title: result,
+        }
+      })
+    }
+  }
+
+  async function updateUserMessage(message: MessageV2.User, editor: (draft: MessageV2.User) => void) {
+    try {
+      const updated = await Storage.update<MessageV2.User>(["message", message.sessionID, message.id], editor)
+      Bus.publish(MessageV2.Event.Updated, { info: updated })
+      return updated
+    } catch (error) {
+      if (!(error instanceof Storage.NotFoundError)) throw error
+      log.warn("skipping summary update for removed user message", {
+        sessionID: message.sessionID,
+        messageID: message.id,
+      })
+      return undefined
     }
   }
 

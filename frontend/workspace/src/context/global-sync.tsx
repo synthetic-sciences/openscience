@@ -657,7 +657,13 @@ function createGlobalSync() {
     if (directory === "global") {
       switch (event?.type) {
         case "global.disposed": {
+          providerLoads.clear()
           refresh()
+          for (const [directory, [, setStore]] of Object.entries(children)) {
+            void loadProvider(directory)
+              .then((value) => setStore("provider", reconcile(value)))
+              .catch((error) => console.error("Failed to refresh providers", { directory, error }))
+          }
           return
         }
         case "project.updated": {

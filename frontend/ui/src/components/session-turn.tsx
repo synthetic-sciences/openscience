@@ -4,6 +4,7 @@ import {
   Message as MessageType,
   Part as PartType,
   type PermissionRequest,
+  type QuestionRequest,
   TextPart,
   ToolPart,
 } from "@synsci/sdk/v2/client"
@@ -157,7 +158,8 @@ export function SessionTurn(
   const emptyFiles: FilePart[] = []
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
-  const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyQuestions: QuestionRequest[] = []
+  const emptyRequestParts: { part: ToolPart; message: AssistantMessage }[] = []
   const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
@@ -270,26 +272,28 @@ export function SessionTurn(
   })
 
   const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? emptyPermissions)
-  const permissionCount = createMemo(() => permissions().length)
   const nextPermission = createMemo(() => permissions()[0])
+  const questions = createMemo(() => data.store.question?.[props.sessionID] ?? emptyQuestions)
+  const nextQuestion = createMemo(() => questions()[0])
+  const requestCount = createMemo(() => permissions().length + questions().length)
 
-  const permissionParts = createMemo(() => {
-    if (props.stepsExpanded) return emptyPermissionParts
+  const requestParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyRequestParts
 
-    const next = nextPermission()
-    if (!next || !next.tool) return emptyPermissionParts
+    const tool = nextPermission()?.tool ?? nextQuestion()?.tool
+    if (!tool) return emptyRequestParts
 
-    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
-    if (!message) return emptyPermissionParts
+    const message = findLast(assistantMessages(), (m) => m.id === tool.messageID)
+    if (!message) return emptyRequestParts
 
     const parts = data.store.part[message.id] ?? emptyParts
     for (const part of parts) {
       if (part?.type !== "tool") continue
-      const tool = part as ToolPart
-      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
+      const toolPart = part as ToolPart
+      if (toolPart.callID === tool.callID) return [{ part: toolPart, message }]
     }
 
-    return emptyPermissionParts
+    return emptyRequestParts
   })
 
   const shellModePart = createMemo(() => {
@@ -487,7 +491,7 @@ export function SessionTurn(
   })
 
   createEffect(
-    on(permissionCount, (count, prev) => {
+    on(requestCount, (count, prev) => {
       if (!count) return
       if (prev !== undefined && count <= prev) return
       autoScroll.forceScrollToBottom()
@@ -648,11 +652,9 @@ export function SessionTurn(
                         </Show>
                       </div>
                     </Show>
-                    <Show when={!props.stepsExpanded && permissionParts().length > 0}>
+                    <Show when={!props.stepsExpanded && requestParts().length > 0}>
                       <div data-slot="session-turn-permission-parts">
-                        <For each={permissionParts()}>
-                          {({ part, message }) => <Part part={part} message={message} />}
-                        </For>
+                        <For each={requestParts()}>{({ part, message }) => <Part part={part} message={message} />}</For>
                       </div>
                     </Show>
                     {/* Response */}

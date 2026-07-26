@@ -1,8 +1,23 @@
 const MODEL_ID = "e2e/echo"
 
+export const E2E_TOOL_SENTINELS = {
+  question: "E2E_TOOL_QUESTION",
+  permission: "E2E_TOOL_PERMISSION",
+} as const
+
 type ChatRequest = {
   stream?: boolean
   messages?: unknown
+  tools?: unknown
+}
+
+type ToolCall = {
+  id: string
+  type: "function"
+  function: {
+    name: "question" | "read"
+    arguments: string
+  }
 }
 
 function textFrom(value: unknown): string {
@@ -21,7 +36,84 @@ function replyFor(body: ChatRequest) {
   return text.match(/E2E_OK_\d+/)?.[0] ?? "E2E reply"
 }
 
-function responseChunk(reply: string, finishReason: string | null) {
+function findSentinel(body: ChatRequest) {
+  const text = textFrom(body.messages)
+  const match = text.match(/\bE2E_TOOL_(QUESTION|PERMISSION)_[A-Za-z0-9_-]+\b/)
+  if (!match) return undefined
+  return {
+    value: match[0],
+    kind: match[1] === "QUESTION" ? E2E_TOOL_SENTINELS.question : E2E_TOOL_SENTINELS.permission,
+  }
+}
+
+function hasToolResult(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasToolResult)
+  if (!value || typeof value !== "object") return false
+
+  const record = value as Record<string, unknown>
+  if (record.role === "tool" || record.type === "tool-result") return true
+  return Object.values(record).some(hasToolResult)
+}
+
+function requestedToolNames(body: ChatRequest) {
+  if (!Array.isArray(body.tools)) return []
+  return body.tools
+    .map((item) =>
+      item && typeof item === "object" && "function" in item
+        ? (item as { function?: { name?: unknown } }).function?.name
+        : undefined,
+    )
+    .filter((name): name is string => typeof name === "string")
+}
+
+function toolCallFor(body: ChatRequest): { call: ToolCall; sentinel: string } | undefined {
+  const sentinel = findSentinel(body)
+  if (!sentinel || hasToolResult(body.messages)) return undefined
+
+  const name = sentinel.kind === E2E_TOOL_SENTINELS.question ? "question" : "read"
+  if (!requestedToolNames(body).includes(name)) return undefined
+
+  const id = `call_${sentinel.value.toLowerCase().replace(/[^a-z0-9_-]/g, "_")}`
+  if (sentinel.kind === E2E_TOOL_SENTINELS.question) {
+    return {
+      sentinel: sentinel.value,
+      call: {
+        id,
+        type: "function",
+        function: {
+          name: "question",
+          arguments: JSON.stringify({
+            questions: [
+              {
+                header: "E2E choice",
+                question: "How should the deterministic E2E request continue?",
+                options: [
+                  { label: "Continue", description: "Reply to the real pending question" },
+                  { label: "Stop", description: "Choose the alternate response" },
+                ],
+                multiple: false,
+              },
+            ],
+          }),
+        },
+      },
+    }
+  }
+
+  return {
+    sentinel: sentinel.value,
+    call: {
+      id,
+      type: "function",
+      function: {
+        name: "read",
+        arguments: JSON.stringify({ filePath: "package.json", limit: 1 }),
+      },
+    },
+  }
+}
+
+function responseChunk(delta: Record<string, unknown>, finishReason: string | null) {
   return {
     id: "chatcmpl-e2e",
     created: Math.floor(Date.now() / 1000),
@@ -29,7 +121,7 @@ function responseChunk(reply: string, finishReason: string | null) {
     choices: [
       {
         index: 0,
-        delta: finishReason ? {} : { role: "assistant", content: reply },
+        delta: finishReason ? {} : delta,
         finish_reason: finishReason,
       },
     ],
@@ -49,7 +141,15 @@ export function fakeModelConfig(baseURL: string) {
   return {
     model: MODEL_ID,
     small_model: MODEL_ID,
-    enabled_providers: ["e2e"],
+    enabled_providers: ["e2e", "openai"],
+    // Ordinary echo prompts never call tools. The sentinel-only read call below
+    // uses this specific override so packaged E2E can exercise the real pending
+    // permission lifecycle without making writes or broadening user defaults.
+    permission: {
+      read: {
+        "*/package.json": "ask",
+      },
+    },
     provider: {
       e2e: {
         name: "E2E echo model",
@@ -58,7 +158,7 @@ export function fakeModelConfig(baseURL: string) {
         models: {
           echo: {
             name: "E2E echo model",
-            tool_call: false,
+            tool_call: true,
             limit: { context: 128_000, output: 4_096 },
             // Exercise the workspace's model-variant control without relying
             // on a real provider catalog or making an external inference.
@@ -89,9 +189,26 @@ export function startFakeModelServer(port: number, hostname = "127.0.0.1") {
       }
 
       const body = (await request.json()) as ChatRequest
-      const reply = replyFor(body)
+      const tool = toolCallFor(body)
+      const sentinel = findSentinel(body)
+      const reply = sentinel && hasToolResult(body.messages) ? `${sentinel.value}_DONE` : replyFor(body)
 
       if (!body.stream) {
+        if (tool) {
+          return Response.json({
+            id: "chatcmpl-e2e",
+            created: Math.floor(Date.now() / 1000),
+            model: "echo",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: null, tool_calls: [tool.call] },
+                finish_reason: "tool_calls",
+              },
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          })
+        }
         return Response.json({
           id: "chatcmpl-e2e",
           created: Math.floor(Date.now() / 1000),
@@ -101,10 +218,14 @@ export function startFakeModelServer(port: number, hostname = "127.0.0.1") {
         })
       }
 
-      const events = [responseChunk(reply, null), responseChunk("", "stop")]
-        .map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`)
-        .join("")
-      return new Response(`${events}data: [DONE]\n\n`, {
+      const events = tool
+        ? [
+            responseChunk({ role: "assistant", tool_calls: [{ index: 0, ...tool.call }] }, null),
+            responseChunk({}, "tool_calls"),
+          ]
+        : [responseChunk({ role: "assistant", content: reply }, null), responseChunk({}, "stop")]
+      const bodyText = events.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")
+      return new Response(`${bodyText}data: [DONE]\n\n`, {
         headers: {
           "content-type": "text/event-stream",
           "cache-control": "no-cache",

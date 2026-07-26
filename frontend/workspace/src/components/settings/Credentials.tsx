@@ -183,7 +183,7 @@ export const Credentials: Component = () => {
     try {
       await sdk.client.auth.set({ providerID: keyProvider(), auth: { type: "api", key } })
       setKeyValue("")
-      await sdk.client.global.sync()
+      await sdk.client.global.dispose()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -195,7 +195,7 @@ export const Credentials: Component = () => {
     setError(undefined)
     try {
       await sdk.client.auth.remove({ providerID })
-      await sdk.client.global.sync()
+      await sdk.client.global.dispose()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }

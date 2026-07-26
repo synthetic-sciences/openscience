@@ -85,6 +85,39 @@ const serverEnv = {
   OPENSCIENCE_SERVER_PASSWORD: e2eServerPassword,
 } satisfies Record<string, string>
 
+// The isolated browser harness must never inherit real provider credentials
+// from the developer or CI host. Besides leaking state into model lists, an
+// inherited key can turn a deterministic UI action into a billable request.
+const providerCredentialEnvKeys = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_BASE_URL",
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "GOOGLE_API_KEY",
+  "GOOGLE_GENERATIVE_AI_API_KEY",
+  "GOOGLE_GENERATIVE_AI_BASE_URL",
+  "AZURE_OPENAI_API_KEY",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_PROFILE",
+  "AWS_REGION",
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "OPENROUTER_API_KEY",
+  "OPENROUTER_BASE_URL",
+  "GROQ_API_KEY",
+  "MISTRAL_API_KEY",
+  "PERPLEXITY_API_KEY",
+  "TOGETHER_API_KEY",
+  "XAI_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "FIREWORKS_API_KEY",
+  "CEREBRAS_API_KEY",
+  "SAMBANOVA_API_KEY",
+] as const
+
+for (const key of providerCredentialEnvKeys) {
+  delete serverEnv[key]
+}
+
 const runnerEnv = {
   ...serverEnv,
   [E2E_MODE_ENV]: "isolated",
@@ -106,10 +139,16 @@ const seed = Bun.spawn(["bun", "script/seed-e2e.ts"], {
 
 const seedExit = await seed.exited
 if (seedExit !== 0) {
+  fakeModelServer.stop(true)
+  await fs.rm(sandbox, { recursive: true, force: true })
   process.exit(seedExit)
 }
 
 Object.assign(process.env, serverEnv)
+// The backend runs in this process, so sanitizing only `serverEnv` is not
+// enough: Object.assign does not remove credentials already present in the
+// parent shell. Clear them before importing any backend/provider modules.
+for (const key of providerCredentialEnvKeys) delete process.env[key]
 process.env.AGENT = "1"
 process.env.OPENSCIENCE = "1"
 
@@ -131,6 +170,10 @@ console.log(`openscience server listening on http://127.0.0.1:${serverPort}`)
 // webServer config) guarantees the Vite-served frontend bundle picks up
 // the matching Basic-Auth credentials. Cleaned up in the finally block.
 const envLocalPath = path.join(appDir, ".env.local")
+const envLocalBefore = await fs.readFile(envLocalPath).catch((error) => {
+  if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+  throw error
+})
 const envLocalBody = [
   `VITE_OPENSCIENCE_SERVER_HOST=127.0.0.1`,
   `VITE_OPENSCIENCE_SERVER_PORT=${serverPort}`,
@@ -159,7 +202,10 @@ const result = await (async () => {
     await inst.Instance.disposeAll()
     await server.stop()
     fakeModelServer.stop(true)
-    await fs.rm(envLocalPath, { force: true })
+    await Promise.all([
+      envLocalBefore === undefined ? fs.rm(envLocalPath, { force: true }) : fs.writeFile(envLocalPath, envLocalBefore),
+      fs.rm(sandbox, { recursive: true, force: true }),
+    ])
   }
 })()
 

@@ -51,6 +51,14 @@ export interface ArtifactsListResponse {
   has_more?: boolean
 }
 
+export interface InitProjectResponse {
+  project_id: string | null
+  error?: "unauthenticated" | "unreachable" | "plan" | "backend"
+  status?: number
+  message?: string
+  host?: string
+}
+
 async function requestJSON<T>(
   server: string,
   method: "GET" | "POST",
@@ -103,7 +111,7 @@ export function createAtlasAPI(server: () => string) {
       get<{ project_id: string | null }>(`/project?directory=${encodeURIComponent(directory)}`),
     /** Find or create the opened project's root after explicit user action. */
     initProject: (directory: string) =>
-      post<{ project_id: string | null }>(`/project/init?directory=${encodeURIComponent(directory)}`, {}),
+      post<InitProjectResponse>(`/project/init?directory=${encodeURIComponent(directory)}`, {}),
     listArtifacts: (nodeID: string) =>
       get<ArtifactsListResponse | AtlasArtifact[]>(`/nodes/${nodeID}/artifacts`),
   }

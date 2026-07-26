@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
+import { children, createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
 import { Icon, IconProps } from "./icon"
 import { Markdown } from "./markdown"
@@ -31,8 +31,14 @@ export interface BasicToolProps {
   onSubtitleClick?: () => void
 }
 
+/** @internal Exported for the focused memoization regression test. */
+export function resolveBasicToolChildren(getChildren: () => JSX.Element) {
+  return children(getChildren)
+}
+
 export function BasicTool(props: BasicToolProps) {
   const [open, setOpen] = createSignal(props.defaultOpen ?? false)
+  const content = resolveBasicToolChildren(() => props.children)
 
   createEffect(() => {
     if (props.forceOpen) setOpen(true)
@@ -103,13 +109,13 @@ export function BasicTool(props: BasicToolProps) {
               </Switch>
             </div>
           </div>
-          <Show when={props.children && !props.hideDetails && !props.locked}>
+          <Show when={content() && !props.hideDetails && !props.locked}>
             <Collapsible.Arrow />
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={props.children && !props.hideDetails}>
-        <Collapsible.Content>{props.children}</Collapsible.Content>
+      <Show when={content() && !props.hideDetails}>
+        <Collapsible.Content>{content()}</Collapsible.Content>
       </Show>
     </Collapsible>
   )
