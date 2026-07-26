@@ -128,9 +128,13 @@ export function PdfViewer(props: ArtifactRenderProps) {
     if (!hasSource) return
     ;(async () => {
       try {
-        const pdfjs = (await import("pdfjs-dist")) as unknown as PdfLib
+        // pdfjs v6's modern build assumes the emerging Map.getOrInsertComputed
+        // API, which is not present in the Chromium/WebKit versions we ship.
+        // Its legacy build includes the required compatibility layer while
+        // remaining lazy-loaded with the viewer.
+        const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as unknown as PdfLib
         if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-          const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default
+          const workerUrl = (await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url")).default
           pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
         }
 

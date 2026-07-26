@@ -3,7 +3,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { centerTabs } from "@/atlas/store/centerTabs"
-import { atlasAPI, type AtlasNode } from "@/atlas/api/atlas"
+import { createAtlasAPI, type AtlasNode } from "@/atlas/api/atlas"
 import {
   IconFolder,
   IconFile,
@@ -575,16 +575,17 @@ type ArtifactRow = { node: AtlasNode; artifact: { name?: string; kind?: string; 
 function ArtifactsPanel(): JSX.Element {
   const sync = useSync()
   const sdk = useSDK()
+  const atlas = createAtlasAPI(() => sdk.url)
   const directory = () => sync.project?.worktree || sync.data.path.directory || sdk.directory
   const [data] = createResource(directory, async (dir) => {
     try {
-      const pid = (await atlasAPI.resolveProject(dir)).project_id
+      const pid = (await atlas.resolveProject(dir)).project_id
       if (!pid) return [] as ArtifactRow[]
-      const tree = await atlasAPI.getGraphTree(pid)
+      const tree = await atlas.getGraphTree(pid)
       const rows: ArtifactRow[] = []
       for (const node of tree.nodes ?? []) {
         try {
-          const res = await atlasAPI.listArtifacts(node.node_id)
+          const res = await atlas.listArtifacts(node.node_id)
           const items = Array.isArray(res) ? res : (res.artifacts ?? [])
           for (const a of items) rows.push({ node, artifact: a })
         } catch {}

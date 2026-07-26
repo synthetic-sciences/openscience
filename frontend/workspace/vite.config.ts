@@ -3,6 +3,11 @@ import desktopPlugin from "./vite"
 
 export default defineConfig({
   plugins: [desktopPlugin] as any,
+  // @pierre/diffs and the workspace both depend on Shiki. Resolve them to one
+  // runtime so Vite emits each language/theme chunk once instead of twice.
+  resolve: {
+    dedupe: ["shiki"],
+  },
   server: {
     host: "0.0.0.0",
     allowedHosts: true,

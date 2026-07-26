@@ -53,6 +53,9 @@ import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { NotebookView, type NotebookCellProps } from "./notebook-cell"
 import { skillName, stripRedactedReasoning } from "./tool-display"
+import { ToolRegistry } from "./tool-registry"
+
+export { ARTIFACT_TOOL, ToolRegistry, type ToolComponent, type ToolProps } from "./tool-registry"
 
 interface Diagnostic {
   range: {
@@ -108,11 +111,6 @@ export interface MessagePartProps {
 export type PartComponent = Component<MessagePartProps>
 
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
-
-// Openscience science-artifact tool renderer id. tool-renderer.tsx registers a
-// custom renderer under this name and imports it from here; re-exported so that
-// import resolves against the v1.1.116 message-part.
-export const ARTIFACT_TOOL = "__artifact__"
 
 // A file-mutation tool (write/edit/apply_patch) has no diff/content for a brief
 // window right after it starts, which would otherwise render a title-only card
@@ -532,44 +530,6 @@ export function Part(props: MessagePartProps) {
   )
 }
 
-export interface ToolProps {
-  input: Record<string, any>
-  metadata: Record<string, any>
-  tool: string
-  output?: string
-  status?: string
-  partID?: string
-  title?: string
-  hideDetails?: boolean
-  defaultOpen?: boolean
-  forceOpen?: boolean
-  locked?: boolean
-}
-
-export type ToolComponent = Component<ToolProps>
-
-const state: Record<
-  string,
-  {
-    name: string
-    render?: ToolComponent
-  }
-> = {}
-
-export function registerTool(input: { name: string; render?: ToolComponent }) {
-  state[input.name] = input
-  return input
-}
-
-export function getTool(name: string) {
-  return state[name]?.render
-}
-
-export const ToolRegistry = {
-  register: registerTool,
-  render: getTool,
-}
-
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
@@ -641,7 +601,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   // @ts-expect-error - title only exists on the running/completed state variants
   const title = () => part.state?.title as string | undefined
 
-  const render = ToolRegistry.render(part.tool) ?? GenericTool
+  const render = createMemo(() => ToolRegistry.render(part.tool, metadata()) ?? GenericTool)
 
   return (
     <div data-component="tool-part-wrapper" data-permission={showPermission()} data-question={showQuestion()}>
@@ -672,7 +632,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
         </Match>
         <Match when={true}>
           <Dynamic
-            component={render}
+            component={render()}
             input={input()}
             tool={part.tool}
             metadata={metadata()}
@@ -1004,9 +964,9 @@ ToolRegistry.register({
       const toolData = childToolPart()
       if (!toolData) return null
       const { part } = toolData
-      const render = ToolRegistry.render(part.tool) ?? GenericTool
       // @ts-expect-error
       const metadata = part.state?.metadata ?? {}
+      const render = ToolRegistry.render(part.tool, metadata) ?? GenericTool
       const input = part.state?.input ?? {}
       return (
         <Dynamic

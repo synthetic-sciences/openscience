@@ -97,6 +97,23 @@ jobs:
             printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}/openscience-e2e/state" >> "$GITHUB_ENV"
           fi
 
+      - name: Start deterministic E2E model
+        if: matrix.settings.name != 'windows'
+        run: |
+          CONFIG=$(bun frontend/workspace/script/e2e-fake-model.ts --port 4097 --print-config)
+          {
+            printf '%s\n' "OPENSCIENCE_CONFIG_CONTENT=$CONFIG"
+            printf '%s\n' "OPENSCIENCE_E2E_MODEL=e2e/echo"
+            printf '%s\n' "OPENSCIENCE_E2E_FAKE_MODEL=1"
+          } >> "$GITHUB_ENV"
+          bun frontend/workspace/script/e2e-fake-model.ts --port 4097 > "$RUNNER_TEMP/openscience-fake-model.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -fsS "http://127.0.0.1:4097/health" > /dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::deterministic E2E model never became healthy on 127.0.0.1:4097"
+          exit 1
+
       - name: Seed openscience data
         if: matrix.settings.name != 'windows'
         working-directory: backend/cli
@@ -114,7 +131,7 @@ jobs:
           OPENSCIENCE_E2E_PROJECT_DIR: ${{ github.workspace }}
           OPENSCIENCE_E2E_SESSION_TITLE: "E2E Session"
           OPENSCIENCE_E2E_MESSAGE: "Seeded for UI e2e"
-          OPENSCIENCE_E2E_MODEL: "synsci/gpt-5-nano"
+          OPENSCIENCE_E2E_MODEL: "e2e/echo"
 
       - name: Run openscience server
         if: matrix.settings.name != 'windows'
@@ -169,7 +186,9 @@ jobs:
 
       - name: Print server log
         if: failure() && matrix.settings.name != 'windows'
-        run: cat "$RUNNER_TEMP/openscience-server.log" || true
+        run: |
+          cat "$RUNNER_TEMP/openscience-server.log" || true
+          cat "$RUNNER_TEMP/openscience-fake-model.log" || true
 
       - name: Upload Playwright artifacts
         if: failure()
@@ -182,3 +201,4 @@ jobs:
             frontend/workspace/e2e/test-results
             frontend/workspace/e2e/playwright-report
             ${{ runner.temp }}/openscience-server.log
+            ${{ runner.temp }}/openscience-fake-model.log

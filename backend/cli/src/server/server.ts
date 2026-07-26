@@ -7,6 +7,7 @@ import { cors } from "hono/cors"
 import { compress } from "hono/compress"
 import { streamSSE } from "hono/streaming"
 import { serveWebAsset, wantsJson } from "../web/serve"
+import { webAssetContentSecurityPolicy } from "../web/csp"
 import { isAllowedHost, isAllowedOrigin, isCrossOrigin } from "./host-guard"
 import { timingSafeEqual } from "../util/timing-safe"
 import { FolderResolveRoutes } from "./routes/folder-resolve"
@@ -641,9 +642,6 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
-          const csp =
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: https://syntheticsciences.ai https://*.syntheticsciences.ai; object-src 'self' data: blob:; frame-src 'self' blob:"
-
           // Unmatched /api/* must 404 — never SPA-fallback (the SPA would
           // try to JSON.parse `<!doctype`) and never proxy upstream.
           if (c.req.path.startsWith("/api/")) return c.notFound()
@@ -655,7 +653,7 @@ export namespace Server {
 
           const local = await serveWebAsset(c)
           if (local) {
-            local.headers.set("Content-Security-Policy", csp)
+            local.headers.set("Content-Security-Policy", webAssetContentSecurityPolicy(c.req.path))
             return local
           }
           return c.notFound()

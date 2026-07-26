@@ -2,6 +2,7 @@ import fs from "node:fs/promises"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
+import { fakeModelConfig, fakeModelID, startFakeModelServer } from "./e2e-fake-model"
 
 async function freePort() {
   return await new Promise<number>((resolve, reject) => {
@@ -52,7 +53,8 @@ const extraArgs = (() => {
   return args
 })()
 
-const [serverPort, webPort] = await Promise.all([freePort(), freePort()])
+const [serverPort, webPort, modelPort] = await Promise.all([freePort(), freePort(), freePort()])
+const fakeModelServer = startFakeModelServer(modelPort)
 
 const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-e2e-"))
 
@@ -78,7 +80,9 @@ const serverEnv = {
   OPENSCIENCE_E2E_PROJECT_DIR: repoDir,
   OPENSCIENCE_E2E_SESSION_TITLE: "E2E Session",
   OPENSCIENCE_E2E_MESSAGE: "Seeded for UI e2e",
-  OPENSCIENCE_E2E_MODEL: "synsci/gpt-5-nano",
+  OPENSCIENCE_E2E_MODEL: fakeModelID,
+  OPENSCIENCE_E2E_FAKE_MODEL: "1",
+  OPENSCIENCE_CONFIG_CONTENT: JSON.stringify(fakeModelConfig(`http://127.0.0.1:${modelPort}/v1`)),
   OPENSCIENCE_CLIENT: "app",
   OPENSCIENCE_SERVER_USERNAME: e2eServerUsername,
   OPENSCIENCE_SERVER_PASSWORD: e2eServerPassword,
@@ -156,6 +160,7 @@ const result = await (async () => {
   } finally {
     await inst.Instance.disposeAll()
     await server.stop()
+    fakeModelServer.stop(true)
     await fs.rm(envLocalPath, { force: true })
   }
 })()

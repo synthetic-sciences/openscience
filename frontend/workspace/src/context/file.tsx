@@ -9,6 +9,7 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
+import { createDebouncedSearch } from "./file-search"
 
 // Aborted / cancelled requests are expected when the user clicks quickly
 // (switching files or folders cancels the in-flight fetch). Surfacing those as
@@ -327,11 +328,20 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const inflight = new Map<string, Promise<void>>()
     const treeInflight = new Map<string, Promise<void>>()
 
-    const search = (query: string, dirs: "true" | "false") =>
-      sdk.client.find.files({ query, dirs }).then(
-        (x) => (x.data ?? []).map(normalize),
-        () => [],
-      )
+    const searches = {
+      false: createDebouncedSearch(
+        (query, signal) =>
+          sdk.client.find.files({ query, dirs: "false" }, { signal }).then((x) => (x.data ?? []).map(normalize)),
+        { delayMs: 100, fallback: () => [] },
+      ),
+      true: createDebouncedSearch(
+        (query, signal) =>
+          sdk.client.find.files({ query, dirs: "true" }, { signal }).then((x) => (x.data ?? []).map(normalize)),
+        { delayMs: 100, fallback: () => [] },
+      ),
+    }
+
+    const search = (query: string, dirs: "true" | "false") => searches[dirs].search(query)
 
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
@@ -378,6 +388,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     createEffect(() => {
       scope()
+      searches.false.cancel()
+      searches.true.cancel()
       inflight.clear()
       treeInflight.clear()
       contentLru.clear()
@@ -699,6 +711,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     onCleanup(() => {
+      searches.false.cancel()
+      searches.true.cancel()
       stop()
       disposeViews()
     })

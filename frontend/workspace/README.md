@@ -33,6 +33,10 @@ Your app is ready to be deployed!
 
 Playwright starts the Vite dev server automatically via `webServer`, and UI tests need an openscience backend (defaults to `localhost:4096`).
 Use the local runner to create a temp sandbox, seed data, and run the tests.
+It also starts a loopback-only deterministic model so prompt/reply coverage never
+uses developer credentials or an external inference service. A direct
+`playwright test` run skips that one model-dependent spec unless the CI harness
+provides the same `OPENSCIENCE_E2E_FAKE_MODEL=1` contract.
 
 ```bash
 bunx playwright install

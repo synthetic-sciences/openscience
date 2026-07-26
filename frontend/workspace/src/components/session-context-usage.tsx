@@ -3,12 +3,15 @@ import { Tooltip } from "@synsci/ui/tooltip"
 import { ProgressCircle } from "@synsci/ui/progress-circle"
 import { Button } from "@synsci/ui/button"
 import { useParams } from "@solidjs/router"
-import { AssistantMessage } from "@synsci/sdk/v2/client"
+import { AssistantMessage, type UserMessage } from "@synsci/sdk/v2/client"
 import { findLast } from "@synsci/util/array"
+import { Dialog } from "@synsci/ui/dialog"
+import { useDialog } from "@synsci/ui/context/dialog"
 
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
+import { SessionContextTab } from "@/components/session/session-context-tab"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
@@ -19,11 +22,13 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const params = useParams()
   const layout = useLayout()
   const language = useLanguage()
+  const dialog = useDialog()
 
   const variant = createMemo(() => props.variant ?? "button")
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
+  const view = layout.view(sessionKey)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const visibleUserMessages = createMemo(() => messages().filter((message): message is UserMessage => message.role === "user"))
 
   const usd = createMemo(
     () =>
@@ -57,10 +62,18 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const openContext = () => {
     if (!params.id) return
-    layout.fileTree.open()
-    layout.fileTree.setTab("all")
-    tabs().open("context")
-    tabs().setActive("context")
+    dialog.show(() => (
+      <Dialog title={language.t("session.tab.context")} size="large" transition>
+        <div style={{ width: "min(760px, 82vw)", height: "min(680px, 75vh)", overflow: "hidden" }}>
+          <SessionContextTab
+            messages={messages}
+            visibleUserMessages={visibleUserMessages}
+            view={() => view}
+            info={() => (params.id ? sync.session.get(params.id) : undefined)}
+          />
+        </div>
+      </Dialog>
+    ))
   }
 
   const circle = () => (

@@ -166,6 +166,30 @@ function createGlobalSync() {
     return sdk
   }
 
+  // Global and project bootstrap can ask for the same 4 MB provider catalog a
+  // few milliseconds apart. Share only that bootstrap burst; expire entries
+  // promptly so project config/provider changes are never held stale here.
+  const providerLoads = new Map<string, Promise<ProviderListResponse>>()
+  const loadProvider = (directory: string) => {
+    const pending = providerLoads.get(directory)
+    if (pending) return pending
+    const promise = sdkFor(directory)
+      .provider.list()
+      .then((x) => normalizeProviderList(x.data!))
+    providerLoads.set(directory, promise)
+    promise.then(
+      () => {
+        setTimeout(() => {
+          if (providerLoads.get(directory) === promise) providerLoads.delete(directory)
+        }, 1_000)
+      },
+      () => {
+        if (providerLoads.get(directory) === promise) providerLoads.delete(directory)
+      },
+    )
+    return promise
+  }
+
   const [projectCache, setProjectCache, , projectCacheReady] = persisted(
     Persist.global("globalSync.project", ["globalSync.project.v1"]),
     createStore({ value: [] as Project[] }),
@@ -522,10 +546,7 @@ function createGlobalSync() {
 
       const blockingRequests = {
         project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
-        provider: () =>
-          sdk.provider.list().then((x) => {
-            setStore("provider", normalizeProviderList(x.data!))
-          }),
+        provider: () => loadProvider(directory).then((value) => setStore("provider", reconcile(value))),
         agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
         config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
       }
@@ -988,11 +1009,16 @@ function createGlobalSync() {
           setGlobalStore("project", projects)
         }),
       ),
-      retry(() =>
-        globalSDK.client.provider.list().then((x) => {
-          setGlobalStore("provider", normalizeProviderList(x.data!))
-        }),
-      ),
+      retry(async () => {
+        // The root catalog belongs to the server worktree. Loading it through
+        // the same directory-keyed helper lets a direct project route share the
+        // in-flight response instead of parsing the catalog twice.
+        const path = globalStore.path.worktree
+          ? globalStore.path
+          : await globalSDK.client.path.get().then((x) => x.data!)
+        const directory = path.worktree || path.directory
+        setGlobalStore("provider", reconcile(await loadProvider(directory)))
+      }),
       retry(() =>
         globalSDK.client.provider.auth().then((x) => {
           setGlobalStore("provider_auth", x.data ?? {})

@@ -5,10 +5,13 @@ import { Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { openscienceFetch } from "@/utils/openscience-fetch"
+import { installStaleBuildRecovery } from "@/utils/stale-build-recovery"
 import { URLS } from "@/config/urls"
 import pkg from "../package.json"
 
 const DEFAULT_SERVER_URL_KEY = "openscience.settings.dat:defaultServerUrl"
+
+installStaleBuildRecovery()
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {

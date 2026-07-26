@@ -4,12 +4,14 @@ import { modKey } from "./utils"
 test("search palette opens and closes", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  await page.keyboard.press(`${modKey}+P`)
+  await page.keyboard.press(`${modKey}+K`)
 
-  const dialog = page.getByRole("dialog")
+  const dialog = page.getByRole("dialog", { name: "command palette" })
+  const search = dialog.getByRole("textbox", { name: "search commands and projects" })
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByRole("textbox").first()).toBeVisible()
+  await expect(search).toBeVisible()
+  await expect(dialog.getByRole("button", { name: /Settings/ })).toBeVisible()
 
   await page.keyboard.press("Escape")
-  await expect(dialog).toHaveCount(0)
+  await expect(search).toHaveCount(0)
 })

@@ -1,18 +1,15 @@
 import { test, expect } from "./fixtures"
-import { modKey, promptSelector } from "./utils"
+import { promptSelector } from "./utils"
 
 test("hiding a model removes it from the model picker", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  await page.locator(promptSelector).click()
-  await page.keyboard.type("/model")
+  const form = page.locator(promptSelector).locator("xpath=ancestor::form[1]")
+  const trigger = form.locator('button[aria-haspopup="dialog"]:has([data-component="provider-icon"])').first()
+  await expect(trigger).toBeVisible()
+  await trigger.click()
 
-  const command = page.locator('[data-slash-id="model.choose"]')
-  await expect(command).toBeVisible()
-  await command.hover()
-  await page.keyboard.press("Enter")
-
-  const picker = page.getByRole("dialog")
+  const picker = page.getByRole("dialog", { name: "select model" })
   await expect(picker).toBeVisible()
 
   const target = picker.locator('[data-slot="list-item"]').first()
@@ -24,28 +21,16 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
   const name = (await target.locator("span").first().innerText()).trim()
   if (!name) throw new Error("Failed to resolve model name from list item")
 
-  await page.keyboard.press("Escape")
-  await expect(picker).toHaveCount(0)
+  await picker.getByRole("button", { name: "manage models" }).click()
 
-  const settings = page.getByRole("dialog")
-
-  await page.keyboard.press(`${modKey}+Comma`).catch(() => undefined)
-  const opened = await settings
-    .waitFor({ state: "visible", timeout: 3000 })
-    .then(() => true)
-    .catch(() => false)
-
-  if (!opened) {
-    await page.getByRole("button", { name: "Settings" }).first().click()
-    await expect(settings).toBeVisible()
-  }
-
-  await settings.getByRole("tab", { name: "Models" }).click()
-  const search = settings.getByPlaceholder("Search models")
+  const manage = page.getByRole("dialog", { name: "manage models" })
+  await expect(manage).toBeVisible()
+  const search = manage.getByPlaceholder("search models")
   await expect(search).toBeVisible()
   await search.fill(name)
 
-  const toggle = settings.locator('[data-component="switch"]').filter({ hasText: name }).first()
+  const row = manage.locator(`[data-slot="list-item"][data-key="${key}"]`)
+  const toggle = row.locator('[data-component="switch"]')
   const input = toggle.locator('[data-slot="switch-input"]')
   await expect(toggle).toBeVisible()
   await expect(input).toHaveAttribute("aria-checked", "true")
@@ -53,32 +38,12 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
   await expect(input).toHaveAttribute("aria-checked", "false")
 
   await page.keyboard.press("Escape")
-  const closed = await settings
-    .waitFor({ state: "detached", timeout: 1500 })
-    .then(() => true)
-    .catch(() => false)
-  if (!closed) {
-    await page.keyboard.press("Escape")
-    const closedSecond = await settings
-      .waitFor({ state: "detached", timeout: 1500 })
-      .then(() => true)
-      .catch(() => false)
-    if (!closedSecond) {
-      await page.locator('[data-component="dialog-overlay"]').click({ position: { x: 5, y: 5 } })
-      await expect(settings).toHaveCount(0)
-    }
-  }
+  await expect(manage).toHaveCount(0)
 
-  await page.locator(promptSelector).click()
-  await page.keyboard.type("/model")
-  await expect(command).toBeVisible()
-  await command.hover()
-  await page.keyboard.press("Enter")
+  await trigger.click()
 
-  const pickerAgain = page.getByRole("dialog")
+  const pickerAgain = page.getByRole("dialog", { name: "select model" })
   await expect(pickerAgain).toBeVisible()
-  await expect(pickerAgain.locator('[data-slot="list-item"]').first()).toBeVisible()
-
   await expect(pickerAgain.locator(`[data-slot="list-item"][data-key="${key}"]`)).toHaveCount(0)
 
   await page.keyboard.press("Escape")

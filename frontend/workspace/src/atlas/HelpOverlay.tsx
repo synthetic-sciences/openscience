@@ -46,7 +46,14 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
     <Show when={props.open}>
       <Portal>
         <div class="atlas-overlay" onClick={props.onClose} />
-        <div class="atlas-modal" style={{ width: "560px", "max-width": "94vw" }} onClick={(e) => e.stopPropagation()}>
+        <div
+          class="atlas-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="keyboard shortcuts"
+          style={{ width: "560px", "max-width": "94vw" }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div
             style={{
               display: "flex",

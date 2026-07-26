@@ -78,6 +78,7 @@ export default function Page(): JSX.Element {
   const theme = useTheme()
   const dialog = useDialog()
   const [creating, setCreating] = createSignal(false)
+  const [mobileSessionsOpen, setMobileSessionsOpen] = createSignal(false)
 
   async function newSession() {
     if (creating()) return
@@ -468,24 +469,42 @@ export default function Page(): JSX.Element {
         onOpenHelp={() => uiStore.setHelpOpen(true)}
         onOpenSettings={() => dialog.show(() => <DialogSettings />)}
         onToggleTheme={() => theme.setColorScheme(isDark() ? "light" : "dark")}
+        onToggleSessions={() => setMobileSessionsOpen((open) => !open)}
       />
 
       <div
+        class="session-workspace"
         style={{
           flex: 1,
           "min-height": 0,
           "min-width": 0,
           display: "flex",
           overflow: "hidden",
+          position: "relative",
         }}
       >
+        <Show when={mobileSessionsOpen()}>
+          <button
+            type="button"
+            class="session-sidebar-backdrop"
+            aria-label="close sessions"
+            onClick={() => setMobileSessionsOpen(false)}
+          />
+        </Show>
         <SessionsSidebar
           sessions={sessions()}
           activeId={params.id}
           dirParam={params.dir ?? ""}
           creating={creating()}
-          onNew={() => void newSession()}
-          onSelect={(id) => navigate(`/${params.dir}/session/${id}`)}
+          mobileOpen={mobileSessionsOpen()}
+          onNew={() => {
+            setMobileSessionsOpen(false)
+            void newSession()
+          }}
+          onSelect={(id) => {
+            setMobileSessionsOpen(false)
+            navigate(`/${params.dir}/session/${id}`)
+          }}
           onDelete={(id) => void deleteSession(id)}
           onRename={(id, title) => void renameSession(id, title)}
         />
@@ -958,9 +977,13 @@ function Header(props: {
   onOpenHelp: () => void
   onOpenSettings: () => void
   onToggleTheme: () => void
+  onToggleSessions: () => void
 }): JSX.Element {
   return (
     <AppHeader>
+      <HeaderIconButton class="session-sidebar-toggle" onClick={props.onToggleSessions} title="sessions">
+        <IconMessageSquare size={13} strokeWidth={1.5} />
+      </HeaderIconButton>
       <button
         onClick={props.onBack}
         title="back to projects"
@@ -981,12 +1004,13 @@ function Header(props: {
         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       >
         <IconChevronLeft size={11} strokeWidth={1.5} />
-        projects
+        <span class="session-back-label">projects</span>
       </button>
       <HeaderDivider />
       <Wordmark size="sm" />
       <HeaderDivider />
       <span
+        class="session-project-name"
         style={{
           "font-family": FONT_SANS,
           "font-size": "13px",
@@ -997,6 +1021,7 @@ function Header(props: {
         {props.projectName}
       </span>
       <span
+        class="session-project-path"
         style={{
           "font-family": FONT_MONO,
           "font-size": "10px",
@@ -1013,13 +1038,13 @@ function Header(props: {
       <HeaderIconButton onClick={props.onOpenPalette} title="command palette">
         <IconSearch size={13} strokeWidth={1.5} />
       </HeaderIconButton>
-      <HeaderIconButton onClick={props.onOpenHelp} title="help">
+      <HeaderIconButton class="session-header-secondary" onClick={props.onOpenHelp} title="help">
         <IconBookOpen size={13} strokeWidth={1.5} />
       </HeaderIconButton>
       <HeaderIconButton onClick={props.onOpenSettings} title="settings">
         <IconSettings size={13} strokeWidth={1.5} />
       </HeaderIconButton>
-      <HeaderIconButton onClick={props.onToggleTheme} title="toggle theme">
+      <HeaderIconButton class="session-header-secondary" onClick={props.onToggleTheme} title="toggle theme">
         <Show when={props.isDark} fallback={<IconMoon size={13} strokeWidth={1.5} />}>
           <IconSun size={13} strokeWidth={1.5} />
         </Show>
@@ -1103,6 +1128,7 @@ function SessionsSidebar(props: {
   activeId: string | undefined
   dirParam: string
   creating: boolean
+  mobileOpen: boolean
   onNew: () => void
   onSelect: (id: string) => void
   onDelete: (id: string) => void
@@ -1117,7 +1143,8 @@ function SessionsSidebar(props: {
   })
   return (
     <aside
-      class="atlas-scroll"
+      class="atlas-scroll session-sidebar"
+      data-mobile-open={props.mobileOpen ? "true" : "false"}
       style={{
         width: "240px",
         "min-width": "240px",
@@ -1180,6 +1207,7 @@ function SessionsSidebar(props: {
             <IconSearch size={13} strokeWidth={1.6} />
           </span>
           <input
+            aria-label="search sessions"
             value={query()}
             onInput={(e) => setQuery(e.currentTarget.value)}
             onKeyDown={(e) => {

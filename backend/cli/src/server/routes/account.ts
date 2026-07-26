@@ -37,6 +37,25 @@ function emitDisposed() {
 export const AccountRoutes = lazy(() =>
   new Hono()
     .get(
+      "/session",
+      describeRoute({
+        summary: "Get local session status",
+        description: "Check whether this OpenScience server has a local Atlas session without contacting Atlas.",
+        operationId: "account.session",
+        responses: {
+          200: {
+            description: "Local session status",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ session: z.boolean() })),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => c.json({ session: await OpenScience.isAuthenticated() }),
+    )
+    .get(
       "/",
       describeRoute({
         summary: "Get account",

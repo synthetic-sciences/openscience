@@ -3,6 +3,8 @@ import { Dialog } from "@synsci/ui/dialog"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { FONT_CODE, FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconRefresh, IconArrowRight } from "@/atlas/shared/Icon"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { resolveServerRoute } from "@/config/server-url"
 
 interface ProbeResult {
   fda: boolean
@@ -11,9 +13,9 @@ interface ProbeResult {
 
 const DISMISS_KEY = "atlas.fda.banner.hidden"
 
-async function probeFda(): Promise<ProbeResult> {
+async function probeFda(server: string): Promise<ProbeResult> {
   try {
-    const res = await fetch("/api/resolve-folder/probe")
+    const res = await fetch(resolveServerRoute("/api/resolve-folder/probe", server, window.location.origin))
     if (!res.ok) return { fda: false, reason: `probe ${res.status}` }
     return await res.json()
   } catch (err: any) {
@@ -53,11 +55,11 @@ const STEP_BODY: Record<"mac" | "win" | "linux", string> = {
  * with a one-tap deep-link to System Settings (mac) and a recheck.
  */
 export function FdaChip(): JSX.Element {
+  const sdk = useGlobalSDK()
   const [dismissed, setDismissed] = createSignal(
     typeof localStorage !== "undefined" && localStorage.getItem(DISMISS_KEY) === "1",
   )
-  const [refreshKey, setRefreshKey] = createSignal(0)
-  const [probe, { refetch }] = createResource(refreshKey, probeFda)
+  const [probe, { refetch }] = createResource(() => sdk.url, probeFda)
   const dialog = useDialog()
 
   onMount(() => {
@@ -72,7 +74,6 @@ export function FdaChip(): JSX.Element {
   })
 
   const recheck = async () => {
-    setRefreshKey((k) => k + 1)
     const r = await refetch()
     if (r?.fda) {
       try {

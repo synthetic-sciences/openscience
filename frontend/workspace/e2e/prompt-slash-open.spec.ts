@@ -1,22 +1,22 @@
 import { test, expect } from "./fixtures"
 import { promptSelector } from "./utils"
 
-test("smoke /open opens file picker dialog", async ({ page, gotoSession }) => {
-  await gotoSession()
+test("smoke slash menu exposes session actions", async ({ page, gotoSession, sdk }) => {
+  const created = await sdk.session.create({ title: `e2e slash menu ${Date.now()}` }).then((r) => r.data)
+  if (!created?.id) throw new Error("Failed to create a session fixture")
 
-  await page.locator(promptSelector).click()
-  await page.keyboard.type("/open")
+  try {
+    await gotoSession(created.id)
 
-  const command = page.locator('[data-slash-id="file.open"]')
-  await expect(command).toBeVisible()
-  await command.hover()
+    await page.locator(promptSelector).click()
+    await page.keyboard.type("/compact")
 
-  await page.keyboard.press("Enter")
+    const command = page.locator('[data-slash-id="session.compact"]')
+    await expect(command).toBeVisible()
 
-  const dialog = page.getByRole("dialog")
-  await expect(dialog).toBeVisible()
-  await expect(dialog.getByRole("textbox").first()).toBeVisible()
-
-  await page.keyboard.press("Escape")
-  await expect(dialog).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(command).toHaveCount(0)
+  } finally {
+    await sdk.session.delete({ sessionID: created.id }).catch(() => undefined)
+  }
 })

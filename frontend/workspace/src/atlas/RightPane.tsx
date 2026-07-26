@@ -104,6 +104,7 @@ export function RightPane(): JSX.Element {
       }
     >
       <aside
+        class="session-right-pane"
         style={{
           flex: `0 0 ${width()}px`,
           width: `${width()}px`,
@@ -550,9 +551,8 @@ function TabBtn(props: {
 }
 
 // ── Canvas ─────────────────────────────────────────────────────────
-// Real Atlas graph: see AtlasCanvas.tsx. Backed by /api/atlas which
-// the dev Vite plugin (vite-atlas.js) routes to the local @synsci/atlas
-// CLI binary.
+// Real Atlas graph: see AtlasCanvas.tsx. The selected OpenScience server owns
+// the /api/atlas bridge in both bundled and separately hosted deployments.
 
 function KeepAlive(props: { show: boolean; mounted: boolean; children: JSX.Element }): JSX.Element {
   // Mounts children on first reveal and never unmounts them (mounted only

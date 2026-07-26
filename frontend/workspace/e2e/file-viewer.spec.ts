@@ -1,35 +1,17 @@
 import { test, expect } from "./fixtures"
-import { modKey } from "./utils"
-
 test("smoke file viewer renders real file content", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  const sep = process.platform === "win32" ? "\\" : "/"
-  const file = ["packages", "app", "package.json"].join(sep)
+  await page.getByRole("tab", { name: "Files", exact: true }).click()
+  await page.getByPlaceholder("filter this folder…").fill("package.json")
 
-  await page.keyboard.press(`${modKey}+P`)
-
-  const dialog = page.getByRole("dialog")
-  await expect(dialog).toBeVisible()
-
-  const input = dialog.getByRole("textbox").first()
-  await input.fill(file)
-
-  const fileItem = dialog
-    .locator(
-      '[data-slot="list-item"][data-key^="file:"][data-key*="packages"][data-key*="app"][data-key$="package.json"]',
-    )
-    .first()
+  const fileItem = page.getByRole("button", { name: /^package\.json\b/ }).first()
   await expect(fileItem).toBeVisible()
   await fileItem.click()
 
-  await expect(dialog).toHaveCount(0)
-
-  const tab = page.getByRole("tab", { name: "package.json" })
+  const tab = page.locator('[role="tab"][title="package.json"]')
   await expect(tab).toBeVisible()
-  await tab.click()
+  await expect(tab).toHaveAttribute("aria-selected", "true")
 
-  const code = page.locator('[data-component="code"]').first()
-  await expect(code).toBeVisible()
-  await expect(code.getByText("@synsci/app")).toBeVisible()
+  await expect(page.getByText("@synsci/monorepo")).toBeVisible()
 })

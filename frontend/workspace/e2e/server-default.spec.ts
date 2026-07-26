@@ -3,7 +3,7 @@ import { serverName, serverUrl } from "./utils"
 
 const DEFAULT_SERVER_URL_KEY = "openscience.settings.dat:defaultServerUrl"
 
-test("can set a default server on web", async ({ page, gotoSession }) => {
+test("can set a default server on web", async ({ page }) => {
   await page.addInitScript((key: string) => {
     try {
       localStorage.removeItem(key)
@@ -12,20 +12,10 @@ test("can set a default server on web", async ({ page, gotoSession }) => {
     }
   }, DEFAULT_SERVER_URL_KEY)
 
-  await gotoSession()
-
-  const status = page.getByRole("button", { name: "Status" })
-  await expect(status).toBeVisible()
-  const popover = page.locator('[data-component="popover-content"]').filter({ hasText: "Manage servers" })
-
-  const ensurePopoverOpen = async () => {
-    if (await popover.isVisible()) return
-    await status.click()
-    await expect(popover).toBeVisible()
-  }
-
-  await ensurePopoverOpen()
-  await popover.getByRole("button", { name: "Manage servers" }).click()
+  await page.goto("/")
+  const trigger = page.getByRole("button", { name: serverName, exact: true })
+  await expect(trigger).toBeVisible()
+  await trigger.click()
 
   const dialog = page.getByRole("dialog")
   await expect(dialog).toBeVisible()
@@ -35,33 +25,20 @@ test("can set a default server on web", async ({ page, gotoSession }) => {
 
   const menu = row.locator('[data-component="icon-button"]').last()
   await menu.click()
-  await page.getByRole("menuitem", { name: "Set as default" }).click()
+  await page.locator('[data-slot="dropdown-menu-item"]').filter({ hasText: "set as default" }).click()
 
   await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), DEFAULT_SERVER_URL_KEY)).toBe(serverUrl)
-  await expect(row.getByText("Default", { exact: true })).toBeVisible()
+  await expect(row.getByText("default", { exact: true })).toBeVisible()
 
-  await page.keyboard.press("Escape")
-  const closed = await dialog
-    .waitFor({ state: "detached", timeout: 1500 })
-    .then(() => true)
-    .catch(() => false)
+  await dialog.getByRole("button", { name: "Close" }).click()
+  await expect(dialog).toHaveCount(0)
 
-  if (!closed) {
-    await page.keyboard.press("Escape")
-    const closedSecond = await dialog
-      .waitFor({ state: "detached", timeout: 1500 })
-      .then(() => true)
-      .catch(() => false)
-
-    if (!closedSecond) {
-      await page.locator('[data-component="dialog-overlay"]').click({ position: { x: 5, y: 5 } })
-      await expect(dialog).toHaveCount(0)
-    }
-  }
-
-  await ensurePopoverOpen()
-
-  const serverRow = popover.locator("button").filter({ hasText: serverName }).first()
+  await trigger.click()
+  const serverRow = page
+    .getByRole("dialog")
+    .locator('[data-slot="list-item"]')
+    .filter({ hasText: serverName })
+    .first()
   await expect(serverRow).toBeVisible()
-  await expect(serverRow.getByText("Default", { exact: true })).toBeVisible()
+  await expect(serverRow.getByText("default", { exact: true })).toBeVisible()
 })

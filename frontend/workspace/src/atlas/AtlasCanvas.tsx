@@ -29,7 +29,7 @@ import { useSDK } from "@/context/sdk"
 import { uiStore } from "@/atlas/store/ui"
 import { FONT_MONO, FONT_SANS, FONT_SERIF, sectionTitle } from "@/styles/tokens"
 import { IconRefresh, IconPlus, IconNetwork, IconArrowRight } from "@/atlas/shared/Icon"
-import { atlasAPI, type AtlasNode } from "@/atlas/api/atlas"
+import { createAtlasAPI, type AtlasNode } from "@/atlas/api/atlas"
 import { toast } from "@/atlas/Toast"
 import { promptDialog } from "@/atlas/dialogs"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
@@ -140,6 +140,7 @@ export function AtlasCanvas(): JSX.Element {
   const dialog = useDialog()
   const sync = useSync()
   const sdk = useSDK()
+  const atlas = createAtlasAPI(() => sdk.url)
   // The project the SPA has open (NOT the serve launch dir). Same resolution as
   // RightPane — threaded to the bridge so the canvas defaults to THIS project's
   // graph instead of the launch directory's.
@@ -148,7 +149,7 @@ export function AtlasCanvas(): JSX.Element {
   // Root list — just the graph roots (fast, root_only=true). Powers the dropdown
   // and default-selection logic without loading every node in the account.
   const [graphList, { refetch: refetchGraphs }] = createResource(() =>
-    atlasAPI
+    atlas
       .listGraphs()
       .then((r) => r.nodes ?? [])
       .catch(() => [] as AtlasNode[]),
@@ -160,7 +161,7 @@ export function AtlasCanvas(): JSX.Element {
   // instead of another project's. `null` = unlinked (offer Initialize); read via
   // `.latest` so it never suspends. `undefined` = still resolving.
   const [folderProject, { refetch: refetchFolderProject }] = createResource(directory, (dir) =>
-    atlasAPI
+    atlas
       .resolveProject(dir)
       .then((r) => r.project_id)
       .catch(() => null),
@@ -207,7 +208,7 @@ export function AtlasCanvas(): JSX.Element {
   const [graphTree, { refetch: refetchTree }] = createResource(
     () => graphId(),
     (id) =>
-      atlasAPI
+      atlas
         .getGraphTree(id)
         .then((r) => r.nodes ?? [])
         .catch(() => [] as AtlasNode[]),
@@ -509,6 +510,11 @@ export function AtlasCanvas(): JSX.Element {
 
   const createNode = async () => {
     if (creating()) return
+    const parentID = selectedID() ?? graphId()
+    if (!parentID) {
+      toast.error("could not stage node", "initialize or select a project graph first")
+      return
+    }
     const title = await promptDialog(dialog, {
       title: "Stage a new node",
       placeholder: "node title",
@@ -517,11 +523,12 @@ export function AtlasCanvas(): JSX.Element {
     if (!title) return
     setCreating(true)
     try {
-      await atlasAPI.createNode(title)
+      const created = await atlas.createNode({ title, directory: directory(), parentID })
+      await Promise.all([refetchGraphs(), refetchTree()])
+      setSelectedID(created.node_id)
       toast.info("node staged", title)
-      refresh()
     } catch (err: any) {
-      toast.error("could not create node", err?.message ?? String(err))
+      toast.error("could not stage node", err?.message ?? String(err))
     } finally {
       setCreating(false)
     }
@@ -533,7 +540,7 @@ export function AtlasCanvas(): JSX.Element {
     if (initializing()) return
     setInitializing(true)
     try {
-      const { project_id } = await atlasAPI.initProject(directory())
+      const { project_id } = await atlas.initProject(directory())
       if (!project_id) throw new Error("backend returned no project id")
       settled = true
       await refetchAll()
@@ -753,7 +760,11 @@ export function AtlasCanvas(): JSX.Element {
           <CanvasAction title="fit to view" onClick={fit}>
             <FitGlyph />
           </CanvasAction>
-          <CanvasAction title="stage a new node" disabled={creating()} onClick={() => void createNode()}>
+          <CanvasAction
+            title={selectedID() ? "stage a child under the selected node" : "stage a node under the graph root"}
+            disabled={creating() || !graphId()}
+            onClick={() => void createNode()}
+          >
             <IconPlus size={12} strokeWidth={1.7} />
           </CanvasAction>
           <CanvasAction title="refresh" onClick={refresh}>
@@ -784,7 +795,7 @@ export function AtlasCanvas(): JSX.Element {
                   fallback={
                     <InitHero
                       // Primary: hit the deterministic find-or-create endpoint
-                      // directly (POST /api/atlas/project/init via atlasAPI) so
+                      // directly (POST /api/atlas/project/init via the selected server) so
                       // the button reliably creates the graph without depending on
                       // the agent or the `atlas` binary. initGraph() refetches and
                       // selects the new root, and toasts a typed error on failure.
@@ -1234,11 +1245,13 @@ function OrbitTooltip(props: { node: AtlasNode; x: number; y: number; byId: Map<
 }
 
 function NodeDetail(props: { node: AtlasNode; onClose: () => void }): JSX.Element {
+  const sdk = useSDK()
+  const atlas = createAtlasAPI(() => sdk.url)
   const [artifacts] = createResource(
     () => props.node.node_id,
     async (id) => {
       try {
-        const res = await atlasAPI.listArtifacts(id)
+        const res = await atlas.listArtifacts(id)
         const list = Array.isArray(res) ? res : ((res as any)?.artifacts ?? [])
         return list as Array<{ name?: string; kind?: string; uri?: string }>
       } catch {

@@ -1,23 +1,15 @@
 import { test, expect } from "./fixtures"
-import { modKey } from "./utils"
-
-test("can open a file tab from the search palette", async ({ page, gotoSession }) => {
+test("can open a file tab from the Files pane", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  await page.keyboard.press(`${modKey}+P`)
+  await page.getByRole("tab", { name: "Files", exact: true }).click()
+  await page.getByPlaceholder("filter this folder…").fill("package.json")
 
-  const dialog = page.getByRole("dialog")
-  await expect(dialog).toBeVisible()
-
-  const input = dialog.getByRole("textbox").first()
-  await input.fill("package.json")
-
-  const fileItem = dialog.locator('[data-slot="list-item"][data-key^="file:"]').first()
+  const fileItem = page.getByRole("button", { name: /^package\.json\b/ }).first()
   await expect(fileItem).toBeVisible()
   await fileItem.click()
 
-  await expect(dialog).toHaveCount(0)
-
-  const tabs = page.locator('[data-component="tabs"][data-variant="normal"]')
-  await expect(tabs.locator('[data-slot="tabs-trigger"]').first()).toBeVisible()
+  const tab = page.locator('[role="tab"][title="package.json"]')
+  await expect(tab).toBeVisible()
+  await expect(tab).toHaveAttribute("aria-selected", "true")
 })

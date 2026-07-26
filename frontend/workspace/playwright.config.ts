@@ -16,6 +16,11 @@ export default defineConfig({
   testDir: "./e2e",
   outputDir: "./e2e/test-results",
   timeout: 60_000,
+  // The integration harness intentionally shares one backend, project
+  // worktree, deterministic model, and PTY pool. Parallel browser contexts
+  // mutate that shared state and can abort prompts or tear down another
+  // test's terminal, so keep this suite serial and deterministic.
+  workers: 1,
   expect: {
     timeout: 10_000,
   },

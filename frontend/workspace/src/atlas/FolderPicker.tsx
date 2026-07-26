@@ -157,7 +157,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
   const goToTyped = async (raw: string) => {
     const abs = normalizeTyped(raw)
     if (!abs) return
-    const valid = await validateDirectoryPath(abs)
+    const valid = await validateDirectoryPath(sdk.url, abs)
     if (!valid) return
     setCwd(valid)
     setFilter("")
@@ -578,7 +578,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
             </button>
             <button
               onClick={async () => {
-                const valid = await validateDirectoryPath(cwd())
+                const valid = await validateDirectoryPath(sdk.url, cwd())
                 if (valid) pick(valid)
               }}
               title="open the current folder as a project"

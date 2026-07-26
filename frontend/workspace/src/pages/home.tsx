@@ -200,6 +200,7 @@ export default function Home(): JSX.Element {
         <Wordmark size="md" />
         <span style={{ flex: 1 }} />
         <div
+          class="home-project-search"
           style={{
             display: "inline-flex",
             "align-items": "center",
@@ -215,6 +216,7 @@ export default function Home(): JSX.Element {
         >
           <IconSearch size={12} strokeWidth={1.5} />
           <input
+            aria-label="search projects"
             value={filter()}
             onInput={(e) => setFilter(e.currentTarget.value)}
             placeholder="search projects…"
@@ -229,6 +231,7 @@ export default function Home(): JSX.Element {
         </div>
         <FdaBanner />
         <button
+          class="home-new-project"
           onClick={chooseProject}
           title="open folder (⌘O)"
           style={{
@@ -250,7 +253,7 @@ export default function Home(): JSX.Element {
           }}
         >
           <IconPlus size={12} strokeWidth={2} />
-          new project
+          <span class="home-new-project-label">new project</span>
         </button>
         <HeaderIconButton onClick={cycleScheme} title="toggle theme">
           <Show when={isDark()} fallback={<IconMoon size={13} strokeWidth={1.5} />}>
@@ -261,6 +264,7 @@ export default function Home(): JSX.Element {
           <IconSettings size={13} strokeWidth={1.5} />
         </HeaderIconButton>
         <button
+          class="home-server-button"
           onClick={() => dialog.show(() => <DialogSelectServer />)}
           title={`server · ${server.name}`}
           style={{
@@ -298,7 +302,7 @@ export default function Home(): JSX.Element {
       </AppHeader>
 
       <main
-        class="atlas-scroll"
+        class="atlas-scroll home-main"
         style={{
           flex: 1,
           "overflow-y": "auto",

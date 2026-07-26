@@ -1,12 +1,14 @@
 import { test, expect } from "./fixtures"
-import { modKey, promptSelector } from "./utils"
+import { promptSelector } from "./utils"
 
-test("titlebar back/forward navigates between sessions", async ({ page, slug, sdk, gotoSession }) => {
+test("browser back/forward navigates between sessions", async ({ page, slug, sdk, gotoSession }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const stamp = Date.now()
-  const one = await sdk.session.create({ title: `e2e titlebar history 1 ${stamp}` }).then((r) => r.data)
-  const two = await sdk.session.create({ title: `e2e titlebar history 2 ${stamp}` }).then((r) => r.data)
+  const oneTitle = `e2e browser history 1 ${stamp}`
+  const twoTitle = `e2e browser history 2 ${stamp}`
+  const one = await sdk.session.create({ title: oneTitle }).then((r) => r.data)
+  const two = await sdk.session.create({ title: twoTitle }).then((r) => r.data)
 
   if (!one?.id) throw new Error("Session create did not return an id")
   if (!two?.id) throw new Error("Session create did not return an id")
@@ -14,37 +16,27 @@ test("titlebar back/forward navigates between sessions", async ({ page, slug, sd
   try {
     await gotoSession(one.id)
 
-    const main = page.locator("main")
-    const collapsed = ((await main.getAttribute("class")) ?? "").includes("xl:border-l")
-    if (collapsed) {
-      await page.keyboard.press(`${modKey}+B`)
-      await expect(main).not.toHaveClass(/xl:border-l/)
-    }
-
-    const link = page.locator(`[data-session-id="${two.id}"] a`).first()
-    await expect(link).toBeVisible()
-    await link.scrollIntoViewIfNeeded()
-    await link.click()
+    const sidebar = page.getByRole("complementary").filter({ has: page.getByPlaceholder("Search sessions") })
+    const target = sidebar.locator('[role="button"]').filter({ hasText: twoTitle })
+    await expect(target).toBeVisible()
+    await target.scrollIntoViewIfNeeded()
+    await target.click()
 
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:\\?|#|$)`))
     await expect(page.locator(promptSelector)).toBeVisible()
+    await expect(page.getByRole("tab", { name: twoTitle, exact: true })).toHaveAttribute("aria-selected", "true")
 
-    const back = page.getByRole("button", { name: "Back" })
-    const forward = page.getByRole("button", { name: "Forward" })
-
-    await expect(back).toBeVisible()
-    await expect(back).toBeEnabled()
-    await back.click()
+    await page.goBack()
 
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${one.id}(?:\\?|#|$)`))
     await expect(page.locator(promptSelector)).toBeVisible()
+    await expect(page.getByRole("tab", { name: oneTitle, exact: true })).toHaveAttribute("aria-selected", "true")
 
-    await expect(forward).toBeVisible()
-    await expect(forward).toBeEnabled()
-    await forward.click()
+    await page.goForward()
 
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:\\?|#|$)`))
     await expect(page.locator(promptSelector)).toBeVisible()
+    await expect(page.getByRole("tab", { name: twoTitle, exact: true })).toHaveAttribute("aria-selected", "true")
   } finally {
     await sdk.session.delete({ sessionID: one.id }).catch(() => undefined)
     await sdk.session.delete({ sessionID: two.id }).catch(() => undefined)

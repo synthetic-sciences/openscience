@@ -1,9 +1,6 @@
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
-import atlasBridge from "./vite-atlas.js"
-import folderResolve from "./vite-folder-resolve.js"
-import repoBridge from "./vite-repo.js"
 
 /**
  * @type {import("vite").PluginOption}
@@ -26,7 +23,4 @@ export default [
   },
   tailwindcss(),
   solidPlugin(),
-  atlasBridge,
-  folderResolve,
-  repoBridge,
 ]

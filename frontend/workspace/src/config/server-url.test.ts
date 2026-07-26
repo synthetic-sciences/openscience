@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { resolveDefaultServerUrl } from "./server-url"
+import { resolveDefaultServerUrl, resolveServerRoute } from "./server-url"
 
 const base = {
   hostname: "127.0.0.1",
@@ -27,5 +27,27 @@ describe("resolveDefaultServerUrl", () => {
 
   test("falls back to the static origin only when no server is configured", () => {
     expect(resolveDefaultServerUrl(base)).toBe("http://127.0.0.1:3010")
+  })
+})
+
+describe("resolveServerRoute", () => {
+  test("uses the selected server for a separately hosted production UI", () => {
+    expect(resolveServerRoute("/api/atlas/graphs", "http://127.0.0.1:4100", base.origin)).toBe(
+      "http://127.0.0.1:4100/api/atlas/graphs",
+    )
+  })
+
+  test("keeps bundled single-origin routes relative", () => {
+    expect(resolveServerRoute("/api/atlas/graphs", base.origin, base.origin)).toBe("/api/atlas/graphs")
+  })
+
+  test("preserves query parameters", () => {
+    expect(
+      resolveServerRoute(
+        "/api/atlas/project?directory=%2Ftmp%2Fresearch",
+        "http://127.0.0.1:4100",
+        base.origin,
+      ),
+    ).toBe("http://127.0.0.1:4100/api/atlas/project?directory=%2Ftmp%2Fresearch")
   })
 })

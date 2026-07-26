@@ -12,6 +12,15 @@ test("context panel can be opened from the prompt", async ({ page, sdk, gotoSess
     await sdk.session.promptAsync({
       sessionID,
       noReply: true,
+      // noReply only persists a user message, but user-message metadata still
+      // requires a model id. Pass the suite model explicitly so this setup does
+      // not depend on a connected provider or on host-machine credentials.
+      model: (() => {
+        const [providerID = "e2e", modelID = "echo"] = (process.env.OPENSCIENCE_E2E_MODEL ?? "e2e/echo").split(
+          "/",
+        )
+        return { providerID, modelID }
+      })(),
       parts: [
         {
           type: "text",
@@ -37,8 +46,9 @@ test("context panel can be opened from the prompt", async ({ page, sdk, gotoSess
     await expect(contextButton).toBeVisible()
     await contextButton.click()
 
-    const tabs = page.locator('[data-component="tabs"][data-variant="normal"]')
-    await expect(tabs.getByRole("tab", { name: "Context" })).toBeVisible()
+    const dialog = page.getByRole("dialog", { name: "context", exact: true })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText("messages", { exact: true })).toBeVisible()
   } finally {
     await sdk.session.delete({ sessionID }).catch(() => undefined)
   }

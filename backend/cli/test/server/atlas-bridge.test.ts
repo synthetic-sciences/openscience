@@ -1,13 +1,23 @@
-import { describe, expect, test, beforeEach } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Global } from "../../src/global"
 import {
+  AtlasBridgeRoutes,
   classifyInitFailure,
   computeDedupeKey,
   initProjectDetailed,
+  parseStageNodeInput,
   pinMatchesKey,
 } from "../../src/server/routes/atlas-bridge"
+
+const realFetch = globalThis.fetch
+const sessionPath = path.join(Global.Path.data, "openscience-session.json")
+
+afterEach(async () => {
+  globalThis.fetch = realFetch
+  await fs.unlink(sessionPath).catch(() => {})
+})
 
 describe("computeDedupeKey", () => {
   test("derives repo:<host>/<owner>/<name> from a GitHub https remote", () => {
@@ -101,13 +111,92 @@ describe("pinMatchesKey", () => {
   })
 })
 
+describe("stage node bridge", () => {
+  test("validates and trims the mutation payload", () => {
+    expect(
+      parseStageNodeInput({ title: "  result  ", directory: " /repo ", parent_id: " parent-1 " }),
+    ).toEqual({ title: "result", directory: "/repo", parentID: "parent-1" })
+    expect(() => parseStageNodeInput({ title: "x", directory: "/repo" })).toThrow("parent_id is required")
+  })
+
+  test("creates a staged child with repository context", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+
+    let requestURL = ""
+    let requestBody: any
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      requestURL = String(input)
+      requestBody = JSON.parse(String(init?.body))
+      return Response.json(
+        {
+          node_id: "staged-1",
+          title: "result",
+          lifecycle: "staged",
+          parent_ids: ["parent-1"],
+        },
+        { status: 201 },
+      )
+    }) as typeof fetch
+
+    const response = await AtlasBridgeRoutes().request("/nodes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "result", directory: process.cwd(), parent_id: "parent-1" }),
+    })
+
+    expect(response.status).toBe(201)
+    expect(requestURL).toEndWith("/api/nodes/stage-create")
+    expect(requestBody.parent_ids).toEqual(["parent-1"])
+    expect(requestBody.title).toBe("result")
+    expect(requestBody.branch_name).toBeTruthy()
+    expect(await response.json()).toMatchObject({
+      node_id: "staged-1",
+      lifecycle: "staged",
+      parent_ids: ["parent-1"],
+    })
+  })
+
+  test("propagates Atlas failures instead of fabricating a node id", async () => {
+    await fs.mkdir(Global.Path.data, { recursive: true })
+    await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    globalThis.fetch = (async () =>
+      Response.json({ detail: "database unavailable" }, { status: 503 })) as unknown as typeof fetch
+
+    const response = await AtlasBridgeRoutes().request("/nodes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "result", directory: process.cwd(), parent_id: "parent-1" }),
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ detail: "database unavailable" })
+  })
+
+  test("rejects malformed mutations before calling Atlas", async () => {
+    let called = false
+    globalThis.fetch = (async () => {
+      called = true
+      return Response.json({})
+    }) as unknown as typeof fetch
+    const response = await AtlasBridgeRoutes().request("/nodes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "result", directory: process.cwd() }),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ detail: "parent_id is required" })
+    expect(called).toBe(false)
+  })
+})
+
 describe("initProjectDetailed", () => {
   // The XDG data dir is isolated per-process, not per-test, so an earlier test
   // in the suite may leave a session file behind — that makes token() non-null
   // and defeats the no-session assertion below (it fails "unreachable" instead
   // of "unauthenticated"). Clear it first so this test is order-independent.
   beforeEach(async () => {
-    await fs.unlink(path.join(Global.Path.data, "openscience-session.json")).catch(() => {})
+    await fs.unlink(sessionPath).catch(() => {})
   })
 
   test("fails fast as unauthenticated with no managed session (no network)", async () => {

@@ -8,9 +8,9 @@
  * the same contract the `atlas` CLI binary speaks (`nodes:list`,
  * `nodes:commit-new`, `auth/github/*`).
  *
- * Unauthenticated (or backend-unreachable) callers get graceful empty /
- * local-stub payloads so the canvas + sync stay quiet instead of throwing
- * 401 toasts on every project open.
+ * Unauthenticated (or backend-unreachable) reads degrade to empty payloads so
+ * the canvas stays quiet while signed out. Mutations never fake success: the
+ * caller receives an actionable HTTP error and can keep the user's input.
  */
 import { Hono } from "hono"
 import crypto from "crypto"
@@ -191,6 +191,69 @@ async function commitNew(input: {
   if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
   const data = await res.json()
   return { node_id: nodeIdOf(data), raw: data }
+}
+
+export interface StageNodeInput {
+  title: string
+  directory: string
+  parentID: string
+}
+
+class StageNodeInputError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "StageNodeInputError"
+  }
+}
+
+/** Validate the browser payload before doing any git or Atlas work. */
+export function parseStageNodeInput(body: unknown): StageNodeInput {
+  const value = body && typeof body === "object" ? (body as Record<string, unknown>) : {}
+  const title = typeof value.title === "string" ? value.title.trim() : ""
+  const directory = typeof value.directory === "string" ? value.directory.trim() : ""
+  const parentID = typeof value.parent_id === "string" ? value.parent_id.trim() : ""
+  if (!title) throw new StageNodeInputError("title is required")
+  if (!directory) throw new StageNodeInputError("directory is required")
+  if (!parentID) throw new StageNodeInputError("parent_id is required")
+  return { title, directory, parentID }
+}
+
+/** Create a real staged child in Atlas, rooted in the repository the SPA has
+ * open. The previous bridge used commit-new (so "stage" actually committed),
+ * dropped the parent edge, captured process.cwd(), and fabricated an id on
+ * failure. Keep the lifecycle, topology, and code context truthful instead. */
+async function stageNode(input: StageNodeInput): Promise<unknown> {
+  const root = await repoRoot(input.directory)
+  const context = await repoContext(root)
+  const res = await atlas("POST", "/api/nodes/stage-create", {
+    title: input.title,
+    summary: "",
+    content: "",
+    kind: "insight",
+    parent_ids: [input.parentID],
+    ...context,
+  })
+  if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
+  const data = await res.json()
+  if (!nodeIdOf(data)) throw new Error("Atlas returned no node id")
+  return data
+}
+
+function mutationError(error: unknown): { status: number; detail: string } {
+  if (error instanceof StageNodeInputError) return { status: 400, detail: error.message }
+  if (error instanceof BackendHttpError) {
+    return {
+      status: error.status,
+      detail: backendMessage(error.body) ?? `Atlas request failed with HTTP ${error.status}`,
+    }
+  }
+  if (error instanceof Error && error.message === "unauthenticated") {
+    return { status: 401, detail: "Sign in to Atlas before changing the graph." }
+  }
+  return {
+    status: 502,
+    detail: error instanceof Error ? error.message : "Atlas is unavailable",
+  }
 }
 
 // ── stable repo-identity dedupe key ──────────────────────────────────────
@@ -505,24 +568,12 @@ export const AtlasBridgeRoutes = lazy(() =>
       }
     })
     .post("/nodes", async (c) => {
-      const body = await c.req.json().catch(() => ({}) as any)
-      const title = String(body?.title ?? "Untitled node")
       try {
-        return c.json(
-          await commitNew({
-            localID: `local-node-${stubNodeId(title)}`,
-            parentIDs: [],
-            title,
-            kind: "insight",
-            summary: "",
-            hypothesis: "",
-            content: "",
-            reason: "Created from OpenScience web.",
-            context: await repoContext(process.cwd()),
-          }),
-        )
-      } catch {
-        return c.json({ node_id: stubNodeId(title), raw: null })
+        const input = parseStageNodeInput(await c.req.json().catch(() => null))
+        return c.json(await stageNode(input), 201)
+      } catch (error) {
+        const failure = mutationError(error)
+        return c.json({ detail: failure.detail }, failure.status as any)
       }
     })
     // Proxy a node's real artifacts/evidence so the detail drawer shows the

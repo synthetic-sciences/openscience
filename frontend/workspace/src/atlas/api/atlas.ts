@@ -1,7 +1,6 @@
-/**
- * Thin client for the dev-only /api/atlas bridge (see vite-atlas.js).
- * Each call shells out to the local @synsci/atlas binary on the host.
- */
+/** Atlas graph client backed by the selected OpenScience server's bridge. */
+
+import { resolveServerRoute } from "@/config/server-url"
 
 export interface AtlasNode {
   node_id: string
@@ -52,30 +51,27 @@ export interface ArtifactsListResponse {
   has_more?: boolean
 }
 
-async function getJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`/api/atlas${path}`)
-  if (!res.ok) {
-    let detail = ""
-    try {
-      detail = (await res.json())?.detail ?? ""
-    } catch {}
-    throw new Error(`atlas ${path} failed: ${res.status}${detail ? ` — ${detail}` : ""}`)
-  }
-  return res.json()
-}
-
-async function postJSON<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`/api/atlas${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+async function requestJSON<T>(
+  server: string,
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const route = `/api/atlas${path}`
+  const res = await fetch(resolveServerRoute(route, server, window.location.origin), {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (!res.ok) {
     let detail = ""
     try {
       detail = (await res.json())?.detail ?? ""
     } catch {}
-    throw new Error(`atlas POST ${path} failed: ${res.status}${detail ? ` — ${detail}` : ""}`)
+    throw new Error(`atlas ${method} ${path} failed: ${res.status}${detail ? ` — ${detail}` : ""}`)
+  }
+  if (!res.headers.get("content-type")?.includes("application/json")) {
+    throw new Error(`atlas ${method} ${path} returned a non-JSON response`)
   }
   return res.json()
 }
@@ -87,37 +83,28 @@ export interface GraphTreeResponse {
   node_count?: number
 }
 
-export const atlasAPI = {
-  listNodes: () => getJSON<NodesListResponse>("/nodes"),
-  /** The user's graphs = root nodes; the canvas shows one at a time. */
-  listGraphs: () => getJSON<NodesListResponse>("/graphs"),
-  /** Full subgraph for a single graph/root. */
-  getGraphTree: (id: string) => getJSON<GraphTreeResponse>(`/graphs/${id}/tree`),
-  createNode: (title: string) => postJSON<AtlasNode>("/nodes", { title }),
-  /** Resolve the OPENED project's root id (null if unlinked/offline). The
-   *  directory is the project the SPA has open, not the serve launch dir. */
-  resolveProject: (directory: string) =>
-    getJSON<{ project_id: string | null }>(`/project?directory=${encodeURIComponent(directory)}`),
-  /** Find-or-create the OPENED project's root (explicit user action). */
-  initProject: (directory: string) =>
-    postJSON<{ project_id: string | null }>(`/project/init?directory=${encodeURIComponent(directory)}`, {}),
-  githubStatus: () => getJSON<unknown>("/github/status"),
-  githubRefresh: () => postJSON<unknown>("/github/refresh", {}),
-  githubDisconnect: () => postJSON<unknown>("/github/disconnect", {}),
-  githubLink: (input: { installationID: string; state?: string }) =>
-    postJSON<unknown>("/github/link", {
-      installation_id: input.installationID,
-      state: input.state,
-    }),
-  listArtifacts: (nodeID: string) => getJSON<ArtifactsListResponse | AtlasArtifact[]>(`/nodes/${nodeID}/artifacts`),
-}
+export function createAtlasAPI(server: () => string) {
+  const get = <T>(path: string) => requestJSON<T>(server(), "GET", path)
+  const post = <T>(path: string, body: unknown) => requestJSON<T>(server(), "POST", path, body)
 
-// Pre-warm the bridge on app boot so the canvas tab is fast on first open.
-// The canvas loads the cheap root list (`/graphs`) + the selected project's
-// subtree (`/graphs/:id/tree`) — NOT the full `/nodes` set — so warm `/graphs`
-// (and resolve this folder's project), not the expensive all-nodes endpoint.
-if (typeof window !== "undefined") {
-  setTimeout(() => {
-    fetch("/api/atlas/graphs").catch(() => {})
-  }, 250)
+  return {
+    /** The user's graphs = root nodes; the canvas shows one at a time. */
+    listGraphs: () => get<NodesListResponse>("/graphs"),
+    /** Full subgraph for a single graph/root. */
+    getGraphTree: (id: string) => get<GraphTreeResponse>(`/graphs/${id}/tree`),
+    createNode: (input: { title: string; directory: string; parentID: string }) =>
+      post<AtlasNode>("/nodes", {
+        title: input.title,
+        directory: input.directory,
+        parent_id: input.parentID,
+      }),
+    /** Resolve the opened project's root without creating one. */
+    resolveProject: (directory: string) =>
+      get<{ project_id: string | null }>(`/project?directory=${encodeURIComponent(directory)}`),
+    /** Find or create the opened project's root after explicit user action. */
+    initProject: (directory: string) =>
+      post<{ project_id: string | null }>(`/project/init?directory=${encodeURIComponent(directory)}`, {}),
+    listArtifacts: (nodeID: string) =>
+      get<ArtifactsListResponse | AtlasArtifact[]>(`/nodes/${nodeID}/artifacts`),
+  }
 }

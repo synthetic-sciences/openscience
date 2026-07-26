@@ -106,11 +106,17 @@ export function ProteinStructure(props: ArtifactRenderProps): JSX.Element {
   onMount(async () => {
     setStatus("loading")
     try {
-      const [ctxMod, specMod] = await Promise.all([
+      const [ctxMod, specMod, configMod] = await Promise.all([
         import("molstar/lib/mol-plugin/context"),
         import("molstar/lib/mol-plugin/spec"),
+        import("molstar/lib/mol-plugin/config"),
       ])
-      const p = new ctxMod.PluginContext(specMod.DefaultPluginSpec())
+      const spec = specMod.DefaultPluginSpec()
+      // Mol* otherwise asks WebGL to fail on software renderers. Chromium uses
+      // SwiftShader in headless mode, and some user machines have no accepted
+      // hardware context, so that default turns a usable 3D view into an error.
+      spec.config = [...(spec.config ?? []), [configMod.PluginConfig.General.AllowMajorPerformanceCaveat, true]]
+      const p = new ctxMod.PluginContext(spec)
       await p.init()
       if (disposed) {
         p.dispose()

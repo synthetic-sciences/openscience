@@ -1,13 +1,12 @@
 import { Show, createEffect, createSignal, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import type { RDKitLoader, RDKitModule } from "@rdkit/rdkit"
 import type { ArtifactRenderProps } from "../registry"
 
 /**
  * 2D chemical structure renderer backed by RDKit.js (`@rdkit/rdkit`) for the
- * `chem-2d` artifact kind. RDKit is a WebAssembly module: it is initialised once
- * (module-level singleton, so every `chem-2d` artifact on the page shares one
- * WASM instance) and used to depict a molecule as an SVG.
+ * `chem-2d` artifact kind. RDKit is initialised once in a dedicated worker, so
+ * every artifact shares one WASM instance without granting its Emscripten glue
+ * permission to evaluate JavaScript strings in the application page.
  *
  * The library is framework-agnostic; here it renders to an SVG string that is
  * mounted via `innerHTML`. Depictions regenerate reactively through
@@ -23,18 +22,64 @@ import type { ArtifactRenderProps } from "../registry"
 
 type Status = "idle" | "loading" | "ready" | "empty" | "error"
 
-let rdkitPromise: Promise<RDKitModule> | undefined
+type WorkerResponse = { ok: true; svg: string } | { ok: false; error: string }
 
-async function getRDKit(): Promise<RDKitModule> {
-  if (!rdkitPromise) {
-    rdkitPromise = (async () => {
-      const init = ((await import("@rdkit/rdkit")) as unknown as { default: RDKitLoader }).default
-      const wasmUrl = ((await import("@rdkit/rdkit/dist/RDKit_minimal.wasm?url")) as unknown as { default: string })
-        .default
-      return init({ locateFile: () => wasmUrl })
-    })()
-  }
-  return rdkitPromise
+let rdkitWorker: Worker | undefined
+const WORKER_TIMEOUT_MS = 30_000
+
+function getRDKitWorker(): Worker {
+  rdkitWorker ??= new Worker(new URL("./rdkit.worker.ts", import.meta.url), {
+    type: "module",
+    name: "openscience-rdkit",
+  })
+  return rdkitWorker
+}
+
+function renderMolecule(spec: Spec): Promise<string> {
+  const worker = getRDKitWorker()
+  const channel = new MessageChannel()
+
+  return new Promise((resolve, reject) => {
+    const discardWorker = () => {
+      if (rdkitWorker !== worker) return
+      worker.terminate()
+      rdkitWorker = undefined
+    }
+    const cleanup = () => {
+      clearTimeout(timeout)
+      channel.port1.close()
+      worker.removeEventListener("error", onWorkerError)
+    }
+    const onWorkerError = (event: ErrorEvent) => {
+      cleanup()
+      discardWorker()
+      reject(new Error(event.message || "RDKit worker failed"))
+    }
+    const timeout = setTimeout(() => {
+      cleanup()
+      discardWorker()
+      reject(new Error("RDKit worker timed out"))
+    }, WORKER_TIMEOUT_MS)
+
+    channel.port1.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      cleanup()
+      if (event.data.ok) resolve(event.data.svg)
+      else reject(new Error(event.data.error))
+    }
+    channel.port1.onmessageerror = () => {
+      cleanup()
+      discardWorker()
+      reject(new Error("RDKit worker returned an unreadable response"))
+    }
+    worker.addEventListener("error", onWorkerError, { once: true })
+    channel.port1.start()
+    try {
+      worker.postMessage(spec, [channel.port2])
+    } catch (error) {
+      cleanup()
+      reject(error)
+    }
+  })
 }
 
 interface Spec {
@@ -88,15 +133,7 @@ export function Chem2D(props: ArtifactRenderProps): JSX.Element {
     setStatus("loading")
     setError("")
     try {
-      const rdkit = await getRDKit()
-      if (my !== token || disposed) return
-      const mol = rdkit.get_mol(spec.input)
-      if (!mol || !mol.is_valid()) {
-        mol?.delete()
-        throw new Error("could not parse molecule (invalid SMILES/Mol block)")
-      }
-      const out = mol.get_svg(spec.width, spec.height)
-      mol.delete()
+      const out = await renderMolecule(spec)
       if (my !== token || disposed) return
       setSvg(responsive(out))
       setStatus("ready")

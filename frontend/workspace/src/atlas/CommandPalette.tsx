@@ -159,6 +159,9 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
         <div class="atlas-overlay" onClick={props.onClose} />
         <div
           class="atlas-modal atlas-fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-label="command palette"
           style={{
             top: "12vh",
             left: "50%",
@@ -186,6 +189,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
             </span>
             <input
               ref={inputRef}
+              aria-label="search commands and projects"
               value={query()}
               onInput={(e) => {
                 setQuery(e.currentTarget.value)
