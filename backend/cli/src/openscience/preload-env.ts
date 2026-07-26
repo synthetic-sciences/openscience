@@ -56,12 +56,13 @@ function syncedEnvPath(): string {
   }
   if (!env || typeof env !== "object" || Array.isArray(env)) return
   for (const [k, v] of Object.entries(env as Record<string, unknown>)) {
+    if (typeof v !== "string") continue
     // Drop per-provider LLM credentials that are BYOK-local-only now — a stale
     // synced key must never shadow the user's own (see synced-env-policy.ts).
-    if (!isSyncedEnvAllowed(k)) continue
+    if (!isSyncedEnvAllowed(k, v)) continue
     // Don't clobber values already set in the parent environment —
     // explicit shell exports win over persisted sync state.
-    if (typeof v === "string" && !process.env[k]) {
+    if (!process.env[k]) {
       process.env[k] = v
     }
   }

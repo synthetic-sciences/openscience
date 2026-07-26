@@ -172,6 +172,77 @@ describe("ProviderTransform.options — BYOK / direct paths stay untouched", () 
   })
 })
 
+describe("new model reasoning effort contracts", () => {
+  test("GPT-5.6 family exposes none through max on direct OpenAI and managed OpenRouter", () => {
+    const expected = ["none", "low", "medium", "high", "xhigh", "max"]
+    const direct = model({
+      id: "gpt-5.6-sol",
+      providerID: "openai",
+      release_date: "2026-07-09",
+      api: { id: "gpt-5.6-sol", url: "https://api.openai.com/v1", npm: "@ai-sdk/openai" },
+    })
+    const managed = orModel("openai/gpt-5.6-sol", "openai/gpt-5.6-sol", { release_date: "2026-07-09" })
+    expect(Object.keys(ProviderTransform.variants(direct))).toEqual(expected)
+    expect(Object.keys(ProviderTransform.variants(managed))).toEqual(expected)
+    expect(ProviderTransform.variants(direct).max).toEqual({
+      reasoningEffort: "max",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    })
+    expect(ProviderTransform.variants(managed).max).toEqual({ reasoning: { effort: "max" } })
+  })
+
+  test("Grok 4.5 exposes low/medium/high with provider-specific wire shapes", () => {
+    const direct = model({
+      id: "grok-4.5",
+      providerID: "xai",
+      api: { id: "grok-4.5", url: "https://api.x.ai/v1", npm: "@ai-sdk/xai" },
+    })
+    const managed = orModel("x-ai/grok-4.5", "x-ai/grok-4.5")
+    expect(ProviderTransform.variants(direct)).toEqual({
+      low: { reasoningEffort: "low" },
+      medium: { reasoningEffort: "medium" },
+      high: { reasoningEffort: "high" },
+    })
+    expect(ProviderTransform.variants(managed)).toEqual({
+      low: { reasoning: { effort: "low" } },
+      medium: { reasoning: { effort: "medium" } },
+      high: { reasoning: { effort: "high" } },
+    })
+  })
+
+  test("Muse Spark 1.1 exposes its exact effort ladder on BYOK and managed Meta", () => {
+    const muse = model({
+      id: "muse-spark-1.1",
+      providerID: "meta",
+      api: { id: "muse-spark-1.1", url: "https://api.meta.ai/v1", npm: "@ai-sdk/openai" },
+    })
+    expect(ProviderTransform.variants(muse)).toEqual({
+      none: { reasoningEffort: "none" },
+      minimal: { reasoningEffort: "minimal" },
+      low: { reasoningEffort: "low" },
+      medium: { reasoningEffort: "medium" },
+      high: { reasoningEffort: "high" },
+      xhigh: { reasoningEffort: "xhigh" },
+    })
+    expect(
+      ProviderTransform.options({
+        model: muse,
+        sessionID,
+        providerOptions: { baseURL: "https://atlas.test/api/llm/proxy/meta/v1" },
+      }),
+    ).toMatchObject({ store: false, reasoningEffort: "medium" })
+    expect(ProviderTransform.smallOptions(muse)).toEqual({ reasoningEffort: "none" })
+    // @ai-sdk/openai's Responses implementation parses the literal `openai`
+    // options namespace even when createOpenAI({ name: "meta" }) reports its
+    // provider as `meta.responses`. Keep this pinned-SDK seam explicit so a
+    // semantic-looking remap to `meta` cannot silently drop the effort.
+    expect(ProviderTransform.providerOptions(muse, { reasoningEffort: "high" })).toEqual({
+      openai: { reasoningEffort: "high" },
+    })
+  })
+})
+
 describe("ProviderTransform.variants — Anthropic max thinking budget", () => {
   const claude = (cap: number) =>
     model({

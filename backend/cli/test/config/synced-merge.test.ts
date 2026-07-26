@@ -70,6 +70,23 @@ describe("Atlas synced-config merge", () => {
     })
   })
 
+  test("synced Meta whitelist is retained for the managed Muse route", async () => {
+    await writeSynced({
+      model: "meta/muse-spark-1.1",
+      provider: { meta: { whitelist: ["muse-spark-1.1"] } },
+    })
+
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.model).toBe("meta/muse-spark-1.1")
+        expect(config.provider?.meta?.whitelist).toEqual(["muse-spark-1.1"])
+      },
+    })
+  })
+
   test("a custom BYOK provider in openscience.json is untouched by sync (#142)", async () => {
     await writeSynced({
       enabled_providers: ["openrouter"],

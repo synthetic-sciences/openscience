@@ -1,11 +1,12 @@
 /**
  * Which Atlas-synced env vars the CLI is allowed to apply.
  *
- * OpenScience routes every *managed* LLM call through OpenRouter — that is the
- * one provider Credits pay for, via the proxy `OPENROUTER_BASE_URL` +
- * a `thk_*` `OPENROUTER_API_KEY`. Every other model provider (Anthropic, OpenAI,
- * Gemini, Together, Groq, Fireworks, xAI, Mistral, DeepSeek, Cerebras, and
- * Codex) is BYOK-only, configured locally with a shell `export`,
+ * OpenScience routes managed LLM calls through two explicit seams: OpenRouter
+ * for the aggregated catalog, and Meta for Muse Spark. Both receive only an
+ * Atlas `thk_*` token plus their Atlas proxy URL. Every other model provider
+ * (Anthropic, OpenAI, Gemini, Together, Groq, Fireworks, xAI, Mistral,
+ * DeepSeek, Cerebras, and Codex) is BYOK-only, configured locally with a shell
+ * `export`,
  * `openscience keys add`, or Codex OAuth.
  *
  * Atlas still emits per-provider LLM credentials over `/api/cli/sync` for the
@@ -22,7 +23,7 @@
  *  credential. Single source of truth — openscience/index.ts imports this for
  *  its subprocess-redaction set, and the sync blocklist below derives from it,
  *  so the two can never drift. OpenRouter is included (its own key is BYOK too)
- *  but kept OUT of the blocklist since it is the one managed-capable provider. */
+ *  but the two managed-capable credentials are kept OUT of the blocklist. */
 export const BYOK_LLM_ENV_KEYS = [
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
@@ -30,6 +31,7 @@ export const BYOK_LLM_ENV_KEYS = [
   "GOOGLE_API_KEY",
   "GEMINI_API_KEY",
   "OPENROUTER_API_KEY",
+  "META_MODEL_API_KEY",
   "TOGETHER_API_KEY",
   "GROQ_API_KEY",
   "FIREWORKS_API_KEY",
@@ -39,20 +41,34 @@ export const BYOK_LLM_ENV_KEYS = [
   "CEREBRAS_API_KEY",
 ]
 
+const MANAGED_SYNCED_LLM_KEYS = new Set(["OPENROUTER_API_KEY", "META_MODEL_API_KEY"])
+const MANAGED_SYNCED_BASE_URLS: Record<string, string> = {
+  OPENROUTER_BASE_URL: "/api/llm/proxy/openrouter/",
+  META_MODEL_BASE_URL: "/api/llm/proxy/meta/",
+}
+
 /** Env vars the CLI drops from Atlas sync: every BYOK model provider EXCEPT
- *  OpenRouter, each with its `*_BASE_URL` companion. Derived from
+ *  OpenRouter and Meta, each with its `*_BASE_URL` companion. Derived from
  *  BYOK_LLM_ENV_KEYS so a newly-added provider is covered automatically. */
 export const BLOCKED_SYNCED_ENV = new Set<string>(
-  BYOK_LLM_ENV_KEYS.filter((key) => key !== "OPENROUTER_API_KEY").flatMap((key) => [
+  BYOK_LLM_ENV_KEYS.filter((key) => !MANAGED_SYNCED_LLM_KEYS.has(key)).flatMap((key) => [
     key,
     key.replace(/_API_KEY$/, "_BASE_URL"),
   ]),
 )
 
 /** True when an Atlas-synced env var may be applied to the CLI process.
- *  OpenRouter (the sole managed LLM route) and all compute / ML-service keys
- *  pass through; every other model-provider LLM credential is dropped because
- *  that provider is BYOK-local-only. */
-export function isSyncedEnvAllowed(key: string): boolean {
-  return !BLOCKED_SYNCED_ENV.has(key)
+ *  OpenRouter + Meta managed routing vars and all compute / ML-service keys pass
+ *  through; every other model-provider LLM credential is dropped because that
+ *  provider is BYOK-local-only. */
+export function isSyncedEnvAllowed(key: string, value?: string): boolean {
+  if (BLOCKED_SYNCED_ENV.has(key)) return false
+  // A managed provider secret delivered to the open-source client must be the
+  // user's scoped Atlas token, never an upstream/shared provider credential.
+  if (value !== undefined && MANAGED_SYNCED_LLM_KEYS.has(key)) return value.startsWith("thk_")
+  // Likewise, managed routing may only target the provider-specific Atlas
+  // proxy. A mismatched/public URL is dropped before it reaches process.env.
+  const route = MANAGED_SYNCED_BASE_URLS[key]
+  if (value !== undefined && route) return value.includes(route)
+  return true
 }

@@ -501,6 +501,14 @@ export namespace ProviderTransform {
     if (/grok-4[.-]20/.test(id) && id.includes("multi-agent")) return efforts([...WIDELY_SUPPORTED_EFFORTS, "xhigh"])
     if (id.includes("grok")) return {}
 
+    // Meta's OpenAI-compatible Muse endpoint accepts this exact ladder. Keep it
+    // separate from OpenAI's date-derived GPT ladder: Muse includes both
+    // `none` and `minimal`, but has no `max` tier.
+    if (/muse-spark-1[.-]1\b/.test(id)) {
+      const values = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+      return Object.fromEntries(values.map((effort) => [effort, { reasoningEffort: effort }]))
+    }
+
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider": {
         // Claude via OpenRouter cannot round-trip reasoning (#167): Anthropic requires
@@ -835,6 +843,10 @@ export namespace ProviderTransform {
       }
     }
 
+    if (/muse-spark-1[.-]1\b/.test(input.model.api.id.toLowerCase())) {
+      result["reasoningEffort"] = "medium"
+    }
+
     if (
       input.model.providerID === "baseten" ||
       (input.model.providerID === "synsci" && ["kimi-k2-thinking", "glm-4.6"].includes(input.model.api.id))
@@ -929,6 +941,9 @@ export namespace ProviderTransform {
         return { reasoningEffort: "low" }
       }
       return { reasoningEffort: "minimal" }
+    }
+    if (/muse-spark-1[.-]1\b/.test(model.api.id.toLowerCase())) {
+      return { reasoningEffort: "none" }
     }
     if (model.providerID === "google") {
       // gemini-3 uses thinkingLevel, gemini-2.5 uses thinkingBudget

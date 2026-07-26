@@ -88,6 +88,8 @@ const SHARED_PROVIDER_KEYS = new Set([
   "OPENAI_API_KEY",
   "GOOGLE_GENERATIVE_AI_API_KEY",
   "GEMINI_API_KEY",
+  "META_MODEL_API_KEY",
+  "XAI_API_KEY",
 ])
 
 /** Env vars that are safe to pass to subprocesses */
@@ -822,14 +824,14 @@ export namespace OpenScience {
         }
       }
 
-      // OpenScience honours only OpenRouter (the sole managed LLM route) plus
-      // compute / ML-service credentials from Atlas sync; every other model
-      // provider is BYOK-local-only. Drop the rest before they are applied or
+      // OpenScience honours only the narrow OpenRouter + Meta managed routes,
+      // plus compute / ML-service credentials from Atlas sync; every other
+      // model provider is BYOK-local-only. Drop the rest before they are applied or
       // persisted — and the unset pass below removes any a previous sync wrote,
       // so this doubles as the migration for existing installs. See
       // synced-env-policy.ts.
-      for (const key of [...fresh.keys()]) {
-        if (!isSyncedEnvAllowed(key)) fresh.delete(key)
+      for (const [key, value] of [...fresh.entries()]) {
+        if (!isSyncedEnvAllowed(key, value)) fresh.delete(key)
       }
 
       // Count distinct APPLIED credential values (post-filter, ignoring routing

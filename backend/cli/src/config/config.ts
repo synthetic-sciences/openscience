@@ -193,9 +193,10 @@ export namespace Config {
     const syncedConfig = path.join(Global.Path.config, "openscience-synced.json")
     try {
       // Atlas writes model-lockdown config (enabled_providers, per-provider
-      // whitelists, default model) for the hosted web agents, but on the CLI the
-      // only *managed* route is OpenRouter. Honour the OpenRouter managed catalog
-      // and the recommended default model; drop the rest UNCONDITIONALLY — the
+      // whitelists, default model) for the hosted web agents. On the CLI the
+      // managed routes are OpenRouter plus the narrow Meta/Muse proxy. Honour
+      // those managed catalogs and the recommended model; drop the rest
+      // UNCONDITIONALLY — the
       // synced enabled_providers must never hide a locally-configured BYOK
       // provider, regardless of the billing toggle. An open-source CLI shouldn't
       // let a dashboard allowlist govern the user's own keys; enterprise lockdown
@@ -203,7 +204,11 @@ export namespace Config {
       // (A user's OWN enabled_providers in their config file still gates normally.)
       const synced = await loadFile(syncedConfig)
       const scoped: Partial<Config.Info> = {}
-      if (synced?.provider?.openrouter) scoped.provider = { openrouter: synced.provider.openrouter }
+      const managedProviders = {
+        ...(synced?.provider?.openrouter ? { openrouter: synced.provider.openrouter } : {}),
+        ...(synced?.provider?.meta ? { meta: synced.provider.meta } : {}),
+      }
+      if (Object.keys(managedProviders).length) scoped.provider = managedProviders
       if (synced?.model) scoped.model = synced.model
       // Merge synced UNDERNEATH the user's own config, not on top: it is the
       // server's *recommendation* (default model, OpenRouter managed catalog),

@@ -8,8 +8,8 @@ import { Global } from "../../src/global"
 // with a managed thk_ value, which would silently turn a free BYOK call into a
 // billed managed one (the "billing flip" bug).
 //
-// OpenRouter is the ONE provider Atlas sync may deliver a credential for; every
-// other model provider is BYOK-local-only, so its synced credential is dropped
+// OpenRouter and Meta are the only providers Atlas sync may deliver a managed
+// credential for; every other model provider is BYOK-local-only, so its synced credential is dropped
 // (see synced-env-policy.ts) — Atlas still emits them for the hosted web agents.
 
 const realFetch = globalThis.fetch
@@ -17,6 +17,8 @@ afterEach(() => {
   globalThis.fetch = realFetch
   delete process.env["OPENROUTER_API_KEY"]
   delete process.env["ANTHROPIC_API_KEY"]
+  delete process.env["META_MODEL_API_KEY"]
+  delete process.env["META_MODEL_BASE_URL"]
 })
 
 async function seedSession() {
@@ -55,6 +57,32 @@ test("a synced managed OpenRouter key IS applied when the slot is empty", async 
   stubSync({ openrouter: { OPENROUTER_API_KEY: "thk_managed.value" } })
   await OpenScience.syncServices()
   expect(process.env["OPENROUTER_API_KEY"]).toBe("thk_managed.value")
+})
+
+test("Meta sync applies only a scoped thk token plus the matching Atlas proxy", async () => {
+  await seedSession()
+  stubSync({
+    meta: {
+      META_MODEL_API_KEY: "thk_managed.value",
+      META_MODEL_BASE_URL: "https://app.syntheticsciences.ai/api/llm/proxy/meta/v1",
+    },
+  })
+  await OpenScience.syncServices()
+  expect(process.env["META_MODEL_API_KEY"]).toBe("thk_managed.value")
+  expect(process.env["META_MODEL_BASE_URL"]).toBe("https://app.syntheticsciences.ai/api/llm/proxy/meta/v1")
+})
+
+test("Meta sync rejects an upstream shared key or public endpoint", async () => {
+  await seedSession()
+  stubSync({
+    meta: {
+      META_MODEL_API_KEY: "meta-shared-secret",
+      META_MODEL_BASE_URL: "https://api.meta.ai/v1",
+    },
+  })
+  await OpenScience.syncServices()
+  expect(process.env["META_MODEL_API_KEY"]).toBeUndefined()
+  expect(process.env["META_MODEL_BASE_URL"]).toBeUndefined()
 })
 
 test("a synced non-OpenRouter LLM key is dropped — those providers are BYOK-local-only", async () => {

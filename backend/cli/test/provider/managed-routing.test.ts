@@ -38,6 +38,8 @@ function clearManagedLLMEnv() {
     "GEMINI_BASE_URL",
     "OPENROUTER_API_KEY",
     "OPENROUTER_BASE_URL",
+    "META_MODEL_API_KEY",
+    "META_MODEL_BASE_URL",
   ]) {
     Env.remove(key)
   }
@@ -47,23 +49,24 @@ const PROXY = `${API_BASE}/api/llm/proxy`
 
 // ── Pure decision helpers ────────────────────────────────────────────────────
 
-describe("Provider.managedRoutesOpenRouterOnly (pure)", () => {
+describe("Provider.managedRoutesCuratedProvidersOnly (pure)", () => {
   test("true only when billing.llm === 'managed'", () => {
-    expect(Provider.managedRoutesOpenRouterOnly({ billing: { llm: "managed" } } as any)).toBe(true)
+    expect(Provider.managedRoutesCuratedProvidersOnly({ billing: { llm: "managed" } } as any)).toBe(true)
   })
   test("false for explicit byok", () => {
-    expect(Provider.managedRoutesOpenRouterOnly({ billing: { llm: "byok" } } as any)).toBe(false)
+    expect(Provider.managedRoutesCuratedProvidersOnly({ billing: { llm: "byok" } } as any)).toBe(false)
   })
   test("false for auto-detect (unset / empty billing / null)", () => {
-    expect(Provider.managedRoutesOpenRouterOnly({} as any)).toBe(false)
-    expect(Provider.managedRoutesOpenRouterOnly({ billing: {} } as any)).toBe(false)
-    expect(Provider.managedRoutesOpenRouterOnly({ billing: { llm: null } } as any)).toBe(false)
+    expect(Provider.managedRoutesCuratedProvidersOnly({} as any)).toBe(false)
+    expect(Provider.managedRoutesCuratedProvidersOnly({ billing: {} } as any)).toBe(false)
+    expect(Provider.managedRoutesCuratedProvidersOnly({ billing: { llm: null } } as any)).toBe(false)
   })
 })
 
 describe("Provider.managedProviderAllowed (pure)", () => {
-  test("OpenRouter and the hosted synsci demo are the only allowed providers", () => {
+  test("OpenRouter, Meta, and the hosted synsci demo are the only allowed providers", () => {
     expect(Provider.managedProviderAllowed("openrouter")).toBe(true)
+    expect(Provider.managedProviderAllowed("meta")).toBe(true)
     expect(Provider.managedProviderAllowed("synsci")).toBe(true)
     expect(Provider.managedProviderAllowed("synsci-hosted")).toBe(true)
   })
@@ -100,7 +103,7 @@ describe("Provider.isManagedProxyBaseURL (pure)", () => {
 // ── Availability filter (hermetic, catalog-backed) ───────────────────────────
 
 describe("managed session availability", () => {
-  test("managed ⇒ only OpenRouter (+ demo) load; first-party proxies are dropped", async () => {
+  test("managed ⇒ OpenRouter + Meta load; unsupported first-party proxies are dropped", async () => {
     await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
     await Instance.provide({
       directory: tmp.path,
@@ -114,15 +117,46 @@ describe("managed session availability", () => {
         Env.set("GOOGLE_GENERATIVE_AI_BASE_URL", `${PROXY}/gemini/v1beta`)
         Env.set("OPENROUTER_API_KEY", "thk_openrouter")
         Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+        Env.set("META_MODEL_API_KEY", "thk_meta")
+        Env.set("META_MODEL_BASE_URL", `${PROXY}/meta/v1`)
         Provider.invalidate()
       },
       fn: async () => {
         const providers = await Provider.list()
         expect(providers["openrouter"]).toBeDefined()
         expect(providers["openrouter"].options.baseURL).toBe(`${PROXY}/openrouter/v1`)
+        expect(providers["meta"]).toBeDefined()
+        expect(String(providers["meta"].options.apiKey).startsWith("thk_")).toBe(true)
+        expect(providers["meta"].options.baseURL).toBe(`${PROXY}/meta/v1`)
+        expect(providers["meta"].models["muse-spark-1.1"]).toBeDefined()
         expect(providers["anthropic"]).toBeUndefined()
         expect(providers["openai"]).toBeUndefined()
         expect(providers["google"]).toBeUndefined()
+      },
+    })
+  })
+
+  test("Meta BYOK overrides a stale managed proxy and bypasses the managed whitelist", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        billing: { llm: "byok" },
+        provider: { meta: { whitelist: ["not-the-muse-model"] } },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("META_MODEL_API_KEY", "meta-user-owned")
+        Env.set("META_MODEL_BASE_URL", `${PROXY}/meta/v1`)
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const meta = (await Provider.list())["meta"]
+        expect(meta).toBeDefined()
+        expect(meta.options.apiKey).toBe("meta-user-owned")
+        expect(meta.options.baseURL).toBe("https://api.meta.ai/v1")
+        expect(meta.models["muse-spark-1.1"]).toBeDefined()
       },
     })
   })

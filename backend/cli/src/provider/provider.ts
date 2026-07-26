@@ -42,7 +42,10 @@ import { ProviderTransform } from "./transform"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
-  const CODEX_MODELS = new Set([
+  // Models exposed by the ChatGPT / Codex OAuth transport. Keep the dot and
+  // dash spellings because older models.dev snapshots normalized version dots
+  // while current snapshots preserve the upstream ids.
+  const CODEX_MODEL_IDS = new Set([
     "gpt-5.6",
     "gpt-5-6",
     "gpt-5.6-sol",
@@ -62,6 +65,10 @@ export namespace Provider {
     "gpt-5.2",
     "gpt-5-2",
   ])
+
+  export function isCodexOAuthModel(modelID: string): boolean {
+    return CODEX_MODEL_IDS.has(modelID)
+  }
 
   function isGpt5OrLater(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
@@ -135,11 +142,11 @@ export namespace Provider {
     const managed =
       isAtlasProxyBaseURL(baseURL) && (await Config.get().catch(() => undefined))?.billing?.llm === "managed"
     if (!managed) return {}
-    // Managed wallet routes through OpenRouter ONLY: never attach the wallet's
-    // thk_ token to a first-party proxy (anthropic / openai / google). Those
-    // providers are also dropped from availability (see isProviderAllowed), so
-    // this is belt-and-suspenders — a managed token can only ever reach the
-    // sanctioned OpenRouter (or hosted synsci) route.
+    // Managed wallet routes are deliberately narrow: OpenRouter for its
+    // aggregated catalog and Meta for Muse Spark. Never attach the wallet's
+    // thk_ token to any other first-party proxy (anthropic / openai / google /
+    // xAI). Those providers are also dropped from availability below, so this
+    // is belt-and-suspenders.
     if (!managedProviderAllowed(providerID)) return {}
     const session = await OpenScience.getSession().catch(() => null)
     return session?.api_key ? { apiKey: session.api_key } : {}
@@ -183,30 +190,29 @@ export namespace Provider {
     )
   }
 
-  /** Managed wallet ⇒ OpenRouter-only routing.
+  /** Managed wallet ⇒ curated managed-provider routing.
    *
    *  When the LLM spend toggle is explicitly "managed", every wallet inference
-   *  call flows through OpenRouter — the one gateway whose stream exposes a
-   *  single, unified reasoning format (`reasoning` / `reasoning_details`). The
-   *  first-party managed proxies (anthropic / openai / google), each with a
-   *  different reasoning shape, are taken out of the managed path entirely; the
-   *  hosted zero-cost `synsci` demo provider is kept. BYOK and the legacy
+   *  call flows through OpenRouter, except Muse Spark which uses Atlas's narrow
+   *  Meta proxy. The other first-party managed proxies (anthropic / openai /
+   *  google / xAI) are taken out of the managed path entirely; the hosted
+   *  zero-cost `synsci` demo provider is kept. BYOK and the legacy
    *  auto-detect path (`billing.llm` unset / null / "byok") are UNTOUCHED —
    *  this only fires on an explicit managed-wallet opt-in. Pure + sync. */
-  export function managedRoutesOpenRouterOnly(config: Config.Info): boolean {
+  export function managedRoutesCuratedProvidersOnly(config: Config.Info): boolean {
     return config.billing?.llm === "managed"
   }
 
-  /** Providers a managed (OpenRouter-only) wallet session may load: OpenRouter
-   *  for all real inference, plus the hosted `synsci` demo. Pure + sync. */
+  /** Providers a managed wallet session may load: OpenRouter for aggregated
+   *  inference, Meta for Muse Spark, plus the hosted `synsci` demo. Pure. */
   export function managedProviderAllowed(providerID: string): boolean {
-    return providerID === "openrouter" || providerID.startsWith("synsci")
+    return providerID === "openrouter" || providerID === "meta" || providerID.startsWith("synsci")
   }
 
   /** True when a base URL points at the local machine (localhost / loopback).
    *  A provider with a local baseURL runs on the user's own hardware, is free,
    *  and is BYOK-class — so it's kept available even in managed-wallet mode
-   *  (where the wallet itself still routes only through OpenRouter). Pure. */
+   *  (where the wallet itself still routes only through curated proxies). Pure. */
   export function isLocalBaseURL(url: unknown): boolean {
     if (typeof url !== "string" || !url) return false
     try {
@@ -526,6 +532,41 @@ export namespace Provider {
 
       // Neither an own key nor a managed route — nothing to route with.
       return { autoload: false, options: { headers } }
+    },
+    meta: async () => {
+      // Meta has the same dual-route contract as OpenRouter, but only for the
+      // Muse catalog: a user-owned key always goes directly to Meta (or their
+      // explicitly configured non-Atlas compatible gateway); otherwise an
+      // Atlas session may route with its thk_* token through the Meta proxy.
+      // The upstream/shared Meta credential never exists in the client.
+      const auth = await Auth.get("meta").catch(() => undefined)
+      const authKey = auth?.type === "api" ? auth.key : undefined
+      const envKey = Env.get("META_MODEL_API_KEY")
+      const ownKey = isByokKey(authKey) ? authKey : isByokKey(envKey) ? envKey : undefined
+      if (ownKey) {
+        const envBase = Env.get("META_MODEL_BASE_URL")
+        const baseURL = envBase && !isAtlasProxyBaseURL(envBase) ? envBase : "https://api.meta.ai/v1"
+        return {
+          autoload: false,
+          options: { apiKey: ownKey, baseURL },
+          getModel: async (sdk, modelID) => sdk.responses(modelID),
+        }
+      }
+
+      const proxyBase = Env.get("META_MODEL_BASE_URL")
+      if (isAtlasProxyBaseURL(proxyBase)) {
+        const session = await OpenScience.getSession().catch(() => null)
+        const managedKey = session?.api_key ?? (isAtlasApiKey(envKey) ? envKey : undefined)
+        if (managedKey) {
+          return {
+            autoload: false,
+            options: { apiKey: managedKey, baseURL: proxyBase },
+            getModel: async (sdk, modelID) => sdk.responses(modelID),
+          }
+        }
+      }
+
+      return { autoload: false, getModel: async (sdk, modelID) => sdk.responses(modelID) }
     },
     vercel: async () => {
       return {
@@ -967,18 +1008,17 @@ export namespace Provider {
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
-    // Managed wallet ⇒ OpenRouter-only. Drop every other provider (the
-    // first-party managed proxies included) from a managed session so wallet
-    // inference can only flow through OpenRouter's unified reasoning stream,
-    // plus the hosted zero-cost demo. Gated on the explicit toggle, so BYOK and
-    // legacy auto-detect sessions see every provider exactly as before. This is
-    // the single seam that makes defaultModel()/getSmallModel() managed-safe:
-    // both read the filtered state, so they can only resolve openrouter/synsci.
-    const managedOpenRouterOnly = managedRoutesOpenRouterOnly(config)
+    // Managed wallet ⇒ curated routes only. OpenRouter handles the aggregated
+    // catalog, while Muse Spark uses the narrow Meta proxy. Every other
+    // first-party managed proxy is dropped. Gated on the explicit toggle, so
+    // BYOK and legacy auto-detect sessions see every provider as before. This is
+    // the single seam that makes defaultModel()/getSmallModel() managed-safe.
+    const managedCuratedProvidersOnly = managedRoutesCuratedProvidersOnly(config)
     // Config-registered providers pointing at the local machine (Ollama, LM
     // Studio, any OpenAI-compatible localhost endpoint). They're free and run on
     // the user's own hardware, so they stay available even in managed-wallet
-    // mode — the wallet still only routes real inference through OpenRouter.
+    // mode — the wallet still only routes real inference through curated
+    // managed proxies.
     const localProviderIds = new Set(
       Object.entries(config.provider ?? {})
         .filter(([, p]) => isLocalBaseURL(p?.options?.baseURL ?? p?.api))
@@ -994,7 +1034,7 @@ export namespace Provider {
       // managed users finish the ChatGPT login (the credential persists) but the
       // provider is filtered out and the UI never flips to Connected.
       if (providerID === "openai-codex") return !disabled.has(providerID)
-      if (managedOpenRouterOnly && !managedProviderAllowed(providerID) && !localProviderIds.has(providerID))
+      if (managedCuratedProvidersOnly && !managedProviderAllowed(providerID) && !localProviderIds.has(providerID))
         return false
       if (enabled && !enabled.has(providerID)) return false
       if (disabled.has(providerID)) return false
@@ -1141,7 +1181,7 @@ export namespace Provider {
       const baseOpenai = database["openai"]
       const codexModels: Record<string, (typeof baseOpenai.models)[string]> = {}
       for (const [id, model] of Object.entries(baseOpenai.models)) {
-        if (CODEX_MODELS.has(id)) {
+        if (isCodexOAuthModel(id)) {
           codexModels[id] = {
             ...model,
             providerID: "openai-codex",
@@ -1275,11 +1315,11 @@ export namespace Provider {
 
       const configProvider = config.provider?.[providerID]
 
-      // The synced OpenRouter whitelist curates the MANAGED catalog only. When
-      // OpenRouter resolves to the user's OWN key (BYOK — the resolver above
-      // attaches a non-thk_ apiKey), it's their account: show the full local
-      // models.dev OpenRouter catalog instead of the managed subset.
-      const openrouterByok = providerID === "openrouter" && isByokKey(provider.options?.["apiKey"])
+      // Synced whitelists curate MANAGED catalogs only. When a dual-route
+      // provider resolves to the user's OWN key, it is their account: show the
+      // full local models.dev catalog instead of the managed subset.
+      const bypassManagedWhitelist =
+        (providerID === "openrouter" || providerID === "meta") && isByokKey(provider.options?.["apiKey"])
 
       for (const [modelID, model] of Object.entries(provider.models)) {
         model.api.id = model.api.id ?? model.id ?? modelID
@@ -1289,7 +1329,7 @@ export namespace Provider {
         if (model.status === "deprecated") delete provider.models[modelID]
         if (
           (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
-          (!openrouterByok && configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
+          (!bypassManagedWhitelist && configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
         )
           delete provider.models[modelID]
 
@@ -1312,7 +1352,7 @@ export namespace Provider {
       // OpenAI-compat for every upstream + managed billing uses usage.cost from
       // the response, not a local price table. Skipped on a BYOK key — that path
       // shows the full local catalog and isn't bound to the managed whitelist.
-      if (!openrouterByok && providerID === "openrouter" && configProvider?.whitelist) {
+      if (!bypassManagedWhitelist && providerID === "openrouter" && configProvider?.whitelist) {
         for (const wlid of configProvider.whitelist) {
           if (!(wlid in provider.models)) {
             provider.models[wlid] = _syntheticOpenRouterModel(wlid)

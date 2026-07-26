@@ -31,7 +31,7 @@ When the agent shells out, it rebuilds the subprocess environment from a curated
 
 **Passed through only when a subprocess needs them:** `HF_TOKEN`, `WANDB_API_KEY`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, `LAMBDA_API_KEY`, `RUNPOD_API_KEY`, `PRIME_INTELLECT_API_KEY`, `TENSORPOOL_API_KEY`, `VAST_API_KEY`, `TINKER_API_KEY`, `LANGSMITH_API_KEY`, `PINECONE_API_KEY`, `TOGETHER_API_KEY`, `GROQ_API_KEY`, `FIREWORKS_API_KEY`, `OPENROUTER_API_KEY`.
 
-**Explicitly filtered out, even if set in your shell:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_API_KEY`. The agent talks to model providers itself; subprocesses do not need these keys.
+**Explicitly filtered out, even if set in your shell:** provider credentials such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, and `META_MODEL_API_KEY`. The agent talks to model providers itself; subprocesses do not need these keys.
 
 ## Output redaction
 

@@ -7,12 +7,18 @@ test("subprocess env filtering never passes managed Atlas provider keys", () => 
     OPENROUTER_API_KEY: "thk_managed_openrouter",
     OPENAI_API_KEY: "thk_managed_openai",
     OPENROUTER_BASE_URL: "https://atlas.test/api/llm/proxy/openrouter/v1",
+    META_MODEL_API_KEY: "thk_managed_meta",
+    META_MODEL_BASE_URL: "https://atlas.test/api/llm/proxy/meta/v1",
+    XAI_API_KEY: "xai-user-owned",
   })
 
   expect(filtered.PATH).toBe("/usr/bin")
   expect(filtered.OPENROUTER_API_KEY).toBeUndefined()
   expect(filtered.OPENAI_API_KEY).toBeUndefined()
+  expect(filtered.META_MODEL_API_KEY).toBeUndefined()
+  expect(filtered.XAI_API_KEY).toBeUndefined()
   expect(filtered.OPENROUTER_BASE_URL).toBe("https://atlas.test/api/llm/proxy/openrouter/v1")
+  expect(filtered.META_MODEL_BASE_URL).toBe("https://atlas.test/api/llm/proxy/meta/v1")
 })
 
 test("subprocess env filtering still passes BYOK OpenRouter keys", () => {

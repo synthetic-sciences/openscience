@@ -15,7 +15,17 @@ export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ...
 openscience
 ```
 
-Keys stay on your machine. Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, DeepSeek, and dozens more work the same way — the catalogue is models.dev-backed, so any `provider/model` id a provider currently exposes is addressable. You can also paste keys into the Credentials panel in the [workspace](/openscience/workspace) instead of exporting them, and OpenAI Codex signs in via OAuth.
+Keys stay on your machine. Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, Meta Model API, DeepSeek, and dozens more work the same way — the catalogue is models.dev-backed, so any `provider/model` id a provider currently exposes is addressable. You can also paste keys into the Credentials panel in the [workspace](/openscience/workspace) instead of exporting them, and OpenAI Codex signs in via OAuth.
+
+The current frontier families are available on both paths:
+
+| Family | BYOK model | Atlas managed model |
+| --- | --- | --- |
+| GPT-5.6 Sol / Terra / Luna | `openai/gpt-5.6-*` | `openrouter/openai/gpt-5.6-*` |
+| Grok 4.5 | `xai/grok-4.5` | `openrouter/x-ai/grok-4.5` |
+| Muse Spark 1.1 | `meta/muse-spark-1.1` | `meta/muse-spark-1.1` through the Atlas Meta proxy |
+
+For BYOK, use `OPENAI_API_KEY`, `XAI_API_KEY`, or `META_MODEL_API_KEY`. The managed Meta route sends only your Atlas session token and proxy URL to OpenScience; Atlas keeps its shared Meta credential server-side.
 
 Current frontier families include:
 
