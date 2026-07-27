@@ -7,10 +7,7 @@ const HIDDEN_KEY = "thesis-project-hidden-v1"
 
 test("home project search, view, favorite, and hide state are functional", async ({ page, directory }) => {
   await page.goto("/")
-  const project = page
-    .getByRole("main")
-    .getByRole("button", { name: new RegExp(directory.split("/").at(-1) ?? "OpenScience") })
-    .first()
+  const project = page.getByRole("main").getByRole("button").filter({ hasText: directory }).first()
   await expect(project).toBeVisible()
 
   const search = page.getByRole("textbox", { name: "search projects" })
