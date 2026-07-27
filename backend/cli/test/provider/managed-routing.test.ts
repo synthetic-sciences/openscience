@@ -250,6 +250,34 @@ describe("managed session availability", () => {
     })
   })
 
+  test("unhealthy managed OpenRouter slugs are hidden from stale synced catalogs", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        billing: { llm: "managed" },
+        provider: {
+          openrouter: {
+            whitelist: ["mistralai/mistral-small-3.2-24b-instruct", "mistralai/mistral-medium-3.1"],
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+        Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const openrouter = (await Provider.list())["openrouter"]
+        expect(openrouter.models["mistralai/mistral-small-3.2-24b-instruct"]).toBeUndefined()
+        expect(openrouter.models["mistralai/mistral-medium-3.1"]).toBeDefined()
+        await expect(Provider.getModel("openrouter", "mistralai/mistral-small-3.2-24b-instruct")).rejects.toThrow()
+      },
+    })
+  })
+
   test("Meta BYOK overrides a path-prefixed stale managed proxy and bypasses the managed whitelist", async () => {
     await using tmp = await tmpdir({
       config: {

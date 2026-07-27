@@ -106,8 +106,12 @@ export namespace Provider {
     return typeof key === "string" && key.startsWith("thk_")
   }
 
+  const REMOVED_MODEL_IDS = new Set(["mistralai/mistral-small-3.2-24b-instruct"])
+
   function isRemovedModel(modelID: string) {
-    return modelID.toLowerCase().includes("fable")
+    const normalized = modelID.toLowerCase()
+    if (normalized.includes("fable")) return true
+    return REMOVED_MODEL_IDS.has(normalized)
   }
 
   export function isAtlasProxyBaseURL(baseURL: unknown): baseURL is string {
