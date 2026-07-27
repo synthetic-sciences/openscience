@@ -226,6 +226,10 @@ describe("managed session availability", () => {
         expect(openrouter.models["anthropic/claude-fable-5"]).toBeUndefined()
         expect(openrouter.models["anthropic/claude-sonnet-5"]).toBeDefined()
         await expect(Provider.getModel("openrouter", "anthropic/claude-fable-5")).rejects.toThrow()
+        await expect(Provider.getModel("amazon-bedrock", "anthropic.claude-fable-5")).rejects.toThrow()
+        await expect(Provider.getModel("amazon-bedrock", "global.anthropic.claude-fable-5")).rejects.toThrow()
+        await expect(Provider.getModel("digitalocean", "anthropic-claude-fable-5")).rejects.toThrow()
+        await expect(Provider.getModel("gitlab", "duo-chat-fable-5")).rejects.toThrow()
       },
     })
 

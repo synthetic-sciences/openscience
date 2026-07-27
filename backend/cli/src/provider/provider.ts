@@ -106,10 +106,8 @@ export namespace Provider {
     return typeof key === "string" && key.startsWith("thk_")
   }
 
-  const REMOVED_MODEL_IDS = new Set(["claude-fable-5", "anthropic/claude-fable-5"])
-
   function isRemovedModel(modelID: string) {
-    return REMOVED_MODEL_IDS.has(modelID)
+    return modelID.toLowerCase().includes("fable")
   }
 
   export function isAtlasProxyBaseURL(baseURL: unknown): baseURL is string {
