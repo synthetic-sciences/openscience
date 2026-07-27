@@ -56,14 +56,11 @@ if (Script.release) {
   }
   const sha = await $`git rev-parse HEAD`.text().then((x) => x.trim())
   await $`git tag -f v${Script.version} ${sha}`
-  await $`gh release edit v${Script.version} --target ${sha}`
   // Tags are exempt from branch protection; push the tag on its own so the
-  // release assets and npm publishes can proceed regardless of what happens
-  // to the branch push below.
-  const tagPush = await $`git push origin refs/tags/v${Script.version} --force --no-verify`.nothrow()
-  if (tagPush.exitCode !== 0) {
-    console.warn(`::warning::tag push failed for v${Script.version} (already pushed?)`)
-  }
+  // release commit exists on GitHub before the draft release targets its SHA.
+  // GitHub rejects a local-only target_commitish with HTTP 422.
+  await $`git push origin refs/tags/v${Script.version} --force --no-verify`
+  await $`gh release edit v${Script.version} --target ${sha}`
   // Branch protection rejects direct pushes to main, and the old .nothrow()
   // swallowed that — every release left its version-bump commit orphaned and
   // main's package versions permanently stale. Try the direct push (works if
