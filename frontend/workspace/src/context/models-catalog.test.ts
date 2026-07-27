@@ -4,6 +4,7 @@ import {
   displayProviderForModel,
   foldedRouteMode,
   FRONTIER_MODELS,
+  isChatModel,
   isFrontier,
   preferredModel,
   preferredModels,
@@ -23,6 +24,13 @@ describe("frontier model canonicalization", () => {
     const managed = canonicalKey("openrouter", "x-ai/grok-4.5")
     expect(direct).toBe(managed)
     expect(FRONTIER_MODELS.has(direct)).toBe(true)
+  })
+
+  test("dated Anthropic aliases collapse to their stable model ids", () => {
+    expect(canonicalKey("anthropic", "claude-opus-4-5-20251101")).toBe(canonicalKey("anthropic", "claude-opus-4-5"))
+    expect(canonicalKey("anthropic", "claude-sonnet-4-5-20250929")).toBe(
+      canonicalKey("openrouter", "anthropic/claude-sonnet-4.5"),
+    )
   })
 
   test("Muse Spark is part of the default frontier set", () => {
@@ -51,7 +59,6 @@ describe("frontier model canonicalization", () => {
       {
         id: "openai/gpt-5.6-sol",
         provider: provider("openrouter"),
-        modes: { pro: { model: "openai/gpt-5.6-sol-pro" } },
       },
       {
         id: "openai/gpt-5.6-sol-pro",
@@ -72,11 +79,38 @@ describe("frontier model canonicalization", () => {
     ])
 
     expect(models.map((model) => `${model.provider.id}/${model.id}`)).toEqual([
+      "openrouter/anthropic/claude-sonnet-5",
       "openrouter/openai/gpt-5.6-sol",
+      "openrouter/openai/gpt-5.6-sol-pro",
       "openrouter/meta/muse-spark-1.1",
-      "anthropic/claude-sonnet-5",
       "openai-codex/gpt-5.6-sol",
     ])
+  })
+
+  test("chat picker excludes output-generation models", () => {
+    const provider = { id: "openrouter" }
+    expect(
+      isChatModel({
+        id: "google/gemini-3-pro-image",
+        provider,
+        capabilities: { output: { text: true, image: true } },
+      }),
+    ).toBe(false)
+    expect(
+      isChatModel({
+        id: "openai/gpt-5.6-sol",
+        provider,
+        capabilities: { output: { text: true, image: false } },
+      }),
+    ).toBe(true)
+  })
+
+  test("stable Anthropic aliases win over dated duplicates", () => {
+    const provider = { id: "anthropic" }
+    const dated = { id: "claude-opus-4-5-20251101", provider }
+    const stable = { id: "claude-opus-4-5", provider }
+    expect(preferredModels([dated, stable])).toEqual([stable])
+    expect(preferredModels([stable, dated])).toEqual([stable])
   })
 
   test("shows ChatGPT subscription models with Fast mode in the default picker", () => {
@@ -124,7 +158,7 @@ describe("frontier model canonicalization", () => {
     })
   })
 
-  test("persisted losing routes resolve to the preferred model", () => {
+  test("managed routes win logical duplicates and persisted native selections follow them", () => {
     const provider = (id: string) => ({ id, name: id })
     const managed = { id: "anthropic/claude-sonnet-5", provider: provider("openrouter") }
     const native = { id: "claude-sonnet-5", provider: provider("anthropic") }
@@ -134,23 +168,32 @@ describe("frontier model canonicalization", () => {
       [native, managed],
     ]) {
       const models = preferredModels(input)
-      expect(preferredModel(models, { providerID: "openrouter", modelID: managed.id })).toEqual(native)
+      expect(models).toEqual([managed])
+      expect(preferredModel(models, { providerID: "anthropic", modelID: native.id })).toEqual(managed)
     }
   })
 
-  test("stale service-route selections resolve only to a base with the matching mode", () => {
+  test("stale fast-route selections resolve only to a base with fast mode", () => {
     const provider = { id: "openrouter", name: "OpenRouter" }
-    const key = { providerID: "openrouter", modelID: "openai/gpt-5.6-sol-pro" }
+    const key = { providerID: "openrouter", modelID: "anthropic/claude-opus-5-fast" }
     const base = {
-      id: "openai/gpt-5.6-sol",
+      id: "anthropic/claude-opus-5",
       provider,
-      modes: { pro: { model: "openai/gpt-5.6-sol-pro" } },
+      modes: { fast: { model: "anthropic/claude-opus-5-fast" } },
     }
-    const unsupported = { id: "openai/gpt-5.6-sol", provider }
+    const unsupported = { id: "anthropic/claude-opus-5", provider }
 
     expect(preferredModel([base], key)).toBe(base)
-    expect(foldedRouteMode(key, base)).toBe("pro")
+    expect(foldedRouteMode(key, base)).toBe("fast")
     expect(preferredModel([unsupported], key)).toBeUndefined()
     expect(foldedRouteMode(key, unsupported)).toBeUndefined()
+  })
+
+  test("Pro routes stay as independently selectable models", () => {
+    const provider = { id: "openrouter", name: "OpenRouter" }
+    const base = { id: "openai/gpt-5.6-sol", provider }
+    const pro = { id: "openai/gpt-5.6-sol-pro", provider }
+    expect(preferredModels([base, pro])).toEqual([base, pro])
+    expect(foldedRouteMode({ providerID: "openrouter", modelID: pro.id }, base)).toBeUndefined()
   })
 })

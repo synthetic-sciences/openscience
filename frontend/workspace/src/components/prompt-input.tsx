@@ -2040,11 +2040,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       class="text-text-base group-hover/prompt-input:inline-block capitalize"
                       onClick={() => local.model.variant.cycle()}
                     >
-                      {local.model.variant.current()}
+                      {local.model.variant.current() === "standard" ? "Thinking" : local.model.variant.current()}
                     </Button>
                   </TooltipKeybind>
                 </Show>
-                <Show when={local.model.tier.list().length > 1}>
+                <Show when={local.model.tier.list().includes("fast")}>
                   <TooltipKeybind
                     placement="top"
                     title={language.t("command.tier.cycle")}
@@ -2052,12 +2052,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <Button
                       data-action="model-tier-cycle"
-                      aria-label={`${language.t("command.tier.cycle")}: ${local.model.tier.current()}`}
+                      aria-label={`Fast mode: ${local.model.tier.current() === "fast" ? "on" : "off"}`}
+                      aria-pressed={local.model.tier.current() === "fast"}
                       variant="ghost"
                       class="text-text-base group-hover/prompt-input:inline-block capitalize"
-                      onClick={() => local.model.tier.cycle()}
+                      classList={{
+                        "bg-surface-raised-base-active text-text-strong": local.model.tier.current() === "fast",
+                      }}
+                      onClick={() => local.model.tier.set(local.model.tier.current() === "fast" ? "standard" : "fast")}
                     >
-                      {local.model.tier.current()}
+                      Fast
                     </Button>
                   </TooltipKeybind>
                 </Show>

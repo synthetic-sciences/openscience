@@ -100,6 +100,7 @@ export function canonicalKey(providerID: string, modelID: string): string {
   if (vendor === "z-ai" || vendor === "zhipuai") vendor = "zai"
   if (vendor === "x-ai") vendor = "xai"
   base = base.replace(/^~/, "").toLowerCase().replace(/\./g, "-")
+  if (vendor === "anthropic") base = base.replace(/-\d{8}$/, "")
   return `${vendor}/${base}`
 }
 
@@ -107,11 +108,26 @@ type CatalogModel = {
   id: string
   provider: { id: string }
   modes?: Record<string, unknown>
+  capabilities?: {
+    output?: {
+      text?: boolean
+      audio?: boolean
+      image?: boolean
+      video?: boolean
+    }
+  }
+}
+
+export function isChatModel(model: CatalogModel): boolean {
+  const output = model.capabilities?.output
+  if (!output) return true
+  if (output.text === false) return false
+  return !output.audio && !output.image && !output.video
 }
 
 export function foldedRouteMode(model: ModelKey, target: CatalogModel): string | undefined {
   if (model.providerID !== "openrouter" || target.provider.id !== model.providerID) return undefined
-  const match = model.modelID.match(/-(fast|pro)$/)
+  const match = model.modelID.match(/-(fast)$/)
   if (!match) return undefined
   const mode = match[1]
   const base = model.modelID.slice(0, -match[0].length)
@@ -120,15 +136,9 @@ export function foldedRouteMode(model: ModelKey, target: CatalogModel): string |
 }
 
 export function preferredModels<T extends CatalogModel>(models: T[]): T[] {
-  const native = new Set(
-    models
-      .filter((model) => model.provider.id !== "openrouter")
-      .map((model) => canonicalKey(model.provider.id, model.id)),
-  )
-
   const routed = models.filter((model) => {
     if (model.provider.id !== "openrouter") return true
-    const match = model.id.match(/-(fast|pro)$/)
+    const match = model.id.match(/-(fast)$/)
     if (!match) return true
     const mode = match[1]
     const base = model.id.slice(0, -match[0].length)
@@ -137,14 +147,30 @@ export function preferredModels<T extends CatalogModel>(models: T[]): T[] {
     )
   })
 
-  const seen = new Set<string>()
-  return routed.filter((model) => {
+  const result: T[] = []
+  const seen = new Map<string, number>()
+  const score = (model: T) => {
+    // Synced managed routes are removed by the backend in explicit BYOK mode.
+    // When both survive in auto mode, prefer the managed OpenRouter route so a
+    // stale native key cannot shadow the healthy wallet route.
+    const route = model.provider.id === "openrouter" ? 2 : 0
+    // Models.dev sometimes ships both a stable alias and its dated Anthropic
+    // snapshot under the same display name. Keep the stable id.
+    const stable = /-\d{8}$/.test(model.id) ? 0 : 1
+    return route + stable
+  }
+
+  for (const model of routed) {
     const key = canonicalKey(model.provider.id, model.id)
-    if (model.provider.id === "openrouter" && native.has(key)) return false
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
+    const index = seen.get(key)
+    if (index === undefined) {
+      seen.set(key, result.length)
+      result.push(model)
+      continue
+    }
+    if (score(model) > score(result[index])) result[index] = model
+  }
+  return result
 }
 
 export function preferredModel<T extends CatalogModel>(models: T[], key: ModelKey): T | undefined {

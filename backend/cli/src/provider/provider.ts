@@ -1048,6 +1048,7 @@ export namespace Provider {
       Object.entries(modes ?? {})
         .filter(([key, mode]) => {
           if (!mode) return false
+          if (key === "pro" && /(^|\/)gpt-/.test(modelID)) return false
           if (providerID !== "anthropic" || key !== "fast") return true
           const id = modelID.toLowerCase().replaceAll(".", "-")
           return id.startsWith("claude-opus-5") || id.startsWith("claude-opus-4-8")
@@ -1082,9 +1083,9 @@ export namespace Provider {
   function modelModes(provider: ModelsDev.Provider, model: ModelsDev.Model): Model["modes"] | undefined {
     const direct = directModes(provider.id, model.id, model.experimental) ?? {}
     const sibling =
-      provider.id === "openrouter" && !/-(?:fast|pro)$/.test(model.id)
+      provider.id === "openrouter" && !/-fast$/.test(model.id)
         ? Object.fromEntries(
-            ["fast", "pro"]
+            ["fast"]
               .map((key) => [key, provider.models[`${model.id}-${key}`]] as const)
               .filter((entry) => !!entry[1])
               .map(([key, route]) => [

@@ -4,7 +4,7 @@ import { uniqueBy } from "remeda"
 import { createSimpleContext } from "@synsci/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
-import { isFrontier, preferredModel, preferredModels, type ModelKey } from "./model-catalog"
+import { isChatModel, isFrontier, preferredModel, preferredModels, type ModelKey } from "./model-catalog"
 
 export { canonicalKey, FRONTIER_MODELS, type ModelKey } from "./model-catalog"
 
@@ -35,10 +35,12 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     const available = createMemo(() =>
       preferredModels(
         providers.connected().flatMap((p) =>
-          Object.values(p.models).map((m) => ({
-            ...m,
-            provider: p,
-          })),
+          Object.values(p.models)
+            .map((m) => ({
+              ...m,
+              provider: p,
+            }))
+            .filter(isChatModel),
         ),
       ),
     )
