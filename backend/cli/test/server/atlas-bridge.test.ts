@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { $ } from "bun"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Global } from "../../src/global"
@@ -10,6 +11,7 @@ import {
   parseStageNodeInput,
   pinMatchesKey,
 } from "../../src/server/routes/atlas-bridge"
+import { tmpdir } from "../fixture/fixture"
 
 const realFetch = globalThis.fetch
 const sessionPath = path.join(Global.Path.data, "openscience-session.json")
@@ -124,6 +126,10 @@ describe("stage node bridge", () => {
   test("creates a staged child with repository context", async () => {
     await fs.mkdir(Global.Path.data, { recursive: true })
     await Bun.write(sessionPath, JSON.stringify({ api_key: "thk_test", user_id: "user-1" }))
+    await using tmp = await tmpdir({ git: true })
+    await $`git remote add origin https://github.com/synthetic-sciences/openscience.git`.cwd(tmp.path).quiet()
+    const branch = (await $`git branch --show-current`.cwd(tmp.path).quiet().text()).trim()
+    const head = (await $`git rev-parse HEAD`.cwd(tmp.path).quiet().text()).trim()
 
     let requestURL = ""
     let requestBody: any
@@ -144,14 +150,16 @@ describe("stage node bridge", () => {
     const response = await AtlasBridgeRoutes().request("/nodes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "result", directory: process.cwd(), parent_id: "parent-1" }),
+      body: JSON.stringify({ title: "result", directory: tmp.path, parent_id: "parent-1" }),
     })
 
     expect(response.status).toBe(201)
     expect(requestURL).toEndWith("/api/nodes/stage-create")
     expect(requestBody.parent_ids).toEqual(["parent-1"])
     expect(requestBody.title).toBe("result")
-    expect(requestBody.branch_name).toBeTruthy()
+    expect(requestBody.repo_url).toBe("https://github.com/synthetic-sciences/openscience")
+    expect(requestBody.branch_name).toBe(branch)
+    expect(requestBody.head_commit_sha).toBe(head)
     expect(await response.json()).toMatchObject({
       node_id: "staged-1",
       lifecycle: "staged",
