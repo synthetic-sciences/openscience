@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { canonicalKey, displayProviderForModel, FRONTIER_MODELS, routableModelKey } from "./model-catalog"
+import {
+  canonicalKey,
+  displayProviderForModel,
+  foldedRouteMode,
+  FRONTIER_MODELS,
+  preferredModel,
+  preferredModels,
+  routableModelKey,
+} from "./model-catalog"
 
 describe("frontier model canonicalization", () => {
   test("direct and OpenRouter GPT-5.6 ids collapse to the same frontier keys", () => {
@@ -30,6 +38,44 @@ describe("frontier model canonicalization", () => {
     expect(displayProviderForModel(openrouter, "google/gemini-3.6-flash")).toEqual({ id: "google", name: "Google" })
     expect(displayProviderForModel(openrouter, "x-ai/grok-4.5")).toEqual({ id: "xai", name: "xAI" })
     expect(displayProviderForModel(openrouter, "z-ai/glm-5.2")).toEqual({ id: "zai", name: "Z.AI" })
+  })
+
+  test("logical models appear once while subscription routes remain separate", () => {
+    const provider = (id: string) => ({ id, name: id })
+    const models = preferredModels([
+      {
+        id: "anthropic/claude-sonnet-5",
+        provider: provider("openrouter"),
+      },
+      {
+        id: "openai/gpt-5.6-sol",
+        provider: provider("openrouter"),
+        modes: { pro: { model: "openai/gpt-5.6-sol-pro" } },
+      },
+      {
+        id: "openai/gpt-5.6-sol-pro",
+        provider: provider("openrouter"),
+      },
+      {
+        id: "meta/muse-spark-1.1",
+        provider: provider("openrouter"),
+      },
+      {
+        id: "claude-sonnet-5",
+        provider: provider("anthropic"),
+      },
+      {
+        id: "gpt-5.6-sol",
+        provider: provider("openai-codex"),
+      },
+    ])
+
+    expect(models.map((model) => `${model.provider.id}/${model.id}`)).toEqual([
+      "openrouter/openai/gpt-5.6-sol",
+      "openrouter/meta/muse-spark-1.1",
+      "anthropic/claude-sonnet-5",
+      "openai-codex/gpt-5.6-sol",
+    ])
   })
 
   test("stale direct model selections route to managed OpenRouter aliases when present", () => {
@@ -68,5 +114,35 @@ describe("frontier model canonicalization", () => {
       providerID: "openrouter",
       modelID: "meta/muse-spark-1.1",
     })
+  })
+
+  test("persisted losing routes resolve to the preferred model", () => {
+    const provider = (id: string) => ({ id, name: id })
+    const managed = { id: "anthropic/claude-sonnet-5", provider: provider("openrouter") }
+    const native = { id: "claude-sonnet-5", provider: provider("anthropic") }
+
+    for (const input of [
+      [managed, native],
+      [native, managed],
+    ]) {
+      const models = preferredModels(input)
+      expect(preferredModel(models, { providerID: "openrouter", modelID: managed.id })).toEqual(native)
+    }
+  })
+
+  test("stale service-route selections resolve only to a base with the matching mode", () => {
+    const provider = { id: "openrouter", name: "OpenRouter" }
+    const key = { providerID: "openrouter", modelID: "openai/gpt-5.6-sol-pro" }
+    const base = {
+      id: "openai/gpt-5.6-sol",
+      provider,
+      modes: { pro: { model: "openai/gpt-5.6-sol-pro" } },
+    }
+    const unsupported = { id: "openai/gpt-5.6-sol", provider }
+
+    expect(preferredModel([base], key)).toBe(base)
+    expect(foldedRouteMode(key, base)).toBe("pro")
+    expect(preferredModel([unsupported], key)).toBeUndefined()
+    expect(foldedRouteMode(key, unsupported)).toBeUndefined()
   })
 })

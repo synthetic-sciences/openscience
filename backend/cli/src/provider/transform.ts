@@ -661,8 +661,11 @@ export namespace ProviderTransform {
       case "@ai-sdk/google-vertex/anthropic": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
         const cap = model.limit.output
+        const usesEffort = /^claude-opus-4[.-][78]\b/.test(id) || /^claude-(opus|sonnet|mythos)-[5-9]\b/.test(id)
         if (exact) {
-          return Object.fromEntries(exact.map((effort) => [effort, { effort }]))
+          return Object.fromEntries(
+            exact.map((effort) => [effort, usesEffort ? { thinking: { type: "adaptive" }, effort } : { effort }]),
+          )
         }
 
         // The newest Claudes REJECT manual extended thinking (`thinking.type:
@@ -675,15 +678,13 @@ export namespace ProviderTransform {
         // to include xhigh/max. Detection is by canonical id — note Mythos is NOT
         // opus/sonnet/haiku, so it must be matched explicitly or it falls
         // through to the classic path below and 400 (manual thinking rejected).
-        const usesEffort = /^claude-opus-4[.-][78]\b/.test(id) || /^claude-(opus|sonnet|mythos)-[5-9]\b/.test(id)
-
         if (usesEffort) {
           return {
-            low: { effort: "low" },
-            medium: { effort: "medium" },
-            high: { effort: "high" },
-            xhigh: { effort: "xhigh" },
-            max: { effort: "max" },
+            low: { thinking: { type: "adaptive" }, effort: "low" },
+            medium: { thinking: { type: "adaptive" }, effort: "medium" },
+            high: { thinking: { type: "adaptive" }, effort: "high" },
+            xhigh: { thinking: { type: "adaptive" }, effort: "xhigh" },
+            max: { thinking: { type: "adaptive" }, effort: "max" },
           }
         }
 

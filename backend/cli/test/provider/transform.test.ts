@@ -2126,9 +2126,9 @@ describe("ProviderTransform.variants", () => {
       test(`${id} exposes the full low→max effort ladder including xhigh`, () => {
         const result = ProviderTransform.variants(anthropicModel(id))
         expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
-        expect(result.low).toEqual({ effort: "low" })
-        expect(result.xhigh).toEqual({ effort: "xhigh" })
-        expect(result.max).toEqual({ effort: "max" })
+        expect(result.low).toEqual({ thinking: { type: "adaptive" }, effort: "low" })
+        expect(result.xhigh).toEqual({ thinking: { type: "adaptive" }, effort: "xhigh" })
+        expect(result.max).toEqual({ thinking: { type: "adaptive" }, effort: "max" })
       })
     }
 
@@ -2136,8 +2136,8 @@ describe("ProviderTransform.variants", () => {
     // drops them to the classic path where manual thinking 400s.
     test("claude-mythos-5 uses effort, not a thinking budget", () => {
       const result = ProviderTransform.variants(anthropicModel("claude-mythos-5"))
-      expect(result.high).toEqual({ effort: "high" })
-      expect(result.high).not.toHaveProperty("thinking")
+      expect(result.high).toEqual({ thinking: { type: "adaptive" }, effort: "high" })
+      expect(result.high.thinking).not.toHaveProperty("budgetTokens")
     })
 
     const CLASSIC_MODELS = [

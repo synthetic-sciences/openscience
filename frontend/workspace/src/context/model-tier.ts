@@ -11,6 +11,10 @@ export function normalizedTier(value: ModelTier | undefined, modes: string[]): M
   return "standard"
 }
 
+export function resolvedTier(value: ModelTier | undefined, modes: string[], fallback?: ModelTier): ModelTier {
+  return normalizedTier(value ?? fallback, modes)
+}
+
 export function promptTier(value: ModelTier | undefined, modes: string[]): ModelTier | undefined {
   const normalized = normalizedTier(value, modes)
   if (normalized === "standard") return undefined

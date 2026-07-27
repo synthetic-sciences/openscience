@@ -1,1 +1,1 @@
-export { modelTierOptions, normalizedTier, promptTier, type ModelTier } from "../context/model-tier"
+export { modelTierOptions, normalizedTier, promptTier, resolvedTier, type ModelTier } from "../context/model-tier"

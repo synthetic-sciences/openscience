@@ -98,4 +98,65 @@ export function canonicalKey(providerID: string, modelID: string): string {
   return `${vendor}/${base}`
 }
 
+type CatalogModel = {
+  id: string
+  provider: { id: string }
+  modes?: Record<string, unknown>
+}
+
+export function foldedRouteMode(model: ModelKey, target: CatalogModel): string | undefined {
+  if (model.providerID !== "openrouter" || target.provider.id !== model.providerID) return undefined
+  const match = model.modelID.match(/-(fast|pro)$/)
+  if (!match) return undefined
+  const mode = match[1]
+  const base = model.modelID.slice(0, -match[0].length)
+  if (target.id !== base || !target.modes?.[mode]) return undefined
+  return mode
+}
+
+export function preferredModels<T extends CatalogModel>(models: T[]): T[] {
+  const native = new Set(
+    models
+      .filter((model) => model.provider.id !== "openrouter")
+      .map((model) => canonicalKey(model.provider.id, model.id)),
+  )
+
+  const routed = models.filter((model) => {
+    if (model.provider.id !== "openrouter") return true
+    const match = model.id.match(/-(fast|pro)$/)
+    if (!match) return true
+    const mode = match[1]
+    const base = model.id.slice(0, -match[0].length)
+    return !models.some(
+      (candidate) => candidate.provider.id === model.provider.id && candidate.id === base && !!candidate.modes?.[mode],
+    )
+  })
+
+  const seen = new Set<string>()
+  return routed.filter((model) => {
+    const key = canonicalKey(model.provider.id, model.id)
+    if (model.provider.id === "openrouter" && native.has(key)) return false
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+export function preferredModel<T extends CatalogModel>(models: T[], key: ModelKey): T | undefined {
+  const exact = (candidate: ModelKey) =>
+    models.find((model) => model.provider.id === candidate.providerID && model.id === candidate.modelID)
+  const found = exact(key)
+  if (found) return found
+
+  const folded = models.find((model) => foldedRouteMode(key, model))
+  if (folded) return folded
+
+  const routed = routableModelKey(key, (candidate) => !!exact(candidate))
+  const alias = exact(routed)
+  if (alias) return alias
+
+  const canonical = canonicalKey(key.providerID, key.modelID)
+  return models.find((model) => canonicalKey(model.provider.id, model.id) === canonical)
+}
+
 export const isFrontier = (model: ModelKey) => FRONTIER_MODELS.has(canonicalKey(model.providerID, model.modelID))

@@ -175,8 +175,8 @@ export function fakeModelConfig(baseURL: string) {
             // Exercise the workspace's model-variant control without relying
             // on a real provider catalog or making an external inference.
             variants: {
-              fast: {},
-              thorough: {},
+              low: {},
+              high: {},
             },
             experimental: {
               modes: {
@@ -195,8 +195,8 @@ export function fakeModelConfig(baseURL: string) {
             tool_call: true,
             limit: { context: 128_000, output: 4_096 },
             variants: {
-              fast: {},
-              thorough: {},
+              low: {},
+              high: {},
             },
             experimental: {
               modes: {

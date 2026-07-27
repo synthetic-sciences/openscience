@@ -1,7 +1,16 @@
 diff --git a/dist/index.d.mts b/dist/index.d.mts
-index 4b0502f71fcdf5f10cb1b4f227b42d123a5ba304..c7c8894fb4679be42c2ba79dcf25a378f77c04be 100644
+index 4b0502f71fcdf5f10cb1b4f227b42d123a5ba304..22609c74670712cbdb9e7092653bf3fdbeeae187 100644
 --- a/dist/index.d.mts
 +++ b/dist/index.d.mts
+@@ -51,7 +51,7 @@ declare const anthropicProviderOptions: z.ZodObject<{
+         auto: "auto";
+     }>>;
+     thinking: z.ZodOptional<z.ZodObject<{
+-        type: z.ZodUnion<readonly [z.ZodLiteral<"enabled">, z.ZodLiteral<"disabled">]>;
++        type: z.ZodUnion<readonly [z.ZodLiteral<"enabled">, z.ZodLiteral<"disabled">, z.ZodLiteral<"adaptive">]>;
+         budgetTokens: z.ZodOptional<z.ZodNumber>;
+     }, z.core.$strip>>;
+     disableParallelToolUse: z.ZodOptional<z.ZodBoolean>;
 @@ -71,6 +71,9 @@ declare const anthropicProviderOptions: z.ZodObject<{
          low: "low";
          medium: "medium";
@@ -13,9 +22,18 @@ index 4b0502f71fcdf5f10cb1b4f227b42d123a5ba304..c7c8894fb4679be42c2ba79dcf25a378
  }, z.core.$strip>;
  type AnthropicProviderOptions = z.infer<typeof anthropicProviderOptions>;
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 4b0502f71fcdf5f10cb1b4f227b42d123a5ba304..c7c8894fb4679be42c2ba79dcf25a378f77c04be 100644
+index 4b0502f71fcdf5f10cb1b4f227b42d123a5ba304..22609c74670712cbdb9e7092653bf3fdbeeae187 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
+@@ -51,7 +51,7 @@ declare const anthropicProviderOptions: z.ZodObject<{
+         auto: "auto";
+     }>>;
+     thinking: z.ZodOptional<z.ZodObject<{
+-        type: z.ZodUnion<readonly [z.ZodLiteral<"enabled">, z.ZodLiteral<"disabled">]>;
++        type: z.ZodUnion<readonly [z.ZodLiteral<"enabled">, z.ZodLiteral<"disabled">, z.ZodLiteral<"adaptive">]>;
+         budgetTokens: z.ZodOptional<z.ZodNumber>;
+     }, z.core.$strip>>;
+     disableParallelToolUse: z.ZodOptional<z.ZodBoolean>;
 @@ -71,6 +71,9 @@ declare const anthropicProviderOptions: z.ZodObject<{
          low: "low";
          medium: "medium";
@@ -27,10 +45,23 @@ index 4b0502f71fcdf5f10cb1b4f227b42d123a5ba304..c7c8894fb4679be42c2ba79dcf25a378
  }, z.core.$strip>;
  type AnthropicProviderOptions = z.infer<typeof anthropicProviderOptions>;
 diff --git a/dist/index.js b/dist/index.js
-index e273a3cb0a7468481bc9b66baa1c434fbfdadd88..5cf76595e2c90e5f4d05b0670e94303d60c41aec 100644
+index e273a3cb0a7468481bc9b66baa1c434fbfdadd88..7891a1da825791393a98e6341545f3bd177f6a01 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -615,7 +615,8 @@ var anthropicProviderOptions = import_v43.z.object({
+@@ -581,7 +581,11 @@ var anthropicProviderOptions = import_v43.z.object({
+    * Requires a minimum budget of 1,024 tokens and counts towards the `max_tokens` limit.
+    */
+   thinking: import_v43.z.object({
+-    type: import_v43.z.union([import_v43.z.literal("enabled"), import_v43.z.literal("disabled")]),
++    type: import_v43.z.union([
++      import_v43.z.literal("enabled"),
++      import_v43.z.literal("disabled"),
++      import_v43.z.literal("adaptive")
++    ]),
+     budgetTokens: import_v43.z.number().optional()
+   }).optional(),
+   /**
+@@ -615,7 +619,8 @@ var anthropicProviderOptions = import_v43.z.object({
    /**
     * @default 'high'
     */
@@ -40,7 +71,26 @@ index e273a3cb0a7468481bc9b66baa1c434fbfdadd88..5cf76595e2c90e5f4d05b0670e94303d
  });
  
  // src/anthropic-prepare-tools.ts
-@@ -1892,6 +1893,9 @@ var AnthropicMessagesLanguageModel = class {
+@@ -1873,7 +1878,9 @@ var AnthropicMessagesLanguageModel = class {
+       warnings,
+       cacheControlValidator
+     });
+-    const isThinking = ((_c = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _c.type) === "enabled";
++    const thinkingType = (_c = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _c.type;
++    const isThinking = thinkingType === "enabled";
++    const isAdaptive = thinkingType === "adaptive";
+     const thinkingBudget = (_d = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _d.budgetTokens;
+     const maxTokens = maxOutputTokens != null ? maxOutputTokens : maxOutputTokensForModel;
+     const baseArgs = {
+@@ -1886,12 +1893,15 @@ var AnthropicMessagesLanguageModel = class {
+       top_p: topP,
+       stop_sequences: stopSequences,
+       // provider specific settings:
+-      ...isThinking && {
+-        thinking: { type: "enabled", budget_tokens: thinkingBudget }
++      ...(isThinking || isAdaptive) && {
++        thinking: isAdaptive ? { type: "adaptive" } : { type: "enabled", budget_tokens: thinkingBudget }
+       },
        ...(anthropicOptions == null ? void 0 : anthropicOptions.effort) && {
          output_config: { effort: anthropicOptions.effort }
        },
@@ -51,9 +101,18 @@ index e273a3cb0a7468481bc9b66baa1c434fbfdadd88..5cf76595e2c90e5f4d05b0670e94303d
        ...useStructuredOutput && (responseFormat == null ? void 0 : responseFormat.type) === "json" && responseFormat.schema != null && {
          output_format: {
 diff --git a/dist/index.mjs b/dist/index.mjs
-index dc4157434cbf3f4afbf70b83c5d40fe85d40b883..146efaaf3ff5ba0d54e0a5824240cb774ad92bfd 100644
+index dc4157434cbf3f4afbf70b83c5d40fe85d40b883..ecd1153bbaa2b45dc1430e680ceae2b326c5daf2 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
+@@ -576,7 +576,7 @@ var anthropicProviderOptions = z3.object({
+    * Requires a minimum budget of 1,024 tokens and counts towards the `max_tokens` limit.
+    */
+   thinking: z3.object({
+-    type: z3.union([z3.literal("enabled"), z3.literal("disabled")]),
++    type: z3.union([z3.literal("enabled"), z3.literal("disabled"), z3.literal("adaptive")]),
+     budgetTokens: z3.number().optional()
+   }).optional(),
+   /**
 @@ -610,7 +610,8 @@ var anthropicProviderOptions = z3.object({
    /**
     * @default 'high'
@@ -64,7 +123,26 @@ index dc4157434cbf3f4afbf70b83c5d40fe85d40b883..146efaaf3ff5ba0d54e0a5824240cb77
  });
  
  // src/anthropic-prepare-tools.ts
-@@ -1911,6 +1912,9 @@ var AnthropicMessagesLanguageModel = class {
+@@ -1892,7 +1893,9 @@ var AnthropicMessagesLanguageModel = class {
+       warnings,
+       cacheControlValidator
+     });
+-    const isThinking = ((_c = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _c.type) === "enabled";
++    const thinkingType = (_c = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _c.type;
++    const isThinking = thinkingType === "enabled";
++    const isAdaptive = thinkingType === "adaptive";
+     const thinkingBudget = (_d = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _d.budgetTokens;
+     const maxTokens = maxOutputTokens != null ? maxOutputTokens : maxOutputTokensForModel;
+     const baseArgs = {
+@@ -1905,12 +1908,15 @@ var AnthropicMessagesLanguageModel = class {
+       top_p: topP,
+       stop_sequences: stopSequences,
+       // provider specific settings:
+-      ...isThinking && {
+-        thinking: { type: "enabled", budget_tokens: thinkingBudget }
++      ...(isThinking || isAdaptive) && {
++        thinking: isAdaptive ? { type: "adaptive" } : { type: "enabled", budget_tokens: thinkingBudget }
+       },
        ...(anthropicOptions == null ? void 0 : anthropicOptions.effort) && {
          output_config: { effort: anthropicOptions.effort }
        },
@@ -75,10 +153,23 @@ index dc4157434cbf3f4afbf70b83c5d40fe85d40b883..146efaaf3ff5ba0d54e0a5824240cb77
        ...useStructuredOutput && (responseFormat == null ? void 0 : responseFormat.type) === "json" && responseFormat.schema != null && {
          output_format: {
 diff --git a/dist/internal/index.js b/dist/internal/index.js
-index c80b1e9d5c73f3256f4f645a614339db4b734cbb..9b77654e4a01b34162013fd09d7006909755fa2b 100644
+index c80b1e9d5c73f3256f4f645a614339db4b734cbb..ef207ecbceae73eb440f68ce994fdf539254a5a3 100644
 --- a/dist/internal/index.js
 +++ b/dist/internal/index.js
-@@ -608,7 +608,8 @@ var anthropicProviderOptions = import_v43.z.object({
+@@ -574,7 +574,11 @@ var anthropicProviderOptions = import_v43.z.object({
+    * Requires a minimum budget of 1,024 tokens and counts towards the `max_tokens` limit.
+    */
+   thinking: import_v43.z.object({
+-    type: import_v43.z.union([import_v43.z.literal("enabled"), import_v43.z.literal("disabled")]),
++    type: import_v43.z.union([
++      import_v43.z.literal("enabled"),
++      import_v43.z.literal("disabled"),
++      import_v43.z.literal("adaptive")
++    ]),
+     budgetTokens: import_v43.z.number().optional()
+   }).optional(),
+   /**
+@@ -608,7 +612,8 @@ var anthropicProviderOptions = import_v43.z.object({
    /**
     * @default 'high'
     */
@@ -88,7 +179,26 @@ index c80b1e9d5c73f3256f4f645a614339db4b734cbb..9b77654e4a01b34162013fd09d700690
  });
  
  // src/anthropic-prepare-tools.ts
-@@ -1885,6 +1886,9 @@ var AnthropicMessagesLanguageModel = class {
+@@ -1866,7 +1871,9 @@ var AnthropicMessagesLanguageModel = class {
+       warnings,
+       cacheControlValidator
+     });
+-    const isThinking = ((_c = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _c.type) === "enabled";
++    const thinkingType = (_c = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _c.type;
++    const isThinking = thinkingType === "enabled";
++    const isAdaptive = thinkingType === "adaptive";
+     const thinkingBudget = (_d = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _d.budgetTokens;
+     const maxTokens = maxOutputTokens != null ? maxOutputTokens : maxOutputTokensForModel;
+     const baseArgs = {
+@@ -1879,12 +1886,15 @@ var AnthropicMessagesLanguageModel = class {
+       top_p: topP,
+       stop_sequences: stopSequences,
+       // provider specific settings:
+-      ...isThinking && {
+-        thinking: { type: "enabled", budget_tokens: thinkingBudget }
++      ...(isThinking || isAdaptive) && {
++        thinking: isAdaptive ? { type: "adaptive" } : { type: "enabled", budget_tokens: thinkingBudget }
+       },
        ...(anthropicOptions == null ? void 0 : anthropicOptions.effort) && {
          output_config: { effort: anthropicOptions.effort }
        },
@@ -99,9 +209,18 @@ index c80b1e9d5c73f3256f4f645a614339db4b734cbb..9b77654e4a01b34162013fd09d700690
        ...useStructuredOutput && (responseFormat == null ? void 0 : responseFormat.type) === "json" && responseFormat.schema != null && {
          output_format: {
 diff --git a/dist/internal/index.mjs b/dist/internal/index.mjs
-index cd1c18d50c2f1a1d8a3d8d73cac4f34149cb1626..e5e6c6e80463c2c2b04032f97a8dc0b9b44489cf 100644
+index cd1c18d50c2f1a1d8a3d8d73cac4f34149cb1626..ed3f2284bc7a656aed8b5bc41dc4ff52c6d5ad01 100644
 --- a/dist/internal/index.mjs
 +++ b/dist/internal/index.mjs
+@@ -561,7 +561,7 @@ var anthropicProviderOptions = z3.object({
+    * Requires a minimum budget of 1,024 tokens and counts towards the `max_tokens` limit.
+    */
+   thinking: z3.object({
+-    type: z3.union([z3.literal("enabled"), z3.literal("disabled")]),
++    type: z3.union([z3.literal("enabled"), z3.literal("disabled"), z3.literal("adaptive")]),
+     budgetTokens: z3.number().optional()
+   }).optional(),
+   /**
 @@ -595,7 +595,8 @@ var anthropicProviderOptions = z3.object({
    /**
     * @default 'high'
@@ -112,7 +231,26 @@ index cd1c18d50c2f1a1d8a3d8d73cac4f34149cb1626..e5e6c6e80463c2c2b04032f97a8dc0b9
  });
  
  // src/anthropic-prepare-tools.ts
-@@ -1896,6 +1897,9 @@ var AnthropicMessagesLanguageModel = class {
+@@ -1877,7 +1878,9 @@ var AnthropicMessagesLanguageModel = class {
+       warnings,
+       cacheControlValidator
+     });
+-    const isThinking = ((_c = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _c.type) === "enabled";
++    const thinkingType = (_c = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _c.type;
++    const isThinking = thinkingType === "enabled";
++    const isAdaptive = thinkingType === "adaptive";
+     const thinkingBudget = (_d = anthropicOptions == null ? void 0 : anthropicOptions.thinking) == null ? void 0 : _d.budgetTokens;
+     const maxTokens = maxOutputTokens != null ? maxOutputTokens : maxOutputTokensForModel;
+     const baseArgs = {
+@@ -1890,12 +1893,15 @@ var AnthropicMessagesLanguageModel = class {
+       top_p: topP,
+       stop_sequences: stopSequences,
+       // provider specific settings:
+-      ...isThinking && {
+-        thinking: { type: "enabled", budget_tokens: thinkingBudget }
++      ...(isThinking || isAdaptive) && {
++        thinking: isAdaptive ? { type: "adaptive" } : { type: "enabled", budget_tokens: thinkingBudget }
+       },
        ...(anthropicOptions == null ? void 0 : anthropicOptions.effort) && {
          output_config: { effort: anthropicOptions.effort }
        },

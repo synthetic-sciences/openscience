@@ -1185,7 +1185,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       providerID: currentModel.provider.id,
     }
     const agent = currentAgent.name
-    const variant = local.model.variant.current()
+    const variant = local.model.variant.prompt()
     const tier = local.model.tier.prompt()
 
     const errorMessage = (err: unknown) => {
@@ -2035,11 +2035,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <Button
                       data-action="model-variant-cycle"
+                      aria-label={`${language.t("command.model.variant.cycle")}: ${local.model.variant.current()}`}
                       variant="ghost"
                       class="text-text-base group-hover/prompt-input:inline-block capitalize"
                       onClick={() => local.model.variant.cycle()}
                     >
-                      {local.model.variant.current() ?? language.t("common.default")}
+                      {local.model.variant.current()}
                     </Button>
                   </TooltipKeybind>
                 </Show>

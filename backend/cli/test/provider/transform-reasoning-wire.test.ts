@@ -157,4 +157,24 @@ describe("reasoning options serialize onto provider request bodies", () => {
 
     expect(wire.bodies[0].speed).toBe("fast")
   })
+
+  test("new Claude effort selections enable adaptive thinking on the wire", async () => {
+    const target = model({
+      id: "claude-opus-4-8",
+      providerID: "anthropic",
+      api: { id: "claude-opus-4-8", url: "https://api.anthropic.com/v1", npm: "@ai-sdk/anthropic" },
+    })
+    const options = mergeDeep(
+      ProviderTransform.options({ model: target, sessionID, providerOptions: {} }),
+      ProviderTransform.variants(target).xhigh,
+    )
+    const wire = recorder()
+    const sdk = createAnthropic({ apiKey: "test", baseURL: "https://anthropic.test/v1", fetch: wire.fetch })
+
+    await send(sdk(target.api.id), ProviderTransform.providerOptions(target, options))
+
+    expect(wire.bodies).toHaveLength(1)
+    expect(wire.bodies[0].thinking).toEqual({ type: "adaptive" })
+    expect(wire.bodies[0].output_config).toEqual({ effort: "xhigh" })
+  })
 })

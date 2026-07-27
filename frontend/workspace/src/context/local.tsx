@@ -6,8 +6,9 @@ import { useSync } from "./sync"
 import { base64Encode } from "@synsci/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { useModels } from "@/context/models"
-import { routableModelKey } from "@/context/model-catalog"
-import { modelTierOptions, normalizedTier, promptTier } from "@/context/model-tier"
+import { foldedRouteMode, routableModelKey } from "@/context/model-catalog"
+import { modelTierOptions, normalizedTier, promptTier, resolvedTier } from "@/context/model-tier"
+import { modelVariantOptions, normalizedVariant, promptVariant } from "@/context/model-variant"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -208,14 +209,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return undefined
       })
 
-      const current = createMemo(() => {
+      const selected = createMemo(() => {
         const a = agent.current()
         if (!a) return undefined
-        const key = getFirstValidModel(
+        return getFirstValidModel(
           () => ephemeral.model[a.name],
           () => a.model,
           fallbackModel,
         )
+      })
+
+      const current = createMemo(() => {
+        const key = selected()
         if (!key) return undefined
         return models.find(key)
       })
@@ -275,44 +280,43 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: {
           current() {
             const m = current()
-            if (!m) return undefined
-            return models.variant.get({ providerID: m.provider.id, modelID: m.id })
+            if (!m) return "standard"
+            return normalizedVariant(
+              models.variant.get({ providerID: m.provider.id, modelID: m.id }),
+              Object.keys(m.variants ?? {}),
+            )
           },
           list() {
             const m = current()
             if (!m) return []
-            if (!m.variants) return []
-            return Object.keys(m.variants)
+            return modelVariantOptions(Object.keys(m.variants ?? {}))
           },
           set(value: string | undefined) {
             const m = current()
             if (!m) return
-            models.variant.set({ providerID: m.provider.id, modelID: m.id }, value)
+            const variants = Object.keys(m.variants ?? {})
+            models.variant.set({ providerID: m.provider.id, modelID: m.id }, promptVariant(value, variants))
           },
           cycle() {
             const variants = this.list()
             if (variants.length === 0) return
-            const currentVariant = this.current()
-            if (!currentVariant) {
-              this.set(variants[0])
-              return
-            }
-            const index = variants.indexOf(currentVariant)
-            if (index === -1 || index === variants.length - 1) {
-              this.set(undefined)
-              return
-            }
-            this.set(variants[index + 1])
+            const index = variants.indexOf(this.current())
+            this.set(variants[index === -1 || index === variants.length - 1 ? 0 : index + 1])
+          },
+          prompt() {
+            const m = current()
+            if (!m) return undefined
+            return promptVariant(this.current(), Object.keys(m.variants ?? {}))
           },
         },
         tier: {
           current() {
             const m = current()
             if (!m) return "standard"
-            return normalizedTier(
-              models.tier.get({ providerID: m.provider.id, modelID: m.id }),
-              Object.keys(m.modes ?? {}),
-            )
+            const saved = models.tier.get({ providerID: m.provider.id, modelID: m.id })
+            const legacy = selected()
+            const migrated = legacy ? foldedRouteMode(legacy, m) : undefined
+            return resolvedTier(saved, Object.keys(m.modes ?? {}), migrated)
           },
           list() {
             const m = current()
@@ -323,7 +327,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const m = current()
             if (!m) return
             const modes = Object.keys(m.modes ?? {})
-            models.tier.set({ providerID: m.provider.id, modelID: m.id }, promptTier(value, modes))
+            models.tier.set({ providerID: m.provider.id, modelID: m.id }, normalizedTier(value, modes))
           },
           cycle() {
             const tiers = this.list()
