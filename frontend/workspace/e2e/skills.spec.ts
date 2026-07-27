@@ -16,7 +16,7 @@ test("skills can be searched, disabled, and authored from scratch", async ({ pag
   await expect(page.getByText(knownSkill, { exact: true }).first()).toBeVisible()
 
   await search.fill("")
-  const toggle = page.locator('[data-component="switch"]').first()
+  const toggle = page.locator('[data-action="skill-toggle"]').first()
   await expect(toggle).toBeVisible()
   const initiallyEnabled = (await toggle.getAttribute("data-checked")) !== null
   await toggle.click()

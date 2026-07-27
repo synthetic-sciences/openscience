@@ -412,7 +412,7 @@ function SkillCard(props: { skill: Skill; on: boolean; onToggle: (v: boolean) =>
         >
           {props.skill.name}
         </span>
-        <Switch checked={props.on} onChange={props.onToggle} hideLabel>
+        <Switch data-action="skill-toggle" checked={props.on} onChange={props.onToggle} hideLabel>
           {props.skill.name}
         </Switch>
       </div>
