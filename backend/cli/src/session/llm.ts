@@ -161,7 +161,7 @@ export namespace LLM {
           OUTPUT_TOKEN_MAX,
         )
 
-    const tools = await resolveTools(input)
+    const tools = await modelTools(input)
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
@@ -279,6 +279,11 @@ export namespace LLM {
         },
       },
     })
+  }
+
+  export async function modelTools(input: Pick<StreamInput, "tools" | "agent" | "model" | "user">) {
+    if (!input.model.capabilities.toolcall) return {}
+    return resolveTools(input)
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {

@@ -1,6 +1,103 @@
 import { describe, expect, test } from "bun:test"
 import { LLM } from "../../src/session/llm"
-import type { ModelMessage } from "ai"
+import { jsonSchema, tool, type ModelMessage } from "ai"
+import type { Agent } from "../../src/agent/agent"
+import type { Provider } from "../../src/provider/provider"
+import type { MessageV2 } from "../../src/session/message-v2"
+
+function testModel(toolcall: boolean): Provider.Model {
+  return {
+    id: "test-model",
+    providerID: "openrouter",
+    api: {
+      id: "test-model",
+      url: "https://example.com",
+      npm: "@openrouter/ai-sdk-provider",
+    },
+    name: "Test Model",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall,
+      input: {
+        text: true,
+        audio: false,
+        image: false,
+        video: false,
+        pdf: false,
+      },
+      output: {
+        text: true,
+        audio: false,
+        image: false,
+        video: false,
+        pdf: false,
+      },
+      interleaved: false,
+    },
+    cost: {
+      input: 0,
+      output: 0,
+      cache: {
+        read: 0,
+        write: 0,
+      },
+    },
+    limit: {
+      context: 0,
+      output: 0,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2026-01-01",
+  }
+}
+
+const agent = {
+  permission: [],
+} as unknown as Agent.Info
+
+const user = {
+  tools: {},
+} as unknown as MessageV2.User
+
+function questionTool() {
+  return tool({
+    description: "Ask the user a question",
+    inputSchema: jsonSchema({ type: "object", properties: {} }),
+    execute: async () => ({ output: "", title: "", metadata: {} }),
+  })
+}
+
+describe("session.llm.modelTools", () => {
+  test("drops native tools for models without tool-call support", async () => {
+    const tools = { question: questionTool() }
+    const resolved = await LLM.modelTools({
+      agent,
+      model: testModel(false),
+      tools,
+      user,
+    })
+
+    expect(resolved).toStrictEqual({})
+    expect(tools.question).toBeDefined()
+  })
+
+  test("keeps native tools for models with tool-call support", async () => {
+    const tools = { question: questionTool() }
+    const resolved = await LLM.modelTools({
+      agent,
+      model: testModel(true),
+      tools,
+      user,
+    })
+
+    expect(resolved).toBe(tools)
+    expect(Object.keys(resolved)).toStrictEqual(["question"])
+  })
+})
 
 describe("session.llm.isCodexSubscriptionModel", () => {
   test("returns true for the synthesized openai-codex OAuth provider", () => {
