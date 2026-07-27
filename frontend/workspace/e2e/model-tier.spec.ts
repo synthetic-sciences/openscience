@@ -1,21 +1,19 @@
 import { test, expect } from "./fixtures"
 import { modelTierCycleSelector, promptSelector } from "./utils"
 
-test("model service mode cycles through supported modes and reaches the prompt request", async ({
-  page,
-  sdk,
-  gotoSession,
-}) => {
+test("model Fast mode toggles and reaches the prompt request", async ({ page, sdk, gotoSession }) => {
   await gotoSession()
 
   await page.addStyleTag({
     content: `${modelTierCycleSelector} { display: inline-block !important; }`,
   })
 
-  const button = page.locator(modelTierCycleSelector)
-  await expect(button).toBeVisible()
-  await expect(button).toHaveText("standard")
-  await expect(button).toHaveAttribute("aria-label", /cycle tier: standard/i)
+  const toggle = page.locator(modelTierCycleSelector)
+  const input = toggle.locator('[data-slot="switch-input"]')
+  const control = toggle.locator('[data-slot="switch-control"]')
+  await expect(toggle).toBeVisible()
+  await expect(toggle).toHaveText("Fast")
+  await expect(input).toHaveAttribute("aria-checked", "false")
 
   const send = async (tier?: string) => {
     const request = page.waitForRequest((request) => {
@@ -53,12 +51,13 @@ test("model service mode cycles through supported modes and reaches the prompt r
       )
       .toContain(standard)
 
-    await button.click()
-    await expect(button).toHaveText("fast")
-    await expect(button).toHaveAttribute("aria-label", /cycle tier: fast/i)
+    await control.click()
+    await expect(toggle).toHaveText("Fast")
+    await expect(input).toHaveAttribute("aria-checked", "true")
 
     await page.reload()
-    await expect(button).toHaveText("fast")
+    await expect(toggle).toHaveText("Fast")
+    await expect(input).toHaveAttribute("aria-checked", "true")
 
     const fast = await send("fast")
     await expect

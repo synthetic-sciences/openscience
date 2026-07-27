@@ -66,8 +66,7 @@ export namespace Provider {
   }
 
   function codexOAuthModes(modelID: string) {
-    if (/^gpt-5[.-]4-mini$/.test(modelID)) return undefined
-    if (!/^gpt-5[.-](?:4|5|6)(?:-(?:sol|terra|luna))?$/.test(modelID)) return undefined
+    if (!/^gpt-5[.-](?:4(?:-mini)?|5|6(?:-(?:sol|terra|luna))?)$/.test(modelID)) return undefined
     return {
       fast: {
         provider: {
@@ -1430,7 +1429,7 @@ export namespace Provider {
       database["openai-codex"] = {
         ...baseOpenai,
         id: "openai-codex",
-        name: "OpenAI Codex (ChatGPT subscription)",
+        name: "OpenAI (ChatGPT subscription)",
         env: [],
         options: {},
         models: codexModels,

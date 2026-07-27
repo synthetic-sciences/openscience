@@ -9,7 +9,7 @@ import { EOL } from "os"
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
-  "openai-codex": "OpenAI Codex",
+  "openai-codex": "OpenAI (ChatGPT subscription)",
   google: "Google",
   gemini: "Google Gemini",
   openrouter: "OpenRouter",
@@ -25,7 +25,7 @@ const PROVIDER_LABELS: Record<string, string> = {
  *  - anything else with a key → BYOK.
  */
 function routingLabel(providerID: string, provider: Provider.Info): string {
-  if (providerID === "openai-codex") return "Signed in with Codex"
+  if (providerID === "openai-codex") return "ChatGPT subscription"
   // Read the EFFECTIVE credential, not just provider.key: a custom loader stores
   // its key under options.apiKey (e.g. openrouter), and a multi-env provider
   // (google's GEMINI_API_KEY + GOOGLE_GENERATIVE_AI_API_KEY) leaves provider.key

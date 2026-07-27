@@ -32,7 +32,7 @@ const BYOK_URL = URLS.dashboard
 const PROVIDER_LABEL: Record<string, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
-  "openai-codex": "OpenAI Codex",
+  "openai-codex": "OpenAI (ChatGPT subscription)",
   google: "Google",
   "google-vertex": "Google Vertex",
   "github-copilot": "GitHub Copilot",

@@ -462,7 +462,7 @@ export const Credentials: Component = () => {
             </p>
           </div>
 
-          {/* Sign in with ChatGPT (Codex OAuth) — an OpenAI plan's credits, no key */}
+          {/* Sign in with ChatGPT — an OpenAI plan's credits, no key */}
           <div
             class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between"
             style={{ border: "1px solid var(--color-border)", "border-radius": "4px", padding: "14px 18px" }}
@@ -470,7 +470,7 @@ export const Credentials: Component = () => {
             <div class="flex flex-col gap-0.5 min-w-0">
               <span class="text-13-medium text-text-base">Sign in with ChatGPT</span>
               <span class="text-12-regular text-text-weak">
-                Use your ChatGPT Plus / Pro / Business plan (Codex) — no API key needed.
+                Use your ChatGPT Plus / Pro / Business plan — no API key needed.
               </span>
             </div>
             <Show

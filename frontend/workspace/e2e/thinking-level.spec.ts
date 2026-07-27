@@ -14,7 +14,7 @@ test("thinking effort starts at standard and reaches the prompt request", async 
   if (!exists) return
 
   await expect(button).toBeVisible()
-  await expect(button).toHaveText("standard")
+  await expect(button).toHaveText("Thinking")
   await expect(button).toHaveAttribute("aria-label", /thinking effort: standard/i)
 
   const send = async (options: { variant?: string; tier?: string } = {}) => {
@@ -59,15 +59,17 @@ test("thinking effort starts at standard and reaches the prompt request", async 
     await expect(button).toHaveAttribute("aria-label", /thinking effort: high/i)
 
     const tier = page.locator(modelTierCycleSelector)
-    await tier.click()
-    await expect(tier).toHaveText("fast")
+    await tier.locator('[data-slot="switch-control"]').click()
+    await expect(tier).toHaveText("Fast")
+    await expect(tier.locator('[data-slot="switch-input"]')).toHaveAttribute("aria-checked", "true")
 
     const high = await send({ variant: "high", tier: "fast" })
     await expect.poll(output, { timeout: 20_000 }).toContain(high)
 
     await page.reload()
     await expect(button).toHaveText("high")
-    await expect(tier).toHaveText("fast")
+    await expect(tier).toHaveText("Fast")
+    await expect(tier.locator('[data-slot="switch-input"]')).toHaveAttribute("aria-checked", "true")
   } finally {
     await sdk.session.delete({ sessionID }).catch(() => undefined)
   }

@@ -33,6 +33,7 @@ import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { FileIcon } from "@synsci/ui/file-icon"
 import { Button } from "@synsci/ui/button"
+import { Switch as Toggle } from "@synsci/ui/switch"
 import { Icon } from "@synsci/ui/icon"
 import { ProviderIcon } from "@synsci/ui/provider-icon"
 import type { IconName } from "@synsci/ui/icons/provider"
@@ -2050,19 +2051,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     title={language.t("command.tier.cycle")}
                     keybind={command.keybind("tier.cycle")}
                   >
-                    <Button
+                    <Toggle
                       data-action="model-tier-cycle"
-                      aria-label={`Fast mode: ${local.model.tier.current() === "fast" ? "on" : "off"}`}
-                      aria-pressed={local.model.tier.current() === "fast"}
-                      variant="ghost"
-                      class="text-text-base group-hover/prompt-input:inline-block capitalize"
-                      classList={{
-                        "bg-surface-raised-base-active text-text-strong": local.model.tier.current() === "fast",
-                      }}
-                      onClick={() => local.model.tier.set(local.model.tier.current() === "fast" ? "standard" : "fast")}
+                      checked={local.model.tier.current() === "fast"}
+                      class="text-text-base group-hover/prompt-input:flex items-center gap-1.5"
+                      onChange={(checked) => local.model.tier.set(checked ? "fast" : "standard")}
                     >
                       Fast
-                    </Button>
+                    </Toggle>
                   </TooltipKeybind>
                 </Show>
                 <Show when={permission.permissionsEnabled() && params.id}>
