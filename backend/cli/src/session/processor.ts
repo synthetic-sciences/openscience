@@ -319,6 +319,7 @@ export namespace SessionProcessor {
                 case "finish-step":
                   const usage = Session.getUsage({
                     model: input.model,
+                    tier: streamInput.user.tier,
                     usage: value.usage,
                     metadata: value.providerMetadata,
                   })

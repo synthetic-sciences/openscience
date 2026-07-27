@@ -307,7 +307,7 @@ export namespace Provider {
    * would leak the credential and mis-bill. Pin the base URL back to the
    * provider's public endpoint and drop the managed routing.
    */
-  function pinByokToPublicEndpoint(provider: Info, options: Record<string, any>, publicURL: string) {
+  function pinByokToPublicEndpoint(provider: Info, options: Record<string, any>, publicURL?: string) {
     const effective = effectiveKey(provider, options)
     // Managed (thk_*) keys must keep their Atlas proxy routing.
     if (isAtlasApiKey(effective)) return
@@ -878,7 +878,7 @@ export namespace Provider {
       providerID: z.string(),
       api: z.object({
         id: z.string(),
-        url: z.string(),
+        url: z.string().optional(),
         npm: z.string(),
       }),
       name: z.string(),
@@ -960,6 +960,30 @@ export namespace Provider {
     })
   export type Info = z.infer<typeof Info>
 
+  export function redact(info: Info): Info {
+    return {
+      ...info,
+      key: undefined,
+      options: {},
+      models: mapValues(info.models, (model) => ({
+        ...model,
+        api: {
+          ...model.api,
+          url: undefined,
+        },
+        options: {},
+        headers: {},
+        variants: model.variants ? mapValues(model.variants, () => ({})) : undefined,
+        modes: model.modes
+          ? mapValues(model.modes, (mode) => ({
+              model: mode.model,
+              cost: mode.cost,
+            }))
+          : undefined,
+      })),
+    }
+  }
+
   /** Synthesize a minimal Model entry for an OpenRouter model that
    *  isn't in the models.dev catalog. OR is OpenAI-compat for every
    *  upstream it aggregates, so any id is dispatchable through the
@@ -1014,15 +1038,18 @@ export namespace Provider {
     return m
   }
 
-  function modelModes(provider: ModelsDev.Provider, model: ModelsDev.Model): Model["modes"] | undefined {
-    const experimental = model.experimental
+  function directModes(
+    providerID: string,
+    modelID: string,
+    experimental: ModelsDev.Model["experimental"],
+  ): Model["modes"] | undefined {
     const modes = experimental && typeof experimental === "object" ? experimental.modes : undefined
-    const direct = Object.fromEntries(
+    const result = Object.fromEntries(
       Object.entries(modes ?? {})
         .filter(([key, mode]) => {
           if (!mode) return false
-          if (provider.id !== "anthropic" || key !== "fast") return true
-          const id = model.id.toLowerCase().replaceAll(".", "-")
+          if (providerID !== "anthropic" || key !== "fast") return true
+          const id = modelID.toLowerCase().replaceAll(".", "-")
           return id.startsWith("claude-opus-5") || id.startsWith("claude-opus-4-8")
         })
         .map(([key, mode]) => [
@@ -1048,6 +1075,12 @@ export namespace Provider {
           },
         ]),
     )
+    if (Object.keys(result).length === 0) return undefined
+    return result
+  }
+
+  function modelModes(provider: ModelsDev.Provider, model: ModelsDev.Model): Model["modes"] | undefined {
+    const direct = directModes(provider.id, model.id, model.experimental) ?? {}
     const sibling =
       provider.id === "openrouter" && !/-(?:fast|pro)$/.test(model.id)
         ? Object.fromEntries(
@@ -1283,6 +1316,7 @@ export namespace Provider {
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         if (isRemovedModel(modelID)) continue
         const existingModel = parsed.models[model.id ?? modelID]
+        const baseURL = typeof provider.options?.baseURL === "string" ? provider.options.baseURL : undefined
         const name = iife(() => {
           if (model.name) return model.name
           if (model.id && model.id !== modelID) return modelID
@@ -1298,7 +1332,7 @@ export namespace Provider {
               existingModel?.api.npm ??
               modelsDev[providerID]?.npm ??
               "@ai-sdk/openai-compatible",
-            url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
+            url: baseURL ?? provider.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
           name,
@@ -1346,7 +1380,7 @@ export namespace Provider {
           release_date: model.release_date ?? existingModel?.release_date ?? "",
           reasoningOptions: existingModel?.reasoningOptions,
           variants: {},
-          modes: existingModel?.modes,
+          modes: directModes(providerID, modelID, model.experimental) ?? existingModel?.modes,
         }
         const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
         parsedModel.variants = mapValues(
@@ -1679,7 +1713,7 @@ export namespace Provider {
         options["includeUsage"] = true
       }
 
-      if (!options["baseURL"]) options["baseURL"] = model.api.url
+      if (!options["baseURL"] && model.api.url) options["baseURL"] = model.api.url
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
       // tokenCommand supplies the credential per-request via the fetch hook below;
       // give the SDK a non-empty placeholder so @ai-sdk/openai's loadApiKey doesn't

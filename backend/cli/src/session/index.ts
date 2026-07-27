@@ -409,6 +409,7 @@ export namespace Session {
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
+      tier: z.string().optional(),
       usage: z.custom<LanguageModelUsage>(),
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
@@ -448,10 +449,12 @@ export namespace Session {
       // cache-CREATION tokens too. Omitting cache.write meant a mostly-cache-write
       // request that really exceeded 200k was billed at the base tier (cost
       // under-report).
+      const modeCost = input.tier ? input.model.modes?.[input.tier]?.cost : undefined
       const costInfo =
-        input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read + tokens.cache.write > 200_000
+        modeCost ??
+        (input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read + tokens.cache.write > 200_000
           ? input.model.cost.experimentalOver200K
-          : input.model.cost
+          : input.model.cost)
       return {
         cost: safe(
           new Decimal(0)

@@ -2,8 +2,6 @@ import type {
   Event,
   createOpenScienceClient,
   Project,
-  Model,
-  Provider,
   Permission,
   UserMessage,
   Message,
@@ -11,6 +9,7 @@ import type {
   Auth,
   Config,
 } from "@synsci/sdk"
+import type { Model, Provider } from "@synsci/sdk/v2"
 
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"

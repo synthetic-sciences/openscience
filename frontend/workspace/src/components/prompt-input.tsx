@@ -1180,6 +1180,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
+    const model = {
+      modelID: currentModel.id,
+      providerID: currentModel.provider.id,
+    }
+    const agent = currentAgent.name
+    const variant = local.model.variant.current()
+    const tier = local.model.tier.prompt()
+
     const errorMessage = (err: unknown) => {
       if (err && typeof err === "object" && "data" in err) {
         const data = (err as { data?: { message?: string } }).data
@@ -1259,13 +1267,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     props.onSubmit?.()
 
-    const model = {
-      modelID: currentModel.id,
-      providerID: currentModel.provider.id,
-    }
-    const agent = currentAgent.name
-    const variant = local.model.variant.current()
-
     const clearInput = () => {
       prompt.reset()
       setStore("mode", "normal")
@@ -1316,6 +1317,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
+            tier,
             parts: images.map((attachment) => ({
               id: Identifier.ascending("part"),
               type: "file" as const,
@@ -1623,6 +1625,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         messageID,
         parts: requestParts,
         variant,
+        tier,
       })
     }
 
@@ -2037,6 +2040,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       onClick={() => local.model.variant.cycle()}
                     >
                       {local.model.variant.current() ?? language.t("common.default")}
+                    </Button>
+                  </TooltipKeybind>
+                </Show>
+                <Show when={local.model.tier.list().length > 1}>
+                  <TooltipKeybind
+                    placement="top"
+                    title={language.t("command.tier.cycle")}
+                    keybind={command.keybind("tier.cycle")}
+                  >
+                    <Button
+                      data-action="model-tier-cycle"
+                      aria-label={`${language.t("command.tier.cycle")}: ${local.model.tier.current()}`}
+                      variant="ghost"
+                      class="text-text-base group-hover/prompt-input:inline-block capitalize"
+                      onClick={() => local.model.tier.cycle()}
+                    >
+                      {local.model.tier.current()}
                     </Button>
                   </TooltipKeybind>
                 </Show>

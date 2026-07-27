@@ -6,9 +6,11 @@ export const E2E_TOOL_SENTINELS = {
 } as const
 
 type ChatRequest = {
+  model?: string
   stream?: boolean
   messages?: unknown
   tools?: unknown
+  service_tier?: string
 }
 
 type ToolCall = {
@@ -33,7 +35,10 @@ function textFrom(value: unknown): string {
 
 function replyFor(body: ChatRequest) {
   const text = textFrom(body.messages)
-  return text.match(/E2E_OK_\d+/)?.[0] ?? "E2E reply"
+  if (text.includes("E2E_TIER_COMMAND")) {
+    return `E2E_TIER_COMMAND_${body.model ?? "unknown"}_${body.service_tier ?? "standard"}`
+  }
+  return [...text.matchAll(/E2E_OK_\d+/g)].at(-1)?.[0] ?? "E2E reply"
 }
 
 function findSentinel(body: ChatRequest) {
@@ -142,6 +147,13 @@ export function fakeModelConfig(baseURL: string) {
     model: MODEL_ID,
     small_model: MODEL_ID,
     enabled_providers: ["e2e", "openai"],
+    command: {
+      "e2e-tier-override": {
+        description: "Exercise command model and service mode isolation",
+        template: "E2E_TIER_COMMAND",
+        model: "e2e/echo-other",
+      },
+    },
     // Ordinary echo prompts never call tools. The sentinel-only read call below
     // uses this specific override so packaged E2E can exercise the real pending
     // permission lifecycle without making writes or broadening user defaults.
@@ -165,6 +177,37 @@ export function fakeModelConfig(baseURL: string) {
             variants: {
               fast: {},
               thorough: {},
+            },
+            experimental: {
+              modes: {
+                fast: {
+                  provider: {
+                    body: {
+                      service_tier: "priority",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "echo-other": {
+            name: "E2E alternate model",
+            tool_call: true,
+            limit: { context: 128_000, output: 4_096 },
+            variants: {
+              fast: {},
+              thorough: {},
+            },
+            experimental: {
+              modes: {
+                fast: {
+                  provider: {
+                    body: {
+                      service_tier: "priority",
+                    },
+                  },
+                },
+              },
             },
           },
         },

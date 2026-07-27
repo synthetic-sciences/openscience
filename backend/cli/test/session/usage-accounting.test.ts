@@ -8,6 +8,15 @@ const model = (): any => ({
     cache: { read: 0.3, write: 3.75 },
     experimentalOver200K: { input: 6, output: 22.5, cache: { read: 0.6, write: 7.5 } },
   },
+  modes: {
+    fast: {
+      cost: {
+        input: 6,
+        output: 30,
+        cache: { read: 0.6, write: 7.5 },
+      },
+    },
+  },
 })
 
 describe("Session.getUsage cost/token accounting", () => {
@@ -39,5 +48,14 @@ describe("Session.getUsage cost/token accounting", () => {
     })
     expect(r.tokens.input).toBe(0)
     expect(r.cost).toBeGreaterThanOrEqual(0)
+  })
+
+  test("uses the selected service mode's pricing", () => {
+    const r = Session.getUsage({
+      model: model(),
+      tier: "fast",
+      usage: { inputTokens: 1_000, outputTokens: 100, cachedInputTokens: 0 } as any,
+    })
+    expect(r.cost).toBeCloseTo((1_000 * 6 + 100 * 30) / 1_000_000, 6)
   })
 })

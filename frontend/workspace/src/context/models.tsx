@@ -14,6 +14,7 @@ type Store = {
   user: User[]
   recent: ModelKey[]
   variant?: Record<string, string | undefined>
+  tier?: Record<string, string | undefined>
 }
 
 export const { use: useModels, provider: ModelsProvider } = createSimpleContext({
@@ -27,6 +28,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
         user: [],
         recent: [],
         variant: {},
+        tier: {},
       }),
     )
 
@@ -132,6 +134,17 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       setStore("variant", key, value)
     }
 
+    const getTier = (model: ModelKey) => store.tier?.[variantKey(model)]
+
+    const setTier = (model: ModelKey, value: string | undefined) => {
+      const key = variantKey(model)
+      if (!store.tier) {
+        setStore("tier", { [key]: value })
+        return
+      }
+      setStore("tier", key, value)
+    }
+
     return {
       ready,
       list,
@@ -145,6 +158,10 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       variant: {
         get: getVariant,
         set: setVariant,
+      },
+      tier: {
+        get: getTier,
+        set: setTier,
       },
     }
   },

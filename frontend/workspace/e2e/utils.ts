@@ -13,6 +13,7 @@ export const terminalToggleKey = "Control+Backquote"
 export const promptSelector = '[data-component="prompt-input"]'
 export const terminalSelector = '[data-component="terminal"]'
 export const modelVariantCycleSelector = '[data-action="model-variant-cycle"]'
+export const modelTierCycleSelector = '[data-action="model-tier-cycle"]'
 
 export function createSdk(directory?: string) {
   return createOpenScienceClient({ baseUrl: serverUrl, directory, throwOnError: true })

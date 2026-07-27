@@ -28,6 +28,7 @@ import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
 import { Auth } from "../../src/auth"
 import { API_BASE } from "../../src/openscience"
+import { ModelsDev } from "../../src/provider/models"
 
 /* Keep this list aligned with live-catalog.test.ts. The committed fixture makes
    PR CI deterministic; the scheduled live check catches upstream delistings. */
@@ -55,6 +56,33 @@ const FRONTIER_MODELS = {
 }
 const SONNET = "claude-sonnet-4-6"
 const OPUS = "claude-opus-4-5"
+
+test("normalized catalog providers satisfy the public provider schema without an API URL", () => {
+  const catalog = ModelsDev.Provider.parse({
+    id: "native",
+    name: "Native",
+    env: [],
+    npm: "@ai-sdk/openai",
+    models: {
+      echo: {
+        id: "echo",
+        name: "Echo",
+        release_date: "2026-01-01",
+        attachment: false,
+        reasoning: false,
+        temperature: true,
+        tool_call: true,
+        limit: {
+          context: 128_000,
+          output: 4_096,
+        },
+        options: {},
+      },
+    },
+  })
+  const provider = Provider.fromModelsDevProvider(catalog)
+  expect(Provider.Info.safeParse(provider).success).toBe(true)
+})
 
 test("Codex OAuth allowlist includes the GPT-5.6 family", () => {
   for (const id of ["gpt-5.6-sol", "gpt-5-6-sol", "gpt-5.6-terra", "gpt-5-6-terra", "gpt-5.6-luna", "gpt-5-6-luna"]) {
@@ -604,6 +632,126 @@ test("custom provider with npm package", async () => {
       expect(providers["custom-provider"]).toBeDefined()
       expect(providers["custom-provider"].name).toBe("Custom Provider")
       expect(providers["custom-provider"].models["custom-model"]).toBeDefined()
+    },
+  })
+})
+
+test("custom provider model exposes configured service modes", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      provider: {
+        e2e: {
+          name: "E2E",
+          npm: "@ai-sdk/openai-compatible",
+          options: {
+            apiKey: "test-key",
+            baseURL: "https://e2e.test/v1",
+          },
+          models: {
+            echo: {
+              name: "Echo",
+              limit: { context: 128_000, output: 4_096 },
+              options: {
+                apiKey: "model-secret",
+              },
+              headers: {
+                authorization: "Bearer model-secret",
+              },
+              variants: {
+                careful: {
+                  apiKey: "variant-secret",
+                },
+              },
+              experimental: {
+                modes: {
+                  fast: {
+                    cost: {
+                      input: 6,
+                      output: 30,
+                      cache_read: 0.6,
+                      cache_write: 7.5,
+                    },
+                    provider: {
+                      body: { service_tier: "priority", api_key: "mode-secret" },
+                      headers: { authorization: "Bearer mode-secret" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers.e2e.models.echo.api.url).toBe("https://e2e.test/v1")
+      expect(Object.keys(providers.e2e.models.echo.modes ?? {})).toEqual(["fast"])
+      expect(providers.e2e.models.echo.modes?.fast.cost).toEqual({
+        input: 6,
+        output: 30,
+        cache: { read: 0.6, write: 7.5 },
+      })
+      expect(providers.e2e.models.echo.modes?.fast.provider?.body).toEqual({
+        service_tier: "priority",
+        api_key: "mode-secret",
+      })
+
+      const redacted = Provider.redact(providers.e2e)
+      expect(Provider.Info.safeParse(redacted).success).toBe(true)
+      expect(redacted.options).toEqual({})
+      expect(redacted.models.echo.api.url).toBeUndefined()
+      expect(redacted.models.echo.options).toEqual({})
+      expect(redacted.models.echo.headers).toEqual({})
+      expect(redacted.models.echo.variants).toEqual({ careful: {} })
+      expect(redacted.models.echo.modes?.fast.provider).toBeUndefined()
+      expect(redacted.models.echo.modes?.fast.cost).toEqual({
+        input: 6,
+        output: 30,
+        cache: { read: 0.6, write: 7.5 },
+      })
+    },
+  })
+})
+
+test("configured native provider without a URL keeps the SDK public endpoint", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      provider: {
+        native: {
+          name: "Native OpenAI",
+          npm: "@ai-sdk/openai",
+          options: {
+            apiKey: "test-key",
+          },
+          models: {
+            echo: {
+              name: "Echo",
+              limit: { context: 128_000, output: 4_096 },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.remove("OPENAI_BASE_URL")
+      Provider.invalidate()
+    },
+    fn: async () => {
+      const model = await Provider.getModel("native", "echo")
+      expect(model.api.url).toBeUndefined()
+
+      const language = await Provider.getLanguage(model)
+      const requestURL = (language as any).config.url({ path: "/responses" })
+      expect(requestURL).toBe("https://api.openai.com/v1/responses")
     },
   })
 })

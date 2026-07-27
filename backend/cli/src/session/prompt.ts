@@ -2061,6 +2061,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
+
+  export function modelTier(
+    value: string | undefined,
+    source: { providerID: string; modelID: string },
+    target: { providerID: string; modelID: string },
+  ) {
+    if (source.providerID !== target.providerID || source.modelID !== target.modelID) return undefined
+    return value
+  }
+
   /**
    * Regular expression to match @ file references in text
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
@@ -2127,6 +2137,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const command = await Command.get(input.command)
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
+    const selectedModel = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
 
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -2183,8 +2194,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           return cmdAgent.model
         }
       }
-      if (input.model) return Provider.parseModel(input.model)
-      return await lastModel(input.sessionID)
+      return selectedModel
     })()
 
     try {
@@ -2232,11 +2242,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       : [...templateParts, ...(input.parts ?? [])]
 
     const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName
-    const userModel = isSubtask
-      ? input.model
-        ? Provider.parseModel(input.model)
-        : await lastModel(input.sessionID)
-      : taskModel
+    const userModel = isSubtask ? selectedModel : taskModel
 
     await Plugin.trigger(
       "command.execute.before",
@@ -2255,7 +2261,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       agent: userAgent,
       parts,
       variant: input.variant,
-      tier: input.tier,
+      tier: modelTier(input.tier, selectedModel, userModel),
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {

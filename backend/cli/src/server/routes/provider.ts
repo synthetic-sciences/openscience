@@ -24,7 +24,7 @@ export const ProviderRoutes = lazy(() =>
               "application/json": {
                 schema: resolver(
                   z.object({
-                    all: ModelsDev.Provider.array(),
+                    all: Provider.Info.array(),
                     default: z.record(z.string(), z.string()),
                     connected: z.array(z.string()),
                   }),
@@ -52,14 +52,7 @@ export const ProviderRoutes = lazy(() =>
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
           connected,
         )
-        // Never hand raw credentials to the browser. The UI only needs to
-        // know that a provider is connected and where its key came from
-        // (`source`), not the key itself.
-        const redacted = Object.values(providers).map((item) => {
-          const options = { ...item.options }
-          if (typeof options["apiKey"] === "string" && options["apiKey"].length > 0) options["apiKey"] = ""
-          return { ...item, key: undefined, options }
-        })
+        const redacted = Object.values(providers).map(Provider.redact)
         return c.json({
           all: redacted,
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),

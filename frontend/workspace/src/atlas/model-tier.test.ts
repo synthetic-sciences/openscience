@@ -4,6 +4,7 @@ import { modelTierOptions, normalizedTier, promptTier } from "./model-tier"
 describe("model tier controls", () => {
   test("shows standard followed by only the selected model's real modes", () => {
     expect(modelTierOptions(["fast", "pro"]).map((x) => x.id)).toEqual(["standard", "fast", "pro"])
+    expect(modelTierOptions(["standard", "fast"]).map((x) => x.id)).toEqual(["standard", "fast"])
   })
 
   test("does not invent modes and drops stale selections at the request boundary", () => {

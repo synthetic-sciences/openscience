@@ -7,6 +7,7 @@ import { base64Encode } from "@synsci/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { useModels } from "@/context/models"
 import { routableModelKey } from "@/context/model-catalog"
+import { modelTierOptions, normalizedTier, promptTier } from "@/context/model-tier"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -302,6 +303,38 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               return
             }
             this.set(variants[index + 1])
+          },
+        },
+        tier: {
+          current() {
+            const m = current()
+            if (!m) return "standard"
+            return normalizedTier(
+              models.tier.get({ providerID: m.provider.id, modelID: m.id }),
+              Object.keys(m.modes ?? {}),
+            )
+          },
+          list() {
+            const m = current()
+            if (!m) return []
+            return modelTierOptions(Object.keys(m.modes ?? {})).map((option) => option.id)
+          },
+          set(value: string | undefined) {
+            const m = current()
+            if (!m) return
+            const modes = Object.keys(m.modes ?? {})
+            models.tier.set({ providerID: m.provider.id, modelID: m.id }, promptTier(value, modes))
+          },
+          cycle() {
+            const tiers = this.list()
+            if (tiers.length <= 1) return
+            const index = tiers.indexOf(this.current())
+            this.set(tiers[index === -1 || index === tiers.length - 1 ? 0 : index + 1])
+          },
+          prompt() {
+            const m = current()
+            if (!m) return undefined
+            return promptTier(this.current(), Object.keys(m.modes ?? {}))
           },
         },
       }
