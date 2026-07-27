@@ -4,6 +4,7 @@ import {
   displayProviderForModel,
   foldedRouteMode,
   FRONTIER_MODELS,
+  isFrontier,
   preferredModel,
   preferredModels,
   routableModelKey,
@@ -76,6 +77,13 @@ describe("frontier model canonicalization", () => {
       "anthropic/claude-sonnet-5",
       "openai-codex/gpt-5.6-sol",
     ])
+  })
+
+  test("shows ChatGPT subscription models with Fast mode in the default picker", () => {
+    for (const modelID of ["gpt-5.4", "gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"]) {
+      expect(isFrontier({ providerID: "openai-codex", modelID })).toBe(true)
+    }
+    expect(isFrontier({ providerID: "openai-codex", modelID: "gpt-5.4-mini" })).toBe(false)
   })
 
   test("stale direct model selections route to managed OpenRouter aliases when present", () => {
