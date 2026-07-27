@@ -220,7 +220,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const recent = createMemo(() =>
-        models.recent.list().map((item) => models.find(resolveModel(item) ?? item)).filter(Boolean),
+        models.recent
+          .list()
+          .map((item) => models.find(resolveModel(item) ?? item))
+          .filter(Boolean),
       )
 
       const cycle = (direction: 1 | -1) => {

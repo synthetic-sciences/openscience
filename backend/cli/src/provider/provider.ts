@@ -256,8 +256,7 @@ export namespace Provider {
     const base = modelID.replace(/^~/, "")
     if (!vendor || !base) return []
     const direct = `${vendor}/${base}`
-    const normalized =
-      vendor === "anthropic" ? `${vendor}/${base.replace(ANTHROPIC_DASHED_VERSION, "$1.$2")}` : direct
+    const normalized = vendor === "anthropic" ? `${vendor}/${base.replace(ANTHROPIC_DASHED_VERSION, "$1.$2")}` : direct
     const aliased = providerID === "openai" && base === "gpt-5.6" ? ["openai/gpt-5.6-sol"] : []
     return Array.from(new Set([direct, normalized, ...aliased]))
   }

@@ -138,12 +138,7 @@ describe("managed session availability", () => {
         billing: { llm: "managed" },
         provider: {
           openrouter: {
-            whitelist: [
-              "anthropic/claude-fable-5",
-              "google/gemini-3.6-flash",
-              "x-ai/grok-4.5",
-              "meta/muse-spark-1.1",
-            ],
+            whitelist: ["anthropic/claude-fable-5", "google/gemini-3.6-flash", "x-ai/grok-4.5", "meta/muse-spark-1.1"],
           },
         },
       },

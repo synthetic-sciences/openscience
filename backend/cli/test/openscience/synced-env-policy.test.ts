@@ -67,10 +67,6 @@ test("managed provider sync accepts only thk tokens and matching Atlas proxy url
     isSyncedEnvAllowed("OPENROUTER_BASE_URL", "https://atlas.test.evil.test/api/llm/proxy/openrouter/v1", atlasBase),
   ).toBe(false)
   expect(
-    isSyncedEnvAllowed(
-      "OPENROUTER_BASE_URL",
-      "https://atlas.test/api/llm/proxy/openrouter/%2e%2e/meta",
-      atlasBase,
-    ),
+    isSyncedEnvAllowed("OPENROUTER_BASE_URL", "https://atlas.test/api/llm/proxy/openrouter/%2e%2e/meta", atlasBase),
   ).toBe(false)
 })

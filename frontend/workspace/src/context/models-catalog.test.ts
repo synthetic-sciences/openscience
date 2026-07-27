@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  canonicalKey,
-  displayProviderForModel,
-  FRONTIER_MODELS,
-  routableModelKey,
-} from "./model-catalog"
+import { canonicalKey, displayProviderForModel, FRONTIER_MODELS, routableModelKey } from "./model-catalog"
 
 describe("frontier model canonicalization", () => {
   test("direct and OpenRouter GPT-5.6 ids collapse to the same frontier keys", () => {
