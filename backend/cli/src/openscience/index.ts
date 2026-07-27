@@ -8,7 +8,7 @@ import { Log } from "../util/log"
 import { Lock } from "../util/lock"
 import { Env } from "../env"
 import { Auth } from "../auth"
-import { isSyncedEnvAllowed, BYOK_LLM_ENV_KEYS } from "./synced-env-policy"
+import { isSyncedEnvAllowed, BYOK_LLM_ENV_KEYS, managedOpenRouterBaseURL } from "./synced-env-policy"
 import { resolveAtlasPackageDir } from "./atlas-package"
 import { DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 
@@ -833,6 +833,15 @@ export namespace OpenScience {
       // synced-env-policy.ts.
       for (const [key, value] of [...fresh.entries()]) {
         if (!isSyncedEnvAllowed(key, value)) fresh.delete(key)
+      }
+
+      // Older Atlas sync responses can carry only OPENROUTER_API_KEY=thk_*.
+      // Managed OpenRouter must also carry the Atlas proxy baseURL; otherwise
+      // provider init correctly refuses to send a wallet token to public
+      // openrouter.ai and the UI shows ProviderInitError.
+      const openrouterKey = fresh.get("OPENROUTER_API_KEY")
+      if (isManagedAtlasKey(openrouterKey ?? "") && !fresh.has("OPENROUTER_BASE_URL")) {
+        fresh.set("OPENROUTER_BASE_URL", managedOpenRouterBaseURL())
       }
 
       // Count distinct APPLIED credential values (post-filter, ignoring routing

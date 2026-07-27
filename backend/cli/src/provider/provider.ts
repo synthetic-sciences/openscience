@@ -14,7 +14,7 @@ import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { OpenScience } from "../openscience"
-import { isAtlasProxyURL } from "../openscience/synced-env-policy"
+import { isAtlasProxyURL, managedOpenRouterBaseURL } from "../openscience/synced-env-policy"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -104,6 +104,12 @@ export namespace Provider {
 
   function isAtlasApiKey(key: unknown): key is string {
     return typeof key === "string" && key.startsWith("thk_")
+  }
+
+  const REMOVED_MODEL_IDS = new Set(["claude-fable-5", "anthropic/claude-fable-5"])
+
+  function isRemovedModel(modelID: string) {
+    return REMOVED_MODEL_IDS.has(modelID)
   }
 
   export function isAtlasProxyBaseURL(baseURL: unknown): baseURL is string {
@@ -599,10 +605,11 @@ export namespace Provider {
       // managed token — the live session, or the synced thk_* already in env if
       // the session file is momentarily unreadable.
       const proxyBase = Env.get("OPENROUTER_BASE_URL")
-      if (isAtlasProxyBaseURL(proxyBase)) {
-        const session = await OpenScience.getSession().catch(() => null)
-        const managedKey = session?.api_key ?? (isAtlasApiKey(envKey) ? envKey : undefined)
-        if (managedKey) return { autoload: false, options: { apiKey: managedKey, baseURL: proxyBase, headers } }
+      const session = await OpenScience.getSession().catch(() => null)
+      const managedKey = session?.api_key ?? (isAtlasApiKey(envKey) ? envKey : undefined)
+      if (managedKey) {
+        const baseURL = isAtlasProxyBaseURL(proxyBase) ? proxyBase : managedOpenRouterBaseURL()
+        return { autoload: false, options: { apiKey: managedKey, baseURL, headers } }
       }
 
       // Neither an own key nor a managed route — nothing to route with.
@@ -1056,7 +1063,11 @@ export namespace Provider {
       name: provider.name,
       env: provider.env ?? [],
       options: {},
-      models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
+      models: Object.fromEntries(
+        Object.entries(provider.models)
+          .filter(([modelID]) => !isRemovedModel(modelID))
+          .map(([modelID, model]) => [modelID, fromModelsDevModel(provider, model)]),
+      ),
     }
   }
 
@@ -1166,6 +1177,7 @@ export namespace Provider {
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
+        if (isRemovedModel(modelID)) continue
         const existingModel = parsed.models[model.id ?? modelID]
         const name = iife(() => {
           if (model.name) return model.name
@@ -1405,6 +1417,7 @@ export namespace Provider {
 
       for (const [modelID, model] of Object.entries(provider.models)) {
         model.api.id = model.api.id ?? model.id ?? modelID
+        if (isRemovedModel(modelID)) delete provider.models[modelID]
         if (modelID === "gpt-5-chat-latest" || (providerID === "openrouter" && modelID === "openai/gpt-5-chat"))
           delete provider.models[modelID]
         if (model.status === "alpha" && !Flag.OPENSCIENCE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
@@ -1436,6 +1449,7 @@ export namespace Provider {
       // shows the full local catalog and isn't bound to the managed whitelist.
       if (!bypassManagedWhitelist && providerID === "openrouter" && configProvider?.whitelist) {
         for (const wlid of configProvider.whitelist) {
+          if (isRemovedModel(wlid)) continue
           if (!(wlid in provider.models)) {
             provider.models[wlid] = _syntheticOpenRouterModel(wlid)
           }

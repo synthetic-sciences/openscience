@@ -3,6 +3,7 @@ import path from "path"
 import { OpenScience } from "../../src/openscience"
 import { Global } from "../../src/global"
 import { managedApiBase } from "../../src/endpoints"
+import { managedOpenRouterBaseURL } from "../../src/openscience/synced-env-policy"
 
 // syncServices must respect credential precedence: a user's own shell-exported
 // (or BYOK) OpenRouter key must survive a background sync — never be overwritten
@@ -17,6 +18,7 @@ const realFetch = globalThis.fetch
 afterEach(() => {
   globalThis.fetch = realFetch
   delete process.env["OPENROUTER_API_KEY"]
+  delete process.env["OPENROUTER_BASE_URL"]
   delete process.env["ANTHROPIC_API_KEY"]
   delete process.env["META_MODEL_API_KEY"]
   delete process.env["META_MODEL_BASE_URL"]
@@ -58,6 +60,7 @@ test("a synced managed OpenRouter key IS applied when the slot is empty", async 
   stubSync({ openrouter: { OPENROUTER_API_KEY: "thk_managed.value" } })
   await OpenScience.syncServices()
   expect(process.env["OPENROUTER_API_KEY"]).toBe("thk_managed.value")
+  expect(process.env["OPENROUTER_BASE_URL"]).toBe(managedOpenRouterBaseURL())
 })
 
 test("Meta sync is dropped even when it looks like an old managed route", async () => {

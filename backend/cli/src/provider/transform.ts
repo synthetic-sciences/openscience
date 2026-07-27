@@ -655,14 +655,14 @@ export namespace ProviderTransform {
         // The newest Claudes REJECT manual extended thinking (`thinking.type:
         // "enabled"` → 400) and drive depth via `output_config.effort` instead.
         // Verified against platform.claude.com/docs/build-with-claude/effort
-        // (July 2026): Opus 4.7/4.8, Sonnet 5, Fable 5, Mythos 5 (and the 5+
+        // (July 2026): Opus 4.7/4.8, Sonnet 5, Mythos 5 (and the 5+
         // generation) all support the full low→max ladder INCLUDING xhigh. The AI
         // SDK maps our top-level `effort` → `output_config: { effort }`; the pinned
         // patch (tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch) widens its enum
-        // to include xhigh/max. Detection is by canonical id — note Fable/Mythos
-        // are NOT opus/sonnet/haiku, so they must be matched explicitly or they
-        // fall through to the classic path below and 400 (manual thinking rejected).
-        const usesEffort = /^claude-opus-4[.-][78]\b/.test(id) || /^claude-(opus|sonnet|fable|mythos)-[5-9]\b/.test(id)
+        // to include xhigh/max. Detection is by canonical id — note Mythos is NOT
+        // opus/sonnet/haiku, so it must be matched explicitly or it falls
+        // through to the classic path below and 400 (manual thinking rejected).
+        const usesEffort = /^claude-opus-4[.-][78]\b/.test(id) || /^claude-(opus|sonnet|mythos)-[5-9]\b/.test(id)
 
         if (usesEffort) {
           return {

@@ -1997,8 +1997,8 @@ describe("ProviderTransform.variants", () => {
     // Verified against platform.claude.com/docs/build-with-claude/effort (July
     // 2026). Two paths:
     //  • EFFORT (output_config.effort, full low→max incl. xhigh): the newest
-    //    Claudes that REJECT manual thinking — Opus 4.7/4.8, Sonnet 5, Fable 5,
-    //    Mythos 5, and the 5+ generation. The SDK effort enum is widened to
+    //    Claudes that REJECT manual thinking — Opus 4.7/4.8, Sonnet 5, Mythos 5,
+    //    and the 5+ generation. The SDK effort enum is widened to
     //    include xhigh/max by tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch.
     //  • CLASSIC thinking-budget (low/medium/high/max): everything else — Opus
     //    4.5/4.6, Sonnet 4.5/4.6, Haiku 4.5 — which have no effort param (4.5
@@ -2010,14 +2010,7 @@ describe("ProviderTransform.variants", () => {
         api: { id, url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
       })
 
-    const EFFORT_MODELS = [
-      "claude-opus-4-7",
-      "claude-opus-4-8",
-      "claude-opus-5",
-      "claude-sonnet-5",
-      "claude-fable-5",
-      "claude-mythos-5",
-    ]
+    const EFFORT_MODELS = ["claude-opus-4-7", "claude-opus-4-8", "claude-opus-5", "claude-sonnet-5", "claude-mythos-5"]
     for (const id of EFFORT_MODELS) {
       test(`${id} exposes the full low→max effort ladder including xhigh`, () => {
         const result = ProviderTransform.variants(anthropicModel(id))
@@ -2028,10 +2021,10 @@ describe("ProviderTransform.variants", () => {
       })
     }
 
-    // Regression guard: Fable/Mythos are NOT opus/sonnet/haiku, so a naive regex
+    // Regression guard: Mythos is NOT opus/sonnet/haiku, so a naive regex
     // drops them to the classic path where manual thinking 400s.
-    test("claude-fable-5 uses effort, not a thinking budget", () => {
-      const result = ProviderTransform.variants(anthropicModel("claude-fable-5"))
+    test("claude-mythos-5 uses effort, not a thinking budget", () => {
+      const result = ProviderTransform.variants(anthropicModel("claude-mythos-5"))
       expect(result.high).toEqual({ effort: "high" })
       expect(result.high).not.toHaveProperty("thinking")
     })

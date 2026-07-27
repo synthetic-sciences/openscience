@@ -32,7 +32,7 @@ import { API_BASE } from "../../src/openscience"
 /* Keep this list aligned with live-catalog.test.ts. The committed fixture makes
    PR CI deterministic; the scheduled live check catches upstream delistings. */
 const FRONTIER_MODELS = {
-  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-fable-5"],
+  anthropic: ["claude-opus-5", "claude-sonnet-5"],
   openai: ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
   xai: [
     "grok-4.3",
@@ -47,7 +47,6 @@ const FRONTIER_MODELS = {
   openrouter: [
     "anthropic/claude-opus-5",
     "anthropic/claude-sonnet-5",
-    "anthropic/claude-fable-5",
     "openai/gpt-5.6-sol",
     "x-ai/grok-4.5",
     "moonshotai/kimi-k3",

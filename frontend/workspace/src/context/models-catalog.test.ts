@@ -22,7 +22,7 @@ describe("frontier model canonicalization", () => {
 
   test("OpenRouter vendor slugs display under their branded provider families", () => {
     const openrouter = { id: "openrouter", name: "OpenRouter" }
-    expect(displayProviderForModel(openrouter, "anthropic/claude-fable-5")).toEqual({
+    expect(displayProviderForModel(openrouter, "anthropic/claude-sonnet-5")).toEqual({
       id: "anthropic",
       name: "Anthropic",
     })
@@ -35,7 +35,7 @@ describe("frontier model canonicalization", () => {
   test("stale direct model selections route to managed OpenRouter aliases when present", () => {
     const available = new Set([
       "openrouter:anthropic/claude-opus-4.8",
-      "openrouter:anthropic/claude-fable-5",
+      "openrouter:anthropic/claude-sonnet-5",
       "openrouter:openai/gpt-5.6-sol",
       "openrouter:google/gemini-3.6-flash",
       "openrouter:x-ai/grok-4.5",
@@ -44,9 +44,9 @@ describe("frontier model canonicalization", () => {
     const hasModel = (model: { providerID: string; modelID: string }) =>
       available.has(`${model.providerID}:${model.modelID}`)
 
-    expect(routableModelKey({ providerID: "anthropic", modelID: "claude-fable-5" }, hasModel)).toEqual({
+    expect(routableModelKey({ providerID: "anthropic", modelID: "claude-sonnet-5" }, hasModel)).toEqual({
       providerID: "openrouter",
-      modelID: "anthropic/claude-fable-5",
+      modelID: "anthropic/claude-sonnet-5",
     })
     expect(routableModelKey({ providerID: "anthropic", modelID: "claude-opus-4-8" }, hasModel)).toEqual({
       providerID: "openrouter",

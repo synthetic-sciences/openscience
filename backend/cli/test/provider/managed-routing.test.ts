@@ -138,7 +138,7 @@ describe("managed session availability", () => {
         billing: { llm: "managed" },
         provider: {
           openrouter: {
-            whitelist: ["anthropic/claude-fable-5", "google/gemini-3.6-flash", "x-ai/grok-4.5", "meta/muse-spark-1.1"],
+            whitelist: ["anthropic/claude-sonnet-5", "google/gemini-3.6-flash", "x-ai/grok-4.5", "meta/muse-spark-1.1"],
           },
         },
       },
@@ -152,9 +152,9 @@ describe("managed session availability", () => {
         Provider.invalidate()
       },
       fn: async () => {
-        const fable = await Provider.getModel("anthropic", "claude-fable-5")
-        expect(fable.providerID).toBe("openrouter")
-        expect(fable.id).toBe("anthropic/claude-fable-5")
+        const sonnet = await Provider.getModel("anthropic", "claude-sonnet-5")
+        expect(sonnet.providerID).toBe("openrouter")
+        expect(sonnet.id).toBe("anthropic/claude-sonnet-5")
 
         const gemini = await Provider.getModel("gemini", "gemini-3.6-flash")
         expect(gemini.providerID).toBe("openrouter")
@@ -167,6 +167,81 @@ describe("managed session availability", () => {
         const muse = await Provider.getModel("meta", "muse-spark-1.1")
         expect(muse.providerID).toBe("openrouter")
         expect(muse.id).toBe("meta/muse-spark-1.1")
+      },
+    })
+  })
+
+  test("managed OpenRouter self-heals a key-only synced env snapshot", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        billing: { llm: "managed" },
+        provider: {
+          openrouter: {
+            whitelist: ["anthropic/claude-sonnet-4.6"],
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        const openrouter = providers["openrouter"]
+        expect(openrouter).toBeDefined()
+        expect(openrouter.options.apiKey).toStartWith("thk_")
+        expect(openrouter.options.baseURL).toBe(`${PROXY}/openrouter/v1`)
+
+        const model = await Provider.getModel("openrouter", "anthropic/claude-sonnet-4.6")
+        await expect(Provider.getLanguage(model)).resolves.toBeDefined()
+      },
+    })
+  })
+
+  test("Fable is hidden from stale managed and direct catalogs", async () => {
+    await using managed = await tmpdir({
+      config: {
+        billing: { llm: "managed" },
+        provider: {
+          openrouter: {
+            whitelist: ["anthropic/claude-fable-5", "anthropic/claude-sonnet-5"],
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: managed.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+        Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const openrouter = (await Provider.list())["openrouter"]
+        expect(openrouter.models["anthropic/claude-fable-5"]).toBeUndefined()
+        expect(openrouter.models["anthropic/claude-sonnet-5"]).toBeDefined()
+        await expect(Provider.getModel("openrouter", "anthropic/claude-fable-5")).rejects.toThrow()
+      },
+    })
+
+    await using byok = await tmpdir({ config: { billing: { llm: "byok" } } })
+    await Instance.provide({
+      directory: byok.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("ANTHROPIC_API_KEY", "sk-ant-byok-key")
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const anthropic = (await Provider.list())["anthropic"]
+        expect(anthropic).toBeDefined()
+        expect(anthropic.models["claude-fable-5"]).toBeUndefined()
+        expect(anthropic.models["claude-sonnet-5"]).toBeDefined()
       },
     })
   })

@@ -11,7 +11,7 @@ import { test, expect } from "bun:test"
 //      test/fixture/models-catalog.json, then gzip it to models-catalog.json.gz.
 //
 const CATALOG_PINS = {
-  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-sonnet-4-6", "claude-opus-4-5"],
+  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-sonnet-4-6", "claude-opus-4-5"],
   openai: ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
   xai: [
     "grok-4.3",
@@ -27,7 +27,6 @@ const CATALOG_PINS = {
   openrouter: [
     "anthropic/claude-opus-5",
     "anthropic/claude-sonnet-5",
-    "anthropic/claude-fable-5",
     "openai/gpt-5.6-sol",
     "openai/gpt-5.6-terra",
     "openai/gpt-5.6-luna",

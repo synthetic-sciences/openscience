@@ -47,6 +47,10 @@ const MANAGED_SYNCED_BASE_URLS: Record<string, string> = {
   OPENROUTER_BASE_URL: "/api/llm/proxy/openrouter/",
 }
 
+export function managedOpenRouterBaseURL(atlasBase = managedApiBase()): string {
+  return `${atlasBase.replace(/\/+$/, "")}/api/llm/proxy/openrouter/v1`
+}
+
 /** Match a proxy URL to the configured Atlas origin and an exact route prefix.
  * A path substring alone is not enough: an attacker-controlled origin could
  * otherwise place `/api/llm/proxy/` in its path and receive the scoped token. */

@@ -1,5 +1,9 @@
 import { test, expect } from "bun:test"
-import { isSyncedEnvAllowed, BLOCKED_SYNCED_ENV } from "../../src/openscience/synced-env-policy"
+import {
+  isSyncedEnvAllowed,
+  BLOCKED_SYNCED_ENV,
+  managedOpenRouterBaseURL,
+} from "../../src/openscience/synced-env-policy"
 
 test("blocks every non-managed model-provider LLM credential (key + *_BASE_URL)", () => {
   const blocked = [
@@ -52,6 +56,7 @@ test("managed provider sync accepts only thk tokens and matching Atlas proxy url
   const atlasBase = "https://atlas.test"
   expect(isSyncedEnvAllowed("OPENROUTER_API_KEY", "thk_user.scoped")).toBe(true)
   expect(isSyncedEnvAllowed("OPENROUTER_API_KEY", "sk-or-shared-secret")).toBe(false)
+  expect(managedOpenRouterBaseURL(atlasBase)).toBe("https://atlas.test/api/llm/proxy/openrouter/v1")
   expect(isSyncedEnvAllowed("OPENROUTER_BASE_URL", "https://atlas.test/api/llm/proxy/openrouter/v1", atlasBase)).toBe(
     true,
   )
