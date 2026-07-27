@@ -110,10 +110,6 @@ try {
 console.log("\n=== launcher (openscience) ===\n")
 try {
   const launcherDir = new URL("../launcher", import.meta.url).pathname
-  // Pin @synsci/openscience dependency to the version being published.
-  // Defensive: initialize `dependencies` if the launcher's package.json
-  // was authored without it — happened on the v1.1.117 publish (broken
-  // launcher step). Empty object is fine since we only need the pin.
   const launcherPkg = await Bun.file(`${launcherDir}/package.json`).json()
   // Keep the launcher version in lockstep with the just-released @synsci/openscience.
   // Without this, each subsequent publish would npm-error with "cannot
@@ -141,6 +137,11 @@ try {
     // chase (`npm owner add <token-user> synsci`), not a broken release —
     // every other package shipped, so warn loudly instead of failing.
     if (stderr.includes("E403") || stderr.includes("do not have permission")) {
+      if (process.env.OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH === "true") {
+        throw new Error(
+          "npm token's account is not an owner of the 'synsci' package; refusing to pass the test publish without launcher coverage",
+        )
+      }
       // A GitHub Actions annotation, so this shows on the run summary
       // instead of being a log line nobody reads on a green run.
       console.warn(

@@ -1,0 +1,364 @@
+name: npm test publish
+run-name: "npm test ${{ inputs.version || github.run_number }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Override test version, e.g. 1.3.5-test.1"
+        required: false
+        type: string
+      run_packaged_e2e:
+        description: "Install @synsci/openscience@test and run packaged browser e2e"
+        required: false
+        type: boolean
+        default: true
+      run_os_smoke:
+        description: "Install @synsci/openscience@test on Linux, macOS, and Windows"
+        required: false
+        type: boolean
+        default: true
+
+concurrency: npm-test-publish
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  version:
+    if: github.repository == 'synthetic-sciences/OpenScience'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.version }}" ]; then
+            version="${{ inputs.version }}"
+          else
+            latest="$(npm view @synsci/openscience@latest version)"
+            IFS=. read -r major minor patch <<< "$latest"
+            version="${major}.${minor}.$((patch + 1))-test.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          fi
+
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-test\.[0-9A-Za-z.-]+$ ]]; then
+            echo "::error::Test publish versions must look like 1.3.5-test.1, received '$version'"
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing npm test version $version"
+
+  build-cli:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/setup-bun
+      - name: Build all npm CLI packages
+        run: ./backend/cli/script/build.ts
+        env:
+          OPENSCIENCE_CHANNEL: test
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+      - name: Cache CLI build
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: backend/cli/dist
+          key: npm-test-cli-build-${{ github.run_id }}-${{ github.run_attempt }}
+
+  publish-test:
+    needs:
+      - version
+      - build-cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      version: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-bun
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+      - name: Restore CLI build
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: backend/cli/dist
+          key: npm-test-cli-build-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
+      - name: Publish npm test packages
+        run: ./tooling/repo/publish.ts
+        env:
+          HUSKY: "0"
+          OPENSCIENCE_CHANNEL: test
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+
+  packaged-e2e:
+    needs: publish-test
+    if: inputs.run_packaged_e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/setup-bun
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+      - name: Install Playwright browsers
+        working-directory: frontend/workspace
+        run: bunx playwright install --with-deps
+      - name: Install published OpenScience test package
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/openscience-npm-test-prefix"
+          home="$RUNNER_TEMP/openscience-npm-test-home"
+          mkdir -p "$prefix" "$home"
+          npm install --global --prefix "$prefix" @synsci/openscience@test
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+          "$prefix/bin/openscience" --version | tee "$RUNNER_TEMP/openscience-version.txt"
+          grep -Fx "${{ needs.publish-test.outputs.version }}" "$RUNNER_TEMP/openscience-version.txt"
+          wrapper_dir="$prefix/lib/node_modules/@synsci/openscience"
+          WRAPPER_DIR="$wrapper_dir" node - <<'NODE'
+          const path = require("node:path")
+          const { execFileSync } = require("node:child_process")
+          const pkg = require.resolve("@synsci/atlas/package.json", { paths: [process.env.WRAPPER_DIR] })
+          const atlas = require(pkg)
+          if (!atlas.version) throw new Error("@synsci/atlas resolved without a version")
+          console.log(`resolved @synsci/atlas ${atlas.version} from ${path.dirname(pkg)}`)
+          const rel = typeof atlas.bin === "string" ? atlas.bin : atlas.bin?.atlas
+          if (!rel) throw new Error("@synsci/atlas package does not expose an atlas bin")
+          const bin = path.join(path.dirname(pkg), rel)
+          console.log(execFileSync(bin, ["--version"], { encoding: "utf8" }).trim())
+          NODE
+
+          launcher_prefix="$RUNNER_TEMP/synsci-npm-test-prefix"
+          npm install --global --prefix "$launcher_prefix" synsci@test
+          node --check "$launcher_prefix/lib/node_modules/synsci/bin/synsci.mjs"
+          LAUNCHER_DIR="$launcher_prefix/lib/node_modules/synsci" node --input-type=module - <<'NODE'
+          const mod = await import(`file://${process.env.LAUNCHER_DIR}/lib/channel.mjs`)
+          const spec = mod.opensciencePackageSpec(process.env.OPENSCIENCE_VERSION)
+          if (spec !== "@synsci/openscience@test") throw new Error(`synsci@test resolves ${spec}`)
+          console.log(`synsci@test resolves ${spec}`)
+          NODE
+        env:
+          HOME: ${{ runner.temp }}/openscience-npm-test-home
+          OPENSCIENCE_VERSION: ${{ needs.publish-test.outputs.version }}
+      - name: Run optional authenticated Atlas smoke
+        run: |
+          set -euo pipefail
+          if [ -z "${ATLAS_TEST_API_KEY:-}" ]; then
+            echo "ATLAS_TEST_API_KEY is not set; skipping authenticated Atlas smoke."
+            exit 0
+          fi
+          wrapper_dir="$RUNNER_TEMP/openscience-npm-test-prefix/lib/node_modules/@synsci/openscience"
+          WRAPPER_DIR="$wrapper_dir" node - <<'NODE'
+          const path = require("node:path")
+          const { execFileSync } = require("node:child_process")
+          const pkg = require.resolve("@synsci/atlas/package.json", { paths: [process.env.WRAPPER_DIR] })
+          const atlas = require(pkg)
+          const rel = typeof atlas.bin === "string" ? atlas.bin : atlas.bin?.atlas
+          if (!rel) throw new Error("@synsci/atlas package does not expose an atlas bin")
+          const bin = path.join(path.dirname(pkg), rel)
+          execFileSync(bin, ["doctor", "--format=json"], {
+            env: { ...process.env, ATLAS_API_KEY: process.env.ATLAS_TEST_API_KEY },
+            stdio: "inherit",
+          })
+          NODE
+        env:
+          ATLAS_TEST_API_KEY: ${{ secrets.ATLAS_TEST_API_KEY }}
+      - name: Set isolated OpenScience paths
+        run: |
+          PASS="ci-$(openssl rand -hex 16)"
+          {
+            echo "OPENSCIENCE_SERVER_PASSWORD=$PASS"
+            echo "VITE_OPENSCIENCE_SERVER_PASSWORD=$PASS"
+            echo "OPENSCIENCE_E2E_ROOT=$RUNNER_TEMP/openscience-e2e"
+            echo "OPENSCIENCE_TEST_HOME=$RUNNER_TEMP/openscience-e2e/home"
+            echo "XDG_DATA_HOME=$RUNNER_TEMP/openscience-e2e/share"
+            echo "XDG_CACHE_HOME=$RUNNER_TEMP/openscience-e2e/cache"
+            echo "XDG_CONFIG_HOME=$RUNNER_TEMP/openscience-e2e/config"
+            echo "XDG_STATE_HOME=$RUNNER_TEMP/openscience-e2e/state"
+          } >> "$GITHUB_ENV"
+          cat > frontend/workspace/.env.local <<ENV
+          VITE_OPENSCIENCE_SERVER_HOST=127.0.0.1
+          VITE_OPENSCIENCE_SERVER_PORT=4096
+          VITE_OPENSCIENCE_SERVER_USERNAME=openscience
+          VITE_OPENSCIENCE_SERVER_PASSWORD=$PASS
+          ENV
+      - name: Start deterministic E2E model
+        run: |
+          CONFIG=$(bun frontend/workspace/script/e2e-fake-model.ts --port 4097 --print-config)
+          {
+            printf '%s\n' "OPENSCIENCE_CONFIG_CONTENT=$CONFIG"
+            printf '%s\n' "OPENSCIENCE_E2E_MODEL=e2e/echo"
+            printf '%s\n' "OPENSCIENCE_E2E_FAKE_MODEL=1"
+          } >> "$GITHUB_ENV"
+          bun frontend/workspace/script/e2e-fake-model.ts --port 4097 > "$RUNNER_TEMP/openscience-fake-model.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -fsS "http://127.0.0.1:4097/health" > /dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::deterministic E2E model never became healthy on 127.0.0.1:4097"
+          exit 1
+      - name: Seed OpenScience data
+        working-directory: backend/cli
+        run: bun script/seed-e2e.ts
+        env:
+          OPENSCIENCE_DISABLE_SHARE: "true"
+          OPENSCIENCE_DISABLE_LSP_DOWNLOAD: "true"
+          OPENSCIENCE_DISABLE_DEFAULT_PLUGINS: "true"
+          OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          OPENSCIENCE_TEST_HOME: ${{ env.OPENSCIENCE_TEST_HOME }}
+          XDG_DATA_HOME: ${{ env.XDG_DATA_HOME }}
+          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
+          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
+          XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
+          OPENSCIENCE_E2E_PROJECT_DIR: ${{ github.workspace }}
+          OPENSCIENCE_E2E_SESSION_TITLE: "E2E Session"
+          OPENSCIENCE_E2E_MESSAGE: "Seeded for UI e2e"
+          OPENSCIENCE_E2E_MODEL: "e2e/echo"
+      - name: Run published OpenScience server
+        run: openscience --print-logs --log-level WARN serve --port 4096 > "$RUNNER_TEMP/openscience-server.log" 2>&1 &
+        env:
+          OPENSCIENCE_DISABLE_SHARE: "true"
+          OPENSCIENCE_DISABLE_LSP_DOWNLOAD: "true"
+          OPENSCIENCE_DISABLE_DEFAULT_PLUGINS: "true"
+          OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          OPENSCIENCE_TEST_HOME: ${{ env.OPENSCIENCE_TEST_HOME }}
+          XDG_DATA_HOME: ${{ env.XDG_DATA_HOME }}
+          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
+          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
+          XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
+          OPENSCIENCE_CLIENT: "app"
+      - name: Wait for published OpenScience server
+        run: |
+          for _ in $(seq 1 120); do
+            curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::published openscience server never became healthy on 127.0.0.1:4096"
+          exit 1
+      - name: Run packaged E2E
+        working-directory: frontend/workspace
+        run: bun run test:e2e:packaged
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: "http://127.0.0.1:4096"
+          PLAYWRIGHT_SERVER_HOST: "127.0.0.1"
+          PLAYWRIGHT_SERVER_PORT: "4096"
+          VITE_OPENSCIENCE_SERVER_HOST: "127.0.0.1"
+          VITE_OPENSCIENCE_SERVER_PORT: "4096"
+          OPENSCIENCE_CLIENT: "app"
+      - name: Print server logs
+        if: failure()
+        run: |
+          cat "$RUNNER_TEMP/openscience-server.log" || true
+          cat "$RUNNER_TEMP/openscience-fake-model.log" || true
+      - name: Upload packaged E2E artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-test-packaged-e2e-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            frontend/workspace/e2e/test-results
+            frontend/workspace/e2e/playwright-report
+            ${{ runner.temp }}/openscience-server.log
+            ${{ runner.temp }}/openscience-fake-model.log
+
+  os-smoke:
+    needs: publish-test
+    if: inputs.run_os_smoke
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-latest
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+          - name: macos
+            runner: macos-latest
+          - name: windows
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+      - name: Install and smoke OpenScience test package
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/openscience-prefix"
+          mkdir -p "$prefix"
+          export OPENSCIENCE_DISABLE_SHARE=true
+          export OPENSCIENCE_DISABLE_LSP_DOWNLOAD=true
+          export OPENSCIENCE_DISABLE_DEFAULT_PLUGINS=true
+          export OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER=true
+          npm install --global --prefix "$prefix" @synsci/openscience@test
+          bin="$prefix/bin/openscience"
+          "$bin" --version | tee "$RUNNER_TEMP/openscience-version.txt"
+          grep -Fx "${{ needs.publish-test.outputs.version }}" "$RUNNER_TEMP/openscience-version.txt"
+          "$bin" serve --port 4096 > "$RUNNER_TEMP/openscience-smoke.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 90); do
+            curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::openscience server never became healthy"
+          cat "$RUNNER_TEMP/openscience-smoke.log" || true
+          exit 1
+      - name: Install and smoke OpenScience test package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $prefix = Join-Path $env:RUNNER_TEMP "openscience-prefix"
+          $env:OPENSCIENCE_DISABLE_SHARE = "true"
+          $env:OPENSCIENCE_DISABLE_LSP_DOWNLOAD = "true"
+          $env:OPENSCIENCE_DISABLE_DEFAULT_PLUGINS = "true"
+          $env:OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER = "true"
+          npm install --global --prefix $prefix "@synsci/openscience@test"
+          $bin = Join-Path $prefix "openscience.cmd"
+          & $bin --version | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP "openscience-version.txt")
+          $actual = Get-Content (Join-Path $env:RUNNER_TEMP "openscience-version.txt")
+          if ($actual -ne "${{ needs.publish-test.outputs.version }}") {
+            throw "expected version ${{ needs.publish-test.outputs.version }}, got $actual"
+          }
+          $stdout = Join-Path $env:RUNNER_TEMP "openscience-smoke.out.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "openscience-smoke.err.log"
+          $proc = Start-Process -FilePath $bin -ArgumentList @("serve", "--port", "4096") -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          try {
+            foreach ($i in 1..90) {
+              try {
+                Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:4096/global/health" | Out-Null
+                exit 0
+              } catch {
+                Start-Sleep -Seconds 1
+              }
+            }
+            Get-Content $stdout -ErrorAction SilentlyContinue
+            Get-Content $stderr -ErrorAction SilentlyContinue
+            throw "openscience server never became healthy"
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }

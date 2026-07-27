@@ -210,6 +210,11 @@ export namespace Installation {
     return `https://community.chocolatey.org/api/v2/Packages?$filter=${filter}&$select=Version`
   }
 
+  export function npmReleaseChannel(channel: string = CHANNEL) {
+    const knownTags = new Set(["latest", "ci", "dev", "beta", "test"])
+    return knownTags.has(channel) ? channel : "latest"
+  }
+
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
 
@@ -236,8 +241,7 @@ export namespace Installation {
         const reg = r || "https://registry.npmjs.org"
         return reg.endsWith("/") ? reg.slice(0, -1) : reg
       })
-      const knownTags = new Set(["latest", "ci", "dev", "beta"])
-      const channel = knownTags.has(CHANNEL) ? CHANNEL : "latest"
+      const channel = npmReleaseChannel()
       return fetch(`${registry}/@synsci/openscience/${channel}`)
         .then((res) => {
           if (!res.ok) throw new Error(res.statusText)

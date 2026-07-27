@@ -8,7 +8,8 @@
     "synsci": "bin/synsci.mjs"
   },
   "files": [
-    "bin"
+    "bin",
+    "lib"
   ],
   "keywords": [
     "openscience",

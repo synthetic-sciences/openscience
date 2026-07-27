@@ -23,6 +23,7 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { createInterface } from "node:readline"
 import { fileURLToPath } from "node:url"
+import { npmDistTag, opensciencePackageSpec } from "../lib/channel.mjs"
 
 const SELF_PATH = (() => {
   try {
@@ -31,6 +32,15 @@ const SELF_PATH = (() => {
     return ""
   }
 })()
+const LAUNCHER_VERSION = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")).version || "0.0.0"
+  } catch {
+    return "0.0.0"
+  }
+})()
+const OPENSCIENCE_NPM_TAG = npmDistTag(LAUNCHER_VERSION)
+const OPENSCIENCE_NPM_SPEC = opensciencePackageSpec(LAUNCHER_VERSION)
 
 const BOLD = "\x1b[1m"
 const DIM = "\x1b[2m"
@@ -278,13 +288,13 @@ async function main() {
     } else {
       const s = spinner("Checking for updates...")
       const current = raw.replace(/[^0-9.]/g, "")
-      const latest = runQuiet("npm view @synsci/openscience version")
+      const latest = runQuiet(`npm view @synsci/openscience@${OPENSCIENCE_NPM_TAG} version`)
       if (!latest || current === latest) {
         s.ok(`openscience ${current} ${DIM}(up to date)${RESET}`)
       } else {
         s.update(`Upgrading ${current} → ${latest}...`)
         try {
-          execCli(cliPath, ["upgrade"], { stdio: "pipe" })
+          execCli(cliPath, ["upgrade", latest], { stdio: "pipe" })
           s.ok(`Upgraded to ${latest}`)
         } catch {
           s.warn(`Upgrade failed, continuing with ${current}`)
@@ -295,7 +305,7 @@ async function main() {
     const s = spinner("Installing OpenScience...")
     try {
       try {
-        execSync("npm i -g @synsci/openscience@latest", { stdio: "pipe" })
+        execSync(`npm i -g ${OPENSCIENCE_NPM_SPEC}`, { stdio: "pipe" })
       } catch (e) {
         // npm refuses to overwrite a bin file owned by another package
         // (EEXIST). If the conflict is the deprecated @synsci/cli, remove it
@@ -306,7 +316,7 @@ async function main() {
         s.update("Removing the deprecated @synsci/cli so it can't shadow the openscience command...")
         runQuiet("npm rm -g @synsci/cli")
         s.update("Retrying the OpenScience install...")
-        execSync("npm i -g @synsci/openscience@latest", { stdio: "pipe" })
+        execSync(`npm i -g ${OPENSCIENCE_NPM_SPEC}`, { stdio: "pipe" })
       }
       cliPath = resolveCli()
       if (!cliPath) throw new Error("openscience not on PATH after install")
@@ -316,7 +326,7 @@ async function main() {
       // no bash to pipe it into, so don't suggest a fallback that can't run.
       if (process.platform === "win32") {
         s.fail("Install failed")
-        console.log(`\n  Try manually: ${CYAN}npm i -g @synsci/openscience${RESET}\n`)
+        console.log(`\n  Try manually: ${CYAN}npm i -g ${OPENSCIENCE_NPM_SPEC}${RESET}\n`)
         process.exit(1)
       }
       // Global npm installs commonly fail on permissions. Fall back to the
@@ -330,7 +340,7 @@ async function main() {
         s.ok("Installed OpenScience")
       } catch (e2) {
         s.fail(`Install failed${e2 && e2.message ? ": " + e2.message : ""}`)
-        console.log(`\n  Try manually: ${CYAN}npm i -g @synsci/openscience${RESET}`)
+        console.log(`\n  Try manually: ${CYAN}npm i -g ${OPENSCIENCE_NPM_SPEC}${RESET}`)
         console.log(`  or:           ${CYAN}curl -fsSL https://openscience.sh/install | bash${RESET}\n`)
         process.exit(1)
       }
