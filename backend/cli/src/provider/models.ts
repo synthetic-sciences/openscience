@@ -13,6 +13,40 @@ import { lazy } from "@/util/lazy"
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
+  const Mode = z
+    .object({
+      model: z.string().optional(),
+      cost: z
+        .object({
+          input: z.number(),
+          output: z.number(),
+          cache_read: z.number().optional(),
+          cache_write: z.number().optional(),
+        })
+        .optional(),
+      provider: z
+        .object({
+          body: z.record(z.string(), z.any()).optional(),
+          headers: z.record(z.string(), z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional()
+
+  const ReasoningOption = z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("toggle"),
+    }),
+    z.object({
+      type: z.literal("effort"),
+      values: z.array(z.string().nullable()),
+    }),
+    z.object({
+      type: z.literal("budget_tokens"),
+      min: z.number().optional(),
+      max: z.number().optional(),
+    }),
+  ])
 
   export const Model = z.object({
     id: z.string(),
@@ -21,6 +55,7 @@ export namespace ModelsDev {
     release_date: z.string(),
     attachment: z.boolean(),
     reasoning: z.boolean(),
+    reasoning_options: z.array(ReasoningOption).optional(),
     temperature: z.boolean(),
     tool_call: z.boolean(),
     interleaved: z
@@ -60,7 +95,14 @@ export namespace ModelsDev {
         output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
       })
       .optional(),
-    experimental: z.boolean().optional(),
+    experimental: z
+      .union([
+        z.boolean(),
+        z.object({
+          modes: z.record(z.string(), Mode).optional(),
+        }),
+      ])
+      .optional(),
     status: z.enum(["alpha", "beta", "deprecated"]).optional(),
     options: z.record(z.string(), z.any()),
     headers: z.record(z.string(), z.string()).optional(),

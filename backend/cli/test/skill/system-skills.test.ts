@@ -13,4 +13,10 @@ describe("system skills", () => {
     const canonical = await Bun.file(path.join(root, "skills/research/initialize-atlas-graph/SKILL.md")).text()
     expect(embedded).toBe(canonical)
   })
+
+  test("embedded goal matches the canonical SKILL.md", async () => {
+    const embedded = await Bun.file(path.join(root, "src/skill/system/goal.txt")).text()
+    const canonical = await Bun.file(path.join(root, "skills/other/goal/SKILL.md")).text()
+    expect(embedded).toBe(canonical)
+  })
 })

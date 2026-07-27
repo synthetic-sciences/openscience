@@ -44,6 +44,10 @@ export namespace LLM {
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
 
   export async function stream(input: StreamInput) {
+    const tier = input.small
+      ? { model: undefined, options: {}, headers: {} }
+      : ProviderTransform.tier(input.model, input.user.tier)
+    const routed = tier.model ? await Provider.getModel(input.model.providerID, tier.model) : input.model
     const l = log
       .clone()
       .tag("providerID", input.model.providerID)
@@ -57,7 +61,7 @@ export namespace LLM {
       providerID: input.model.providerID,
     })
     const [language, cfg, provider, auth] = await Promise.all([
-      Provider.getLanguage(input.model),
+      Provider.getLanguage(routed),
       Config.get(),
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
@@ -112,6 +116,7 @@ export namespace LLM {
     const options: Record<string, any> = pipe(
       base,
       mergeDeep(input.model.options),
+      mergeDeep(tier.options),
       mergeDeep(input.agent.options),
       mergeDeep(variant),
     )
@@ -232,6 +237,7 @@ export namespace LLM {
               }
             : undefined),
         ...input.model.headers,
+        ...tier.headers,
         ...headers,
       },
       maxRetries: input.retries ?? 0,

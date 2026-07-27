@@ -135,7 +135,7 @@ export type UserMessage = {
     [key: string]: boolean
   }
   variant?: string
-  tier?: "fast" | "pro" | "ultra"
+  tier?: string
 }
 
 export type ProviderAuthError = {
@@ -1429,6 +1429,20 @@ export type ProviderConfig = {
       release_date?: string
       attachment?: boolean
       reasoning?: boolean
+      reasoning_options?: Array<
+        | {
+            type: "toggle"
+          }
+        | {
+            type: "effort"
+            values: Array<string | null>
+          }
+        | {
+            type: "budget_tokens"
+            min?: number
+            max?: number
+          }
+      >
       temperature?: boolean
       tool_call?: boolean
       interleaved?:
@@ -1457,7 +1471,29 @@ export type ProviderConfig = {
         input: Array<"text" | "audio" | "image" | "video" | "pdf">
         output: Array<"text" | "audio" | "image" | "video" | "pdf">
       }
-      experimental?: boolean
+      experimental?:
+        | boolean
+        | {
+            modes?: {
+              [key: string]: {
+                model?: string
+                cost?: {
+                  input: number
+                  output: number
+                  cache_read?: number
+                  cache_write?: number
+                }
+                provider?: {
+                  body?: {
+                    [key: string]: unknown
+                  }
+                  headers?: {
+                    [key: string]: string
+                  }
+                }
+              }
+            }
+          }
       status?: "alpha" | "beta" | "deprecated"
       options?: {
         [key: string]: unknown
@@ -1942,9 +1978,33 @@ export type Model = {
     [key: string]: string
   }
   release_date: string
+  reasoningOptions?: Array<{
+    [key: string]: unknown
+  }>
   variants?: {
     [key: string]: {
       [key: string]: unknown
+    }
+  }
+  modes?: {
+    [key: string]: {
+      model?: string
+      cost?: {
+        input: number
+        output: number
+        cache: {
+          read: number
+          write: number
+        }
+      }
+      provider?: {
+        body?: {
+          [key: string]: unknown
+        }
+        headers?: {
+          [key: string]: string
+        }
+      }
     }
   }
 }
@@ -2382,6 +2442,24 @@ export type GlobalSyncResponses = {
 }
 
 export type GlobalSyncResponse = GlobalSyncResponses[keyof GlobalSyncResponses]
+
+export type AccountSessionData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/session"
+}
+
+export type AccountSessionResponses = {
+  /**
+   * Local session status
+   */
+  200: {
+    session: boolean
+  }
+}
+
+export type AccountSessionResponse = AccountSessionResponses[keyof AccountSessionResponses]
 
 export type AccountGetData = {
   body?: never
@@ -4383,7 +4461,7 @@ export type SessionPromptData = {
     }
     system?: string
     variant?: string
-    tier?: "fast" | "pro" | "ultra"
+    tier?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -4571,7 +4649,7 @@ export type SessionPromptAsyncData = {
     }
     system?: string
     variant?: string
-    tier?: "fast" | "pro" | "ultra"
+    tier?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -4616,6 +4694,7 @@ export type SessionCommandData = {
     arguments: string
     command: string
     variant?: string
+    tier?: string
     parts?: Array<{
       id?: string
       type: "file"
@@ -4981,6 +5060,20 @@ export type ProviderListResponses = {
           release_date: string
           attachment: boolean
           reasoning: boolean
+          reasoning_options?: Array<
+            | {
+                type: "toggle"
+              }
+            | {
+                type: "effort"
+                values: Array<string | null>
+              }
+            | {
+                type: "budget_tokens"
+                min?: number
+                max?: number
+              }
+          >
           temperature: boolean
           tool_call: boolean
           interleaved?:
@@ -5009,7 +5102,29 @@ export type ProviderListResponses = {
             input: Array<"text" | "audio" | "image" | "video" | "pdf">
             output: Array<"text" | "audio" | "image" | "video" | "pdf">
           }
-          experimental?: boolean
+          experimental?:
+            | boolean
+            | {
+                modes?: {
+                  [key: string]: {
+                    model?: string
+                    cost?: {
+                      input: number
+                      output: number
+                      cache_read?: number
+                      cache_write?: number
+                    }
+                    provider?: {
+                      body?: {
+                        [key: string]: unknown
+                      }
+                      headers?: {
+                        [key: string]: string
+                      }
+                    }
+                  }
+                }
+              }
           status?: "alpha" | "beta" | "deprecated"
           options: {
             [key: string]: unknown

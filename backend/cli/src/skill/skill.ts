@@ -9,6 +9,7 @@ import { runtimeRegexPass, classifierInjectionRegexPass } from "./install/review
 import { NamedError } from "@synsci/util/error"
 import { ConfigMarkdown } from "../config/markdown"
 import INITIALIZE_ATLAS_GRAPH_MD from "./system/initialize-atlas-graph.txt"
+import GOAL_MD from "./system/goal.txt"
 import { Log } from "../util/log"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
@@ -25,6 +26,7 @@ import { Installation } from "@/installation"
 // including the compiled binary, which ships no skills and otherwise depends on
 // the API index. Kept in sync with skills/research/<name>/SKILL.md by a test.
 const SYSTEM_SKILLS: Array<{ name: string; content: string }> = [
+  { name: "goal", content: GOAL_MD },
   { name: "initialize-atlas-graph", content: INITIALIZE_ATLAS_GRAPH_MD },
 ]
 

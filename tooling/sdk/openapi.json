@@ -342,6 +342,39 @@
         ]
       }
     },
+    "/account/session": {
+      "get": {
+        "operationId": "account.session",
+        "summary": "Get local session status",
+        "description": "Check whether this OpenScience server has a local Atlas session without contacting Atlas.",
+        "responses": {
+          "200": {
+            "description": "Local session status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "session"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.session({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/account": {
       "get": {
         "operationId": "account.get",
@@ -5405,12 +5438,7 @@
                     "type": "string"
                   },
                   "tier": {
-                    "type": "string",
-                    "enum": [
-                      "fast",
-                      "pro",
-                      "ultra"
-                    ]
+                    "type": "string"
                   },
                   "parts": {
                     "type": "array",
@@ -5797,12 +5825,7 @@
                     "type": "string"
                   },
                   "tier": {
-                    "type": "string",
-                    "enum": [
-                      "fast",
-                      "pro",
-                      "ultra"
-                    ]
+                    "type": "string"
                   },
                   "parts": {
                     "type": "array",
@@ -5932,6 +5955,9 @@
                     "type": "string"
                   },
                   "variant": {
+                    "type": "string"
+                  },
+                  "tier": {
                     "type": "string"
                   },
                   "parts": {
@@ -6702,6 +6728,69 @@
                                 "reasoning": {
                                   "type": "boolean"
                                 },
+                                "reasoning_options": {
+                                  "type": "array",
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "const": "toggle"
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "const": "effort"
+                                          },
+                                          "values": {
+                                            "type": "array",
+                                            "items": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "values"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "const": "budget_tokens"
+                                          },
+                                          "min": {
+                                            "type": "number"
+                                          },
+                                          "max": {
+                                            "type": "number"
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
                                 "temperature": {
                                   "type": "boolean"
                                 },
@@ -6828,7 +6917,72 @@
                                   ]
                                 },
                                 "experimental": {
-                                  "type": "boolean"
+                                  "anyOf": [
+                                    {
+                                      "type": "boolean"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "modes": {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string"
+                                          },
+                                          "additionalProperties": {
+                                            "type": "object",
+                                            "properties": {
+                                              "model": {
+                                                "type": "string"
+                                              },
+                                              "cost": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "input": {
+                                                    "type": "number"
+                                                  },
+                                                  "output": {
+                                                    "type": "number"
+                                                  },
+                                                  "cache_read": {
+                                                    "type": "number"
+                                                  },
+                                                  "cache_write": {
+                                                    "type": "number"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "input",
+                                                  "output"
+                                                ]
+                                              },
+                                              "provider": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "body": {
+                                                    "type": "object",
+                                                    "propertyNames": {
+                                                      "type": "string"
+                                                    },
+                                                    "additionalProperties": {}
+                                                  },
+                                                  "headers": {
+                                                    "type": "object",
+                                                    "propertyNames": {
+                                                      "type": "string"
+                                                    },
+                                                    "additionalProperties": {
+                                                      "type": "string"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
                                 },
                                 "status": {
                                   "type": "string",
@@ -9929,12 +10083,7 @@
             "type": "string"
           },
           "tier": {
-            "type": "string",
-            "enum": [
-              "fast",
-              "pro",
-              "ultra"
-            ]
+            "type": "string"
           }
         },
         "required": [
@@ -13340,6 +13489,69 @@
                 "reasoning": {
                   "type": "boolean"
                 },
+                "reasoning_options": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "toggle"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "effort"
+                          },
+                          "values": {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "values"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "budget_tokens"
+                          },
+                          "min": {
+                            "type": "number"
+                          },
+                          "max": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ]
+                      }
+                    ]
+                  }
+                },
                 "temperature": {
                   "type": "boolean"
                 },
@@ -13466,7 +13678,72 @@
                   ]
                 },
                 "experimental": {
-                  "type": "boolean"
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "modes": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "model": {
+                                "type": "string"
+                              },
+                              "cost": {
+                                "type": "object",
+                                "properties": {
+                                  "input": {
+                                    "type": "number"
+                                  },
+                                  "output": {
+                                    "type": "number"
+                                  },
+                                  "cache_read": {
+                                    "type": "number"
+                                  },
+                                  "cache_write": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "input",
+                                  "output"
+                                ]
+                              },
+                              "provider": {
+                                "type": "object",
+                                "properties": {
+                                  "body": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string"
+                                    },
+                                    "additionalProperties": {}
+                                  },
+                                  "headers": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string"
+                                    },
+                                    "additionalProperties": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
                 },
                 "status": {
                   "type": "string",
@@ -14632,6 +14909,16 @@
           "release_date": {
             "type": "string"
           },
+          "reasoningOptions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
           "variants": {
             "type": "object",
             "propertyNames": {
@@ -14643,6 +14930,72 @@
                 "type": "string"
               },
               "additionalProperties": {}
+            }
+          },
+          "modes": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "cost": {
+                  "type": "object",
+                  "properties": {
+                    "input": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "number"
+                    },
+                    "cache": {
+                      "type": "object",
+                      "properties": {
+                        "read": {
+                          "type": "number"
+                        },
+                        "write": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "read",
+                        "write"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "input",
+                    "output",
+                    "cache"
+                  ]
+                },
+                "provider": {
+                  "type": "object",
+                  "properties": {
+                    "body": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "headers": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },

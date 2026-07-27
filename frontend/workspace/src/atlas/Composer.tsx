@@ -25,6 +25,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { openSetupDialog } from "@/atlas/SetupDialog"
 import { resolveModelSource, type ModelSource } from "@/utils/model-cost"
+import { modelTierOptions, normalizedTier, promptTier, type ModelTier } from "./model-tier"
 
 const BYOK_URL = URLS.dashboard
 
@@ -57,7 +58,7 @@ const SOURCE_DOT: Record<ModelSource, { color: string; opacity: number; meters: 
 
 // The effort control renders a model's OWN reasoning-effort variant keys
 // (low/medium/high/xhigh/none/minimal, exactly as the backend emits them) and
-// persists the choice via models.variant. No relabeling.
+// persists the choice via models.variant. Speed/context modes are separate.
 //
 
 // Collapse a model id to its FAMILY so the picker shows one current entry per
@@ -98,6 +99,10 @@ interface ModelCostShape {
   input?: number
   output?: number
   experimentalOver200K?: { input?: number; output?: number }
+}
+
+interface ModelModeShape {
+  modes?: Record<string, unknown>
 }
 function rateFor(cost: ModelCostShape | undefined, over: boolean) {
   const tier = over && cost?.experimentalOver200K ? cost.experimentalOver200K : cost
@@ -218,6 +223,7 @@ export function Composer(): JSX.Element {
     agent: string
     model: ModelKey
     variant: string | undefined
+    tier: ModelTier | undefined
   }
   const [queue, setQueue] = createSignal<QueuedPrompt[]>([])
   const [inflight, setInflight] = createSignal(false)
@@ -331,17 +337,16 @@ export function Composer(): JSX.Element {
     if (m) models.variant.set(m, value)
   }
 
-  // Context tier (Cursor "MAX mode" analogue). Only meaningful when the model
-  // prices the >200k window differently. This is a price-preview + intent signal;
-  // the long-context request flag is threaded through submit in a later pass.
-  const [longCtx, setLongCtx] = createSignal(false)
-  const selectedCost = createMemo(() => selectedInfo()?.cost as ModelCostShape | undefined)
-  const hasLongTier = createMemo(() => !!selectedCost()?.experimentalOver200K)
-  // Reset the tier toggle whenever the model changes — pricing is per-model.
+  const [tier, setTier] = createSignal<ModelTier>("standard")
+  const selectedModes = createMemo(() => (selectedInfo() as ModelModeShape | undefined)?.modes)
+  const modeKeys = createMemo(() => Object.keys(selectedModes() ?? {}))
+  const tierOptions = createMemo(() => modelTierOptions(modeKeys()))
+  const selectedTier = createMemo(() => normalizedTier(tier(), modeKeys()))
+  // Reset the tier whenever the model changes — modes and pricing are per-model.
   createEffect(
     on(
       () => model()?.providerID + "/" + model()?.modelID,
-      () => setLongCtx(false),
+      () => setTier("standard"),
       { defer: true },
     ),
   )
@@ -716,6 +721,7 @@ export function Composer(): JSX.Element {
       agent: agent(),
       model: chosen,
       variant: models.variant.get(chosen),
+      tier: promptTier(tier(), modeKeys()),
     }
     // Clear the input immediately in both paths so typing can continue.
     setText("")
@@ -800,6 +806,7 @@ export function Composer(): JSX.Element {
           model: p.model,
           agent: p.agent,
           variant: p.variant,
+          tier: p.tier,
           parts: promptParts,
         } as any)
         .catch((e: any) => {
@@ -1349,7 +1356,7 @@ export function Composer(): JSX.Element {
                                       model()?.providerID === row.provider.id && model()?.modelID === row.id
                                     const highlighted = () => modelIndex() === flatIndex()
                                     const dot = SOURCE_DOT[rowSource(row.provider.id)]
-                                    const price = () => rateFor(row.cost as ModelCostShape, active() && longCtx())
+                                    const price = () => rateFor(row.cost as ModelCostShape, false)
                                     return (
                                       <div
                                         ref={(el) => (modelRowRefs[flatIndex()] = el)}
@@ -1532,8 +1539,8 @@ export function Composer(): JSX.Element {
                       </div>
 
                       {/* controls for the selected model — one home for effort /
-                          speed / context, so every list row stays uniform */}
-                      <Show when={!!model() && (variantKeys().length > 0 || hasLongTier())}>
+                          mode, so every list row stays uniform */}
+                      <Show when={!!model() && (variantKeys().length > 0 || tierOptions().length > 0)}>
                         <div
                           onClick={(e) => e.stopPropagation()}
                           style={{
@@ -1556,16 +1563,13 @@ export function Composer(): JSX.Element {
                               />
                             </span>
                           </Show>
-                          <Show when={hasLongTier()}>
+                          <Show when={tierOptions().length > 0}>
                             <span style={{ display: "inline-flex", "align-items": "center", gap: "6px" }}>
-                              <span style={CONTROL_LABEL}>context</span>
+                              <span style={CONTROL_LABEL}>mode</span>
                               <Segmented
-                                options={[
-                                  { id: "std", label: "≤200k" },
-                                  { id: "long", label: ">200k" },
-                                ]}
-                                value={longCtx() ? "long" : "std"}
-                                onPick={(id) => setLongCtx(id === "long")}
+                                options={tierOptions()}
+                                value={selectedTier()}
+                                onPick={(id) => setTier(id as ModelTier)}
                               />
                             </span>
                           </Show>
@@ -1838,7 +1842,7 @@ export function Composer(): JSX.Element {
   )
 }
 
-// Faint caption preceding a segmented control ("effort" / "speed" / "context").
+// Faint caption preceding a segmented control ("effort" / "mode").
 const CONTROL_LABEL: JSX.CSSProperties = {
   "font-family": FONT_MONO,
   "font-size": "10px",
@@ -1848,8 +1852,7 @@ const CONTROL_LABEL: JSX.CSSProperties = {
 
 // Cursor-style segmented control: a quiet row of peers where the selected one is
 // marked by a faint tint + hairline border at a consistent weight — never bold.
-// Used on the active model row for the effort keys, the fast/normal speed toggle,
-// and the context tier.
+// Used on the active model row for effort keys and provider-native modes.
 function Segmented(props: {
   options: { id: string; label: string }[]
   value: string

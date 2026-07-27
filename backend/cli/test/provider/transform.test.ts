@@ -101,6 +101,111 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
   })
+
+  test("enables managed Claude reasoning through OpenRouter", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...mockModel,
+        id: "anthropic/claude-opus-4.8",
+        providerID: "openrouter",
+        api: {
+          id: "anthropic/claude-opus-4.8",
+          url: "https://openrouter.ai/api/v1",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+        capabilities: {
+          ...mockModel.capabilities,
+          reasoning: true,
+          interleaved: { field: "reasoning_details" },
+        },
+      },
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.reasoning).toEqual({ effort: "medium" })
+  })
+})
+
+describe("ProviderTransform.tier", () => {
+  test("catalog mode applies provider body, headers, and sibling model route", () => {
+    const result = ProviderTransform.tier(
+      {
+        modes: {
+          pro: {
+            model: "openai/gpt-5.6-sol-pro",
+            provider: {
+              body: { reasoning: { mode: "pro" } },
+              headers: { "x-model-mode": "pro" },
+            },
+          },
+        },
+      } as any,
+      "pro",
+    )
+
+    expect(result.model).toBe("openai/gpt-5.6-sol-pro")
+    expect(result.options).toEqual({ reasoning: { mode: "pro" } })
+    expect(result.headers).toEqual({ "x-model-mode": "pro" })
+  })
+
+  test("missing mode metadata leaves provider payload and model untouched", () => {
+    expect(ProviderTransform.tier({ modes: {} } as any, "pro")).toEqual({
+      model: undefined,
+      options: {},
+      headers: {},
+    })
+    expect(ProviderTransform.tier({} as any, "fast")).toEqual({
+      model: undefined,
+      options: {},
+      headers: {},
+    })
+  })
+})
+
+describe("ProviderTransform.variants - exact catalog efforts", () => {
+  const model = {
+    id: "deepseek/deepseek-v4-pro",
+    providerID: "openrouter",
+    api: {
+      id: "deepseek/deepseek-v4-pro",
+      url: "https://openrouter.ai/api/v1",
+      npm: "@openrouter/ai-sdk-provider",
+    },
+    capabilities: {
+      reasoning: true,
+      temperature: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    reasoningOptions: [{ type: "effort", values: ["high", "xhigh"] }],
+    limit: { context: 1_000_000, output: 384_000 },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("uses the model's exact effort ladder instead of a family-wide guess", () => {
+    expect(ProviderTransform.variants(model)).toEqual({
+      high: { reasoning: { effort: "high" } },
+      xhigh: { reasoning: { effort: "xhigh" } },
+    })
+  })
+
+  test("an explicit empty reasoning contract exposes no effort control", () => {
+    expect(
+      ProviderTransform.variants({
+        ...model,
+        id: "z-ai/glm-5",
+        api: { ...model.api, id: "z-ai/glm-5" },
+        reasoningOptions: [],
+      }),
+    ).toEqual({})
+  })
 })
 
 describe("ProviderTransform.maxOutputTokens", () => {
@@ -1450,20 +1555,26 @@ describe("ProviderTransform.variants", () => {
       expect(result.xhigh).toEqual({ reasoning: { effort: "xhigh" } })
     })
 
-    test("claude via OpenRouter offers NO reasoning variants (#167: unsignable round-trip)", () => {
-      // OpenRouter strips Anthropic's thinking-block signature, so Claude reasoning
-      // 400s on multi-step tool-use turns — variants() must return {} for Claude on
-      // OR (native-Anthropic BYOK keeps its full ladder, tested separately).
-      for (const apiId of ["anthropic/claude-opus-4.8", "anthropic/claude-sonnet-5", "anthropic/claude-sonnet-4-5"]) {
-        const result = ProviderTransform.variants(
-          createMockModel({
-            id: apiId,
-            providerID: "openrouter",
-            api: { id: apiId, url: "https://openrouter.ai", npm: "@openrouter/ai-sdk-provider" },
-          }),
-        )
-        expect(result).toEqual({})
-      }
+    test("claude via OpenRouter uses its exact catalog effort ladder", () => {
+      const result = ProviderTransform.variants(
+        createMockModel({
+          id: "anthropic/claude-opus-4.8",
+          providerID: "openrouter",
+          api: {
+            id: "anthropic/claude-opus-4.8",
+            url: "https://openrouter.ai",
+            npm: "@openrouter/ai-sdk-provider",
+          },
+          reasoningOptions: [
+            {
+              type: "effort",
+              values: ["low", "medium", "high", "xhigh", "max"],
+            },
+          ],
+        }),
+      )
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.xhigh).toEqual({ reasoning: { effort: "xhigh" } })
     })
 
     test("no-effort-dial models expose no variants (kimi = on/off only)", () => {

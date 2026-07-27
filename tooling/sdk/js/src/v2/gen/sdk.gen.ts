@@ -11,6 +11,7 @@ import type {
   AccountGetResponses,
   AccountLoginKeyResponses,
   AccountLogoutResponses,
+  AccountSessionResponses,
   AgentPartInput,
   AppAgentsResponses,
   AppLogErrors,
@@ -458,6 +459,18 @@ export class BillingMode extends HeyApiClient {
 }
 
 export class Account extends HeyApiClient {
+  /**
+   * Get local session status
+   *
+   * Check whether this OpenScience server has a local Atlas session without contacting Atlas.
+   */
+  public session<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AccountSessionResponses, unknown, ThrowOnError>({
+      url: "/account/session",
+      ...options,
+    })
+  }
+
   /**
    * Get account
    *
@@ -2409,7 +2422,7 @@ export class Session extends HeyApiClient {
       }
       system?: string
       variant?: string
-      tier?: "fast" | "pro" | "ultra"
+      tier?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -2499,7 +2512,7 @@ export class Session extends HeyApiClient {
       }
       system?: string
       variant?: string
-      tier?: "fast" | "pro" | "ultra"
+      tier?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -2551,6 +2564,7 @@ export class Session extends HeyApiClient {
       arguments?: string
       command?: string
       variant?: string
+      tier?: string
       parts?: Array<{
         id?: string
         type: "file"
@@ -2575,6 +2589,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "arguments" },
             { in: "body", key: "command" },
             { in: "body", key: "variant" },
+            { in: "body", key: "tier" },
             { in: "body", key: "parts" },
           ],
         },

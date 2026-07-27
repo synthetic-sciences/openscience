@@ -50,42 +50,41 @@ describe("ProviderTransform.options — managed OpenRouter reasoning", () => {
     expect(result.include).toBeUndefined()
   })
 
-  test("Claude via OpenRouter explicitly DISABLES reasoning (unreplayable signed thinking → 400)", () => {
+  test("Claude via OpenRouter requests unified reasoning for managed inference", () => {
     const result = ProviderTransform.options({
       model: orModel("openrouter/anthropic/claude-sonnet-4", "anthropic/claude-sonnet-4"),
       sessionID,
       providerOptions: { baseURL: PROXY_OR },
     })
-    // usage tracking still on, reasoning explicitly off → no thinking blocks, even
-    // for adaptive-thinking models that default on and past a config effort merge.
     expect(result.usage).toEqual({ include: true })
-    expect(result.reasoning).toEqual({ enabled: false })
+    expect(result.reasoning).toEqual({ effort: "medium" })
   })
 
-  test("Claude-OR reasoning is disabled even when only api.id (mixed-case) carries the token", () => {
-    // options() and variants() must key off the SAME both-field, lowercased predicate,
-    // or an uppercase/aliased Claude id slips options() and re-triggers the 400.
+  test("Claude via OpenRouter supports reasoning when only api.id carries a mixed-case token", () => {
     const upper = ProviderTransform.options({
       model: orModel("openrouter/some-alias", "Anthropic/Claude-Sonnet-4"),
       sessionID,
       providerOptions: { baseURL: PROXY_OR },
     })
-    expect(upper.reasoning).toEqual({ enabled: false })
-    // model.id carries the token, api.id does not → still caught (both fields checked).
+    expect(upper.reasoning).toEqual({ effort: "medium" })
+
     const aliased = ProviderTransform.options({
       model: orModel("openrouter/anthropic/claude-x", "vendor/opaque-slug"),
       sessionID,
       providerOptions: { baseURL: PROXY_OR },
     })
-    expect(aliased.reasoning).toEqual({ enabled: false })
+    expect(aliased.reasoning).toEqual({ effort: "medium" })
   })
 
-  test("Claude via OpenRouter offers no reasoning-effort variants (same predicate as options)", () => {
+  test("Claude via OpenRouter offers the unified reasoning-effort variants", () => {
     expect(
-      ProviderTransform.variants(orModel("openrouter/anthropic/claude-sonnet-4", "anthropic/claude-sonnet-4")),
-    ).toEqual({})
-    // mixed-case api.id must also yield no picker, matching options() above.
-    expect(ProviderTransform.variants(orModel("openrouter/some-alias", "Anthropic/Claude-Sonnet-4"))).toEqual({})
+      Object.keys(
+        ProviderTransform.variants(orModel("openrouter/anthropic/claude-sonnet-4", "anthropic/claude-sonnet-4")),
+      ),
+    ).toEqual(["low", "medium", "high"])
+    expect(
+      Object.keys(ProviderTransform.variants(orModel("openrouter/some-alias", "Anthropic/Claude-Sonnet-4"))),
+    ).toEqual(["low", "medium", "high"])
   })
 
   test("a non-Claude OR model whose id merely contains a vendor token is unaffected", () => {

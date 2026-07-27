@@ -65,6 +65,21 @@ export namespace Provider {
     return CODEX_MODEL_IDS.has(modelID)
   }
 
+  function codexOAuthModes(modelID: string) {
+    if (/^gpt-5[.-]4-mini$/.test(modelID)) return undefined
+    if (!/^gpt-5[.-](?:4|5|6)(?:-(?:sol|terra|luna))?$/.test(modelID)) return undefined
+    return {
+      fast: {
+        provider: {
+          body: {
+            service_tier: "priority",
+          },
+          headers: {},
+        },
+      },
+    }
+  }
+
   function isGpt5OrLater(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
     if (!match) {
@@ -837,6 +852,26 @@ export namespace Provider {
     },
   }
 
+  const Mode = z.object({
+    model: z.string().optional(),
+    cost: z
+      .object({
+        input: z.number(),
+        output: z.number(),
+        cache: z.object({
+          read: z.number(),
+          write: z.number(),
+        }),
+      })
+      .optional(),
+    provider: z
+      .object({
+        body: z.record(z.string(), z.any()).optional(),
+        headers: z.record(z.string(), z.string()).optional(),
+      })
+      .optional(),
+  })
+
   export const Model = z
     .object({
       id: z.string(),
@@ -901,7 +936,9 @@ export namespace Provider {
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
+      reasoningOptions: z.array(z.record(z.string(), z.any())).optional(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+      modes: z.record(z.string(), Mode).optional(),
     })
     .meta({
       ref: "Model",
@@ -977,6 +1014,69 @@ export namespace Provider {
     return m
   }
 
+  function modelModes(provider: ModelsDev.Provider, model: ModelsDev.Model): Model["modes"] | undefined {
+    const experimental = model.experimental
+    const modes = experimental && typeof experimental === "object" ? experimental.modes : undefined
+    const direct = Object.fromEntries(
+      Object.entries(modes ?? {})
+        .filter(([key, mode]) => {
+          if (!mode) return false
+          if (provider.id !== "anthropic" || key !== "fast") return true
+          const id = model.id.toLowerCase().replaceAll(".", "-")
+          return id.startsWith("claude-opus-5") || id.startsWith("claude-opus-4-8")
+        })
+        .map(([key, mode]) => [
+          key,
+          {
+            model: mode?.model,
+            cost: mode?.cost
+              ? {
+                  input: mode.cost.input,
+                  output: mode.cost.output,
+                  cache: {
+                    read: mode.cost.cache_read ?? 0,
+                    write: mode.cost.cache_write ?? 0,
+                  },
+                }
+              : undefined,
+            provider: mode?.provider
+              ? {
+                  body: mode.provider.body ?? {},
+                  headers: mode.provider.headers ?? {},
+                }
+              : undefined,
+          },
+        ]),
+    )
+    const sibling =
+      provider.id === "openrouter" && !/-(?:fast|pro)$/.test(model.id)
+        ? Object.fromEntries(
+            ["fast", "pro"]
+              .map((key) => [key, provider.models[`${model.id}-${key}`]] as const)
+              .filter((entry) => !!entry[1])
+              .map(([key, route]) => [
+                key,
+                {
+                  model: route!.id,
+                  cost: route!.cost
+                    ? {
+                        input: route!.cost.input,
+                        output: route!.cost.output,
+                        cache: {
+                          read: route!.cost.cache_read ?? 0,
+                          write: route!.cost.cache_write ?? 0,
+                        },
+                      }
+                    : undefined,
+                },
+              ]),
+          )
+        : {}
+    const result = { ...direct, ...sibling }
+    if (Object.keys(result).length === 0) return undefined
+    return result
+  }
+
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     // models.dev can lag a just-launched model's authoritative provider
     // contract. Normalize Muse at the ingestion seam so cached, bundled, and
@@ -1005,6 +1105,8 @@ export namespace Provider {
       status: model.status ?? "active",
       headers: model.headers ?? {},
       options: model.options ?? {},
+      modes: modelModes(provider, model),
+      reasoningOptions: model.reasoning_options,
       cost: {
         input: model.cost?.input ?? 0,
         output: model.cost?.output ?? 0,
@@ -1242,7 +1344,9 @@ export namespace Provider {
           headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
           family: model.family ?? existingModel?.family ?? "",
           release_date: model.release_date ?? existingModel?.release_date ?? "",
+          reasoningOptions: existingModel?.reasoningOptions,
           variants: {},
+          modes: existingModel?.modes,
         }
         const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
         parsedModel.variants = mapValues(
@@ -1277,6 +1381,9 @@ export namespace Provider {
             // Codex OAuth advertises a separate 272k window even when the
             // copied public-API entry has a million-token context.
             limit: { ...model.limit, context: 272_000 },
+            // Codex advertises its own fast tier independently of the public
+            // API catalog, so synthesize only the modes in the OAuth contract.
+            modes: codexOAuthModes(model.id),
           }
           // The public API and ChatGPT/Codex expose different GPT-5.6 effort
           // ladders. Recompute after changing providerID instead of copying the

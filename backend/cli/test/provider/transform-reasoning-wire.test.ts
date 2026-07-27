@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { createAnthropic } from "@ai-sdk/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createXai } from "@ai-sdk/xai"
 import { generateText } from "ai"
@@ -104,5 +105,56 @@ describe("reasoning options serialize onto provider request bodies", () => {
       include: ["reasoning.encrypted_content"],
     })
     expect(wire.bodies[0].reasoning).toBeUndefined()
+  })
+
+  test("OpenAI fast and pro modes reach their native request fields", async () => {
+    const target = model({
+      id: "gpt-5.6-sol",
+      providerID: "openai",
+      api: { id: "gpt-5.6-sol", url: "https://api.openai.com/v1", npm: "@ai-sdk/openai" },
+      modes: {
+        fast: { provider: { body: { service_tier: "priority" } } },
+        pro: { provider: { body: { reasoning: { mode: "pro" } } } },
+      },
+    })
+    const wire = recorder()
+    const sdk = createOpenAI({ apiKey: "test", baseURL: "https://openai.test/v1", fetch: wire.fetch })
+
+    for (const mode of ["fast", "pro"]) {
+      const options = mergeDeep(
+        ProviderTransform.options({ model: target, sessionID, providerOptions: {} }),
+        ProviderTransform.tier(target, mode).options,
+      )
+      await send(sdk.responses(target.api.id), ProviderTransform.providerOptions(target, options))
+    }
+
+    expect(wire.bodies[0].service_tier).toBe("priority")
+    expect(wire.bodies[1].reasoning).toMatchObject({ mode: "pro" })
+  })
+
+  test("Anthropic fast mode reaches the speed field", async () => {
+    const target = model({
+      id: "claude-opus-4-8",
+      providerID: "anthropic",
+      api: { id: "claude-opus-4-8", url: "https://api.anthropic.com/v1", npm: "@ai-sdk/anthropic" },
+      modes: {
+        fast: {
+          provider: {
+            body: { speed: "fast" },
+            headers: { "anthropic-beta": "fast-mode-2026-02-01" },
+          },
+        },
+      },
+    })
+    const options = mergeDeep(
+      ProviderTransform.options({ model: target, sessionID, providerOptions: {} }),
+      ProviderTransform.tier(target, "fast").options,
+    )
+    const wire = recorder()
+    const sdk = createAnthropic({ apiKey: "test", baseURL: "https://anthropic.test/v1", fetch: wire.fetch })
+
+    await send(sdk(target.api.id), ProviderTransform.providerOptions(target, options))
+
+    expect(wire.bodies[0].speed).toBe("fast")
   })
 })

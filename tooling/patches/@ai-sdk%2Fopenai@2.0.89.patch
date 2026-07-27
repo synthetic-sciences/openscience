@@ -1,0 +1,136 @@
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index 9754c0afb02f570ace9c58c3fb973764d1104925..259e666a9d8235450c25dc104946247f17293fd1 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -342,6 +342,7 @@ declare const openaiResponsesProviderOptionsSchema: _ai_sdk_provider_utils.LazyV
+     promptCacheKey?: string | null | undefined;
+     promptCacheRetention?: "in_memory" | "24h" | null | undefined;
+     reasoningEffort?: string | null | undefined;
++    reasoningMode?: "pro" | null | undefined;
+     reasoningSummary?: string | null | undefined;
+     safetyIdentifier?: string | null | undefined;
+     serviceTier?: "default" | "auto" | "flex" | "priority" | null | undefined;
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 9754c0afb02f570ace9c58c3fb973764d1104925..259e666a9d8235450c25dc104946247f17293fd1 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -342,6 +342,7 @@ declare const openaiResponsesProviderOptionsSchema: _ai_sdk_provider_utils.LazyV
+     promptCacheKey?: string | null | undefined;
+     promptCacheRetention?: "in_memory" | "24h" | null | undefined;
+     reasoningEffort?: string | null | undefined;
++    reasoningMode?: "pro" | null | undefined;
+     reasoningSummary?: string | null | undefined;
+     safetyIdentifier?: string | null | undefined;
+     serviceTier?: "default" | "auto" | "flex" | "priority" | null | undefined;
+diff --git a/dist/index.js b/dist/index.js
+index ba86783033e3fa24faf7c919374d548316f2cd1f..a681310b6a2ee7c69f1b0947acf0e8e784001c87 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2983,6 +2983,7 @@ var openaiResponsesProviderOptionsSchema = (0, import_provider_utils22.lazyValid
+        * an error.
+        */
+       reasoningEffort: import_v417.z.string().nullish(),
++      reasoningMode: import_v417.z.literal("pro").nullish(),
+       reasoningSummary: import_v417.z.string().nullish(),
+       safetyIdentifier: import_v417.z.string().nullish(),
+       serviceTier: import_v417.z.enum(["auto", "flex", "priority", "default"]).nullish(),
+@@ -3279,11 +3280,14 @@ var OpenAIResponsesLanguageModel = class {
+       top_logprobs: topLogprobs,
+       truncation: openaiOptions == null ? void 0 : openaiOptions.truncation,
+       // model-specific settings:
+-      ...modelCapabilities.isReasoningModel && ((openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null) && {
++      ...modelCapabilities.isReasoningModel && ((openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningMode) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null) && {
+         reasoning: {
+           ...(openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null && {
+             effort: openaiOptions.reasoningEffort
+           },
++          ...(openaiOptions == null ? void 0 : openaiOptions.reasoningMode) != null && {
++            mode: openaiOptions.reasoningMode
++          },
+           ...(openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null && {
+             summary: openaiOptions.reasoningSummary
+           }
+diff --git a/dist/index.mjs b/dist/index.mjs
+index a740f1650ff7cf157bd5b7dc78b1256e5a204292..f9ca1b66e78fa0a86e5941f5a5927401e8c0fcac 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -3054,6 +3054,7 @@ var openaiResponsesProviderOptionsSchema = lazyValidator9(
+        * an error.
+        */
+       reasoningEffort: z17.string().nullish(),
++      reasoningMode: z17.literal("pro").nullish(),
+       reasoningSummary: z17.string().nullish(),
+       safetyIdentifier: z17.string().nullish(),
+       serviceTier: z17.enum(["auto", "flex", "priority", "default"]).nullish(),
+@@ -3352,11 +3353,14 @@ var OpenAIResponsesLanguageModel = class {
+       top_logprobs: topLogprobs,
+       truncation: openaiOptions == null ? void 0 : openaiOptions.truncation,
+       // model-specific settings:
+-      ...modelCapabilities.isReasoningModel && ((openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null) && {
++      ...modelCapabilities.isReasoningModel && ((openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningMode) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null) && {
+         reasoning: {
+           ...(openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null && {
+             effort: openaiOptions.reasoningEffort
+           },
++          ...(openaiOptions == null ? void 0 : openaiOptions.reasoningMode) != null && {
++            mode: openaiOptions.reasoningMode
++          },
+           ...(openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null && {
+             summary: openaiOptions.reasoningSummary
+           }
+diff --git a/dist/internal/index.js b/dist/internal/index.js
+index d191a78cd4874889239b15b1ec131f65a1cd9e41..18a4a89c031cac5e374d512b09e45b133f666cc7 100644
+--- a/dist/internal/index.js
++++ b/dist/internal/index.js
+@@ -3052,6 +3052,7 @@ var openaiResponsesProviderOptionsSchema = (0, import_provider_utils22.lazyValid
+        * an error.
+        */
+       reasoningEffort: import_v415.z.string().nullish(),
++      reasoningMode: import_v415.z.literal("pro").nullish(),
+       reasoningSummary: import_v415.z.string().nullish(),
+       safetyIdentifier: import_v415.z.string().nullish(),
+       serviceTier: import_v415.z.enum(["auto", "flex", "priority", "default"]).nullish(),
+@@ -3583,11 +3584,14 @@ var OpenAIResponsesLanguageModel = class {
+       top_logprobs: topLogprobs,
+       truncation: openaiOptions == null ? void 0 : openaiOptions.truncation,
+       // model-specific settings:
+-      ...modelCapabilities.isReasoningModel && ((openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null) && {
++      ...modelCapabilities.isReasoningModel && ((openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningMode) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null) && {
+         reasoning: {
+           ...(openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null && {
+             effort: openaiOptions.reasoningEffort
+           },
++          ...(openaiOptions == null ? void 0 : openaiOptions.reasoningMode) != null && {
++            mode: openaiOptions.reasoningMode
++          },
+           ...(openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null && {
+             summary: openaiOptions.reasoningSummary
+           }
+diff --git a/dist/internal/index.mjs b/dist/internal/index.mjs
+index d3959d8bd4fe137d32202b871ed6a354a4606492..13d04619d91985ec6d88835fe45efe6e66f49663 100644
+--- a/dist/internal/index.mjs
++++ b/dist/internal/index.mjs
+@@ -3091,6 +3091,7 @@ var openaiResponsesProviderOptionsSchema = lazyValidator12(
+        * an error.
+        */
+       reasoningEffort: z15.string().nullish(),
++      reasoningMode: z15.literal("pro").nullish(),
+       reasoningSummary: z15.string().nullish(),
+       safetyIdentifier: z15.string().nullish(),
+       serviceTier: z15.enum(["auto", "flex", "priority", "default"]).nullish(),
+@@ -3644,11 +3645,14 @@ var OpenAIResponsesLanguageModel = class {
+       top_logprobs: topLogprobs,
+       truncation: openaiOptions == null ? void 0 : openaiOptions.truncation,
+       // model-specific settings:
+-      ...modelCapabilities.isReasoningModel && ((openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null) && {
++      ...modelCapabilities.isReasoningModel && ((openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningMode) != null || (openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null) && {
+         reasoning: {
+           ...(openaiOptions == null ? void 0 : openaiOptions.reasoningEffort) != null && {
+             effort: openaiOptions.reasoningEffort
+           },
++          ...(openaiOptions == null ? void 0 : openaiOptions.reasoningMode) != null && {
++            mode: openaiOptions.reasoningMode
++          },
+           ...(openaiOptions == null ? void 0 : openaiOptions.reasoningSummary) != null && {
+             summary: openaiOptions.reasoningSummary
+           }

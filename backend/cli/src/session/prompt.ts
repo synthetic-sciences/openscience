@@ -136,7 +136,7 @@ export namespace SessionPrompt {
       ),
     system: z.string().optional(),
     variant: z.string().optional(),
-    tier: z.enum(["fast", "pro", "ultra"]).optional(),
+    tier: z.string().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -2041,6 +2041,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     arguments: z.string(),
     command: z.string(),
     variant: z.string().optional(),
+    tier: z.string().optional(),
     parts: z
       .array(
         z.discriminatedUnion("type", [
@@ -2254,6 +2255,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       agent: userAgent,
       parts,
       variant: input.variant,
+      tier: input.tier,
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {

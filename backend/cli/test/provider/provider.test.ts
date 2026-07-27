@@ -98,9 +98,13 @@ test("synthesized Codex OAuth models use Codex variants and context instead of p
         expect(sol.limit.context).toBe(272_000)
         expect(sol.cost).toEqual({ input: 0, output: 0, cache: { read: 0, write: 0 } })
         expect(Object.keys(sol.variants ?? {})).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"])
+        expect(Object.keys(sol.modes ?? {})).toEqual(["fast"])
+        expect(sol.modes?.fast.provider?.body).toEqual({ service_tier: "priority" })
 
         const codex54 = codex.models["gpt-5.4"]
         expect(Object.keys(codex54.variants ?? {})).toEqual(["low", "medium", "high", "xhigh"])
+        expect(Object.keys(codex54.modes ?? {})).toEqual(["fast"])
+        expect(codex.models["gpt-5.4-mini"].modes).toBeUndefined()
 
         const publicSol = providers.openai?.models["gpt-5.6-sol"]
         expect(Object.keys(publicSol?.variants ?? {})).toEqual(["none", "low", "medium", "high", "xhigh", "max"])
@@ -143,6 +147,17 @@ test("current frontier models are routable from the seeded catalog", async () =>
         "high",
         "xhigh",
       ])
+      expect((providers["openai"].models["gpt-5.4"] as any).modes?.fast?.provider?.body).toEqual({
+        service_tier: "priority",
+      })
+      expect((providers["anthropic"].models["claude-opus-4-8"] as any).modes?.fast?.provider?.body).toEqual({
+        speed: "fast",
+      })
+      expect((providers["anthropic"].models["claude-opus-4-8"] as any).modes?.fast?.provider?.headers).toEqual({
+        "anthropic-beta": "fast-mode-2026-02-01",
+      })
+      expect((providers["anthropic"].models["claude-opus-4-7"] as any).modes).toBeUndefined()
+      expect((providers["anthropic"].models["claude-opus-4-6"] as any).modes).toBeUndefined()
     },
   })
 })
@@ -176,6 +191,7 @@ test("Codex OAuth exposes the GPT-5.6 family as subscription models", async () =
             output: 0,
             cache: { read: 0, write: 0 },
           })
+          expect(Object.keys(codex.models[id].modes ?? {})).toEqual(["fast"])
         }
       },
     })
@@ -2445,8 +2461,8 @@ test("variant config merges with generated variants", async () => {
       const providers = await Provider.list()
       const model = providers["anthropic"].models[SONNET]
       expect(model.variants!["high"]).toBeDefined()
-      // Should have both the generated thinking config and the custom option
-      expect(model.variants!["high"].thinking).toBeDefined()
+      // Should have both the generated native effort and the custom option.
+      expect(model.variants!["high"].effort).toBe("high")
       expect(model.variants!["high"].extraOption).toBe("custom-value")
     },
   })
