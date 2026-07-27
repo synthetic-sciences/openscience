@@ -45,6 +45,7 @@ import { ImagePreview } from "@synsci/ui/image-preview"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
+import { displayProviderForModel } from "@/context/model-catalog"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
@@ -1987,7 +1988,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       >
                         <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
                           <Show when={local.model.current()?.provider?.id}>
-                            <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                            <ProviderIcon
+                              id={
+                                displayProviderForModel(local.model.current()!.provider, local.model.current()!.id)
+                                  .id as IconName
+                              }
+                              class="size-4 shrink-0"
+                            />
                           </Show>
                           {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                           <Icon name="chevron-down" size="small" />
@@ -2002,7 +2009,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     >
                       <ModelSelectorPopover triggerAs={Button} triggerProps={{ variant: "ghost" }}>
                         <Show when={local.model.current()?.provider?.id}>
-                          <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                          <ProviderIcon
+                            id={
+                              displayProviderForModel(local.model.current()!.provider, local.model.current()!.id)
+                                .id as IconName
+                            }
+                            class="size-4 shrink-0"
+                          />
                         </Show>
                         {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                         <Icon name="chevron-down" size="small" />

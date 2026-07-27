@@ -89,6 +89,7 @@ const SHARED_PROVIDER_KEYS = new Set([
   "GOOGLE_GENERATIVE_AI_API_KEY",
   "GEMINI_API_KEY",
   "META_MODEL_API_KEY",
+  "META_MODEL_BASE_URL",
   "XAI_API_KEY",
 ])
 
@@ -824,8 +825,8 @@ export namespace OpenScience {
         }
       }
 
-      // OpenScience honours only the narrow OpenRouter + Meta managed routes,
-      // plus compute / ML-service credentials from Atlas sync; every other
+      // OpenScience honours only the narrow OpenRouter managed route, plus
+      // compute / ML-service credentials from Atlas sync; every other
       // model provider is BYOK-local-only. Drop the rest before they are applied or
       // persisted — and the unset pass below removes any a previous sync wrote,
       // so this doubles as the migration for existing installs. See

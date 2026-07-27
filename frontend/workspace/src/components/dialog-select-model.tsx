@@ -15,6 +15,7 @@ import type { IconName } from "@synsci/ui/icons/provider"
 import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { displayProviderForModel } from "@/context/model-catalog"
 
 const ModelList: Component<{
   provider?: string
@@ -29,7 +30,11 @@ const ModelList: Component<{
     local.model
       .list()
       .filter((m) => local.model.visible({ modelID: m.id, providerID: m.provider.id }))
-      .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
+      .filter((m) => {
+        if (!props.provider) return true
+        const display = displayProviderForModel(m.provider, m.id)
+        return m.provider.id === props.provider || display.id === props.provider
+      }),
   )
 
   return (
@@ -42,10 +47,10 @@ const ModelList: Component<{
       current={local.model.current()}
       filterKeys={["provider.name", "name", "id"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
-      groupBy={(x) => x.provider.name}
+      groupBy={(x) => displayProviderForModel(x.provider, x.id).name}
       sortGroupsBy={(a, b) => {
-        const aProvider = a.items[0].provider.id
-        const bProvider = b.items[0].provider.id
+        const aProvider = displayProviderForModel(a.items[0].provider, a.items[0].id).id
+        const bProvider = displayProviderForModel(b.items[0].provider, b.items[0].id).id
         if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
         if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
         return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
@@ -58,7 +63,7 @@ const ModelList: Component<{
           forceMount={false}
           value={
             <ModelTooltip
-              model={item}
+              model={{ ...item, provider: displayProviderForModel(item.provider, item.id) }}
               latest={item.latest}
               free={item.provider.id === "synsci" && (!item.cost || item.cost.input === 0)}
             />
@@ -76,7 +81,7 @@ const ModelList: Component<{
     >
       {(i) => (
         <div class="w-full flex items-center gap-x-2 text-13-regular">
-          <ProviderIcon id={i.provider.id as IconName} class="size-4 shrink-0 opacity-90" />
+          <ProviderIcon id={displayProviderForModel(i.provider, i.id).id as IconName} class="size-4 shrink-0 opacity-90" />
           <span class="truncate">{i.name}</span>
           <span class="flex items-center gap-x-1.5 ml-auto shrink-0">
             <Show when={i.provider.id === "synsci" && (!i.cost || i.cost?.input === 0)}>

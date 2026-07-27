@@ -940,8 +940,11 @@ export namespace SessionPrompt {
       // A historical model can reference a provider that is no longer available
       // (e.g. its API key was removed) — validate before reusing it.
       const model = item.info.model
-      const provider = await Provider.getProvider(model.providerID)
-      if (provider?.models[model.modelID]) return model
+      const resolved = await Provider.getModel(model.providerID, model.modelID).catch((e) => {
+        if (Provider.ModelNotFoundError.isInstance(e)) return undefined
+        throw e
+      })
+      if (resolved) return { providerID: resolved.providerID, modelID: resolved.id }
       log.warn("last used model is no longer available, falling back to default", model)
       break
     }

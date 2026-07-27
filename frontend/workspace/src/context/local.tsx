@@ -6,6 +6,7 @@ import { useSync } from "./sync"
 import { base64Encode } from "@synsci/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { useModels } from "@/context/models"
+import { routableModelKey } from "@/context/model-catalog"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -15,8 +16,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const sync = useSync()
     const providers = useProviders()
+    const models = useModels()
 
-    function isModelValid(model: ModelKey) {
+    function isExactModelValid(model: ModelKey) {
       const provider = providers.all().find((x) => x.id === model.providerID)
       return (
         !!provider?.models[model.modelID] &&
@@ -27,11 +29,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       )
     }
 
+    function resolveModel(model: ModelKey) {
+      const routed = routableModelKey(model, isExactModelValid)
+      if (isExactModelValid(routed)) return routed
+    }
+
+    function isModelValid(model: ModelKey) {
+      return !!resolveModel(model)
+    }
+
     function getFirstValidModel(...modelFns: (() => ModelKey | undefined)[]) {
       for (const modelFn of modelFns) {
         const model = modelFn()
         if (!model) continue
-        if (isModelValid(model)) return model
+        const resolved = resolveModel(model)
+        if (resolved) return resolved
       }
     }
 
@@ -159,8 +171,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })()
 
     const model = (() => {
-      const models = useModels()
-
       const [ephemeral, setEphemeral] = createStore<{
         model: Record<string, ModelKey | undefined>
       }>({
@@ -169,19 +179,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const fallbackModel = createMemo<ModelKey | undefined>(() => {
         if (sync.data.config.model) {
-          const [providerID, modelID] = sync.data.config.model.split("/")
-          if (isModelValid({ providerID, modelID })) {
-            return {
-              providerID,
-              modelID,
-            }
-          }
+          const [providerID, ...parts] = sync.data.config.model.split("/")
+          const modelID = parts.join("/")
+          const resolved = resolveModel({ providerID, modelID })
+          if (resolved) return resolved
         }
 
         for (const item of models.recent.list()) {
-          if (isModelValid(item)) {
-            return item
-          }
+          const resolved = resolveModel(item)
+          if (resolved) return resolved
         }
 
         const defaults = providers.default()
@@ -213,7 +219,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return models.find(key)
       })
 
-      const recent = createMemo(() => models.recent.list().map(models.find).filter(Boolean))
+      const recent = createMemo(() =>
+        models.recent.list().map((item) => models.find(resolveModel(item) ?? item)).filter(Boolean),
+      )
 
       const cycle = (direction: 1 | -1) => {
         const recentList = recent()
@@ -247,10 +255,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
             const currentAgent = agent.current()
-            const next = model ?? fallbackModel()
+            const selected = model ? (resolveModel(model) ?? model) : undefined
+            const next = selected ?? fallbackModel()
             if (currentAgent) setEphemeral("model", currentAgent.name, next)
-            if (model) models.setVisibility(model, true)
-            if (options?.recent && model) models.recent.push(model)
+            if (selected) models.setVisibility(selected, true)
+            if (options?.recent && selected) models.recent.push(selected)
           })
         },
         visible(model: ModelKey) {

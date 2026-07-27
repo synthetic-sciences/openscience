@@ -64,14 +64,13 @@ describe("Provider.managedRoutesCuratedProvidersOnly (pure)", () => {
 })
 
 describe("Provider.managedProviderAllowed (pure)", () => {
-  test("OpenRouter, Meta, and the hosted synsci demo are the only allowed providers", () => {
+  test("OpenRouter and the hosted synsci demo are the only managed providers", () => {
     expect(Provider.managedProviderAllowed("openrouter")).toBe(true)
-    expect(Provider.managedProviderAllowed("meta")).toBe(true)
     expect(Provider.managedProviderAllowed("synsci")).toBe(true)
     expect(Provider.managedProviderAllowed("synsci-hosted")).toBe(true)
   })
-  test("first-party managed proxies + everything else are rejected", () => {
-    for (const id of ["anthropic", "openai", "google", "openai-codex", "github-copilot", "gateway", "azure"]) {
+  test("first-party managed proxies, Meta, Codex, and everything else are rejected", () => {
+    for (const id of ["anthropic", "openai", "google", "meta", "openai-codex", "github-copilot", "gateway", "azure"]) {
       expect(Provider.managedProviderAllowed(id)).toBe(false)
     }
   })
@@ -103,7 +102,7 @@ describe("Provider.isManagedProxyBaseURL (pure)", () => {
 // ── Availability filter (hermetic, catalog-backed) ───────────────────────────
 
 describe("managed session availability", () => {
-  test("managed ⇒ OpenRouter + Meta load; unsupported first-party proxies are dropped", async () => {
+  test("managed ⇒ only OpenRouter loads; unsupported first-party and Meta proxies are dropped", async () => {
     await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
     await Instance.provide({
       directory: tmp.path,
@@ -125,13 +124,54 @@ describe("managed session availability", () => {
         const providers = await Provider.list()
         expect(providers["openrouter"]).toBeDefined()
         expect(providers["openrouter"].options.baseURL).toBe(`${PROXY}/openrouter/v1`)
-        expect(providers["meta"]).toBeDefined()
-        expect(String(providers["meta"].options.apiKey).startsWith("thk_")).toBe(true)
-        expect(providers["meta"].options.baseURL).toBe(`${PROXY}/meta/v1`)
-        expect(providers["meta"].models["muse-spark-1.1"]).toBeDefined()
+        expect(providers["meta"]).toBeUndefined()
         expect(providers["anthropic"]).toBeUndefined()
         expect(providers["openai"]).toBeUndefined()
         expect(providers["google"]).toBeUndefined()
+      },
+    })
+  })
+
+  test("managed direct model selections resolve to OpenRouter vendor slugs", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        billing: { llm: "managed" },
+        provider: {
+          openrouter: {
+            whitelist: [
+              "anthropic/claude-fable-5",
+              "google/gemini-3.6-flash",
+              "x-ai/grok-4.5",
+              "meta/muse-spark-1.1",
+            ],
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+        Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const fable = await Provider.getModel("anthropic", "claude-fable-5")
+        expect(fable.providerID).toBe("openrouter")
+        expect(fable.id).toBe("anthropic/claude-fable-5")
+
+        const gemini = await Provider.getModel("gemini", "gemini-3.6-flash")
+        expect(gemini.providerID).toBe("openrouter")
+        expect(gemini.id).toBe("google/gemini-3.6-flash")
+
+        const grok = await Provider.getModel("xai", "grok-4.5")
+        expect(grok.providerID).toBe("openrouter")
+        expect(grok.id).toBe("x-ai/grok-4.5")
+
+        const muse = await Provider.getModel("meta", "muse-spark-1.1")
+        expect(muse.providerID).toBe("openrouter")
+        expect(muse.id).toBe("meta/muse-spark-1.1")
       },
     })
   })

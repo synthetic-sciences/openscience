@@ -306,7 +306,7 @@ describe("new model reasoning effort contracts", () => {
     expect(ProviderTransform.smallOptions(managed)).toEqual({ reasoning: { effort: "low" } })
   })
 
-  test("Muse Spark 1.1 exposes its exact effort ladder on BYOK and managed Meta", () => {
+  test("Muse Spark 1.1 exposes its exact effort ladder on BYOK and legacy Meta proxy", () => {
     const muse = model({
       id: "muse-spark-1.1",
       providerID: "meta",

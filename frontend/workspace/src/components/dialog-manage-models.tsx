@@ -3,6 +3,7 @@ import { List } from "@synsci/ui/list"
 import { Switch } from "@synsci/ui/switch"
 import type { Component } from "solid-js"
 import { useLocal } from "@/context/local"
+import { displayProviderForModel } from "@/context/model-catalog"
 import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
 
@@ -19,10 +20,10 @@ export const DialogManageModels: Component = () => {
         items={local.model.list()}
         filterKeys={["provider.name", "name", "id"]}
         sortBy={(a, b) => a.name.localeCompare(b.name)}
-        groupBy={(x) => x.provider.name}
+        groupBy={(x) => displayProviderForModel(x.provider, x.id).name}
         sortGroupsBy={(a, b) => {
-          const aProvider = a.items[0].provider.id
-          const bProvider = b.items[0].provider.id
+          const aProvider = displayProviderForModel(a.items[0].provider, a.items[0].id).id
+          const bProvider = displayProviderForModel(b.items[0].provider, b.items[0].id).id
           if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
           if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
           return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)

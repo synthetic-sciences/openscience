@@ -9,8 +9,8 @@ import { managedApiBase } from "../../src/endpoints"
 // with a managed thk_ value, which would silently turn a free BYOK call into a
 // billed managed one (the "billing flip" bug).
 //
-// OpenRouter and Meta are the only providers Atlas sync may deliver a managed
-// credential for; every other model provider is BYOK-local-only, so its synced credential is dropped
+// OpenRouter is the only provider Atlas sync may deliver a managed credential
+// for; every other model provider is BYOK-local-only, so its synced credential is dropped
 // (see synced-env-policy.ts) — Atlas still emits them for the hosted web agents.
 
 const realFetch = globalThis.fetch
@@ -60,7 +60,7 @@ test("a synced managed OpenRouter key IS applied when the slot is empty", async 
   expect(process.env["OPENROUTER_API_KEY"]).toBe("thk_managed.value")
 })
 
-test("Meta sync applies only a scoped thk token plus the matching Atlas proxy", async () => {
+test("Meta sync is dropped even when it looks like an old managed route", async () => {
   await seedSession()
   const proxyURL = `${managedApiBase()}/api/llm/proxy/meta/v1`
   stubSync({
@@ -70,8 +70,8 @@ test("Meta sync applies only a scoped thk token plus the matching Atlas proxy", 
     },
   })
   await OpenScience.syncServices()
-  expect(process.env["META_MODEL_API_KEY"]).toBe("thk_managed.value")
-  expect(process.env["META_MODEL_BASE_URL"]).toBe(proxyURL)
+  expect(process.env["META_MODEL_API_KEY"]).toBeUndefined()
+  expect(process.env["META_MODEL_BASE_URL"]).toBeUndefined()
 })
 
 test("Meta sync rejects an upstream shared key or public endpoint", async () => {

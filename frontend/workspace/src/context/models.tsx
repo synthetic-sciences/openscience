@@ -4,7 +4,7 @@ import { uniqueBy } from "remeda"
 import { createSimpleContext } from "@synsci/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
-import { isFrontier, type ModelKey } from "./model-catalog"
+import { isFrontier, routableModelKey, type ModelKey } from "./model-catalog"
 
 export { canonicalKey, FRONTIER_MODELS, type ModelKey } from "./model-catalog"
 
@@ -72,7 +72,13 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       })
     })
 
-    const find = (key: ModelKey) => list().find((m) => m.id === key.modelID && m.provider.id === key.providerID)
+    const findExact = (key: ModelKey) => list().find((m) => m.id === key.modelID && m.provider.id === key.providerID)
+    const find = (key: ModelKey) => {
+      const exact = findExact(key)
+      if (exact) return exact
+      const routed = routableModelKey(key, (candidate) => !!findExact(candidate))
+      return findExact(routed)
+    }
 
     function update(model: ModelKey, state: Visibility) {
       const index = store.user.findIndex((x) => x.modelID === model.modelID && x.providerID === model.providerID)

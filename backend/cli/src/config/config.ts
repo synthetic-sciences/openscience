@@ -194,8 +194,8 @@ export namespace Config {
     try {
       // Atlas writes model-lockdown config (enabled_providers, per-provider
       // whitelists, default model) for the hosted web agents. On the CLI the
-      // managed routes are OpenRouter plus the narrow Meta/Muse proxy. Honour
-      // those managed catalogs and the recommended model; drop the rest
+      // managed route is OpenRouter. Honour that managed catalog and the
+      // recommended model; drop the rest
       // UNCONDITIONALLY — the
       // synced enabled_providers must never hide a locally-configured BYOK
       // provider, regardless of the billing toggle. An open-source CLI shouldn't
@@ -206,10 +206,9 @@ export namespace Config {
       const scoped: Partial<Config.Info> = {}
       const managedProviders = {
         ...(synced?.provider?.openrouter ? { openrouter: synced.provider.openrouter } : {}),
-        ...(synced?.provider?.meta ? { meta: synced.provider.meta } : {}),
       }
       if (Object.keys(managedProviders).length) scoped.provider = managedProviders
-      if (synced?.model) scoped.model = synced.model
+      if (typeof synced?.model === "string" && synced.model.startsWith("openrouter/")) scoped.model = synced.model
       // Merge synced UNDERNEATH the user's own config, not on top: it is the
       // server's *recommendation* (default model, OpenRouter managed catalog),
       // not a lockdown, so the user's config must win — otherwise their chosen

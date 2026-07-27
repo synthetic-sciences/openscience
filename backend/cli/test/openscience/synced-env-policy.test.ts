@@ -16,6 +16,8 @@ test("blocks every non-managed model-provider LLM credential (key + *_BASE_URL)"
     "GROQ_API_KEY",
     "FIREWORKS_API_KEY",
     "XAI_API_KEY",
+    "META_MODEL_API_KEY",
+    "META_MODEL_BASE_URL",
     // Derived from BYOK_LLM_ENV_KEYS — these three used to be missing from the
     // hand-maintained blocklist; deriving keeps them covered automatically.
     "MISTRAL_API_KEY",
@@ -29,12 +31,10 @@ test("blocks every non-managed model-provider LLM credential (key + *_BASE_URL)"
   }
 })
 
-test("allows the OpenRouter + Meta managed routes and compute / ML-service keys", () => {
+test("allows the OpenRouter managed route and compute / ML-service keys", () => {
   const allowed = [
     "OPENROUTER_API_KEY",
     "OPENROUTER_BASE_URL",
-    "META_MODEL_API_KEY",
-    "META_MODEL_BASE_URL",
     "TINKER_API_KEY",
     "WANDB_API_KEY",
     "HF_TOKEN",
@@ -50,20 +50,27 @@ test("allows the OpenRouter + Meta managed routes and compute / ML-service keys"
 
 test("managed provider sync accepts only thk tokens and matching Atlas proxy urls", () => {
   const atlasBase = "https://atlas.test"
-  expect(isSyncedEnvAllowed("META_MODEL_API_KEY", "thk_user.scoped")).toBe(true)
-  expect(isSyncedEnvAllowed("META_MODEL_API_KEY", "meta-shared-secret")).toBe(false)
-  expect(isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://atlas.test/api/llm/proxy/meta/v1", atlasBase)).toBe(true)
-  expect(isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://api.meta.ai/v1", atlasBase)).toBe(false)
-  expect(isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://atlas.test/api/llm/proxy/openrouter/v1", atlasBase)).toBe(
-    false,
+  expect(isSyncedEnvAllowed("OPENROUTER_API_KEY", "thk_user.scoped")).toBe(true)
+  expect(isSyncedEnvAllowed("OPENROUTER_API_KEY", "sk-or-shared-secret")).toBe(false)
+  expect(isSyncedEnvAllowed("OPENROUTER_BASE_URL", "https://atlas.test/api/llm/proxy/openrouter/v1", atlasBase)).toBe(
+    true,
   )
+  expect(isSyncedEnvAllowed("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1", atlasBase)).toBe(false)
   expect(
-    isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://evil.test/https://atlas.test/api/llm/proxy/meta/v1", atlasBase),
+    isSyncedEnvAllowed(
+      "OPENROUTER_BASE_URL",
+      "https://evil.test/https://atlas.test/api/llm/proxy/openrouter/v1",
+      atlasBase,
+    ),
   ).toBe(false)
   expect(
-    isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://atlas.test.evil.test/api/llm/proxy/meta/v1", atlasBase),
+    isSyncedEnvAllowed("OPENROUTER_BASE_URL", "https://atlas.test.evil.test/api/llm/proxy/openrouter/v1", atlasBase),
   ).toBe(false)
   expect(
-    isSyncedEnvAllowed("META_MODEL_BASE_URL", "https://atlas.test/api/llm/proxy/meta/%2e%2e/openrouter", atlasBase),
+    isSyncedEnvAllowed(
+      "OPENROUTER_BASE_URL",
+      "https://atlas.test/api/llm/proxy/openrouter/%2e%2e/meta",
+      atlasBase,
+    ),
   ).toBe(false)
 })

@@ -70,7 +70,7 @@ describe("Atlas synced-config merge", () => {
     })
   })
 
-  test("synced Meta whitelist is retained for the managed Muse route", async () => {
+  test("stale synced Meta model config is ignored because managed Muse routes through OpenRouter", async () => {
     await writeSynced({
       model: "meta/muse-spark-1.1",
       provider: { meta: { whitelist: ["muse-spark-1.1"] } },
@@ -81,8 +81,8 @@ describe("Atlas synced-config merge", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        expect(config.model).toBe("meta/muse-spark-1.1")
-        expect(config.provider?.meta?.whitelist).toEqual(["muse-spark-1.1"])
+        expect(config.model).toBeUndefined()
+        expect(config.provider?.meta).toBeUndefined()
       },
     })
   })

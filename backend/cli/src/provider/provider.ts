@@ -172,11 +172,11 @@ export namespace Provider {
     const managed =
       isAtlasProxyBaseURL(baseURL) && (await Config.get().catch(() => undefined))?.billing?.llm === "managed"
     if (!managed) return {}
-    // Managed wallet routes are deliberately narrow: OpenRouter for its
-    // aggregated catalog and Meta for Muse Spark. Never attach the wallet's
-    // thk_ token to any other first-party proxy (anthropic / openai / google /
-    // xAI). Those providers are also dropped from availability below, so this
-    // is belt-and-suspenders.
+    // Managed wallet routes are deliberately narrow: OpenRouter for the
+    // aggregated catalog. Never attach the wallet's thk_ token to any other
+    // first-party proxy (anthropic / openai / google / xAI / Meta). Those
+    // providers are also dropped from availability below, so this is
+    // belt-and-suspenders.
     if (!managedProviderAllowed(providerID)) return {}
     const session = await OpenScience.getSession().catch(() => null)
     return session?.api_key ? { apiKey: session.api_key } : {}
@@ -223,9 +223,9 @@ export namespace Provider {
   /** Managed wallet ⇒ curated managed-provider routing.
    *
    *  When the LLM spend toggle is explicitly "managed", every wallet inference
-   *  call flows through OpenRouter, except Muse Spark which uses Atlas's narrow
-   *  Meta proxy. The other first-party managed proxies (anthropic / openai /
-   *  google / xAI) are taken out of the managed path entirely; the hosted
+   *  call flows through OpenRouter. The other first-party managed proxies
+   *  (anthropic / openai / google / xAI / Meta) are taken out of the managed
+   *  path entirely; the hosted
    *  zero-cost `synsci` demo provider is kept. BYOK and the legacy
    *  auto-detect path (`billing.llm` unset / null / "byok") are UNTOUCHED —
    *  this only fires on an explicit managed-wallet opt-in. Pure + sync. */
@@ -234,9 +234,32 @@ export namespace Provider {
   }
 
   /** Providers a managed wallet session may load: OpenRouter for aggregated
-   *  inference, Meta for Muse Spark, plus the hosted `synsci` demo. Pure. */
+   *  inference, plus the hosted `synsci` demo. Pure. */
   export function managedProviderAllowed(providerID: string): boolean {
-    return providerID === "openrouter" || providerID === "meta" || providerID.startsWith("synsci")
+    return providerID === "openrouter" || providerID.startsWith("synsci")
+  }
+
+  const OPENROUTER_VENDOR_PREFIX: Record<string, string> = {
+    gemini: "google",
+    google: "google",
+    xai: "x-ai",
+    meta: "meta",
+    zai: "z-ai",
+    zhipuai: "z-ai",
+  }
+
+  const ANTHROPIC_DASHED_VERSION = /^(claude-(?:opus|sonnet|haiku)-\d+)-(\d+)(?:-\d{8})?$/
+
+  function openrouterAliasCandidates(providerID: string, modelID: string) {
+    if (providerID === "openrouter") return []
+    const vendor = OPENROUTER_VENDOR_PREFIX[providerID] ?? providerID
+    const base = modelID.replace(/^~/, "")
+    if (!vendor || !base) return []
+    const direct = `${vendor}/${base}`
+    const normalized =
+      vendor === "anthropic" ? `${vendor}/${base.replace(ANTHROPIC_DASHED_VERSION, "$1.$2")}` : direct
+    const aliased = providerID === "openai" && base === "gpt-5.6" ? ["openai/gpt-5.6-sol"] : []
+    return Array.from(new Set([direct, normalized, ...aliased]))
   }
 
   /** True when a base URL points at the local machine (localhost / loopback).
@@ -587,11 +610,9 @@ export namespace Provider {
       return { autoload: false, options: { headers } }
     },
     meta: async () => {
-      // Meta has the same dual-route contract as OpenRouter, but only for the
-      // Muse catalog: a user-owned key always goes directly to Meta (or their
-      // explicitly configured non-Atlas compatible gateway); otherwise an
-      // Atlas session may route with its thk_* token through the Meta proxy.
-      // The upstream/shared Meta credential never exists in the client.
+      // Meta is BYOK-only in the client. Managed Muse Spark now routes through
+      // OpenRouter's `meta/muse-spark-1.1` slug, so stale Atlas Meta proxy env
+      // from older syncs must not create a managed Meta provider.
       const auth = await Auth.get("meta").catch(() => undefined)
       const authKey = auth?.type === "api" ? auth.key : undefined
       const envKey = Env.get("META_MODEL_API_KEY")
@@ -603,19 +624,6 @@ export namespace Provider {
           autoload: false,
           options: { apiKey: ownKey, baseURL },
           getModel: async (sdk, modelID) => sdk.responses(modelID),
-        }
-      }
-
-      const proxyBase = Env.get("META_MODEL_BASE_URL")
-      if (isAtlasProxyBaseURL(proxyBase)) {
-        const session = await OpenScience.getSession().catch(() => null)
-        const managedKey = session?.api_key ?? (isAtlasApiKey(envKey) ? envKey : undefined)
-        if (managedKey) {
-          return {
-            autoload: false,
-            options: { apiKey: managedKey, baseURL: proxyBase },
-            getModel: async (sdk, modelID) => sdk.responses(modelID),
-          }
         }
       }
 
@@ -1076,8 +1084,8 @@ export namespace Provider {
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
     // Managed wallet ⇒ curated routes only. OpenRouter handles the aggregated
-    // catalog, while Muse Spark uses the narrow Meta proxy. Every other
-    // first-party managed proxy is dropped. Gated on the explicit toggle, so
+    // catalog. Every other first-party managed proxy is dropped. Gated on the
+    // explicit toggle, so
     // BYOK and legacy auto-detect sessions see every provider as before. This is
     // the single seam that makes defaultModel()/getSmallModel() managed-safe.
     const managedCuratedProvidersOnly = managedRoutesCuratedProvidersOnly(config)
@@ -1475,6 +1483,20 @@ export namespace Provider {
     _stateCacheDirectory = undefined
   }
 
+  function resolveOpenRouterAlias(s: Awaited<ReturnType<typeof state>>, providerID: string, modelID: string) {
+    const openrouter = s.providers["openrouter"]
+    if (!openrouter) return undefined
+    for (const alias of openrouterAliasCandidates(providerID, modelID)) {
+      const model = openrouter.models[alias]
+      if (model) return model
+    }
+  }
+
+  function resolveAvailableModel(s: Awaited<ReturnType<typeof state>>, providerID: string, modelID: string) {
+    const exact = s.providers[providerID]?.models[modelID]
+    return exact ?? resolveOpenRouterAlias(s, providerID, modelID)
+  }
+
   export async function list() {
     return state().then((state) => state.providers)
   }
@@ -1648,6 +1670,9 @@ export namespace Provider {
 
   export async function getModel(providerID: string, modelID: string) {
     const s = await state()
+    const resolved = resolveAvailableModel(s, providerID, modelID)
+    if (resolved) return resolved
+
     const provider = s.providers[providerID]
     if (!provider) {
       const availableProviders = Object.keys(s.providers)
@@ -1656,14 +1681,10 @@ export namespace Provider {
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
 
-    const info = provider.models[modelID]
-    if (!info) {
-      const availableModels = Object.keys(provider.models)
-      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
-      const suggestions = matches.map((m) => m.target)
-      throw new ModelNotFoundError({ providerID, modelID, suggestions })
-    }
-    return info
+    const availableModels = Object.keys(provider.models)
+    const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
+    const suggestions = matches.map((m) => m.target)
+    throw new ModelNotFoundError({ providerID, modelID, suggestions })
   }
 
   export async function getLanguage(model: Model): Promise<LanguageModelV2> {
@@ -1794,7 +1815,8 @@ export namespace Provider {
       // (e.g. a saved `anthropic/...` model with no API key must not be returned)
       // — otherwise fall through to the priority-based selection below.
       const parsed = parseModel(cfg.model)
-      if (available[parsed.providerID]?.models[parsed.modelID]) return parsed
+      const resolved = resolveAvailableModel(await state(), parsed.providerID, parsed.modelID)
+      if (resolved) return { providerID: resolved.providerID, modelID: resolved.id }
       log.warn("configured model is not available, falling back to default selection", parsed)
     }
 
