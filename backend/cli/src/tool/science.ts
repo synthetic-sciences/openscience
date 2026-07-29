@@ -227,7 +227,13 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
       return {
         title: `${connector.name}: ${outcome.message}`,
         output: `${connector.name} could not serve "${params.id}": ${outcome.message}`,
-        metadata: { db: connector.id, count: 0, error: "source_error", truncated: false } as Record<string, unknown>,
+        metadata: {
+          db: connector.id,
+          count: 0,
+          error: "source_error",
+          message: outcome.message,
+          truncated: false,
+        } as Record<string, unknown>,
       }
 
     if (outcome.disposition === "inline")
@@ -245,6 +251,18 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
 
     const target = path.join(Instance.directory, outcome.filename)
     await fs.mkdir(path.dirname(target), { recursive: true })
+    // Self-ignoring dir so per-fetch spill files never show up in `git status`
+    // (mirrors src/session/compaction.ts's handoff directory). Failure-tolerant:
+    // a read-only checkout must not break a fetch.
+    await Bun.write(path.join(path.dirname(target), ".gitignore"), "*\n").catch(() => {})
+
+    await ctx.ask({
+      permission: "edit",
+      patterns: [path.relative(Instance.worktree, target)],
+      always: ["*"],
+      metadata: { path: outcome.filename },
+    })
+
     await Bun.write(target, outcome.body)
 
     return {

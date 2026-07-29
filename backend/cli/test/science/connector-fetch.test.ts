@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { registry } from "../../src/science/connectors"
 import { clearCache, resetRateLimits } from "../../src/science/connectors/http"
@@ -28,11 +28,24 @@ const EXPECTED: Record<string, FetchOutcome["kind"]> = {
   "expression-atlas": "miss",
 }
 
+// The six connectors whose recorded payload exceeds the 50 KB inline cap, per
+// the live recording run. Declared explicitly rather than re-derived from the
+// fixture's own byte count — deriving it from the same output being checked
+// cannot catch a fixture silently shrinking below the cap on a future
+// re-record, which would quietly delete all spill coverage while this suite
+// keeps reporting green.
+const EXPECTED_SPILL = new Set(["uniprot", "mygene", "sifts", "bindingdb", "pfam", "ensembl"])
+
 describe("connector fetch conformance", () => {
   const connectors = registry.all()
 
   test("the registry is fully populated", () => {
     expect(connectors.length).toBe(42)
+  })
+
+  test("exactly 40 fixture files are present", () => {
+    const files = readdirSync(FIXTURES).filter((f) => f.endsWith(".json"))
+    expect(files.length).toBe(40)
   })
 
   // Each fixture is one connector's REAL recorded response. Replaying it through
@@ -48,7 +61,7 @@ describe("connector fetch conformance", () => {
       const { id, payload } = JSON.parse(readFileSync(file, "utf8"))
       const outcome = outcomeFor({ db: c.id, id, payload })
       expect(outcome.kind).toBe(EXPECTED[c.id] ?? "record")
-      if (outcome.kind === "record") expect(outcome.disposition).toBe(outcome.bytes > 50 * 1024 ? "spill" : "inline")
+      if (outcome.kind === "record") expect(outcome.disposition).toBe(EXPECTED_SPILL.has(c.id) ? "spill" : "inline")
     })
   }
 

@@ -103,6 +103,17 @@ describe("science_fetch degradation", () => {
   })
 })
 
+describe("science_fetch format path", () => {
+  test("a supplied format always spills and reports its own path", async () => {
+    stub("data_6LU7\nloop_\n")
+    const out = await run({ db: "rcsb-pdb", id: "6LU7", format: "cif" })
+    expect(out.metadata.disposition).toBe("spill")
+    expect(out.metadata.path).toBe(".openscience/fetch/rcsb-pdb/6LU7.cif")
+    const written = await fs.readFile(path.join(dir, ".openscience/fetch/rcsb-pdb/6LU7.cif"), "utf8")
+    expect(written).toBe("data_6LU7\nloop_\n")
+  })
+})
+
 describe("science_list_dbs reports formats", () => {
   test("a records-only connector shows no formats suffix", async () => {
     const out = await Instance.provide({
