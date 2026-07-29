@@ -16,9 +16,7 @@ test("browser back/forward navigates between sessions", async ({ page, slug, sdk
   try {
     await gotoSession(one.id)
 
-    const sidebar = page
-      .getByRole("complementary")
-      .filter({ has: page.getByRole("button", { name: "New research" }) })
+    const sidebar = page.getByRole("complementary").filter({ has: page.getByRole("button", { name: "New research" }) })
     const target = sidebar.locator('[role="button"]').filter({ hasText: twoTitle })
     await expect(target).toBeVisible()
     await target.scrollIntoViewIfNeeded()

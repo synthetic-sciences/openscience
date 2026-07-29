@@ -31,9 +31,7 @@ test.describe("mobile workspace", () => {
   test("sessions open as a drawer instead of squeezing the active pane", async ({ page, gotoSession }) => {
     await gotoSession()
 
-    const sidebar = page
-      .getByRole("complementary")
-      .filter({ has: page.getByRole("button", { name: "New research" }) })
+    const sidebar = page.getByRole("complementary").filter({ has: page.getByRole("button", { name: "New research" }) })
     await expect(sidebar).toHaveAttribute("data-mobile-open", "false")
 
     await page.getByRole("button", { name: "Show sessions" }).click()
