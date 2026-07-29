@@ -37,6 +37,13 @@ describe("rcsb-pdb fetchFile", () => {
     expect(out.body).toContain("data_6LU7")
   })
 
+  test("uppercases the id for the file server", async () => {
+    const s = stub("data_6LU7\nloop_\n")
+    const out = await rcsbPdb.fetchFile!("6lu7", "cif")
+    expect(s.url()).toBe("https://files.rcsb.org/download/6LU7.cif")
+    expect(out.filename).toBe("6LU7.cif")
+  })
+
   test("pdb uses the .pdb extension on the same host", async () => {
     const s = stub("HEADER    VIRAL PROTEIN")
     await rcsbPdb.fetchFile!("6LU7", "pdb")
