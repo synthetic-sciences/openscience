@@ -4,7 +4,7 @@
  * REST API: https://rest.uniprot.org (open, no key). We hit the UniProtKB
  * search + entry endpoints and normalize into ConnectorHit.
  */
-import type { Connector, ConnectorHit, FetchOptions, SearchOptions } from "../types"
+import type { Connector, ConnectorHit, FetchedFile, FetchOptions, SearchOptions } from "../types"
 import { getJSON, getText, orFallback } from "../http"
 import { asArray, clampLimit, firstString, toRaw } from "./util"
 
@@ -90,5 +90,15 @@ export const uniprot: Connector = {
     const base = `https://rest.uniprot.org/uniprotkb/${encodeURIComponent(id)}`
     if (format === "json") return getJSON(`${base}?format=json`, { signal: opts?.signal })
     return getText(`${base}?format=${encodeURIComponent(format)}`, { signal: opts?.signal })
+  },
+
+  formats: ["fasta", "txt"],
+
+  async fetchFile(id, format, opts?: FetchOptions): Promise<FetchedFile> {
+    const body = await getText(
+      `https://rest.uniprot.org/uniprotkb/${encodeURIComponent(id)}?format=${encodeURIComponent(format)}`,
+      { signal: opts?.signal },
+    )
+    return { body, contentType: "text/plain", filename: `${id}.${format}` }
   },
 }

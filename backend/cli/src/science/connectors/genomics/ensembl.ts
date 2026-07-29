@@ -2,8 +2,8 @@
  * Ensembl REST — genes, transcripts, and cross-references by symbol / stable id.
  * Public, keyless API at rest.ensembl.org.
  */
-import type { Connector, ConnectorHit } from "../types"
-import { getJSON } from "../http"
+import type { Connector, ConnectorHit, FetchedFile, FetchOptions } from "../types"
+import { getJSON, getText } from "../http"
 import { arr, asRecord, num, str, summarize, type Rec } from "./util"
 
 const REST = "https://rest.ensembl.org"
@@ -90,5 +90,15 @@ export const ensembl: Connector = {
     return getJSON<Rec>(`${REST}/lookup/id/${encodeURIComponent(stable)}?expand=1&content-type=application/json`, {
       signal: opts?.signal,
     })
+  },
+
+  formats: ["fasta"],
+
+  async fetchFile(id, format, opts?: FetchOptions): Promise<FetchedFile> {
+    const stable = id.trim()
+    const body = await getText(`${REST}/sequence/id/${encodeURIComponent(stable)}?content-type=text/x-fasta`, {
+      signal: opts?.signal,
+    })
+    return { body, contentType: "text/x-fasta", filename: `${stable}.${format}` }
   },
 }

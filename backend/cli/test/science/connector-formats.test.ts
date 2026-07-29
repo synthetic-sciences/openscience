@@ -3,6 +3,10 @@ import { rcsbPdb } from "../../src/science/connectors/proteins/rcsb-pdb"
 import { pdbe } from "../../src/science/connectors/proteins/pdbe"
 import { alphafold } from "../../src/science/connectors/proteins/alphafold"
 import { clearCache, resetRateLimits } from "../../src/science/connectors/http"
+import { uniprot } from "../../src/science/connectors/proteins/uniprot"
+import { pubchem } from "../../src/science/connectors/chemistry/pubchem"
+import { ensembl } from "../../src/science/connectors/genomics/ensembl"
+import { kegg } from "../../src/science/connectors/pathways/kegg"
 
 const realFetch = globalThis.fetch
 
@@ -96,5 +100,39 @@ describe("alphafold fetchFile", () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify([{ entryId: "AF-X-F1" }]), { status: 200 })) as unknown as typeof fetch
     await expect(alphafold.fetchFile!("P04637", "cif")).rejects.toThrow(/no cif/i)
+  })
+})
+
+describe("query-param, path-segment, path and suffix formats", () => {
+  test("uniprot uses a format query param", async () => {
+    const s = stub(">sp|P04637|P53_HUMAN\nMEEPQSDPSV\n")
+    const out = await uniprot.fetchFile!("P04637", "fasta")
+    expect(s.url()).toBe("https://rest.uniprot.org/uniprotkb/P04637?format=fasta")
+    expect(out.filename).toBe("P04637.fasta")
+    expect(uniprot.formats).toEqual(["fasta", "txt"])
+  })
+
+  test("pubchem uses an uppercase path segment", async () => {
+    const s = stub("2244\n  -OEChem-\n")
+    const out = await pubchem.fetchFile!("2244", "sdf")
+    expect(s.url()).toBe("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/2244/SDF")
+    expect(out.filename).toBe("2244.sdf")
+    expect(pubchem.formats).toEqual(["sdf"])
+  })
+
+  test("ensembl uses a different path with a fasta content-type", async () => {
+    const s = stub(">ENSG00000141510\nACGT\n")
+    const out = await ensembl.fetchFile!("ENSG00000141510", "fasta")
+    expect(s.url()).toBe("https://rest.ensembl.org/sequence/id/ENSG00000141510?content-type=text/x-fasta")
+    expect(out.filename).toBe("ENSG00000141510.fasta")
+    expect(ensembl.formats).toEqual(["fasta"])
+  })
+
+  test("kegg uses an aaseq path suffix", async () => {
+    const s = stub(">hsa:7157 TP53\nMEEPQSDPSV\n")
+    const out = await kegg.fetchFile!("hsa:7157", "fasta")
+    expect(s.url()).toBe("https://rest.kegg.jp/get/hsa%3A7157/aaseq")
+    expect(out.filename).toBe("hsa_7157.fasta")
+    expect(kegg.formats).toEqual(["fasta"])
   })
 })

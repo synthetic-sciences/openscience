@@ -1,4 +1,4 @@
-import type { Connector, ConnectorHit } from "../types"
+import type { Connector, ConnectorHit, FetchedFile, FetchOptions } from "../types"
 import { getText, orFallback } from "../http"
 import { asText, clampLimit } from "./util"
 
@@ -50,5 +50,13 @@ export const kegg: Connector = {
     const url = `${REST}/get/${encodeURIComponent(id)}`
     const text = await orFallback(getText(url, { signal: opts?.signal }), "", opts?.signal)
     return { id, format: "kegg-flat", text }
+  },
+
+  formats: ["fasta"],
+
+  async fetchFile(id, format, opts?: FetchOptions): Promise<FetchedFile> {
+    // KEGG appends the representation as a path suffix; aaseq is amino-acid FASTA.
+    const body = await getText(`${REST}/get/${encodeURIComponent(id)}/aaseq`, { signal: opts?.signal })
+    return { body, contentType: "text/x-fasta", filename: `${id.replace(/:/g, "_")}.${format}` }
   },
 }

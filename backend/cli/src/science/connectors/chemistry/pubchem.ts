@@ -1,5 +1,5 @@
-import type { Connector, ConnectorHit } from "../types"
-import { getJSON, orFallback } from "../http"
+import type { Connector, ConnectorHit, FetchedFile, FetchOptions } from "../types"
+import { getJSON, getText, orFallback } from "../http"
 
 /**
  * PubChem — NCBI's public chemical database (PUG REST). No key required.
@@ -77,5 +77,15 @@ export const pubchem: Connector = {
   async fetch(id, opts) {
     const url = `${BASE}/compound/cid/${encodeURIComponent(id)}/JSON`
     return getJSON(url, { signal: opts?.signal })
+  },
+
+  formats: ["sdf"],
+
+  async fetchFile(id, format, opts?: FetchOptions): Promise<FetchedFile> {
+    // PubChem takes the format as an UPPERCASE path segment, not a parameter.
+    const body = await getText(`${BASE}/compound/cid/${encodeURIComponent(id)}/${format.toUpperCase()}`, {
+      signal: opts?.signal,
+    })
+    return { body, contentType: "chemical/x-mdl-sdfile", filename: `${id}.${format}` }
   },
 }
