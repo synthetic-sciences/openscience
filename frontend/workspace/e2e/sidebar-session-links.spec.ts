@@ -14,7 +14,9 @@ test("sidebar session rows navigate to the selected session", async ({ page, slu
   try {
     await gotoSession(one.id)
 
-    const sidebar = page.getByRole("complementary").filter({ has: page.getByPlaceholder("Search sessions") })
+    const sidebar = page
+      .getByRole("complementary")
+      .filter({ has: page.getByRole("button", { name: "New research" }) })
     const target = sidebar.locator('[role="button"]').filter({ hasText: twoTitle })
     await expect(target).toBeVisible()
     await target.scrollIntoViewIfNeeded()

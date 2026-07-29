@@ -1,6 +1,6 @@
 import { test, expect } from "./fixtures"
 
-test("sidebar filters sessions and clears the search", async ({ page, sdk, gotoSession }) => {
+test("sidebar keeps recent sessions visible without a permanent search field", async ({ page, sdk, gotoSession }) => {
   const stamp = Date.now()
   const oneTitle = `e2e sidebar search alpha ${stamp}`
   const twoTitle = `e2e sidebar search beta ${stamp}`
@@ -13,17 +13,10 @@ test("sidebar filters sessions and clears the search", async ({ page, sdk, gotoS
   try {
     await gotoSession(one.id)
 
-    const search = page.getByPlaceholder("Search sessions")
-    const sidebar = page.getByRole("complementary").filter({ has: search })
+    const sidebar = page.getByRole("complementary").filter({ has: page.getByRole("button", { name: "New research" }) })
     await expect(sidebar).toBeVisible()
-    await expect(sidebar.getByRole("button", { name: "New session" })).toBeVisible()
-
-    await search.fill(`beta ${stamp}`)
-    await expect(sidebar.locator('[role="button"]').filter({ hasText: twoTitle })).toBeVisible()
-    await expect(sidebar.locator('[role="button"]').filter({ hasText: oneTitle })).toHaveCount(0)
-
-    await sidebar.getByRole("button", { name: "clear search" }).click()
-    await expect(search).toHaveValue("")
+    await expect(sidebar.getByRole("button", { name: "New research" })).toBeVisible()
+    await expect(sidebar.getByPlaceholder("Search sessions")).toHaveCount(0)
     await expect(sidebar.locator('[role="button"]').filter({ hasText: oneTitle })).toBeVisible()
     await expect(sidebar.locator('[role="button"]').filter({ hasText: twoTitle })).toBeVisible()
   } finally {
@@ -38,12 +31,14 @@ test.describe("mobile workspace", () => {
   test("sessions open as a drawer instead of squeezing the active pane", async ({ page, gotoSession }) => {
     await gotoSession()
 
-    const sidebar = page.getByRole("complementary").filter({ has: page.getByLabel("search sessions") })
+    const sidebar = page
+      .getByRole("complementary")
+      .filter({ has: page.getByRole("button", { name: "New research" }) })
     await expect(sidebar).toHaveAttribute("data-mobile-open", "false")
 
-    await page.getByRole("button", { name: "sessions" }).click()
+    await page.getByRole("button", { name: "Show sessions" }).click()
     await expect(sidebar).toHaveAttribute("data-mobile-open", "true")
-    await expect(page.getByLabel("search sessions")).toBeVisible()
+    await expect(sidebar.getByRole("button", { name: "New research" })).toBeVisible()
 
     await page.getByRole("button", { name: "close sessions" }).click()
     await expect(sidebar).toHaveAttribute("data-mobile-open", "false")
