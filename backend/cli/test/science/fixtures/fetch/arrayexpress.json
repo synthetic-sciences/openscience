@@ -1,0 +1,543 @@
+{
+  "id": "E-MTAB-1234",
+  "payload": {
+    "accno": "E-MTAB-1234",
+    "attributes": [
+      {
+        "name": "Title",
+        "value": "Gene Expression Profile of AGS cell line cultured in 2D and in 3D conditions"
+      },
+      {
+        "name": "ReleaseDate",
+        "value": "2013-02-15"
+      },
+      {
+        "name": "RootPath",
+        "value": "E-MTAB-1234"
+      },
+      {
+        "name": "AttachTo",
+        "value": "ArrayExpress"
+      }
+    ],
+    "section": {
+      "accno": "s-E-MTAB-1234",
+      "type": "Study",
+      "attributes": [
+        {
+          "name": "Title",
+          "value": "Gene Expression Profile of AGS cell line cultured in 2D and in 3D conditions"
+        },
+        {
+          "name": "Study type",
+          "value": "transcription profiling by array",
+          "valqual": [
+            {
+              "name": "Ontology",
+              "value": "EFO"
+            },
+            {
+              "name": "TermId",
+              "value": "EFO_0002768"
+            }
+          ]
+        },
+        {
+          "name": "Organism",
+          "value": "Homo sapiens"
+        },
+        {
+          "name": "Description",
+          "value": "AGS cell line was cultured in standard T25 flasks (2D condition) and in T25 flasks precoated with 50 M-5L/cm2 of matrigel basement membrane (BD Biosciences) at a 1.5:1 proportion to RPMI serum-free medium (3D condition, overlay method). Cultures were maintained for 14 days with medium change every two days. Transcriptome alterations were then investigated."
+        }
+      ],
+      "subsections": [
+        [
+          {
+            "accno": "P-MTAB-27772",
+            "type": "Protocols",
+            "attributes": [
+              {
+                "name": "Name",
+                "value": "P-MTAB-27772"
+              },
+              {
+                "name": "Type",
+                "value": "grow"
+              },
+              {
+                "name": "Description",
+                "value": "Cells were grown in a humidified incubator, at 37 C and 5% CO2 atmosphere. The culture medium used was RPMI-1640 supplemented with 10% fetal bovine serum, 100U/mL penicillin and 100M-5g/mL streptomycin. For 2D condition, AGS cells were cultured in standard T25 flasks. For 3D condition, AGS cells were cultured in T25 flasks precoated with 50M-5L/cm2 of matrigel basement membrane (BD Biosciences) at a 1.5:1 proportion to RPMI serum-free medium  (overlay method). Cultures were maintained for 14 days with medium change every two days."
+              }
+            ]
+          },
+          {
+            "accno": "P-MTAB-27773",
+            "type": "Protocols",
+            "attributes": [
+              {
+                "name": "Name",
+                "value": "P-MTAB-27773"
+              },
+              {
+                "name": "Type",
+                "value": "nucleic_acid_extraction"
+              },
+              {
+                "name": "Description",
+                "value": "Total RNA extraction was performed using TRI reagent (Sigma) and following the manufacturer`s guidlines."
+              }
+            ]
+          },
+          {
+            "accno": "P-MTAB-27774",
+            "type": "Protocols",
+            "attributes": [
+              {
+                "name": "Name",
+                "value": "P-MTAB-27774"
+              },
+              {
+                "name": "Type",
+                "value": "labeling"
+              },
+              {
+                "name": "Description",
+                "value": "Labeling was performed with the One-Color Microarray-Based Gene Expression Analysis Quick Amp Labeling kit (Agilent Technologies). 600ng of total RNA was used as input to generate Cyanine 3-labeled cRNA."
+              }
+            ]
+          },
+          {
+            "accno": "P-MTAB-27775",
+            "type": "Protocols",
+            "attributes": [
+              {
+                "name": "Name",
+                "value": "P-MTAB-27775"
+              },
+              {
+                "name": "Type",
+                "value": "hybridization"
+              },
+              {
+                "name": "Description",
+                "value": "Hybridization was carried out overnight for 17h at 65 C in a microarray hybridization oven Agilent G2545A (Agilent Technologies)."
+              }
+            ]
+          },
+          {
+            "accno": "P-MTAB-27776",
+            "type": "Protocols",
+            "attributes": [
+              {
+                "name": "Name",
+                "value": "P-MTAB-27776"
+              },
+              {
+                "name": "Type",
+                "value": "image_acquisition"
+              },
+              {
+                "name": "Description",
+                "value": "Images of the hybridizations were acquired using a G2505B Microarray Scanner (Agilent Technologies). The Feature Extraction software (Agilent Technologies) was used for spot identification, background subtraction and quantification of the fluorescent signal."
+              }
+            ]
+          },
+          {
+            "accno": "P-MTAB-27777",
+            "type": "Protocols",
+            "attributes": [
+              {
+                "name": "Name",
+                "value": "P-MTAB-27777"
+              },
+              {
+                "name": "Type",
+                "value": "bioassay_data_transformation"
+              },
+              {
+                "name": "Description",
+                "value": "Normalization was achieved by the median intensity over the entire array, using the median array as reference. Raw data was base 2 log-transformed and probe replicates were averaged."
+              }
+            ]
+          }
+        ],
+        {
+          "type": "Author",
+          "attributes": [
+            {
+              "name": "Name",
+              "value": "Raquel Almeida"
+            },
+            {
+              "name": "Email",
+              "value": "ralmeida@ipatimup.pt"
+            },
+            {
+              "name": "Phone",
+              "value": "225570700"
+            },
+            {
+              "name": "Role",
+              "value": "submitter"
+            },
+            {
+              "name": "affiliation",
+              "value": "o1",
+              "reference": true
+            }
+          ]
+        },
+        {
+          "accno": "o1",
+          "type": "Organization",
+          "attributes": [
+            {
+              "name": "Name",
+              "value": "IPATIMUP"
+            },
+            {
+              "name": "Address",
+              "value": "Rua Dr. Roberto Frias s/n, 4200-465 Porto, PORTUGAL"
+            }
+          ]
+        },
+        {
+          "accno": "23408853",
+          "type": "Publication",
+          "attributes": [
+            {
+              "name": "Title",
+              "value": "CDX2 regulation by the RNA-binding protein MEX3A: impact on intestinal"
+            },
+            {
+              "name": "Authors",
+              "value": "Bruno Pereira; Sofia Sousa; Rita Barros; Laura Carreto; PatrM-CM-^CM-BM--cia Oliveira;"
+            },
+            {
+              "name": "DOI",
+              "value": "10.1093/nar/gkt087"
+            }
+          ],
+          "links": [
+            {
+              "url": "10.1093/nar/gkt087",
+              "attributes": [
+                {
+                  "name": "Type",
+                  "value": "DOI"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "accno": "s-samples-factors-E-MTAB-1234",
+          "type": "Samples",
+          "attributes": [
+            {
+              "name": "Sample count",
+              "value": "6"
+            },
+            {
+              "name": "Experimental Designs",
+              "value": "growth condition design"
+            },
+            {
+              "name": "Experimental Factors",
+              "value": "GROWTH_CONDITION",
+              "valqual": [
+                {
+                  "name": "TermName",
+                  "value": "growth_condition"
+                }
+              ]
+            },
+            {
+              "name": "Quality Controls",
+              "value": "Spike-in quality control (Agilent One Color RNA Spike-in kit)"
+            }
+          ],
+          "subsections": [
+            {
+              "accno": "exp_factor-E-MTAB-1234",
+              "type": "Experimental Factors",
+              "attributes": [
+                {
+                  "name": "Growth_condition",
+                  "value": "2D"
+                },
+                {
+                  "name": "Growth_condition",
+                  "value": "3D"
+                }
+              ],
+              "subsections": [
+                [
+                  {
+                    "accno": "factors_0",
+                    "type": "Factors Table",
+                    "attributes": [
+                      {
+                        "name": "GROWTH_CONDITION",
+                        "value": "2D"
+                      },
+                      {
+                        "name": "No. of Samples",
+                        "value": "3",
+                        "valqual": [
+                          {
+                            "name": "search",
+                            "value": "\"252665211368_1_3_2D1.txt\" OR \"252665211369_1_1_2D2.txt\" OR \"252665211369_1_3_2D3.txt\""
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "accno": "factors_1",
+                    "type": "Factors Table",
+                    "attributes": [
+                      {
+                        "name": "GROWTH_CONDITION",
+                        "value": "3D"
+                      },
+                      {
+                        "name": "No. of Samples",
+                        "value": "3",
+                        "valqual": [
+                          {
+                            "name": "search",
+                            "value": "\"252665211368_1_4_3D1.txt\" OR \"252665211369_1_2_3D2.txt\" OR \"252665211369_1_4_3D3.txt\""
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              ]
+            },
+            {
+              "accno": "source_chars-E-MTAB-1234",
+              "type": "Source Characteristics",
+              "attributes": [
+                {
+                  "name": "Organism",
+                  "value": "Homo sapiens"
+                },
+                {
+                  "name": "CellLine",
+                  "value": "AGS"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "accno": "s-assays-data-E-MTAB-1234",
+          "type": "Assays and Data",
+          "attributes": [
+            {
+              "name": "Technology",
+              "value": "Array assay"
+            },
+            {
+              "name": "Assay by Molecule",
+              "value": "RNA assay"
+            }
+          ],
+          "subsections": [
+            {
+              "accno": "raw-data",
+              "type": "Raw Data",
+              "files": [
+                [
+                  {
+                    "path": "252665211368_1_3_2D1.txt",
+                    "size": 6671500,
+                    "attributes": [
+                      {
+                        "name": "Samples",
+                        "value": "AGS_2D_bio_replicate_1"
+                      },
+                      {
+                        "name": "Description",
+                        "value": "Raw data file"
+                      }
+                    ],
+                    "type": "file"
+                  },
+                  {
+                    "path": "252665211369_1_1_2D2.txt",
+                    "size": 6680997,
+                    "attributes": [
+                      {
+                        "name": "Samples",
+                        "value": "AGS_2D_bio_replicate_2"
+                      },
+                      {
+                        "name": "Description",
+                        "value": "Raw data file"
+                      }
+                    ],
+                    "type": "file"
+                  },
+                  {
+                    "path": "252665211369_1_3_2D3.txt",
+                    "size": 6680336,
+                    "attributes": [
+                      {
+                        "name": "Samples",
+                        "value": "AGS_2D_bio_replicate_3"
+                      },
+                      {
+                        "name": "Description",
+                        "value": "Raw data file"
+                      }
+                    ],
+                    "type": "file"
+                  },
+                  {
+                    "path": "252665211368_1_4_3D1.txt",
+                    "size": 6690327,
+                    "attributes": [
+                      {
+                        "name": "Samples",
+                        "value": "AGS_3D_bio_replicate_1"
+                      },
+                      {
+                        "name": "Description",
+                        "value": "Raw data file"
+                      }
+                    ],
+                    "type": "file"
+                  },
+                  {
+                    "path": "252665211369_1_2_3D2.txt",
+                    "size": 6679375,
+                    "attributes": [
+                      {
+                        "name": "Samples",
+                        "value": "AGS_3D_bio_replicate_2"
+                      },
+                      {
+                        "name": "Description",
+                        "value": "Raw data file"
+                      }
+                    ],
+                    "type": "file"
+                  },
+                  {
+                    "path": "252665211369_1_4_3D3.txt",
+                    "size": 6698010,
+                    "attributes": [
+                      {
+                        "name": "Samples",
+                        "value": "AGS_3D_bio_replicate_3"
+                      },
+                      {
+                        "name": "Description",
+                        "value": "Raw data file"
+                      }
+                    ],
+                    "type": "file"
+                  }
+                ]
+              ]
+            },
+            {
+              "accno": "mt-E-MTAB-1234",
+              "type": "MAGE-TAB Files",
+              "files": [
+                [
+                  {
+                    "path": "E-MTAB-1234.idf.txt",
+                    "size": 3435,
+                    "attributes": [
+                      {
+                        "name": "Type",
+                        "value": "IDF File"
+                      },
+                      {
+                        "name": "Format",
+                        "value": "tab-delimited text"
+                      },
+                      {
+                        "name": "Description",
+                        "value": "Investigation Design Format (IDF)"
+                      }
+                    ],
+                    "type": "file"
+                  },
+                  {
+                    "path": "E-MTAB-1234.sdrf.txt",
+                    "size": 3212,
+                    "attributes": [
+                      {
+                        "name": "Type",
+                        "value": "SDRF File"
+                      },
+                      {
+                        "name": "Format",
+                        "value": "tab-delimited text"
+                      },
+                      {
+                        "name": "Description",
+                        "value": "Sample and Data Relationship Format (SDRF)"
+                      }
+                    ],
+                    "type": "file"
+                  }
+                ]
+              ]
+            },
+            {
+              "accno": "ad-E-MTAB-1234",
+              "type": "Array Designs",
+              "links": [
+                [
+                  {
+                    "url": "A-MEXP-2183",
+                    "attributes": [
+                      {
+                        "name": "Type",
+                        "value": "Array Design"
+                      }
+                    ]
+                  }
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "accno": "score-E-MTAB-1234",
+          "type": "MIAME Score",
+          "attributes": [
+            {
+              "name": "Platforms",
+              "value": "*"
+            },
+            {
+              "name": "Processed",
+              "value": "*"
+            },
+            {
+              "name": "Protocols",
+              "value": "*"
+            },
+            {
+              "name": "Variables",
+              "value": "*"
+            },
+            {
+              "name": "Raw",
+              "value": "*"
+            }
+          ]
+        }
+      ]
+    },
+    "type": "submission"
+  }
+}

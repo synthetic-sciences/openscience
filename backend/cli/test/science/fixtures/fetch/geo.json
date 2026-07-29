@@ -1,0 +1,75 @@
+{
+  "id": "GSE1000",
+  "payload": {
+    "uid": "200001000",
+    "accession": "GSE1000",
+    "gds": "562",
+    "title": "Osteosarcoma TE85 cell tissue culture study",
+    "summary": "Amino acid conjugated surfaces and controls at 6 and 32 hours Keywords: other",
+    "gpl": "96",
+    "gse": "1000",
+    "taxon": "Homo sapiens",
+    "entrytype": "GSE",
+    "gdstype": "Expression profiling by array",
+    "ptechtype": "",
+    "valtype": "",
+    "ssinfo": "",
+    "subsetinfo": "",
+    "pdat": "2004/01/28",
+    "suppfile": "CEL",
+    "samples": [
+      {
+        "accession": "GSM15787",
+        "title": "Glutamic Acid Surface 6 hours"
+      },
+      {
+        "accession": "GSM15790",
+        "title": "Aspartic Acid Conjugated Surface 32 hours"
+      },
+      {
+        "accession": "GSM15788",
+        "title": "Serine Surface 6 hours"
+      },
+      {
+        "accession": "GSM15785",
+        "title": "Aspartic Acid Conjugated Surface 6 hours"
+      },
+      {
+        "accession": "GSM15794",
+        "title": "Amino Terminated surface 32 hours"
+      },
+      {
+        "accession": "GSM15791",
+        "title": "Glutamic Acid Conjugated Surface 32 hours"
+      },
+      {
+        "accession": "GSM15786",
+        "title": "Tissue Culture Polystyrene 32 hours"
+      },
+      {
+        "accession": "GSM15789",
+        "title": "Amino terminated Surface 6 hours"
+      },
+      {
+        "accession": "GSM15795",
+        "title": "Tissue Culture Polystyrene 6 hours"
+      },
+      {
+        "accession": "GSM15792",
+        "title": "Serine Conjugated Surface 32 hours"
+      }
+    ],
+    "relations": [],
+    "extrelations": [],
+    "n_samples": 10,
+    "seriestitle": "",
+    "platformtitle": "",
+    "platformtaxa": "",
+    "samplestaxa": "",
+    "pubmedids": [],
+    "projects": [],
+    "ftplink": "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE1nnn/GSE1000/",
+    "geo2r": "yes",
+    "bioproject": "PRJNA87053"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "ENSG00000141510",
+  "payload": {
+    "gene_id": "ENSG00000141510",
+    "symbol": "TP53",
+    "name": "tumor protein p53",
+    "chrom": "17",
+    "start": 7661779,
+    "stop": 7687538,
+    "canonical_transcript_id": "ENST00000269305"
+  }
+}

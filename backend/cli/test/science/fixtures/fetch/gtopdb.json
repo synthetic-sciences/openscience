@@ -1,0 +1,28 @@
+{
+  "id": "4139",
+  "payload": {
+    "ligandId": 4139,
+    "name": "aspirin",
+    "type": "Synthetic organic",
+    "abbreviation": "",
+    "inn": "",
+    "approvalSource": "FDA (no history prior to 1965)",
+    "approved": true,
+    "whoEssential": true,
+    "withdrawn": false,
+    "antibacterial": false,
+    "immuno": true,
+    "malaria": false,
+    "labelled": false,
+    "radioactive": false,
+    "activeDrugIds": [],
+    "prodrugIds": [],
+    "complexIds": [],
+    "subunitIds": [],
+    "ligandName": "aspirin",
+    "iupacName": "2-acetyloxybenzoic acid",
+    "smiles": "CC(=O)Oc1ccccc1C(=O)O",
+    "inchi": "InChI=1S/C9H8O4/c1-6(10)13-8-5-3-2-4-7(8)9(11)12/h2-5H,1H3,(H,11,12)",
+    "inchiKey": "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"
+  }
+}

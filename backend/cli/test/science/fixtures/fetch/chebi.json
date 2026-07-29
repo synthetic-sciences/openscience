@@ -1,0 +1,483 @@
+{
+  "id": "CHEBI:15377",
+  "payload": {
+    "iri": "http://purl.obolibrary.org/obo/CHEBI_15377",
+    "lang": "en",
+    "description": [
+      "An oxygen hydride consisting of an oxygen atom that is covalently bonded to two hydrogen atoms"
+    ],
+    "synonyms": [
+      "BOUND WATER",
+      "H(2)O",
+      "H2O",
+      "HOH",
+      "WATER",
+      "WATER",
+      "Wasser",
+      "Water",
+      "Water",
+      "[OH2]",
+      "acqua",
+      "agua",
+      "aqua",
+      "dihydridooxygen",
+      "dihydrogen oxide",
+      "eau",
+      "hydrogen hydroxide",
+      "oxidane",
+      "oxidane",
+      "water",
+      "water"
+    ],
+    "annotation": {
+      "charge": [
+        0
+      ],
+      "database_cross_reference": [
+        "cas:7732-18-5",
+        "gmelin:117",
+        "hmdb:HMDB0002111",
+        "kegg.compound:C00001",
+        "kegg.drug:D00001",
+        "metacyc.compound:WATER",
+        "molbase:1",
+        "pdb-ccd:HOH",
+        "reaxys:3587155",
+        "wikipedia.en:Water"
+      ],
+      "generalized_empirical_formula": [
+        "H2O"
+      ],
+      "has_alternative_id": [
+        "CHEBI:10743",
+        "CHEBI:13352",
+        "CHEBI:27313",
+        "CHEBI:42043",
+        "CHEBI:42857",
+        "CHEBI:43228",
+        "CHEBI:44292",
+        "CHEBI:44701",
+        "CHEBI:44819",
+        "CHEBI:5585"
+      ],
+      "has_obo_namespace": [
+        "chebi_ontology"
+      ],
+      "id": [
+        "CHEBI:15377"
+      ],
+      "inchi_key_string": [
+        "XLYOFNOQVPJJNP-UHFFFAOYSA-N"
+      ],
+      "inchi_string": [
+        "InChI=1S/H2O/h1H2"
+      ],
+      "mass": [
+        "18.015"
+      ],
+      "monoisotopic_mass": [
+        "18.01056"
+      ],
+      "smiles_string": [
+        "[H]O[H]"
+      ]
+    },
+    "label": "water",
+    "ontology_name": "chebi",
+    "ontology_prefix": "CHEBI",
+    "ontology_iri": "http://purl.obolibrary.org/obo/chebi.owl",
+    "is_obsolete": false,
+    "term_replaced_by": null,
+    "is_defining_ontology": true,
+    "has_children": true,
+    "is_root": false,
+    "short_form": "CHEBI_15377",
+    "obo_id": "CHEBI:15377",
+    "in_subset": [
+      "3_STAR"
+    ],
+    "obo_definition_citation": null,
+    "obo_xref": [
+      {
+        "database": "cas",
+        "id": "7732-18-5",
+        "description": "cas",
+        "url": "https://commonchemistry.cas.org/detail?cas_rn=7732-18-5"
+      },
+      {
+        "database": "gmelin",
+        "id": "117",
+        "description": "gmelin",
+        "url": null
+      },
+      {
+        "database": "hmdb",
+        "id": "HMDB0002111",
+        "description": "hmdb",
+        "url": "http://www.hmdb.ca/metabolites/HMDB0002111"
+      },
+      {
+        "database": "kegg.compound",
+        "id": "C00001",
+        "description": "kegg.compound",
+        "url": null
+      },
+      {
+        "database": "kegg.drug",
+        "id": "D00001",
+        "description": "kegg.drug",
+        "url": null
+      },
+      {
+        "database": "metacyc.compound",
+        "id": "WATER",
+        "description": "metacyc.compound",
+        "url": null
+      },
+      {
+        "database": "molbase",
+        "id": "1",
+        "description": "molbase",
+        "url": "http://www.molbase.com/en/index.php?app=search&search_keyword=1"
+      },
+      {
+        "database": "pdb-ccd",
+        "id": "HOH",
+        "description": "pdb-ccd",
+        "url": null
+      },
+      {
+        "database": "reaxys",
+        "id": "3587155",
+        "description": "reaxys",
+        "url": null
+      },
+      {
+        "database": "wikipedia.en",
+        "id": "Water",
+        "description": "wikipedia.en",
+        "url": null
+      }
+    ],
+    "obo_synonym": [
+      {
+        "name": "WATER",
+        "scope": "hasExactSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "PDBeChem",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "Water",
+        "scope": "hasExactSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "KEGG_COMPOUND",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "oxidane",
+        "scope": "hasExactSynonym",
+        "type": "IUPAC NAME",
+        "xrefs": [
+          {
+            "database": null,
+            "id": "IUPAC",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "water",
+        "scope": "hasExactSynonym",
+        "type": "IUPAC NAME",
+        "xrefs": [
+          {
+            "database": null,
+            "id": "IUPAC",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "BOUND WATER",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "pdb-ccd",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "H(2)O",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "uniprot_ft",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "H2O",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "kegg.compound",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "HOH",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "chebi",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "WATER",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "pdb-ccd",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "Wasser",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "chebi",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "Water",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "kegg.compound",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "[OH2]",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "iupac",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "acqua",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "chebi",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "agua",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "chebi",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "aqua",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "chebi",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "dihydridooxygen",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "iupac",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "dihydrogen oxide",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "iupac",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "eau",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "chebi",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "hydrogen hydroxide",
+        "scope": "hasRelatedSynonym",
+        "type": null,
+        "xrefs": [
+          {
+            "database": null,
+            "id": "chebi",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "oxidane",
+        "scope": "hasRelatedSynonym",
+        "type": "IUPAC NAME",
+        "xrefs": [
+          {
+            "database": null,
+            "id": "iupac",
+            "description": null,
+            "url": null
+          }
+        ]
+      },
+      {
+        "name": "water",
+        "scope": "hasRelatedSynonym",
+        "type": "IUPAC NAME",
+        "xrefs": [
+          {
+            "database": null,
+            "id": "iupac",
+            "description": null,
+            "url": null
+          }
+        ]
+      }
+    ],
+    "is_preferred_root": false,
+    "_links": {
+      "self": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377?lang=en"
+      },
+      "parents": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/parents"
+      },
+      "ancestors": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/ancestors"
+      },
+      "hierarchicalParents": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/hierarchicalParents"
+      },
+      "hierarchicalAncestors": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/hierarchicalAncestors"
+      },
+      "jstree": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/jstree"
+      },
+      "children": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/children"
+      },
+      "descendants": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/descendants"
+      },
+      "hierarchicalChildren": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/hierarchicalChildren"
+      },
+      "hierarchicalDescendants": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/hierarchicalDescendants"
+      },
+      "graph": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/graph"
+      },
+      "has_role": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FRO_0000087"
+      },
+      "is_deprotonated_form_of": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FRO_0018033"
+      },
+      "is_protonated_form_of": {
+        "href": "http://www.ebi.ac.uk/ols4/api/ontologies/chebi/terms/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FCHEBI_15377/http%253A%252F%252Fpurl.obolibrary.org%252Fobo%252FRO_0018034"
+      }
+    }
+  }
+}

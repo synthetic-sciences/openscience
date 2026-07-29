@@ -95,3 +95,37 @@ backend/cli/skills/ml-training/unsloth/docs/qwen3-coder-next.md:generic-api-key:
 backend/cli/skills/ml-training/unsloth/docs/qwen3-coder-next.md:generic-api-key:898
 backend/cli/skills/ml-training/unsloth/docs/qwen3-coder-next.md:generic-api-key:900
 backend/cli/skills/other/hugging-face-jobs/references/token_usage.md:generic-api-key:344
+# backend/cli/test/science/fixtures/fetch/crossref.json: recorded live-API fixture
+# (Task 9, science_fetch). Each flagged "key" is CrossRef's own bibliography
+# reference identifier (format <article-DOI-slug>_CR<n>, e.g. "BFnature12373_CR1"),
+# not a credential -- it labels one entry in the DOI record's "reference" array.
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:183
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:189
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:200
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:211
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:222
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:233
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:244
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:255
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:266
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:277
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:288
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:299
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:310
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:321
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:332
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:343
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:354
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:363
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:374
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:385
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:396
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:407
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:418
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:429
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:440
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:451
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:462
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:473
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:484
+backend/cli/test/science/fixtures/fetch/crossref.json:generic-api-key:495

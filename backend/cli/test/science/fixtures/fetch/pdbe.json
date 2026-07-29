@@ -1,0 +1,47 @@
+{
+  "id": "6lu7",
+  "payload": {
+    "title": "The crystal structure of COVID-19 main protease in complex with an inhibitor N3",
+    "processing_site": "PDBJ",
+    "deposition_site": "PDBJ",
+    "deposition_date": "20200126",
+    "release_date": "20200205",
+    "revision_date": "20241120",
+    "experimental_method_class": [
+      "x-ray"
+    ],
+    "experimental_method": [
+      "X-ray diffraction"
+    ],
+    "split_entry": [],
+    "related_structures": [],
+    "entry_authors": [
+      "Liu, X.",
+      "Zhang, B.",
+      "Jin, Z.",
+      "Yang, H.",
+      "Rao, Z."
+    ],
+    "number_of_entities": {
+      "water": 1,
+      "polypeptide": 2,
+      "dna": 0,
+      "rna": 0,
+      "sugar": 0,
+      "ligand": 0,
+      "dna/rna": 0,
+      "other": 0,
+      "carbohydrate_polymer": 0,
+      "peptide_nucleic_acid": 0,
+      "cyclic_pseudo_peptide": 0
+    },
+    "assemblies": [
+      {
+        "assembly_id": "1",
+        "name": "tetramer",
+        "form": "hetero",
+        "preferred": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "1706.03762",
+  "payload": {
+    "id": "http://arxiv.org/abs/1706.03762v7",
+    "title": "Attention Is All You Need",
+    "summary": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks in an encoder-decoder configuration. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing both with large and limited training data.",
+    "published": "2017-06-12T17:57:34Z",
+    "updated": "2023-08-02T00:41:18Z",
+    "authors": [
+      "Ashish Vaswani",
+      "Noam Shazeer",
+      "Niki Parmar",
+      "Jakob Uszkoreit",
+      "Llion Jones",
+      "Aidan N. Gomez",
+      "Lukasz Kaiser",
+      "Illia Polosukhin"
+    ],
+    "primaryCategory": "cs.CL",
+    "pdf": "https://arxiv.org/pdf/1706.03762v7",
+    "raw": "\n    <id>http://arxiv.org/abs/1706.03762v7</id>\n    <title>Attention Is All You Need</title>\n    <updated>2023-08-02T00:41:18Z</updated>\n    <link href=\"https://arxiv.org/abs/1706.03762v7\" rel=\"alternate\" type=\"text/html\"/>\n    <link href=\"https://arxiv.org/pdf/1706.03762v7\" rel=\"related\" type=\"application/pdf\" title=\"pdf\"/>\n    <summary>The dominant sequence transduction models are based on complex recurrent or convolutional neural networks in an encoder-decoder configuration. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing both with large and limited training data.</summary>\n    <category term=\"cs.CL\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <category term=\"cs.LG\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <published>2017-06-12T17:57:34Z</published>\n    <arxiv:comment>15 pages, 5 figures</arxiv:comment>\n    <arxiv:primary_category term=\"cs.CL\"/>\n    <author>\n      <name>Ashish Vaswani</name>\n    </author>\n    <author>\n      <name>Noam Shazeer</name>\n    </author>\n    <author>\n      <name>Niki Parmar</name>\n    </author>\n    <author>\n      <name>Jakob Uszkoreit</name>\n    </author>\n    <author>\n      <name>Llion Jones</name>\n    </author>\n    <author>\n      <name>Aidan N. Gomez</name>\n    </author>\n    <author>\n      <name>Lukasz Kaiser</name>\n    </author>\n    <author>\n      <name>Illia Polosukhin</name>\n    </author>\n  "
+  }
+}

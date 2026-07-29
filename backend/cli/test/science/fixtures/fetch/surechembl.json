@@ -1,0 +1,28 @@
+{
+  "id": "1",
+  "payload": {
+    "id": "1",
+    "chemical_id": "1",
+    "name": "methylbenzene",
+    "smiles": "Cc1ccccc1",
+    "inchi": "InChI=1S/C7H8/c1-7-5-3-2-4-6-7/h2-6H,1H3",
+    "inchi_key": "YXFVVABEGXRONW-UHFFFAOYSA-N",
+    "mol_weight": 92.1384,
+    "log_p": 1.99502,
+    "is_element": "0",
+    "global_frequency": 295,
+    "mchem_struct_alert": "0",
+    "mol_formula": "C7H8",
+    "hbd": 0,
+    "heavy_atoms": 7,
+    "psa": 0,
+    "hba": 0,
+    "aromatic_rings": 1,
+    "qed_weighted": 0.458806,
+    "organic": 1,
+    "num_ro5_violations": 0,
+    "ro3_pass": 0,
+    "rtb": 0,
+    "similarity": ""
+  }
+}

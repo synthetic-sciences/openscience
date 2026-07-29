@@ -1,0 +1,257 @@
+{
+  "id": "10508479",
+  "payload": {
+    "id": "37466043",
+    "source": "MED",
+    "pmid": "37466043",
+    "pmcid": "PMC10508479",
+    "fullTextIdList": {
+      "fullTextId": [
+        "PMC10508479"
+      ]
+    },
+    "doi": "10.1002/vms3.1202",
+    "title": "Interactions of dietary wheat cultivars and NSP-degrading enzyme on productive performance and egg quality traits.",
+    "authorString": "Seyedoshohadaei S, Torki M, Yaghoubfar A, Abdolmohammadi A.",
+    "authorList": {
+      "author": [
+        {
+          "fullName": "Seyedoshohadaei S",
+          "firstName": "SeyedKamyar",
+          "lastName": "Seyedoshohadaei",
+          "initials": "S",
+          "authorAffiliationDetailsList": {
+            "authorAffiliation": [
+              {
+                "affiliation": "Animal Science Department, College of Agriculture and Natural Resources, Razi University, Kermanshah, Iran."
+              }
+            ]
+          }
+        },
+        {
+          "fullName": "Torki M",
+          "firstName": "Mehran",
+          "lastName": "Torki",
+          "initials": "M",
+          "authorId": {
+            "type": "ORCID",
+            "value": "0000-0001-5660-0273"
+          },
+          "authorAffiliationDetailsList": {
+            "authorAffiliation": [
+              {
+                "affiliation": "Animal Science Department, College of Agriculture and Natural Resources, Razi University, Kermanshah, Iran."
+              }
+            ]
+          }
+        },
+        {
+          "fullName": "Yaghoubfar A",
+          "firstName": "Akbar",
+          "lastName": "Yaghoubfar",
+          "initials": "A",
+          "authorAffiliationDetailsList": {
+            "authorAffiliation": [
+              {
+                "affiliation": "Animal Science Research Institute, Agriculture, Education and Extension Organization, Karaj, Iran."
+              }
+            ]
+          }
+        },
+        {
+          "fullName": "Abdolmohammadi A",
+          "firstName": "Alireza",
+          "lastName": "Abdolmohammadi",
+          "initials": "A",
+          "authorAffiliationDetailsList": {
+            "authorAffiliation": [
+              {
+                "affiliation": "Animal Science Department, College of Agriculture and Natural Resources, Razi University, Kermanshah, Iran."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "authorIdList": {
+      "authorId": [
+        {
+          "type": "ORCID",
+          "value": "0000-0001-5660-0273"
+        }
+      ]
+    },
+    "dataLinksTagsList": {
+      "dataLinkstag": [
+        "altmetrics"
+      ]
+    },
+    "journalInfo": {
+      "issue": "5",
+      "volume": "9",
+      "journalIssueId": 3635571,
+      "dateOfPublication": "2023 Sep",
+      "monthOfPublication": 9,
+      "yearOfPublication": 2023,
+      "printPublicationDate": "2023-09-01",
+      "journal": {
+        "title": "Veterinary medicine and science",
+        "medlineAbbreviation": "Vet Med Sci",
+        "issn": "2053-1095",
+        "essn": "2053-1095",
+        "isoabbreviation": "Vet Med Sci",
+        "nlmid": "101678837"
+      }
+    },
+    "pubYear": "2023",
+    "pageInfo": "2132-2143",
+    "abstractText": "<h4>Context</h4>The nutritional value of enzyme-supplemented wheat-contained diets can be influenced by interactions between wheat cultivar and exogenous enzyme, which in turn cause various effects on the performance of poultry.<h4>Aims</h4>The effects of diets including various wheat cultivars with or without enzyme on productive performance and egg quality characteristics were evaluated.<h4>Methods</h4>A total of 270 58-week-old Lohmann LSL-Lite were allocated to 9 experimental dietary groups with 5 replicate cages and 6 birds per each cage. Based on a 4 × 2 factorial arrangement of treatment, nine iso-caloric and iso-nitrogenous experimental diets, including four wheat cultivars (Sardari, Azar 2, Pishgam and Sirvan) with and without enzymes plus a corn-based control diet, were tested in a completely randomized design during an 8-week trial period.<h4>Key results</h4>From weeks 58 to 63 and 63 to 67 of age, the hens fed with Sardari-included diet showed the lowest feed intake compared to other groups (p < 0.05). Egg production (EP), feed conversion ratio (FCR) and egg mass (EM) were not influenced by the experimental diets. At the age of 62 weeks, the effect of adding enzyme on egg shape index was significant. Moreover, in sampling week 67, increased eggshell weight (%) was detected in enzyme-supplemented diets compared to diets with no enzyme (10.03 vs. 9.37, respectively). Besides, the shell thickness was the highest in the group fed with Azar 2, and the lowest in the group fed with Sirvan at the age of 67 weeks (p < 0.05). Albumen weights (%) were also significant in some cases. The highest albumen weight was observed in Sirvan-included diet without enzyme on week 62. Reduced yolk weight was detected in enzyme-supplemented Pishgam-included diet on 62 weeks of age (p < 0.05).<h4>Conclusions</h4>The inclusion of the diets of laying hens with the four tested Iranian wheat cultivars has no negative impact on most productive performance and egg quality indices. Moreover, supplementing the wheat-included diets with non-starch polysaccharidase enzyme (beta-endopower) improved eggshell weight on week 67.",
+    "affiliation": "Animal Science Department, College of Agriculture and Natural Resources, Razi University, Kermanshah, Iran.",
+    "publicationStatus": "ppublish",
+    "language": "eng",
+    "pubModel": "Print-Electronic",
+    "pubTypeList": {
+      "pubType": [
+        "Randomized Controlled Trial, Veterinary",
+        "research-article",
+        "Journal Article"
+      ]
+    },
+    "grantsList": {
+      "grant": [
+        {
+          "agency": "Razi University",
+          "orderIn": 0
+        }
+      ]
+    },
+    "meshHeadingList": {
+      "meshHeading": [
+        {
+          "majorTopic_YN": "N",
+          "descriptorName": "Ovum"
+        },
+        {
+          "majorTopic_YN": "N",
+          "descriptorName": "Animals"
+        },
+        {
+          "majorTopic_YN": "Y",
+          "descriptorName": "Chickens"
+        },
+        {
+          "majorTopic_YN": "Y",
+          "descriptorName": "Triticum"
+        },
+        {
+          "majorTopic_YN": "N",
+          "descriptorName": "Diet",
+          "meshQualifierList": {
+            "meshQualifier": [
+              {
+                "abbreviation": "VE",
+                "qualifierName": "veterinary",
+                "majorTopic_YN": "N"
+              }
+            ]
+          }
+        },
+        {
+          "majorTopic_YN": "N",
+          "descriptorName": "Iran"
+        },
+        {
+          "majorTopic_YN": "N",
+          "descriptorName": "Female"
+        }
+      ]
+    },
+    "keywordList": {
+      "keyword": [
+        "Laying hens",
+        "Productive performance",
+        "Wheat cultivars",
+        "Egg Quality Indices"
+      ]
+    },
+    "subsetList": {
+      "subset": [
+        {
+          "code": "IM",
+          "name": "Index Medicus"
+        }
+      ]
+    },
+    "fullTextUrlList": {
+      "fullTextUrl": [
+        {
+          "availability": "Open access",
+          "availabilityCode": "OA",
+          "documentStyle": "pdf",
+          "site": "Unpaywall",
+          "url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/vms3.1202"
+        },
+        {
+          "availability": "Open access",
+          "availabilityCode": "OA",
+          "documentStyle": "pdf",
+          "site": "Unpaywall",
+          "url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/vms3.1202"
+        },
+        {
+          "availability": "Open access",
+          "availabilityCode": "OA",
+          "documentStyle": "pdf",
+          "site": "Unpaywall",
+          "url": "https://onlinelibrary.wiley.com/doi/pdfdirect/10.1002/vms3.1202"
+        },
+        {
+          "availability": "Subscription required",
+          "availabilityCode": "S",
+          "documentStyle": "doi",
+          "site": "DOI",
+          "url": "https://doi.org/10.1002/vms3.1202"
+        },
+        {
+          "availability": "Open access",
+          "availabilityCode": "OA",
+          "documentStyle": "html",
+          "site": "Europe_PMC",
+          "url": "https://europepmc.org/articles/PMC10508479"
+        },
+        {
+          "availability": "Open access",
+          "availabilityCode": "OA",
+          "documentStyle": "pdf",
+          "site": "Europe_PMC",
+          "url": "https://europepmc.org/articles/PMC10508479?pdf=render"
+        }
+      ]
+    },
+    "isOpenAccess": "Y",
+    "inEPMC": "Y",
+    "inPMC": "Y",
+    "hasPDF": "Y",
+    "hasBook": "N",
+    "hasSuppl": "N",
+    "citedByCount": 2,
+    "hasData": "N",
+    "hasReferences": "Y",
+    "hasTextMinedTerms": "Y",
+    "hasDbCrossReferences": "N",
+    "hasLabsLinks": "Y",
+    "license": "cc by-nc",
+    "hasEvaluations": "N",
+    "authMan": "N",
+    "epmcAuthMan": "N",
+    "nihAuthMan": "N",
+    "hasTMAccessionNumbers": "N",
+    "dateOfCompletion": "2023-09-20",
+    "dateOfCreation": "2023-07-19",
+    "firstIndexDate": "2023-07-19",
+    "fullTextReceivedDate": "2023-09-21",
+    "dateOfRevision": "2023-09-21",
+    "electronicPublicationDate": "2023-07-19",
+    "firstPublicationDate": "2023-07-19"
+  }
+}

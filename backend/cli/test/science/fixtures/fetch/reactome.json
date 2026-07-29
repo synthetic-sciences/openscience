@@ -1,0 +1,496 @@
+{
+  "id": "R-HSA-68886",
+  "payload": {
+    "dbId": 68886,
+    "displayName": "M Phase",
+    "stId": "R-HSA-68886",
+    "stIdVersion": "R-HSA-68886.5",
+    "definition": "The part of a standard cell cycle during which mitosis and cytokinesis take place.",
+    "isInDisease": false,
+    "isInferred": false,
+    "maxDepth": 6,
+    "name": [
+      "M Phase"
+    ],
+    "releaseDate": "2004-07-06",
+    "speciesName": "Homo sapiens",
+    "figure": [
+      {
+        "dbId": 9628890,
+        "displayName": "/figures/ehld/R-HSA-68886.svg",
+        "url": "/figures/ehld/R-HSA-68886.svg",
+        "className": "Figure",
+        "schemaClass": "Figure"
+      }
+    ],
+    "precedingEvent": [
+      {
+        "dbId": 69275,
+        "displayName": "G2/M Transition",
+        "stId": "R-HSA-69275",
+        "stIdVersion": "R-HSA-69275.7",
+        "definition": "Progression from G2 phase to M phase of the standard mitotic cell cycle.",
+        "isInDisease": false,
+        "isInferred": false,
+        "maxDepth": 5,
+        "name": [
+          "G2/M Transition"
+        ],
+        "releaseDate": "2004-07-06",
+        "speciesName": "Homo sapiens",
+        "followingEvent": [
+          68886
+        ],
+        "doi": "10.3180/REACT_2203.2",
+        "hasDiagram": false,
+        "hasEHLD": false,
+        "lastUpdatedDate": "2019-03-25",
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      }
+    ],
+    "goBiologicalProcess": {
+      "dbId": 6063,
+      "displayName": "mitotic M phase",
+      "accession": "0000087",
+      "databaseName": "GO",
+      "definition": "A cell cycle phase during which nuclear division occurs, and which is comprises the phases: prophase, metaphase, anaphase and telophase and occurs as part of a mitotic cell cycle.",
+      "name": "mitotic M phase",
+      "url": "https://www.ebi.ac.uk/QuickGO/term/GO:0000087",
+      "className": "GO_BiologicalProcess",
+      "schemaClass": "GO_BiologicalProcess"
+    },
+    "orthologousEvent": [
+      {
+        "dbId": 11136594,
+        "displayName": "M Phase",
+        "stId": "R-PFA-68886",
+        "stIdVersion": "R-PFA-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Plasmodium falciparum",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 11115890,
+        "displayName": "M Phase",
+        "stId": "R-SCE-68886",
+        "stIdVersion": "R-SCE-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Saccharomyces cerevisiae",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 11086806,
+        "displayName": "M Phase",
+        "stId": "R-SPO-68886",
+        "stIdVersion": "R-SPO-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Schizosaccharomyces pombe",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 11057438,
+        "displayName": "M Phase",
+        "stId": "R-DDI-68886",
+        "stIdVersion": "R-DDI-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Dictyostelium discoideum",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 11001901,
+        "displayName": "M Phase",
+        "stId": "R-CEL-68886",
+        "stIdVersion": "R-CEL-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Caenorhabditis elegans",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 10918955,
+        "displayName": "M Phase",
+        "stId": "R-DME-68886",
+        "stIdVersion": "R-DME-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Drosophila melanogaster",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 10833412,
+        "displayName": "M Phase",
+        "stId": "R-GGA-68886",
+        "stIdVersion": "R-GGA-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Gallus gallus",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 10736342,
+        "displayName": "M Phase",
+        "stId": "R-XTR-68886",
+        "stIdVersion": "R-XTR-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Xenopus tropicalis",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 10655276,
+        "displayName": "M Phase",
+        "stId": "R-DRE-68886",
+        "stIdVersion": "R-DRE-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Danio rerio",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 10563179,
+        "displayName": "M Phase",
+        "stId": "R-SSC-68886",
+        "stIdVersion": "R-SSC-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Sus scrofa",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 10450183,
+        "displayName": "M Phase",
+        "stId": "R-BTA-68886",
+        "stIdVersion": "R-BTA-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Bos taurus",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 10335667,
+        "displayName": "M Phase",
+        "stId": "R-CFA-68886",
+        "stIdVersion": "R-CFA-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Canis familiaris",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 10228872,
+        "displayName": "M Phase",
+        "stId": "R-RNO-68886",
+        "stIdVersion": "R-RNO-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Rattus norvegicus",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 10105102,
+        "displayName": "M Phase",
+        "stId": "R-MMU-68886",
+        "stIdVersion": "R-MMU-68886.1",
+        "isInDisease": false,
+        "isInferred": true,
+        "maxDepth": 6,
+        "name": [
+          "M Phase"
+        ],
+        "releaseDate": "2026-06-17",
+        "speciesName": "Mus musculus",
+        "inferredFrom": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      }
+    ],
+    "species": [
+      {
+        "dbId": 48887,
+        "displayName": "Homo sapiens",
+        "name": [
+          "Homo sapiens",
+          "H. sapiens",
+          "Hs",
+          "human",
+          "man"
+        ],
+        "taxId": "9606",
+        "abbreviation": "HSA",
+        "className": "Species",
+        "schemaClass": "Species"
+      }
+    ],
+    "summation": [
+      {
+        "dbId": 69390,
+        "displayName": "Mitosis, or the M phase, involves nuclear division and cytok...",
+        "text": "Mitosis, or the M phase, involves nuclear division and cytokinesis, where two identical daughter cells are produced.  Mitosis involves prophase, prometaphase, metaphase, anaphase, and telophase.  Finally, cytokinesis leads to cell division.  The phase between two M phases is called the interphase; it encompasses the G1, S, and G2 phases of the cell cycle.",
+        "className": "Summation",
+        "schemaClass": "Summation"
+      }
+    ],
+    "reviewStatus": {
+      "dbId": 9821382,
+      "displayName": "five stars",
+      "definition": "externally reviewed",
+      "name": [
+        "five stars"
+      ],
+      "className": "ReviewStatus",
+      "schemaClass": "ReviewStatus"
+    },
+    "doi": "10.3180/REACT_910.1",
+    "hasDiagram": true,
+    "hasEHLD": true,
+    "lastUpdatedDate": "2023-03-29",
+    "hasEvent": [
+      {
+        "dbId": 68875,
+        "displayName": "Mitotic Prophase",
+        "stId": "R-HSA-68875",
+        "stIdVersion": "R-HSA-68875.7",
+        "definition": "The initial stage of mitosis in which the chromosomes are condensed but are not yet attached to a mitotic spindle.",
+        "isInDisease": false,
+        "isInferred": false,
+        "maxDepth": 4,
+        "name": [
+          "Mitotic Prophase"
+        ],
+        "releaseDate": "2004-07-06",
+        "speciesName": "Homo sapiens",
+        "eventOf": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "lastUpdatedDate": "2023-03-29",
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 68877,
+        "displayName": "Mitotic Prometaphase",
+        "stId": "R-HSA-68877",
+        "stIdVersion": "R-HSA-68877.8",
+        "definition": "The stage in mitosis (in higher eukaryotes), following prophase, during which the nuclear envelope is disrupted and breaks into membrane vesicles, and the spindle microtubules enter the nuclear region. Kinetochores mature on each centromere and attach to some of the spindle microtubules. Kinetochore microtubules begin the process of aligning chromosomes in one plane halfway between the poles.",
+        "isInDisease": false,
+        "isInferred": false,
+        "maxDepth": 3,
+        "name": [
+          "Mitotic Prometaphase"
+        ],
+        "releaseDate": "2004-07-06",
+        "speciesName": "Homo sapiens",
+        "eventOf": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "lastUpdatedDate": "2019-12-10",
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 2555396,
+        "displayName": "Mitotic Metaphase and Anaphase",
+        "stId": "R-HSA-2555396",
+        "stIdVersion": "R-HSA-2555396.4",
+        "isInDisease": false,
+        "isInferred": false,
+        "maxDepth": 5,
+        "name": [
+          "Mitotic Metaphase and Anaphase"
+        ],
+        "releaseDate": "2012-09-18",
+        "speciesName": "Homo sapiens",
+        "eventOf": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "lastUpdatedDate": "2020-03-16",
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      },
+      {
+        "dbId": 68884,
+        "displayName": "Mitotic Telophase/Cytokinesis",
+        "stId": "R-HSA-68884",
+        "stIdVersion": "R-HSA-68884.6",
+        "definition": "The division of a cell into two daughter cells following mitosis.",
+        "isInDisease": false,
+        "isInferred": false,
+        "maxDepth": 3,
+        "name": [
+          "Mitotic Telophase/Cytokinesis",
+          "cell division"
+        ],
+        "releaseDate": "2004-07-06",
+        "speciesName": "Homo sapiens",
+        "eventOf": [
+          68886
+        ],
+        "hasDiagram": true,
+        "hasEHLD": false,
+        "lastUpdatedDate": "2023-03-29",
+        "schemaClass": "Pathway",
+        "className": "Pathway"
+      }
+    ],
+    "schemaClass": "Pathway",
+    "className": "Pathway"
+  }
+}

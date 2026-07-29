@@ -1,0 +1,1905 @@
+{
+  "id": "6LU7",
+  "payload": {
+    "audit_author": [
+      {
+        "name": "Liu, X.",
+        "pdbx_ordinal": 1
+      },
+      {
+        "name": "Zhang, B.",
+        "pdbx_ordinal": 2
+      },
+      {
+        "name": "Jin, Z.",
+        "pdbx_ordinal": 3
+      },
+      {
+        "name": "Yang, H.",
+        "pdbx_ordinal": 4
+      },
+      {
+        "name": "Rao, Z.",
+        "pdbx_ordinal": 5
+      }
+    ],
+    "cell": {
+      "Z_PDB": 4,
+      "angle_alpha": 90,
+      "angle_beta": 114.55,
+      "angle_gamma": 90,
+      "length_a": 97.931,
+      "length_b": 79.477,
+      "length_c": 51.803
+    },
+    "citation": [
+      {
+        "country": "UK",
+        "id": "primary",
+        "journal_abbrev": "Nature",
+        "journal_id_ASTM": "NATUAS",
+        "journal_id_CSD": "0006",
+        "journal_id_ISSN": "1476-4687",
+        "journal_volume": "582",
+        "page_first": "289",
+        "page_last": "293",
+        "pdbx_database_id_DOI": "10.1038/s41586-020-2223-y",
+        "pdbx_database_id_PubMed": 32272481,
+        "rcsb_authors": [
+          "Jin, Z.",
+          "Du, X.",
+          "Xu, Y.",
+          "Deng, Y.",
+          "Liu, M.",
+          "Zhao, Y.",
+          "Zhang, B.",
+          "Li, X.",
+          "Zhang, L.",
+          "Peng, C.",
+          "Duan, Y.",
+          "Yu, J.",
+          "Wang, L.",
+          "Yang, K.",
+          "Liu, F.",
+          "Jiang, R.",
+          "Yang, X.",
+          "You, T.",
+          "Liu, X.",
+          "Yang, X.",
+          "Bai, F.",
+          "Liu, H.",
+          "Liu, X.",
+          "Guddat, L.W.",
+          "Xu, W.",
+          "Xiao, G.",
+          "Qin, C.",
+          "Shi, Z.",
+          "Jiang, H.",
+          "Rao, Z.",
+          "Yang, H."
+        ],
+        "rcsb_is_primary": "Y",
+        "rcsb_journal_abbrev": "Nature",
+        "title": "Structure of Mprofrom SARS-CoV-2 and discovery of its inhibitors.",
+        "year": 2020
+      },
+      {
+        "country": "US",
+        "id": "1",
+        "journal_abbrev": "Biorxiv",
+        "journal_id_ISSN": "2692-8205",
+        "pdbx_database_id_DOI": "10.1101/2020.02.26.964882",
+        "rcsb_authors": [
+          "Jin, Z.",
+          "Du, X.",
+          "Xu, Y.",
+          "Deng, Y.",
+          "Liu, M.",
+          "Zhao, Y.",
+          "Zhang, B.",
+          "Li, X.",
+          "Zhang, L.",
+          "Peng, C.",
+          "Duan, Y.",
+          "Yu, J.",
+          "Wang, L.",
+          "Yang, K.",
+          "Liu, F.",
+          "Jiang, R.",
+          "Yang, X.",
+          "You, T.",
+          "Liu, X.",
+          "Yang, X.",
+          "Bai, F.",
+          "Liu, H.",
+          "Liu, X.",
+          "Guddat, L.",
+          "Xu, W.",
+          "Xiao, G.",
+          "Qin, C.",
+          "Shi, Z.",
+          "Jiang, H.",
+          "Rao, Z.",
+          "Yang, H."
+        ],
+        "rcsb_is_primary": "N",
+        "rcsb_journal_abbrev": "bioRxiv",
+        "title": "Structure of Mpro from COVID-19 virus and discovery of its inhibitors.",
+        "year": 2020
+      }
+    ],
+    "database_2": [
+      {
+        "database_code": "6LU7",
+        "database_id": "PDB",
+        "pdbx_DOI": "10.2210/pdb6lu7/pdb",
+        "pdbx_database_accession": "pdb_00006lu7"
+      },
+      {
+        "database_code": "D_1300015462",
+        "database_id": "WWPDB"
+      }
+    ],
+    "diffrn": [
+      {
+        "ambient_temp": 100,
+        "crystal_id": "1",
+        "id": "1",
+        "pdbx_serial_crystal_experiment": "N"
+      }
+    ],
+    "diffrn_detector": [
+      {
+        "detector": "PIXEL",
+        "diffrn_id": "1",
+        "pdbx_collection_date": "2020-01-12T00:00:00.000+00:00",
+        "type": "DECTRIS EIGER X 16M"
+      }
+    ],
+    "diffrn_radiation": [
+      {
+        "diffrn_id": "1",
+        "pdbx_diffrn_protocol": "SINGLE WAVELENGTH",
+        "pdbx_monochromatic_or_laue_m_l": "M",
+        "pdbx_scattering_type": "x-ray",
+        "wavelength_id": "1"
+      }
+    ],
+    "diffrn_source": [
+      {
+        "diffrn_id": "1",
+        "pdbx_synchrotron_beamline": "BL17U1",
+        "pdbx_synchrotron_site": "SSRF",
+        "pdbx_wavelength_list": "1.07180",
+        "source": "SYNCHROTRON",
+        "type": "SSRF BEAMLINE BL17U1"
+      }
+    ],
+    "entry": {
+      "id": "6LU7"
+    },
+    "exptl": [
+      {
+        "crystals_number": 1,
+        "method": "X-RAY DIFFRACTION"
+      }
+    ],
+    "exptl_crystal": [
+      {
+        "density_Matthews": 2.65,
+        "density_percent_sol": 53.53,
+        "id": "1"
+      }
+    ],
+    "exptl_crystal_grow": [
+      {
+        "crystal_id": "1",
+        "method": "EVAPORATION",
+        "pH": 6,
+        "pdbx_details": "2% polyethylene glycol (PEG) 6000, 3% DMSO, 1mM DTT, 0.1M MES buffer (pH 6.0), protein concentration 5mg/ml, VAPOR DIFFUSION, HANGING DROP, temperature 293K",
+        "temp": 293
+      }
+    ],
+    "pdbx_audit_revision_category": [
+      {
+        "category": "atom_site",
+        "data_content_type": "Structure model",
+        "ordinal": 1,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "citation",
+        "data_content_type": "Structure model",
+        "ordinal": 2,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "entity",
+        "data_content_type": "Structure model",
+        "ordinal": 3,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "pdbx_nonpoly_scheme",
+        "data_content_type": "Structure model",
+        "ordinal": 4,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "pdbx_struct_assembly_prop",
+        "data_content_type": "Structure model",
+        "ordinal": 5,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "pdbx_struct_sheet_hbond",
+        "data_content_type": "Structure model",
+        "ordinal": 6,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "pdbx_struct_special_symmetry",
+        "data_content_type": "Structure model",
+        "ordinal": 7,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "pdbx_validate_rmsd_bond",
+        "data_content_type": "Structure model",
+        "ordinal": 8,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "pdbx_validate_symm_contact",
+        "data_content_type": "Structure model",
+        "ordinal": 9,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "pdbx_validate_torsion",
+        "data_content_type": "Structure model",
+        "ordinal": 10,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "refine",
+        "data_content_type": "Structure model",
+        "ordinal": 11,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "refine_hist",
+        "data_content_type": "Structure model",
+        "ordinal": 12,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "refine_ls_shell",
+        "data_content_type": "Structure model",
+        "ordinal": 13,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "software",
+        "data_content_type": "Structure model",
+        "ordinal": 14,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "struct",
+        "data_content_type": "Structure model",
+        "ordinal": 15,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "struct_conn",
+        "data_content_type": "Structure model",
+        "ordinal": 16,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "struct_site",
+        "data_content_type": "Structure model",
+        "ordinal": 17,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "struct_site_gen",
+        "data_content_type": "Structure model",
+        "ordinal": 18,
+        "revision_ordinal": 2
+      },
+      {
+        "category": "citation",
+        "data_content_type": "Structure model",
+        "ordinal": 19,
+        "revision_ordinal": 3
+      },
+      {
+        "category": "struct",
+        "data_content_type": "Structure model",
+        "ordinal": 20,
+        "revision_ordinal": 3
+      },
+      {
+        "category": "diffrn_detector",
+        "data_content_type": "Structure model",
+        "ordinal": 21,
+        "revision_ordinal": 4
+      },
+      {
+        "category": "entity",
+        "data_content_type": "Structure model",
+        "ordinal": 22,
+        "revision_ordinal": 5
+      },
+      {
+        "category": "entity_src_gen",
+        "data_content_type": "Structure model",
+        "ordinal": 23,
+        "revision_ordinal": 5
+      },
+      {
+        "category": "struct",
+        "data_content_type": "Structure model",
+        "ordinal": 24,
+        "revision_ordinal": 5
+      },
+      {
+        "category": "citation",
+        "data_content_type": "Structure model",
+        "ordinal": 25,
+        "revision_ordinal": 6
+      },
+      {
+        "category": "citation_author",
+        "data_content_type": "Structure model",
+        "ordinal": 26,
+        "revision_ordinal": 6
+      },
+      {
+        "category": "citation",
+        "data_content_type": "Structure model",
+        "ordinal": 27,
+        "revision_ordinal": 7
+      },
+      {
+        "category": "citation_author",
+        "data_content_type": "Structure model",
+        "ordinal": 28,
+        "revision_ordinal": 7
+      },
+      {
+        "category": "entity",
+        "data_content_type": "Structure model",
+        "ordinal": 29,
+        "revision_ordinal": 8
+      },
+      {
+        "category": "entity_name_com",
+        "data_content_type": "Structure model",
+        "ordinal": 30,
+        "revision_ordinal": 8
+      },
+      {
+        "category": "entity_src_gen",
+        "data_content_type": "Structure model",
+        "ordinal": 31,
+        "revision_ordinal": 8
+      },
+      {
+        "category": "struct",
+        "data_content_type": "Structure model",
+        "ordinal": 32,
+        "revision_ordinal": 8
+      },
+      {
+        "category": "struct_ref",
+        "data_content_type": "Structure model",
+        "ordinal": 33,
+        "revision_ordinal": 8
+      },
+      {
+        "category": "struct_ref_seq",
+        "data_content_type": "Structure model",
+        "ordinal": 34,
+        "revision_ordinal": 8
+      },
+      {
+        "category": "citation",
+        "data_content_type": "Structure model",
+        "ordinal": 35,
+        "revision_ordinal": 9
+      },
+      {
+        "category": "citation_author",
+        "data_content_type": "Structure model",
+        "ordinal": 36,
+        "revision_ordinal": 9
+      },
+      {
+        "category": "entity",
+        "data_content_type": "Structure model",
+        "ordinal": 37,
+        "revision_ordinal": 10
+      },
+      {
+        "category": "citation",
+        "data_content_type": "Structure model",
+        "ordinal": 38,
+        "revision_ordinal": 11
+      },
+      {
+        "category": "atom_site",
+        "data_content_type": "Structure model",
+        "ordinal": 39,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "citation_author",
+        "data_content_type": "Structure model",
+        "ordinal": 40,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "entity",
+        "data_content_type": "Structure model",
+        "ordinal": 41,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "pdbx_entity_instance_feature",
+        "data_content_type": "Structure model",
+        "ordinal": 42,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "pdbx_nonpoly_scheme",
+        "data_content_type": "Structure model",
+        "ordinal": 43,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "pdbx_poly_seq_scheme",
+        "data_content_type": "Structure model",
+        "ordinal": 44,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "pdbx_struct_assembly_prop",
+        "data_content_type": "Structure model",
+        "ordinal": 45,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "pdbx_validate_rmsd_bond",
+        "data_content_type": "Structure model",
+        "ordinal": 46,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "pdbx_validate_symm_contact",
+        "data_content_type": "Structure model",
+        "ordinal": 47,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "refine",
+        "data_content_type": "Structure model",
+        "ordinal": 48,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "refine_hist",
+        "data_content_type": "Structure model",
+        "ordinal": 49,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "reflns_shell",
+        "data_content_type": "Structure model",
+        "ordinal": 50,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "struct_conn",
+        "data_content_type": "Structure model",
+        "ordinal": 51,
+        "revision_ordinal": 12
+      },
+      {
+        "category": "entity",
+        "data_content_type": "Structure model",
+        "ordinal": 52,
+        "revision_ordinal": 13
+      },
+      {
+        "category": "entity_name_com",
+        "data_content_type": "Structure model",
+        "ordinal": 53,
+        "revision_ordinal": 13
+      },
+      {
+        "category": "atom_site",
+        "data_content_type": "Structure model",
+        "ordinal": 54,
+        "revision_ordinal": 14
+      },
+      {
+        "category": "chem_comp_atom",
+        "data_content_type": "Structure model",
+        "ordinal": 55,
+        "revision_ordinal": 14
+      },
+      {
+        "category": "chem_comp_bond",
+        "data_content_type": "Structure model",
+        "ordinal": 56,
+        "revision_ordinal": 14
+      },
+      {
+        "category": "citation",
+        "data_content_type": "Structure model",
+        "ordinal": 57,
+        "revision_ordinal": 14
+      },
+      {
+        "category": "database_2",
+        "data_content_type": "Structure model",
+        "ordinal": 58,
+        "revision_ordinal": 14
+      },
+      {
+        "category": "pdbx_validate_rmsd_angle",
+        "data_content_type": "Structure model",
+        "ordinal": 59,
+        "revision_ordinal": 14
+      },
+      {
+        "category": "struct_conn",
+        "data_content_type": "Structure model",
+        "ordinal": 60,
+        "revision_ordinal": 14
+      },
+      {
+        "category": "pdbx_initial_refinement_model",
+        "data_content_type": "Structure model",
+        "ordinal": 61,
+        "revision_ordinal": 15
+      },
+      {
+        "category": "pdbx_entry_details",
+        "data_content_type": "Structure model",
+        "ordinal": 62,
+        "revision_ordinal": 16
+      },
+      {
+        "category": "pdbx_modification_feature",
+        "data_content_type": "Structure model",
+        "ordinal": 63,
+        "revision_ordinal": 16
+      }
+    ],
+    "pdbx_audit_revision_details": [
+      {
+        "data_content_type": "Structure model",
+        "ordinal": 1,
+        "provider": "repository",
+        "revision_ordinal": 1,
+        "type": "Initial release"
+      },
+      {
+        "data_content_type": "Structure model",
+        "description": "Ligand geometry",
+        "ordinal": 2,
+        "provider": "author",
+        "revision_ordinal": 2,
+        "type": "Coordinate replacement"
+      },
+      {
+        "data_content_type": "Structure model",
+        "description": "Ligand geometry",
+        "ordinal": 3,
+        "provider": "author",
+        "revision_ordinal": 12,
+        "type": "Coordinate replacement"
+      }
+    ],
+    "pdbx_audit_revision_group": [
+      {
+        "data_content_type": "Structure model",
+        "group": "Advisory",
+        "ordinal": 1,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Atomic model",
+        "ordinal": 2,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Data collection",
+        "ordinal": 3,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Database references",
+        "ordinal": 4,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Derived calculations",
+        "ordinal": 5,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Refinement description",
+        "ordinal": 6,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Structure summary",
+        "ordinal": 7,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Database references",
+        "ordinal": 8,
+        "revision_ordinal": 3
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Structure summary",
+        "ordinal": 9,
+        "revision_ordinal": 3
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Data collection",
+        "ordinal": 10,
+        "revision_ordinal": 4
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Source and taxonomy",
+        "ordinal": 11,
+        "revision_ordinal": 5
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Structure summary",
+        "ordinal": 12,
+        "revision_ordinal": 5
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Database references",
+        "ordinal": 13,
+        "revision_ordinal": 6
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Database references",
+        "ordinal": 14,
+        "revision_ordinal": 7
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Database references",
+        "ordinal": 15,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Source and taxonomy",
+        "ordinal": 16,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Structure summary",
+        "ordinal": 17,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Database references",
+        "ordinal": 18,
+        "revision_ordinal": 9
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Structure summary",
+        "ordinal": 19,
+        "revision_ordinal": 10
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Database references",
+        "ordinal": 20,
+        "revision_ordinal": 11
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Advisory",
+        "ordinal": 21,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Atomic model",
+        "ordinal": 22,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Author supporting evidence",
+        "ordinal": 23,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Data collection",
+        "ordinal": 24,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Database references",
+        "ordinal": 25,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Derived calculations",
+        "ordinal": 26,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Refinement description",
+        "ordinal": 27,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Structure summary",
+        "ordinal": 28,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Structure summary",
+        "ordinal": 29,
+        "revision_ordinal": 13
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Atomic model",
+        "ordinal": 30,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Data collection",
+        "ordinal": 31,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Database references",
+        "ordinal": 32,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Derived calculations",
+        "ordinal": 33,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Refinement description",
+        "ordinal": 34,
+        "revision_ordinal": 15
+      },
+      {
+        "data_content_type": "Structure model",
+        "group": "Structure summary",
+        "ordinal": 35,
+        "revision_ordinal": 16
+      }
+    ],
+    "pdbx_audit_revision_history": [
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 1,
+        "minor_revision": 0,
+        "ordinal": 1,
+        "revision_date": "2020-02-05T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 2,
+        "minor_revision": 0,
+        "ordinal": 2,
+        "revision_date": "2020-02-12T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 2,
+        "minor_revision": 1,
+        "ordinal": 3,
+        "revision_date": "2020-02-19T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 2,
+        "minor_revision": 2,
+        "ordinal": 4,
+        "revision_date": "2020-02-26T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 2,
+        "minor_revision": 3,
+        "ordinal": 5,
+        "revision_date": "2020-03-11T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 2,
+        "minor_revision": 4,
+        "ordinal": 6,
+        "revision_date": "2020-03-18T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 2,
+        "minor_revision": 5,
+        "ordinal": 7,
+        "revision_date": "2020-04-22T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 2,
+        "minor_revision": 6,
+        "ordinal": 8,
+        "revision_date": "2020-05-06T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 2,
+        "minor_revision": 7,
+        "ordinal": 9,
+        "revision_date": "2020-05-27T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 2,
+        "minor_revision": 8,
+        "ordinal": 10,
+        "revision_date": "2020-06-10T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 2,
+        "minor_revision": 9,
+        "ordinal": 11,
+        "revision_date": "2020-06-24T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 3,
+        "minor_revision": 0,
+        "ordinal": 12,
+        "revision_date": "2020-07-29T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 3,
+        "minor_revision": 1,
+        "ordinal": 13,
+        "revision_date": "2021-03-10T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 4,
+        "minor_revision": 0,
+        "ordinal": 14,
+        "revision_date": "2023-11-15T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 4,
+        "minor_revision": 1,
+        "ordinal": 15,
+        "revision_date": "2023-11-29T00:00:00.000+00:00"
+      },
+      {
+        "data_content_type": "Structure model",
+        "major_revision": 4,
+        "minor_revision": 2,
+        "ordinal": 16,
+        "revision_date": "2024-11-20T00:00:00.000+00:00"
+      }
+    ],
+    "pdbx_audit_revision_item": [
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.title",
+        "ordinal": 1,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity.pdbx_number_of_molecules",
+        "ordinal": 2,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_struct_assembly_prop.value",
+        "ordinal": 3,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_struct_sheet_hbond.range_1_auth_comp_id",
+        "ordinal": 4,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_struct_sheet_hbond.range_1_auth_seq_id",
+        "ordinal": 5,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_struct_sheet_hbond.range_1_label_comp_id",
+        "ordinal": 6,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_struct_sheet_hbond.range_1_label_seq_id",
+        "ordinal": 7,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_struct_sheet_hbond.range_2_auth_comp_id",
+        "ordinal": 8,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_struct_sheet_hbond.range_2_auth_seq_id",
+        "ordinal": 9,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_struct_sheet_hbond.range_2_label_comp_id",
+        "ordinal": 10,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_struct_sheet_hbond.range_2_label_seq_id",
+        "ordinal": 11,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_validate_rmsd_bond.bond_deviation",
+        "ordinal": 12,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_validate_rmsd_bond.bond_value",
+        "ordinal": 13,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_validate_torsion.phi",
+        "ordinal": 14,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_validate_torsion.psi",
+        "ordinal": 15,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.B_iso_max",
+        "ordinal": 16,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.B_iso_mean",
+        "ordinal": 17,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.B_iso_min",
+        "ordinal": 18,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.ls_R_factor_R_free",
+        "ordinal": 19,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.ls_R_factor_R_work",
+        "ordinal": 20,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.ls_R_factor_obs",
+        "ordinal": 21,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.ls_number_reflns_R_work",
+        "ordinal": 22,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.overall_SU_ML",
+        "ordinal": 23,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.pdbx_overall_phase_error",
+        "ordinal": 24,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.pdbx_stereochemistry_target_values",
+        "ordinal": 25,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.solvent_model_details",
+        "ordinal": 26,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_hist.number_atoms_solvent",
+        "ordinal": 27,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_hist.number_atoms_total",
+        "ordinal": 28,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_hist.pdbx_B_iso_mean_ligand",
+        "ordinal": 29,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_hist.pdbx_B_iso_mean_solvent",
+        "ordinal": 30,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_ls_shell.R_factor_R_free",
+        "ordinal": 31,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_ls_shell.R_factor_R_work",
+        "ordinal": 32,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_software.classification",
+        "ordinal": 33,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_software.name",
+        "ordinal": 34,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_software.version",
+        "ordinal": 35,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct.title",
+        "ordinal": 36,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_conn.pdbx_dist_value",
+        "ordinal": 37,
+        "revision_ordinal": 2
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.journal_abbrev",
+        "ordinal": 38,
+        "revision_ordinal": 3
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.title",
+        "ordinal": 39,
+        "revision_ordinal": 3
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct.title",
+        "ordinal": 40,
+        "revision_ordinal": 3
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_diffrn_detector.type",
+        "ordinal": 41,
+        "revision_ordinal": 4
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity.pdbx_description",
+        "ordinal": 42,
+        "revision_ordinal": 5
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity_src_gen.gene_src_common_name",
+        "ordinal": 43,
+        "revision_ordinal": 5
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity_src_gen.pdbx_gene_src_ncbi_taxonomy_id",
+        "ordinal": 44,
+        "revision_ordinal": 5
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity_src_gen.pdbx_gene_src_scientific_name",
+        "ordinal": 45,
+        "revision_ordinal": 5
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct.pdbx_descriptor",
+        "ordinal": 46,
+        "revision_ordinal": 5
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.country",
+        "ordinal": 47,
+        "revision_ordinal": 6
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.journal_abbrev",
+        "ordinal": 48,
+        "revision_ordinal": 6
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.journal_id_CSD",
+        "ordinal": 49,
+        "revision_ordinal": 6
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.pdbx_database_id_DOI",
+        "ordinal": 50,
+        "revision_ordinal": 6
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.title",
+        "ordinal": 51,
+        "revision_ordinal": 6
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.year",
+        "ordinal": 52,
+        "revision_ordinal": 6
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity.pdbx_description",
+        "ordinal": 53,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity.pdbx_ec",
+        "ordinal": 54,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity_src_gen.gene_src_common_name",
+        "ordinal": 55,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity_src_gen.pdbx_gene_src_gene",
+        "ordinal": 56,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct.pdbx_descriptor",
+        "ordinal": 57,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_ref.db_code",
+        "ordinal": 58,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_ref.db_name",
+        "ordinal": 59,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_ref.pdbx_align_begin",
+        "ordinal": 60,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_ref.pdbx_db_accession",
+        "ordinal": 61,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_ref.pdbx_seq_one_letter_code",
+        "ordinal": 62,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_ref_seq.db_align_beg",
+        "ordinal": 63,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_ref_seq.db_align_end",
+        "ordinal": 64,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_ref_seq.pdbx_db_accession",
+        "ordinal": 65,
+        "revision_ordinal": 8
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.title",
+        "ordinal": 66,
+        "revision_ordinal": 9
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation_author.identifier_ORCID",
+        "ordinal": 67,
+        "revision_ordinal": 9
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity.pdbx_ec",
+        "ordinal": 68,
+        "revision_ordinal": 10
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.journal_volume",
+        "ordinal": 69,
+        "revision_ordinal": 11
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.page_first",
+        "ordinal": 70,
+        "revision_ordinal": 11
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.page_last",
+        "ordinal": 71,
+        "revision_ordinal": 11
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_atom_site.B_iso_or_equiv",
+        "ordinal": 72,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_atom_site.Cartn_x",
+        "ordinal": 73,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_atom_site.Cartn_y",
+        "ordinal": 74,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_atom_site.Cartn_z",
+        "ordinal": 75,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_atom_site.occupancy",
+        "ordinal": 76,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation_author.identifier_ORCID",
+        "ordinal": 77,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity.pdbx_fragment",
+        "ordinal": 78,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_nonpoly_scheme.auth_seq_num",
+        "ordinal": 79,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_poly_seq_scheme.auth_mon_id",
+        "ordinal": 80,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_poly_seq_scheme.auth_seq_num",
+        "ordinal": 81,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_struct_assembly_prop.value",
+        "ordinal": 82,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.B_iso_mean",
+        "ordinal": 83,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.ls_R_factor_obs",
+        "ordinal": 84,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.ls_percent_reflns_obs",
+        "ordinal": 85,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine.pdbx_starting_model",
+        "ordinal": 86,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_hist.pdbx_B_iso_mean_ligand",
+        "ordinal": 87,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_hist.pdbx_B_iso_mean_solvent",
+        "ordinal": 88,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_hist.pdbx_number_atoms_ligand",
+        "ordinal": 89,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_hist.pdbx_number_atoms_protein",
+        "ordinal": 90,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_refine_hist.pdbx_number_residues_total",
+        "ordinal": 91,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_conn.pdbx_dist_value",
+        "ordinal": 92,
+        "revision_ordinal": 12
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity.pdbx_description",
+        "ordinal": 93,
+        "revision_ordinal": 13
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_entity_name_com.name",
+        "ordinal": 94,
+        "revision_ordinal": 13
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_atom_site.auth_atom_id",
+        "ordinal": 95,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_atom_site.label_atom_id",
+        "ordinal": 96,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_citation.journal_id_ISSN",
+        "ordinal": 97,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_database_2.pdbx_DOI",
+        "ordinal": 98,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_database_2.pdbx_database_accession",
+        "ordinal": 99,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_conn.ptnr1_label_atom_id",
+        "ordinal": 100,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_struct_conn.ptnr2_label_atom_id",
+        "ordinal": 101,
+        "revision_ordinal": 14
+      },
+      {
+        "data_content_type": "Structure model",
+        "item": "_pdbx_entry_details.has_protein_modification",
+        "ordinal": 102,
+        "revision_ordinal": 16
+      }
+    ],
+    "pdbx_database_status": {
+      "SG_entry": "N",
+      "deposit_site": "PDBJ",
+      "pdb_format_compatible": "Y",
+      "process_site": "PDBJ",
+      "recvd_initial_deposition_date": "2020-01-26T00:00:00.000+00:00",
+      "status_code": "REL",
+      "status_code_sf": "REL"
+    },
+    "pdbx_initial_refinement_model": [
+      {
+        "accession_code": "2HOB",
+        "id": 1,
+        "source_name": "PDB",
+        "type": "experimental model"
+      }
+    ],
+    "pdbx_molecule_features": [
+      {
+        "class": "Inhibitor",
+        "name": "N-[(5-METHYLISOXAZOL-3-YL)CARBONYL]ALANYL-L-VALYL-N~1~-((1R,2Z)-4-(BENZYLOXY)-4-OXO-1-{[(3R)-2-OXOPYRROLIDIN-3-YL]METHYL}BUT-2-ENYL)-L-LEUCINAMIDE",
+        "prd_id": "PRD_002214",
+        "type": "Peptide-like"
+      }
+    ],
+    "pdbx_vrpt_summary": {
+      "attempted_validation_steps": "molprobity,validation-pack,xtriage,eds,mogul,validation_schema,percentiles,writexml,writecif,writepdf",
+      "ligands_for_buster_report": "N",
+      "report_creation_date": "2026-02-28T17:18:00.000+00:00"
+    },
+    "pdbx_vrpt_summary_diffraction": [
+      {
+        "B_factor_type": "FULL",
+        "CCP4_version": "9.0.010 (Gargrove)",
+        "DCC_R": 0.2043,
+        "DCC_Rfree": 0.2347,
+        "EDS_R": 0.2171,
+        "EDS_res_high": 2.16,
+        "EDS_res_low": 27.81,
+        "Fo_Fc_correlation": 0.948,
+        "I_over_sigma": "3.09(2.16A)",
+        "Padilla_Yeates_L2_mean": 0.294,
+        "Padilla_Yeates_L_mean": 0.467,
+        "Wilson_B_aniso": "[49.980,32.397,31.457,-0.000,-13.325,0.000]",
+        "Wilson_B_estimate": 34.736,
+        "acentric_outliers": 1,
+        "bulk_solvent_b": 30.971,
+        "bulk_solvent_k": 0.314,
+        "centric_outliers": 0,
+        "data_anisotropy": 0.488,
+        "data_completeness": 99.84,
+        "density_fitness_version": "1.0.12",
+        "exp_method": "x-ray",
+        "num_miller_indices": 19454,
+        "number_reflns_R_free": 998,
+        "percent_RSRZ_outliers": 10.68,
+        "percent_free_reflections": 5.13,
+        "trans_NCS_details": "The largest off-origin peak in the Patterson function is 7.73% of the height of the origin peak. No significant pseudotranslation is detected."
+      }
+    ],
+    "pdbx_vrpt_summary_geometry": [
+      {
+        "angles_RMSZ": 0.3,
+        "bonds_RMSZ": 0.24,
+        "clashscore": 5.03,
+        "num_H_reduce": 2354,
+        "num_angles_RMSZ": 3314,
+        "num_bonds_RMSZ": 2439,
+        "percent_ramachandran_outliers": 0,
+        "percent_rotamer_outliers": 0
+      }
+    ],
+    "rcsb_accession_info": {
+      "deposit_date": "2020-01-26T00:00:00.000+00:00",
+      "has_released_experimental_data": "Y",
+      "initial_release_date": "2020-02-05T00:00:00.000+00:00",
+      "major_revision": 4,
+      "minor_revision": 2,
+      "revision_date": "2024-11-20T00:00:00.000+00:00",
+      "status_code": "REL"
+    },
+    "rcsb_entry_container_identifiers": {
+      "assembly_ids": [
+        "1"
+      ],
+      "entity_ids": [
+        "1",
+        "2",
+        "3"
+      ],
+      "entry_id": "6LU7",
+      "model_ids": [
+        1
+      ],
+      "polymer_entity_ids": [
+        "1",
+        "2"
+      ],
+      "pubmed_id": 32272481,
+      "rcsb_id": "6LU7"
+    },
+    "rcsb_entry_info": {
+      "assembly_count": 1,
+      "branched_entity_count": 0,
+      "cis_peptide_count": 0,
+      "deposited_atom_count": 2500,
+      "deposited_deuterated_water_count": 0,
+      "deposited_hydrogen_atom_count": 0,
+      "deposited_model_count": 1,
+      "deposited_modeled_polymer_monomer_count": 312,
+      "deposited_nonpolymer_entity_instance_count": 0,
+      "deposited_polymer_entity_instance_count": 2,
+      "deposited_polymer_monomer_count": 312,
+      "deposited_solvent_atom_count": 84,
+      "deposited_unmodeled_polymer_monomer_count": 0,
+      "diffrn_radiation_wavelength_maximum": 1.0718,
+      "diffrn_radiation_wavelength_minimum": 1.0718,
+      "disulfide_bond_count": 0,
+      "entity_count": 3,
+      "experimental_method": "X-ray",
+      "experimental_method_count": 1,
+      "inter_mol_covalent_bond_count": 4,
+      "inter_mol_metalic_bond_count": 0,
+      "molecular_weight": 34.51,
+      "na_polymer_entity_types": "Other",
+      "nonpolymer_entity_count": 0,
+      "polymer_composition": "heteromeric protein",
+      "polymer_entity_count": 2,
+      "polymer_entity_count_DNA": 0,
+      "polymer_entity_count_RNA": 0,
+      "polymer_entity_count_nucleic_acid": 0,
+      "polymer_entity_count_nucleic_acid_hybrid": 0,
+      "polymer_entity_count_protein": 2,
+      "polymer_entity_taxonomy_count": 2,
+      "polymer_molecular_weight_maximum": 33.83,
+      "polymer_molecular_weight_minimum": 0.68,
+      "polymer_monomer_count_maximum": 306,
+      "polymer_monomer_count_minimum": 6,
+      "resolution_combined": [
+        2.16
+      ],
+      "selected_polymer_entity_types": "Protein (only)",
+      "software_programs_combined": [
+        "PDB_EXTRACT",
+        "PHASER",
+        "PHENIX",
+        "XIA2"
+      ],
+      "solvent_entity_count": 1,
+      "structure_determination_methodology": "experimental",
+      "structure_determination_methodology_priority": 10,
+      "diffrn_resolution_high": {
+        "provenance_source": "Depositor assigned",
+        "value": 2.16
+      }
+    },
+    "rcsb_primary_citation": {
+      "country": "UK",
+      "id": "primary",
+      "journal_abbrev": "Nature",
+      "journal_id_ASTM": "NATUAS",
+      "journal_id_CSD": "0006",
+      "journal_id_ISSN": "1476-4687",
+      "journal_volume": "582",
+      "page_first": "289",
+      "page_last": "293",
+      "pdbx_database_id_DOI": "10.1038/s41586-020-2223-y",
+      "pdbx_database_id_PubMed": 32272481,
+      "rcsb_ORCID_identifiers": [
+        "0000-0001-6448-820X",
+        "?",
+        "0000-0002-1581-6155",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "?",
+        "0000-0001-8089-163X",
+        "0000-0003-0656-6315",
+        "0000-0001-9866-2384",
+        "0000-0002-1875-3268"
+      ],
+      "rcsb_authors": [
+        "Jin, Z.",
+        "Du, X.",
+        "Xu, Y.",
+        "Deng, Y.",
+        "Liu, M.",
+        "Zhao, Y.",
+        "Zhang, B.",
+        "Li, X.",
+        "Zhang, L.",
+        "Peng, C.",
+        "Duan, Y.",
+        "Yu, J.",
+        "Wang, L.",
+        "Yang, K.",
+        "Liu, F.",
+        "Jiang, R.",
+        "Yang, X.",
+        "You, T.",
+        "Liu, X.",
+        "Yang, X.",
+        "Bai, F.",
+        "Liu, H.",
+        "Liu, X.",
+        "Guddat, L.W.",
+        "Xu, W.",
+        "Xiao, G.",
+        "Qin, C.",
+        "Shi, Z.",
+        "Jiang, H.",
+        "Rao, Z.",
+        "Yang, H."
+      ],
+      "rcsb_journal_abbrev": "Nature",
+      "title": "Structure of Mprofrom SARS-CoV-2 and discovery of its inhibitors.",
+      "year": 2020
+    },
+    "refine": [
+      {
+        "B_iso_max": 89.99,
+        "B_iso_mean": 42.82,
+        "B_iso_min": 16.91,
+        "ls_R_factor_R_free": 0.235,
+        "ls_R_factor_R_work": 0.202,
+        "ls_R_factor_obs": 0.204,
+        "ls_d_res_high": 2.16,
+        "ls_d_res_low": 27.81,
+        "ls_number_reflns_R_free": 997,
+        "ls_number_reflns_R_work": 18435,
+        "ls_number_reflns_obs": 19432,
+        "ls_percent_reflns_R_free": 5.13,
+        "ls_percent_reflns_obs": 99.5,
+        "overall_SU_ML": 0.21,
+        "pdbx_diffrn_id": [
+          "1"
+        ],
+        "pdbx_ls_cross_valid_method": "THROUGHOUT",
+        "pdbx_ls_sigma_F": 1.34,
+        "pdbx_method_to_determine_struct": "MOLECULAR REPLACEMENT",
+        "pdbx_overall_phase_error": 27.66,
+        "pdbx_refine_id": "X-RAY DIFFRACTION",
+        "pdbx_solvent_shrinkage_radii": 0.9,
+        "pdbx_solvent_vdw_probe_radii": 1.11,
+        "pdbx_starting_model": "2HOB",
+        "pdbx_stereochemistry_target_values": "ML",
+        "solvent_model_details": "FLAT BULK SOLVENT MODEL"
+      }
+    ],
+    "refine_hist": [
+      {
+        "cycle_id": "final",
+        "d_res_high": 2.16,
+        "d_res_low": 27.81,
+        "number_atoms_solvent": 84,
+        "number_atoms_total": 2500,
+        "pdbx_B_iso_mean_ligand": 36.18,
+        "pdbx_B_iso_mean_solvent": 44.27,
+        "pdbx_number_atoms_ligand": 21,
+        "pdbx_number_atoms_nucleic_acid": 0,
+        "pdbx_number_atoms_protein": 2395,
+        "pdbx_number_residues_total": 310,
+        "pdbx_refine_id": "X-RAY DIFFRACTION"
+      }
+    ],
+    "reflns": [
+      {
+        "d_resolution_high": 2.16,
+        "d_resolution_low": 42.29,
+        "number_obs": 19455,
+        "pdbx_Rmerge_I_obs": 0.189,
+        "pdbx_diffrn_id": [
+          "1"
+        ],
+        "pdbx_netI_over_sigmaI": 6.3,
+        "pdbx_ordinal": 1,
+        "pdbx_redundancy": 6.6,
+        "percent_possible_obs": 100
+      }
+    ],
+    "reflns_shell": [
+      {
+        "Rmerge_I_obs": 1.472,
+        "d_res_high": 2.16,
+        "d_res_low": 2.22,
+        "number_unique_obs": 1431,
+        "pdbx_diffrn_id": [
+          "1"
+        ],
+        "pdbx_ordinal": 1,
+        "pdbx_redundancy": 6.1,
+        "percent_possible_all": 100
+      }
+    ],
+    "software": [
+      {
+        "classification": "refinement",
+        "name": "PHENIX",
+        "pdbx_ordinal": 1,
+        "version": "1.17.1_3660"
+      },
+      {
+        "classification": "data scaling",
+        "name": "xia2",
+        "pdbx_ordinal": 2
+      },
+      {
+        "classification": "data extraction",
+        "name": "PDB_EXTRACT",
+        "pdbx_ordinal": 3,
+        "version": "3.25"
+      },
+      {
+        "classification": "data reduction",
+        "name": "xia2",
+        "pdbx_ordinal": 4
+      },
+      {
+        "classification": "phasing",
+        "name": "PHASER",
+        "pdbx_ordinal": 5
+      }
+    ],
+    "struct": {
+      "pdbx_CASP_flag": "N",
+      "title": "The crystal structure of COVID-19 main protease in complex with an inhibitor N3"
+    },
+    "struct_keywords": {
+      "pdbx_keywords": "VIRAL PROTEIN",
+      "text": "protease, VIRAL PROTEIN"
+    },
+    "symmetry": {
+      "Int_Tables_number": 5,
+      "space_group_name_H_M": "C 1 2 1"
+    },
+    "rcsb_id": "6LU7"
+  }
+}

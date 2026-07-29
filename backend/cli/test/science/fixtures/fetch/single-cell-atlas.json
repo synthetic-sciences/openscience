@@ -1,0 +1,27 @@
+{
+  "id": "E-MTAB-5061",
+  "payload": {
+    "experimentAccession": "E-MTAB-5061",
+    "experimentDescription": "Single-cell RNA-seq analysis of human pancreas from healthy individuals and type 2 diabetes patients",
+    "species": "Homo sapiens",
+    "kingdom": "animals",
+    "loadDate": "26-05-2018",
+    "lastUpdate": "26-05-2018",
+    "rawExperimentType": "SINGLE_CELL_RNASEQ_MRNA_BASELINE",
+    "technologyType": [
+      "smart-seq2"
+    ],
+    "numberOfAssays": 2942,
+    "experimentalFactors": [
+      "single cell identifier",
+      "disease",
+      "inferred cell type - ontology labels",
+      "inferred cell type - authors labels"
+    ],
+    "experimentProjects": [
+      "Human Cell Atlas - Data Portal",
+      "Human Cell Atlas"
+    ],
+    "experimentType": "Baseline"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "7157",
+  "payload": {
+    "id": "7157",
+    "error": "BioGRID access key required (set BIOGRID_ACCESS_KEY or pass params.accessKey)"
+  }
+}

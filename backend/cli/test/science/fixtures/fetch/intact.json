@@ -1,0 +1,207 @@
+{
+  "id": "EBI-77613",
+  "payload": {
+    "ac": "EBI-15982574",
+    "binaryInteractionId": 3190502,
+    "documentType": "interaction",
+    "idA": "P05067-PRO_0000000092 (uniprotkb)",
+    "idB": "P05067-PRO_0000000092 (uniprotkb)",
+    "acA": "EBI-821758",
+    "acB": "EBI-821758",
+    "uniqueIdA": "P05067-PRO_0000000092",
+    "uniqueIdB": "P05067-PRO_0000000092",
+    "moleculeA": "P05067-PRO_0000000092",
+    "moleculeB": "P05067-PRO_0000000092",
+    "intactNameA": "p05067-pro_0000000092",
+    "intactNameB": "p05067-pro_0000000092",
+    "mutationA": false,
+    "mutationB": false,
+    "altIdsA": [
+      "EBI-821758 (intact)",
+      "P05067-PRO_0000000092 (uniprotkb)"
+    ],
+    "altIdsB": [
+      "EBI-821758 (intact)",
+      "P05067-PRO_0000000092 (uniprotkb)"
+    ],
+    "aliasesA": [
+      "A4 (MI:0302 (gene name synonym))",
+      "AD1 (MI:0302 (gene name synonym))",
+      "Cerebral vascular amyloid peptide (MI:0302 (gene name synonym))",
+      "APP (MI:0301 (gene name))",
+      "Alzheimer disease amyloid A4 protein homolog (MI:0302 (gene name synonym))",
+      "Alzheimer disease amyloid protein (MI:0302 (gene name synonym))",
+      "Amyloid-beta A4 protein (MI:0302 (gene name synonym))",
+      "APPI (MI:0302 (gene name synonym))",
+      "Protease nexin-II (MI:0302 (gene name synonym))",
+      "Amyloid-beta (A4) precursor protein (MI:0302 (gene name synonym))",
+      "ABPP (MI:0302 (gene name synonym))",
+      "Amyloid precursor protein (MI:0302 (gene name synonym))",
+      "PreA4 (MI:0302 (gene name synonym))"
+    ],
+    "aliasesB": [
+      "A4 (MI:0302 (gene name synonym))",
+      "AD1 (MI:0302 (gene name synonym))",
+      "Cerebral vascular amyloid peptide (MI:0302 (gene name synonym))",
+      "APP (MI:0301 (gene name))",
+      "Alzheimer disease amyloid A4 protein homolog (MI:0302 (gene name synonym))",
+      "Alzheimer disease amyloid protein (MI:0302 (gene name synonym))",
+      "Amyloid-beta A4 protein (MI:0302 (gene name synonym))",
+      "APPI (MI:0302 (gene name synonym))",
+      "Protease nexin-II (MI:0302 (gene name synonym))",
+      "Amyloid-beta (A4) precursor protein (MI:0302 (gene name synonym))",
+      "ABPP (MI:0302 (gene name synonym))",
+      "Amyloid precursor protein (MI:0302 (gene name synonym))",
+      "PreA4 (MI:0302 (gene name synonym))"
+    ],
+    "taxIdA": 9606,
+    "taxIdB": 9606,
+    "intraTaxId": 9606,
+    "descriptionA": "Amyloid-beta protein 42",
+    "descriptionB": "Amyloid-beta protein 42",
+    "typeA": "protein",
+    "typeB": "protein",
+    "typeMIA": "MI:0326",
+    "typeMIB": "MI:0326",
+    "xrefsA": [
+      "EBI-77613 (intact)"
+    ],
+    "xrefsB": [
+      "EBI-77613 (intact)"
+    ],
+    "annotationsA": [
+      "chain-seq-start (672)",
+      "chain-seq-end (713)"
+    ],
+    "annotationsB": [
+      "chain-seq-start (672)",
+      "chain-seq-end (713)"
+    ],
+    "checksumsA": [
+      "crc64 (3AC85563D7858C37)"
+    ],
+    "checksumsB": [
+      "crc64 (3AC85563D7858C37)"
+    ],
+    "speciesA": "Homo sapiens",
+    "speciesB": "Homo sapiens",
+    "intraSpecies": "Homo sapiens",
+    "biologicalRoleA": "unspecified role",
+    "biologicalRoleB": "unspecified role",
+    "experimentalRoleA": "unspecified role",
+    "experimentalRoleB": "unspecified role",
+    "biologicalRoleMIIdentifierA": "MI:0499",
+    "biologicalRoleMIIdentifierB": "MI:0499",
+    "experimentalRoleMIIdentifierA": "MI:0499",
+    "experimentalRoleMIIdentifierB": "MI:0499",
+    "featuresA": null,
+    "featuresB": null,
+    "featureShortLabelsA": null,
+    "featureShortLabelsB": null,
+    "featureTypesA": null,
+    "featureTypesB": null,
+    "featureRangesA": null,
+    "featureRangesB": null,
+    "featureCount": 0,
+    "stoichiometryA": "0-0",
+    "stoichiometryB": "0-0",
+    "identificationMethodsA": [
+      "predetermined"
+    ],
+    "identificationMethodsB": [
+      "predetermined"
+    ],
+    "identificationMethodMIIdentifiersA": [
+      "MI:0396"
+    ],
+    "identificationMethodMIIdentifiersB": [
+      "MI:0396"
+    ],
+    "experimentalPreparationsA": null,
+    "experimentalPreparationsB": null,
+    "detectionMethod": "tem",
+    "detectionMethodMIIdentifier": "MI:0020",
+    "authors": [
+      "Stroud JC.",
+      " Liu C.",
+      " Teng PK.",
+      " Eisenberg D."
+    ],
+    "sourceDatabase": "DIP",
+    "identifiers": [
+      "DIP-87859E (dip)",
+      "EBI-15982574 (intact)"
+    ],
+    "confidenceValues": [
+      "intact-miscore:0.99"
+    ],
+    "expansionMethod": null,
+    "xrefs": [
+      "CPX-1062 (complex portal)",
+      "IM-21274-1 (imex)",
+      "MI:0465 (psi-mi)",
+      "CPX-1120 (complex portal)",
+      "CPX-1070 (complex portal)",
+      "CPX-1134 (complex portal)"
+    ],
+    "allAnnotations": [
+      "author-list (Stroud JC., Liu C., Teng PK., Eisenberg D.)",
+      "curation depth (IMEx)",
+      "dataset (Alzheimers - Interactions investigated in the context of Alzheimers disease)",
+      "publication year (2012)",
+      "journal (Proceedings of the National Academy of Sciences of the United States of America)",
+      "title (Toxic fibrillar oligomers of amyloid-β have cross-β structure.)",
+      "full coverage (Only protein-protein interactions)",
+      "comment (DIP original experiment: DIP-253572X)",
+      "imex curation (null)"
+    ],
+    "annotations": null,
+    "parameters": null,
+    "parameterTypes": null,
+    "creationDate": "2017-08-07T09:49:31.000+0000",
+    "updationDate": "2025-07-19T10:57:48.000+0000",
+    "checksums": null,
+    "negative": false,
+    "type": "direct interaction",
+    "hostOrganism": "In vitro",
+    "hostOrganismTaxId": -1,
+    "intactMiscore": 0.99,
+    "publicationIdentifiers": [
+      "EBI-15982555 (intact)",
+      "10.1073/pnas.1203193109 (doi)",
+      "22547798 (pubmed)"
+    ],
+    "publicationAnnotations": [
+      "Only protein-protein interactions",
+      "Alzheimers - Interactions investigated in the context of Alzheimers disease"
+    ],
+    "publicationPubmedIdentifier": "22547798",
+    "count": null,
+    "typeMIIdentifier": "MI:0407",
+    "affectedByMutation": false,
+    "firstAuthor": "Stroud JC. et al. (2012)\t\n",
+    "releaseDate": "2017-08-31T13:17:56.164+0000",
+    "intraTaxIdStyled": "9606__Homo sapiens__#335e94",
+    "taxIdAStyled": "9606__Homo sapiens__#335e94",
+    "taxIdBStyled": "9606__Homo sapiens__#335e94",
+    "typeMIIdentifierStyled": "MI:0407__direct interaction__#43a2ca",
+    "detectionMethodMIIdentifierStyled": "MI:0020__tem",
+    "identificationMethodMIAStyled": [
+      "MI:0396__predetermined"
+    ],
+    "identificationMethodMIBStyled": [
+      "MI:0396__predetermined"
+    ],
+    "typeMIAStyled": "MI:0326__protein__ELLIPSE",
+    "typeMIBStyled": "MI:0326__protein__ELLIPSE",
+    "hostOrganismTaxIdStyled": "-1__In vitro__#8d6666",
+    "affectedByMutationStyled": "none__false__#7e8389",
+    "jsonFormat": "{\"object\":\"interactor\",\"id\":\"uniprotkb_P05067-PRO_0000000092\",\"sequence\":\"DAEFRHDSGYEVHHQKLVFFAEDVGSNKGAIIGLMVGGVVIA\",\"type\":{\"id\":\"MI:0326\",\"name\":\"protein\"},\"organism\":{\"taxid\":\"9606\",\"common\":\"human\",\"scientific\":\"Homo sapiens\"},\"identifier\":{\"db\":\"uniprotkb\",\"id\":\"P05067-PRO_0000000092\"},\"label\":\"P05067-PRO_0000000092\"},{\"object\":\"interaction\",\"id\":\"intact_EBI-15982574\",\"interactionType\":{\"id\":\"MI:0407\",\"name\":\"direct interaction\"},\"experiment\":{\"detmethod\":{\"id\":\"MI:0020\",\"name\":\"transmission electron microscopy\"},\"host\":{\"taxid\":\"-1\",\"common\":\"in vitro\",\"scientific\":\"In vitro\"},\"pubid\":[{\"db\":\"intact\",\"id\":\"EBI-15982555\"},{\"db\":\"doi\",\"id\":\"10.1073\\/pnas.1203193109\"},{\"db\":\"pubmed\",\"id\":\"22547798\"},{\"db\":\"imex\",\"id\":\"IM-21274\"}],\"sourceDatabase\":{\"id\":\"MI:0465\",\"name\":\"Database of Interacting Proteins\"}},\"identifiers\":[{\"db\":\"intact\",\"id\":\"EBI-15982574\"},{\"db\":\"dip\",\"id\":\"DIP-87859E\"},{\"db\":\"imex\",\"id\":\"IM-21274-1\"}],\"participants\":[{\"id\":\"1\",\"interactorRef\":\"uniprotkb_P05067-PRO_0000000092\",\"bioRole\":{\"id\":\"MI:0499\",\"name\":\"unspecified role\"},\"expRole\":{\"id\":\"MI:0499\",\"name\":\"unspecified role\"},\"identificationMethods\":[{\"id\":\"MI:0396\",\"name\":\"predetermined participant\"}],\"expressedIn\":{\"taxid\":\"562\",\"common\":\"ecolx\",\"scientific\":\"Escherichia coli\"}}]}",
+    "xml25Format": "<entry>\n  <source releaseDate=\"2026-02-09\">\n    <names>\n      <shortLabel>DIP</shortLabel>\n      <fullName>Database of Interacting Proteins</fullName>\n    </names>\n    <xref>\n      <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0465\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n      <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14681454\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n      <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-1579232\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n    </xref>\n    <attributeList>\n      <attribute name=\"postaladdress\">611 Young Drive East; Los Angeles CA 90095; USA</attribute>\n      <attribute name=\"url\" nameAc=\"MI:0614\">http://dip.doe-mbi.ucla.edu/</attribute>\n      <attribute name=\"contact-email\" nameAc=\"MI:0634\">dip@mbi.ucla.edu</attribute>\n    </attributeList>\n  </source>\n  <interactionList>\n    <interaction id=\"1\" imexId=\"IM-21274-1\">\n      <names>\n        <shortLabel>abeta(142)-20</shortLabel>\n      </names>\n      <xref>\n        <primaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-15982574\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n        <secondaryRef db=\"dip\" dbAc=\"MI:0465\" id=\"DIP-87859E\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n        <secondaryRef db=\"complex portal\" dbAc=\"MI:2279\" id=\"CPX-1134\" refType=\"see-also\" refTypeAc=\"MI:0361\"/>\n        <secondaryRef db=\"complex portal\" dbAc=\"MI:2279\" id=\"CPX-1120\" refType=\"see-also\" refTypeAc=\"MI:0361\"/>\n        <secondaryRef db=\"complex portal\" dbAc=\"MI:2279\" id=\"CPX-1070\" refType=\"see-also\" refTypeAc=\"MI:0361\"/>\n        <secondaryRef db=\"complex portal\" dbAc=\"MI:2279\" id=\"CPX-1062\" refType=\"see-also\" refTypeAc=\"MI:0361\"/>\n        <secondaryRef db=\"imex\" dbAc=\"MI:0670\" id=\"IM-21274-1\" refType=\"imex-primary\" refTypeAc=\"MI:0662\"/>\n        <secondaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0465\" refType=\"imex source\"/>\n      </xref>\n      <experimentList>\n        <experimentDescription id=\"2\">\n          <names>\n            <fullName>Toxic fibrillar oligomers of amyloid-β have cross-β structure.</fullName>\n          </names>\n          <bibref>\n            <xref>\n              <primaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"22547798\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n              <secondaryRef db=\"doi\" dbAc=\"MI:0574\" id=\"10.1073/pnas.1203193109\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n              <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-15982555\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"imex\" dbAc=\"MI:0670\" id=\"IM-21274\" refType=\"imex-primary\" refTypeAc=\"MI:0662\"/>\n            </xref>\n          </bibref>\n          <xref>\n            <primaryRef db=\"doi\" dbAc=\"MI:0574\" id=\"10.1073/pnas.1203193109\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n            <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"22547798\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n            <secondaryRef db=\"dip\" dbAc=\"MI:0465\" id=\"DIP-253572X\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n            <secondaryRef db=\"imex\" dbAc=\"MI:0670\" id=\"IM-21274\" refType=\"imex-primary\" refTypeAc=\"MI:0662\"/>\n          </xref>\n          <hostOrganismList>\n            <hostOrganism ncbiTaxId=\"-1\">\n              <names>\n                <shortLabel>in vitro</shortLabel>\n                <fullName>In vitro</fullName>\n              </names>\n            </hostOrganism>\n          </hostOrganismList>\n          <interactionDetectionMethod>\n            <names>\n              <shortLabel>tem</shortLabel>\n              <fullName>transmission electron microscopy</fullName>\n              <alias type=\"synonym\" typeAc=\"MI:1041\">tem</alias>\n            </names>\n            <xref>\n              <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0020\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-1016\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n            </xref>\n          </interactionDetectionMethod>\n          <attributeList>\n            <attribute name=\"dataset\" nameAc=\"MI:0875\">Alzheimers - Interactions investigated in the context of Alzheimers disease</attribute>\n            <attribute name=\"publication year\" nameAc=\"MI:0886\">2012</attribute>\n            <attribute name=\"journal\" nameAc=\"MI:0885\">Proceedings of the National Academy of Sciences of the United States of America</attribute>\n            <attribute name=\"title\" nameAc=\"MI:1091\">Toxic fibrillar oligomers of amyloid-β have cross-β structure.</attribute>\n            <attribute name=\"author-list\" nameAc=\"MI:0636\">Stroud JC., Liu C., Teng PK., Eisenberg D.</attribute>\n            <attribute name=\"curation depth\" nameAc=\"MI:0955\">IMEx</attribute>\n            <attribute name=\"comment\" nameAc=\"MI:0612\">DIP original experiment: DIP-253572X</attribute>\n          </attributeList>\n        </experimentDescription>\n      </experimentList>\n      <participantList>\n        <participant id=\"3\">\n          <interactor id=\"4\">\n            <names>\n              <shortLabel>p05067-pro_0000000092</shortLabel>\n              <fullName>Amyloid-beta protein 42</fullName>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Alzheimer disease amyloid protein</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Cerebral vascular amyloid peptide</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">A4</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">AD1</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">ABPP</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">PreA4</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Protease nexin-II</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">APPI</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Amyloid precursor protein</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Amyloid-beta A4 protein</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Alzheimer disease amyloid A4 protein homolog</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Amyloid-beta (A4) precursor protein</alias>\n              <alias type=\"gene name\" typeAc=\"MI:0301\">APP</alias>\n            </names>\n            <xref>\n              <primaryRef db=\"uniprotkb\" dbAc=\"MI:0486\" id=\"P05067-PRO_0000000092\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-821758\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"uniprotkb\" dbAc=\"MI:0486\" id=\"P05067-PRO_0000000092\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-77613\" refType=\"chain-parent\" refTypeAc=\"MI:0951\"/>\n            </xref>\n            <interactorType>\n              <names>\n                <shortLabel>protein</shortLabel>\n                <fullName>protein</fullName>\n              </names>\n              <xref>\n                <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0326\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-619654\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n                <secondaryRef db=\"so\" dbAc=\"MI:0601\" id=\"SO:0000358\" refType=\"see-also\" refTypeAc=\"MI:0361\"/>\n              </xref>\n            </interactorType>\n            <organism ncbiTaxId=\"9606\">\n              <names>\n                <shortLabel>human</shortLabel>\n                <fullName>Homo sapiens</fullName>\n                <alias type=\"synonym\" typeAc=\"MI:1041\">Human</alias>\n              </names>\n            </organism>\n            <sequence>DAEFRHDSGYEVHHQKLVFFAEDVGSNKGAIIGLMVGGVVIA</sequence>\n            <attributeList>\n              <attribute name=\"chain-seq-start\">672</attribute>\n              <attribute name=\"chain-seq-end\">713</attribute>\n              <attribute name=\"crc64\">3AC85563D7858C37</attribute>\n            </attributeList>\n          </interactor>\n          <participantIdentificationMethodList>\n            <participantIdentificationMethod>\n              <names>\n                <shortLabel>predetermined</shortLabel>\n                <fullName>predetermined participant</fullName>\n                <alias type=\"synonym\" typeAc=\"MI:1041\">predetermined</alias>\n              </names>\n              <xref>\n                <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0396\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-1465\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n              </xref>\n            </participantIdentificationMethod>\n          </participantIdentificationMethodList>\n          <biologicalRole>\n            <names>\n              <shortLabel>unspecified role</shortLabel>\n              <fullName>unspecified role</fullName>\n            </names>\n            <xref>\n              <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0499\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-1383079\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n            </xref>\n          </biologicalRole>\n          <experimentalRoleList>\n            <experimentalRole>\n              <names>\n                <shortLabel>unspecified role</shortLabel>\n                <fullName>unspecified role</fullName>\n              </names>\n              <xref>\n                <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0499\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-1383079\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n              </xref>\n            </experimentalRole>\n          </experimentalRoleList>\n          <hostOrganismList>\n            <hostOrganism ncbiTaxId=\"562\">\n              <names>\n                <shortLabel>ecolx</shortLabel>\n                <fullName>Escherichia coli</fullName>\n              </names>\n            </hostOrganism>\n          </hostOrganismList>\n          <attributeList>\n            <attribute name=\"comment\" nameAc=\"MI:0612\">stoichiometry: 0</attribute>\n          </attributeList>\n        </participant>\n      </participantList>\n      <interactionType>\n        <names>\n          <shortLabel>direct interaction</shortLabel>\n          <fullName>direct interaction</fullName>\n        </names>\n        <xref>\n          <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0407\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n          <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-608833\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n          <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n        </xref>\n      </interactionType>\n    </interaction>\n  </interactionList>\n</entry>",
+    "xml30Format": "<entry>\n  <source releaseDate=\"2026-02-09\">\n    <names>\n      <shortLabel>DIP</shortLabel>\n      <fullName>Database of Interacting Proteins</fullName>\n    </names>\n    <xref>\n      <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0465\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n      <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14681454\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n      <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-1579232\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n    </xref>\n    <attributeList>\n      <attribute name=\"postaladdress\">611 Young Drive East; Los Angeles CA 90095; USA</attribute>\n      <attribute name=\"url\" nameAc=\"MI:0614\">http://dip.doe-mbi.ucla.edu/</attribute>\n      <attribute name=\"contact-email\" nameAc=\"MI:0634\">dip@mbi.ucla.edu</attribute>\n    </attributeList>\n  </source>\n  <interactionList>\n    <interaction id=\"1\" imexId=\"IM-21274-1\">\n      <names>\n        <shortLabel>abeta(142)-20</shortLabel>\n      </names>\n      <xref>\n        <primaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-15982574\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n        <secondaryRef db=\"dip\" dbAc=\"MI:0465\" id=\"DIP-87859E\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n        <secondaryRef db=\"complex portal\" dbAc=\"MI:2279\" id=\"CPX-1134\" refType=\"see-also\" refTypeAc=\"MI:0361\"/>\n        <secondaryRef db=\"complex portal\" dbAc=\"MI:2279\" id=\"CPX-1120\" refType=\"see-also\" refTypeAc=\"MI:0361\"/>\n        <secondaryRef db=\"complex portal\" dbAc=\"MI:2279\" id=\"CPX-1070\" refType=\"see-also\" refTypeAc=\"MI:0361\"/>\n        <secondaryRef db=\"complex portal\" dbAc=\"MI:2279\" id=\"CPX-1062\" refType=\"see-also\" refTypeAc=\"MI:0361\"/>\n        <secondaryRef db=\"imex\" dbAc=\"MI:0670\" id=\"IM-21274-1\" refType=\"imex-primary\" refTypeAc=\"MI:0662\"/>\n        <secondaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0465\" refType=\"imex source\"/>\n      </xref>\n      <experimentList>\n        <experimentDescription id=\"2\">\n          <names>\n            <fullName>Toxic fibrillar oligomers of amyloid-β have cross-β structure.</fullName>\n          </names>\n          <bibref>\n            <xref>\n              <primaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"22547798\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n              <secondaryRef db=\"doi\" dbAc=\"MI:0574\" id=\"10.1073/pnas.1203193109\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n              <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-15982555\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"imex\" dbAc=\"MI:0670\" id=\"IM-21274\" refType=\"imex-primary\" refTypeAc=\"MI:0662\"/>\n            </xref>\n            <attributeList>\n              <attribute name=\"publication title\" nameAc=\"MI:1091\">Toxic fibrillar oligomers of amyloid-β have cross-β structure.</attribute>\n              <attribute name=\"journal\" nameAc=\"MI:0885\">Proceedings of the National Academy of Sciences of the United States of America</attribute>\n              <attribute name=\"publication year\" nameAc=\"MI:0886\">2012</attribute>\n              <attribute name=\"author-list\" nameAc=\"MI:0636\">Stroud JC.,  Liu C.,  Teng PK.,  Eisenberg D., Stroud JC.,  Liu C.,  Teng PK.,  Eisenberg D.</attribute>\n              <attribute name=\"dataset\" nameAc=\"MI:0875\">Alzheimers - Interactions investigated in the context of Alzheimers disease</attribute>\n              <attribute name=\"imex curation\" nameAc=\"MI:0959\"/>\n              <attribute name=\"full coverage\" nameAc=\"MI:0957\">Only protein-protein interactions</attribute>\n            </attributeList>\n          </bibref>\n          <xref>\n            <primaryRef db=\"doi\" dbAc=\"MI:0574\" id=\"10.1073/pnas.1203193109\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n            <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"22547798\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n            <secondaryRef db=\"dip\" dbAc=\"MI:0465\" id=\"DIP-253572X\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n            <secondaryRef db=\"imex\" dbAc=\"MI:0670\" id=\"IM-21274\" refType=\"imex-primary\" refTypeAc=\"MI:0662\"/>\n          </xref>\n          <hostOrganismList>\n            <hostOrganism ncbiTaxId=\"-1\">\n              <names>\n                <shortLabel>in vitro</shortLabel>\n                <fullName>In vitro</fullName>\n              </names>\n            </hostOrganism>\n          </hostOrganismList>\n          <interactionDetectionMethod>\n            <names>\n              <shortLabel>tem</shortLabel>\n              <fullName>transmission electron microscopy</fullName>\n              <alias type=\"synonym\" typeAc=\"MI:1041\">tem</alias>\n            </names>\n            <xref>\n              <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0020\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-1016\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n            </xref>\n          </interactionDetectionMethod>\n          <attributeList>\n            <attribute name=\"dataset\" nameAc=\"MI:0875\">Alzheimers - Interactions investigated in the context of Alzheimers disease</attribute>\n            <attribute name=\"publication year\" nameAc=\"MI:0886\">2012</attribute>\n            <attribute name=\"journal\" nameAc=\"MI:0885\">Proceedings of the National Academy of Sciences of the United States of America</attribute>\n            <attribute name=\"title\" nameAc=\"MI:1091\">Toxic fibrillar oligomers of amyloid-β have cross-β structure.</attribute>\n            <attribute name=\"author-list\" nameAc=\"MI:0636\">Stroud JC., Liu C., Teng PK., Eisenberg D.</attribute>\n            <attribute name=\"curation depth\" nameAc=\"MI:0955\">IMEx</attribute>\n            <attribute name=\"comment\" nameAc=\"MI:0612\">DIP original experiment: DIP-253572X</attribute>\n          </attributeList>\n        </experimentDescription>\n      </experimentList>\n      <participantList>\n        <participant id=\"3\">\n          <interactor id=\"4\">\n            <names>\n              <shortLabel>p05067-pro_0000000092</shortLabel>\n              <fullName>Amyloid-beta protein 42</fullName>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Alzheimer disease amyloid protein</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Cerebral vascular amyloid peptide</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">A4</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">AD1</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">ABPP</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">PreA4</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Protease nexin-II</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">APPI</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Amyloid precursor protein</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Amyloid-beta A4 protein</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Alzheimer disease amyloid A4 protein homolog</alias>\n              <alias type=\"gene name synonym\" typeAc=\"MI:0302\">Amyloid-beta (A4) precursor protein</alias>\n              <alias type=\"gene name\" typeAc=\"MI:0301\">APP</alias>\n            </names>\n            <xref>\n              <primaryRef db=\"uniprotkb\" dbAc=\"MI:0486\" id=\"P05067-PRO_0000000092\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-821758\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"uniprotkb\" dbAc=\"MI:0486\" id=\"P05067-PRO_0000000092\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-77613\" refType=\"chain-parent\" refTypeAc=\"MI:0951\"/>\n            </xref>\n            <interactorType>\n              <names>\n                <shortLabel>protein</shortLabel>\n                <fullName>protein</fullName>\n              </names>\n              <xref>\n                <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0326\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-619654\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n                <secondaryRef db=\"so\" dbAc=\"MI:0601\" id=\"SO:0000358\" refType=\"see-also\" refTypeAc=\"MI:0361\"/>\n              </xref>\n            </interactorType>\n            <organism ncbiTaxId=\"9606\">\n              <names>\n                <shortLabel>human</shortLabel>\n                <fullName>Homo sapiens</fullName>\n                <alias type=\"synonym\" typeAc=\"MI:1041\">Human</alias>\n              </names>\n            </organism>\n            <sequence>DAEFRHDSGYEVHHQKLVFFAEDVGSNKGAIIGLMVGGVVIA</sequence>\n            <attributeList>\n              <attribute name=\"chain-seq-start\">672</attribute>\n              <attribute name=\"chain-seq-end\">713</attribute>\n              <attribute name=\"crc64\">3AC85563D7858C37</attribute>\n            </attributeList>\n          </interactor>\n          <participantIdentificationMethodList>\n            <participantIdentificationMethod>\n              <names>\n                <shortLabel>predetermined</shortLabel>\n                <fullName>predetermined participant</fullName>\n                <alias type=\"synonym\" typeAc=\"MI:1041\">predetermined</alias>\n              </names>\n              <xref>\n                <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0396\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-1465\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n              </xref>\n            </participantIdentificationMethod>\n          </participantIdentificationMethodList>\n          <biologicalRole>\n            <names>\n              <shortLabel>unspecified role</shortLabel>\n              <fullName>unspecified role</fullName>\n            </names>\n            <xref>\n              <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0499\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-1383079\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n              <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n            </xref>\n          </biologicalRole>\n          <experimentalRoleList>\n            <experimentalRole>\n              <names>\n                <shortLabel>unspecified role</shortLabel>\n                <fullName>unspecified role</fullName>\n              </names>\n              <xref>\n                <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0499\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-1383079\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n                <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n              </xref>\n            </experimentalRole>\n          </experimentalRoleList>\n          <hostOrganismList>\n            <hostOrganism ncbiTaxId=\"562\">\n              <names>\n                <shortLabel>ecolx</shortLabel>\n                <fullName>Escherichia coli</fullName>\n              </names>\n            </hostOrganism>\n          </hostOrganismList>\n        </participant>\n      </participantList>\n      <interactionType>\n        <names>\n          <shortLabel>direct interaction</shortLabel>\n          <fullName>direct interaction</fullName>\n        </names>\n        <xref>\n          <primaryRef db=\"psi-mi\" dbAc=\"MI:0488\" id=\"MI:0407\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n          <secondaryRef db=\"intact\" dbAc=\"MI:0469\" id=\"EBI-608833\" refType=\"identity\" refTypeAc=\"MI:0356\"/>\n          <secondaryRef db=\"pubmed\" dbAc=\"MI:0446\" id=\"14755292\" refType=\"primary-reference\" refTypeAc=\"MI:0358\"/>\n        </xref>\n      </interactionType>\n    </interaction>\n  </interactionList>\n</entry>",
+    "tab25Format": "uniprotkb:P05067-PRO_0000000092\tuniprotkb:P05067-PRO_0000000092\tintact:EBI-821758|uniprotkb:P05067-PRO_0000000092\tintact:EBI-821758|uniprotkb:P05067-PRO_0000000092\tpsi-mi:p05067-pro_0000000092(display_short)|psi-mi:Amyloid-beta protein 42(display_long)|uniprotkb:Alzheimer disease amyloid protein(gene name synonym)|uniprotkb:Cerebral vascular amyloid peptide(gene name synonym)|uniprotkb:A4(gene name synonym)|uniprotkb:AD1(gene name synonym)|uniprotkb:ABPP(gene name synonym)|uniprotkb:PreA4(gene name synonym)|uniprotkb:Protease nexin-II(gene name synonym)|uniprotkb:APPI(gene name synonym)|uniprotkb:Amyloid precursor protein(gene name synonym)|uniprotkb:Amyloid-beta A4 protein(gene name synonym)|uniprotkb:Alzheimer disease amyloid A4 protein homolog(gene name synonym)|uniprotkb:\"Amyloid-beta (A4) precursor protein\"(gene name synonym)|uniprotkb:APP(gene name)\tpsi-mi:p05067-pro_0000000092(display_short)|psi-mi:Amyloid-beta protein 42(display_long)|uniprotkb:Alzheimer disease amyloid protein(gene name synonym)|uniprotkb:Cerebral vascular amyloid peptide(gene name synonym)|uniprotkb:A4(gene name synonym)|uniprotkb:AD1(gene name synonym)|uniprotkb:ABPP(gene name synonym)|uniprotkb:PreA4(gene name synonym)|uniprotkb:Protease nexin-II(gene name synonym)|uniprotkb:APPI(gene name synonym)|uniprotkb:Amyloid precursor protein(gene name synonym)|uniprotkb:Amyloid-beta A4 protein(gene name synonym)|uniprotkb:Alzheimer disease amyloid A4 protein homolog(gene name synonym)|uniprotkb:\"Amyloid-beta (A4) precursor protein\"(gene name synonym)|uniprotkb:APP(gene name)\tpsi-mi:\"MI:0020\"(transmission electron microscopy)\tStroud JC. et al.(2012)\tintact:EBI-15982555|doi:10.1073/pnas.1203193109|pubmed:22547798|imex:IM-21274\ttaxid:9606(human)|taxid:9606(Homo sapiens)\ttaxid:9606(human)|taxid:9606(Homo sapiens)\tpsi-mi:\"MI:0407\"(direct interaction)\tpsi-mi:\"MI:0465\"(Database of Interacting Proteins)\tintact:EBI-15982574|dip:DIP-87859E|imex:IM-21274-1\tintact-miscore:0.99",
+    "tab26Format": "uniprotkb:P05067-PRO_0000000092\tuniprotkb:P05067-PRO_0000000092\tintact:EBI-821758|uniprotkb:P05067-PRO_0000000092\tintact:EBI-821758|uniprotkb:P05067-PRO_0000000092\tpsi-mi:p05067-pro_0000000092(display_short)|psi-mi:Amyloid-beta protein 42(display_long)|uniprotkb:Alzheimer disease amyloid protein(gene name synonym)|uniprotkb:Cerebral vascular amyloid peptide(gene name synonym)|uniprotkb:A4(gene name synonym)|uniprotkb:AD1(gene name synonym)|uniprotkb:ABPP(gene name synonym)|uniprotkb:PreA4(gene name synonym)|uniprotkb:Protease nexin-II(gene name synonym)|uniprotkb:APPI(gene name synonym)|uniprotkb:Amyloid precursor protein(gene name synonym)|uniprotkb:Amyloid-beta A4 protein(gene name synonym)|uniprotkb:Alzheimer disease amyloid A4 protein homolog(gene name synonym)|uniprotkb:\"Amyloid-beta (A4) precursor protein\"(gene name synonym)|uniprotkb:APP(gene name)\tpsi-mi:p05067-pro_0000000092(display_short)|psi-mi:Amyloid-beta protein 42(display_long)|uniprotkb:Alzheimer disease amyloid protein(gene name synonym)|uniprotkb:Cerebral vascular amyloid peptide(gene name synonym)|uniprotkb:A4(gene name synonym)|uniprotkb:AD1(gene name synonym)|uniprotkb:ABPP(gene name synonym)|uniprotkb:PreA4(gene name synonym)|uniprotkb:Protease nexin-II(gene name synonym)|uniprotkb:APPI(gene name synonym)|uniprotkb:Amyloid precursor protein(gene name synonym)|uniprotkb:Amyloid-beta A4 protein(gene name synonym)|uniprotkb:Alzheimer disease amyloid A4 protein homolog(gene name synonym)|uniprotkb:\"Amyloid-beta (A4) precursor protein\"(gene name synonym)|uniprotkb:APP(gene name)\tpsi-mi:\"MI:0020\"(transmission electron microscopy)\tStroud JC. et al.(2012)\tintact:EBI-15982555|doi:10.1073/pnas.1203193109|pubmed:22547798|imex:IM-21274\ttaxid:9606(human)|taxid:9606(Homo sapiens)\ttaxid:9606(human)|taxid:9606(Homo sapiens)\tpsi-mi:\"MI:0407\"(direct interaction)\tpsi-mi:\"MI:0465\"(Database of Interacting Proteins)\tintact:EBI-15982574|dip:DIP-87859E|imex:IM-21274-1\tintact-miscore:0.99\t-\tpsi-mi:\"MI:0499\"(unspecified role)\tpsi-mi:\"MI:0499\"(unspecified role)\tpsi-mi:\"MI:0499\"(unspecified role)\tpsi-mi:\"MI:0499\"(unspecified role)\tpsi-mi:\"MI:0326\"(protein)\tpsi-mi:\"MI:0326\"(protein)\tintact:EBI-77613(chain-parent)\tintact:EBI-77613(chain-parent)\tcomplex portal:CPX-1134(see-also)|complex portal:CPX-1120(see-also)|complex portal:CPX-1070(see-also)|complex portal:CPX-1062(see-also)|psi-mi:\"MI:0465\"(imex source)\tStart position of the feature chain:672|End position of the feature chain:713\tStart position of the feature chain:672|End position of the feature chain:713\tfull coverage:Only protein-protein interactions\ttaxid:-1(in vitro)|taxid:-1(In vitro)\t-\t2017/08/07\t2025/07/19\tcrc64:3AC85563D7858C37\tcrc64:3AC85563D7858C37\t-\t-",
+    "tab27Format": "uniprotkb:P05067-PRO_0000000092\tuniprotkb:P05067-PRO_0000000092\tintact:EBI-821758|uniprotkb:P05067-PRO_0000000092\tintact:EBI-821758|uniprotkb:P05067-PRO_0000000092\tpsi-mi:p05067-pro_0000000092(display_short)|psi-mi:Amyloid-beta protein 42(display_long)|uniprotkb:Alzheimer disease amyloid protein(gene name synonym)|uniprotkb:Cerebral vascular amyloid peptide(gene name synonym)|uniprotkb:A4(gene name synonym)|uniprotkb:AD1(gene name synonym)|uniprotkb:ABPP(gene name synonym)|uniprotkb:PreA4(gene name synonym)|uniprotkb:Protease nexin-II(gene name synonym)|uniprotkb:APPI(gene name synonym)|uniprotkb:Amyloid precursor protein(gene name synonym)|uniprotkb:Amyloid-beta A4 protein(gene name synonym)|uniprotkb:Alzheimer disease amyloid A4 protein homolog(gene name synonym)|uniprotkb:\"Amyloid-beta (A4) precursor protein\"(gene name synonym)|uniprotkb:APP(gene name)\tpsi-mi:p05067-pro_0000000092(display_short)|psi-mi:Amyloid-beta protein 42(display_long)|uniprotkb:Alzheimer disease amyloid protein(gene name synonym)|uniprotkb:Cerebral vascular amyloid peptide(gene name synonym)|uniprotkb:A4(gene name synonym)|uniprotkb:AD1(gene name synonym)|uniprotkb:ABPP(gene name synonym)|uniprotkb:PreA4(gene name synonym)|uniprotkb:Protease nexin-II(gene name synonym)|uniprotkb:APPI(gene name synonym)|uniprotkb:Amyloid precursor protein(gene name synonym)|uniprotkb:Amyloid-beta A4 protein(gene name synonym)|uniprotkb:Alzheimer disease amyloid A4 protein homolog(gene name synonym)|uniprotkb:\"Amyloid-beta (A4) precursor protein\"(gene name synonym)|uniprotkb:APP(gene name)\tpsi-mi:\"MI:0020\"(transmission electron microscopy)\tStroud JC. et al.(2012)\tintact:EBI-15982555|doi:10.1073/pnas.1203193109|pubmed:22547798|imex:IM-21274\ttaxid:9606(human)|taxid:9606(Homo sapiens)\ttaxid:9606(human)|taxid:9606(Homo sapiens)\tpsi-mi:\"MI:0407\"(direct interaction)\tpsi-mi:\"MI:0465\"(Database of Interacting Proteins)\tintact:EBI-15982574|dip:DIP-87859E|imex:IM-21274-1\tintact-miscore:0.99\t-\tpsi-mi:\"MI:0499\"(unspecified role)\tpsi-mi:\"MI:0499\"(unspecified role)\tpsi-mi:\"MI:0499\"(unspecified role)\tpsi-mi:\"MI:0499\"(unspecified role)\tpsi-mi:\"MI:0326\"(protein)\tpsi-mi:\"MI:0326\"(protein)\tintact:EBI-77613(chain-parent)\tintact:EBI-77613(chain-parent)\tcomplex portal:CPX-1134(see-also)|complex portal:CPX-1120(see-also)|complex portal:CPX-1070(see-also)|complex portal:CPX-1062(see-also)|psi-mi:\"MI:0465\"(imex source)\tStart position of the feature chain:672|End position of the feature chain:713\tStart position of the feature chain:672|End position of the feature chain:713\tfull coverage:Only protein-protein interactions\ttaxid:-1(in vitro)|taxid:-1(In vitro)\t-\t2017/08/07\t2025/07/19\tcrc64:3AC85563D7858C37\tcrc64:3AC85563D7858C37\t-\t-\t-\t-\t0\t0\tpsi-mi:\"MI:0396\"(predetermined participant)\tpsi-mi:\"MI:0396\"(predetermined participant)",
+    "searchChildInteractors": null
+  }
+}

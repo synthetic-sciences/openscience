@@ -1,0 +1,153 @@
+{
+  "id": "12345",
+  "payload": {
+    "uid": "12345",
+    "obj_type": "single nucleotide variant",
+    "accession": "VCV000012345",
+    "accession_version": "VCV000012345.2",
+    "title": "NM_001065.4(TNFRSF1A):c.295T>A (p.Cys99Ser)",
+    "variation_set": [
+      {
+        "measure_id": "27384",
+        "variation_xrefs": [
+          {
+            "db_source": "ClinGen",
+            "db_id": "CA280163"
+          },
+          {
+            "db_source": "UniProtKB",
+            "db_id": "P19438#VAR_019304"
+          },
+          {
+            "db_source": "OMIM",
+            "db_id": "191190.0011"
+          },
+          {
+            "db_source": "dbSNP",
+            "db_id": "104895228"
+          }
+        ],
+        "variation_name": "NM_001065.4(TNFRSF1A):c.295T>A (p.Cys99Ser)",
+        "cdna_change": "c.295T>A",
+        "aliases": [
+          "C70S"
+        ],
+        "variation_loc": [
+          {
+            "status": "current",
+            "assembly_name": "GRCh38",
+            "chr": "12",
+            "band": "12p13.31",
+            "start": "6333764",
+            "stop": "6333764",
+            "inner_start": "",
+            "inner_stop": "",
+            "outer_start": "",
+            "outer_stop": "",
+            "display_start": "6333764",
+            "display_stop": "6333764",
+            "assembly_acc_ver": "GCF_000001405.38",
+            "annotation_release": "",
+            "alt": "",
+            "ref": ""
+          },
+          {
+            "status": "previous",
+            "assembly_name": "GRCh37",
+            "chr": "12",
+            "band": "12p13.31",
+            "start": "6442930",
+            "stop": "6442930",
+            "inner_start": "",
+            "inner_stop": "",
+            "outer_start": "",
+            "outer_stop": "",
+            "display_start": "6442930",
+            "display_stop": "6442930",
+            "assembly_acc_ver": "GCF_000001405.25",
+            "annotation_release": "",
+            "alt": "",
+            "ref": ""
+          }
+        ],
+        "allele_freq_set": [],
+        "variant_type": "single nucleotide variant",
+        "canonical_spdi": "NC_000012.12:6333763:A:T",
+        "common_name": ""
+      }
+    ],
+    "supporting_submissions": {
+      "scv": [
+        "SCV000116051",
+        "SCV000033385"
+      ],
+      "rcv": [
+        "RCV000013138"
+      ]
+    },
+    "germline_classification": {
+      "description": "Pathogenic",
+      "last_evaluated": "2003/09/01 00:00",
+      "review_status": "no assertion criteria provided",
+      "fda_recognized_database": "",
+      "trait_set": [
+        {
+          "trait_xrefs": [
+            {
+              "db_source": "Orphanet",
+              "db_id": "32960"
+            },
+            {
+              "db_source": "MedGen",
+              "db_id": "C1275126"
+            },
+            {
+              "db_source": "MONDO",
+              "db_id": "MONDO:0007727"
+            },
+            {
+              "db_source": "OMIM",
+              "db_id": "142680"
+            }
+          ],
+          "trait_name": "TNF receptor-associated periodic fever syndrome (TRAPS)"
+        }
+      ]
+    },
+    "clinical_impact_classification": {
+      "description": "",
+      "last_evaluated": "1/01/01 00:00",
+      "review_status": "",
+      "fda_recognized_database": "",
+      "trait_set": []
+    },
+    "oncogenicity_classification": {
+      "description": "",
+      "last_evaluated": "1/01/01 00:00",
+      "review_status": "",
+      "fda_recognized_database": "",
+      "trait_set": []
+    },
+    "record_status": "",
+    "gene_sort": "TNFRSF1A",
+    "chr_sort": "12",
+    "location_sort": "00000000000006333764",
+    "variation_set_name": "",
+    "variation_set_id": "",
+    "genes": [
+      {
+        "symbol": "TNFRSF1A",
+        "geneid": "7132",
+        "strand": "-",
+        "source": "submitted"
+      }
+    ],
+    "molecular_consequence_list": [
+      "missense variant",
+      "5 prime UTR variant",
+      "non-coding transcript variant"
+    ],
+    "protein_change": "C99S",
+    "fda_recognized_database": ""
+  }
+}

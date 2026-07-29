@@ -1,0 +1,23 @@
+{
+  "id": "ENSG00000141510",
+  "payload": {
+    "gene": {
+      "chromosome": "chr17",
+      "dataSource": "HAVANA",
+      "description": "tumor protein p53 [Source:HGNC Symbol;Acc:HGNC:11998]",
+      "end": 7687550,
+      "entrezGeneId": 7157,
+      "gencodeId": "ENSG00000141510.16",
+      "gencodeVersion": "v26",
+      "geneStatus": "",
+      "geneSymbol": "TP53",
+      "geneSymbolUpper": "TP53",
+      "geneType": "protein coding",
+      "genomeBuild": "GRCh38/hg38",
+      "start": 7661779,
+      "strand": "-",
+      "tss": 7687550
+    },
+    "medianExpression": []
+  }
+}

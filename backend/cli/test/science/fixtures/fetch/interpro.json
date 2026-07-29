@@ -1,0 +1,216 @@
+{
+  "id": "IPR000001",
+  "payload": {
+    "metadata": {
+      "accession": "IPR000001",
+      "entry_id": null,
+      "type": "domain",
+      "go_terms": null,
+      "source_database": "interpro",
+      "member_databases": {
+        "cdd": {
+          "cd00108": "KR"
+        },
+        "profile": {
+          "PS50070": "Kringle domain profile"
+        },
+        "pfam": {
+          "PF00051": "Kringle domain"
+        },
+        "smart": {
+          "SM00130": "Kringle domain"
+        }
+      },
+      "integrated": null,
+      "hierarchy": {
+        "accession": "IPR000001",
+        "name": "Kringle",
+        "type": "Domain",
+        "children": []
+      },
+      "name": {
+        "name": "Kringle",
+        "short": "Kringle"
+      },
+      "description": [
+        {
+          "text": "<p>Kringles are autonomous structural domains, found throughout the blood clotting and fibrinolytic proteins. Kringle domains are believed to play a role in binding mediators (e.g., membranes, other proteins or phospholipids), and in the regulation of proteolytic activity [[cite:PUB00002414], [cite:PUB00001541], [cite:PUB00003257]]. Kringle domains [[cite:PUB00003400], [cite:PUB00000803], [cite:PUB00001620]] are characterised by a triple loop, 3-disulphide bridge structure, whose conformation is defined by a number of hydrogen bonds and small pieces of anti-parallel β-sheet. They are found in a varying number of copies in some plasma proteins including prothrombin and urokinase-type plasminogen activator, which are serine proteases belonging to MEROPS peptidase family S1A.</p>",
+          "llm": false,
+          "checked": false,
+          "updated": false
+        }
+      ],
+      "wikipedia": null,
+      "literature": {
+        "PUB00002414": {
+          "PMID": 3886654,
+          "ISBN": null,
+          "volume": "260",
+          "issue": "9",
+          "year": 1985,
+          "title": "Amino acid sequence of the heavy chain of human alpha-factor XIIa (activated Hageman factor).",
+          "URL": null,
+          "raw_pages": "5328-41",
+          "medline_journal": "J Biol Chem",
+          "ISO_journal": "J. Biol. Chem.",
+          "authors": [
+            "McMullen BA",
+            "Fujikawa K."
+          ],
+          "DOI_URL": "http://intl.jbc.org/cgi/content/abstract/260/9/5328"
+        },
+        "PUB00003400": {
+          "PMID": 3131537,
+          "ISBN": null,
+          "volume": "26",
+          "issue": "4",
+          "year": 1987,
+          "title": "The genetic relationships between the kringle domains of human plasminogen, prothrombin, tissue plasminogen activator, urokinase, and coagulation factor XII.",
+          "URL": null,
+          "raw_pages": "358-69",
+          "medline_journal": "J Mol Evol",
+          "ISO_journal": "J. Mol. Evol.",
+          "authors": [
+            "Castellino FJ",
+            "Beals JM."
+          ],
+          "DOI_URL": "http://dx.doi.org/10.1007/BF02101155"
+        },
+        "PUB00001541": {
+          "PMID": 6373375,
+          "ISBN": null,
+          "volume": "171",
+          "issue": "1",
+          "year": 1984,
+          "title": "Kringles: modules specialized for protein binding. Homology of the gelatin-binding region of fibronectin with the kringle structures of proteases.",
+          "URL": null,
+          "raw_pages": "131-6",
+          "medline_journal": "FEBS Lett",
+          "ISO_journal": "FEBS Lett.",
+          "authors": [
+            "Patthy L",
+            "Trexler M",
+            "Vali Z",
+            "Banyai L",
+            "Varadi A."
+          ],
+          "DOI_URL": "http://dx.doi.org/10.1016/0014-5793(84)80473-1"
+        },
+        "PUB00001620": {
+          "PMID": 1879523,
+          "ISBN": null,
+          "volume": "287",
+          "issue": "1-2",
+          "year": 1991,
+          "title": "Evolutionary origin of numerous kringles in human and simian apolipoprotein(a).",
+          "URL": null,
+          "raw_pages": "146-8",
+          "medline_journal": "FEBS Lett",
+          "ISO_journal": "FEBS Lett.",
+          "authors": [
+            "Ikeo K",
+            "Takahashi K",
+            "Gojobori T."
+          ],
+          "DOI_URL": "http://dx.doi.org/10.1016/0014-5793(91)80036-3"
+        },
+        "PUB00000803": {
+          "PMID": 3891096,
+          "ISBN": null,
+          "volume": "41",
+          "issue": "3",
+          "year": 1985,
+          "title": "Evolution of the proteases of blood coagulation and fibrinolysis by assembly from modules.",
+          "URL": null,
+          "raw_pages": "657-63",
+          "medline_journal": "Cell",
+          "ISO_journal": "Cell",
+          "authors": [
+            "Patthy L."
+          ],
+          "DOI_URL": "http://dx.doi.org/10.1016/S0092-8674(85)80046-5"
+        },
+        "PUB00003257": {
+          "PMID": 2157850,
+          "ISBN": null,
+          "volume": "212",
+          "issue": "3",
+          "year": 1990,
+          "title": "Solution structure of the kringle 4 domain from human plasminogen by 1H nuclear magnetic resonance spectroscopy and distance geometry.",
+          "URL": null,
+          "raw_pages": "541-52",
+          "medline_journal": "J Mol Biol",
+          "ISO_journal": "J. Mol. Biol.",
+          "authors": [
+            "Atkinson RA",
+            "Williams RJ."
+          ],
+          "DOI_URL": "http://dx.doi.org/10.1016/0022-2836(90)90330-O"
+        }
+      },
+      "set_info": null,
+      "overlaps_with": [
+        {
+          "accession": "IPR038178",
+          "name": "Kringle superfamily",
+          "type": "homologous_superfamily"
+        },
+        {
+          "accession": "IPR013806",
+          "name": "Kringle-like fold",
+          "type": "homologous_superfamily"
+        }
+      ],
+      "counters": {
+        "subfamilies": 0,
+        "domain_architectures": 1219,
+        "interactions": 2,
+        "matches": 37640,
+        "pathways": 135,
+        "proteins": 19901,
+        "proteomes": 1413,
+        "sets": 0,
+        "structural_models": {
+          "alphafold": 16865
+        },
+        "structures": 135,
+        "taxa": 4639
+      },
+      "entry_annotations": {
+        "alignment:seed": 23,
+        "alignment:full": 29186
+      },
+      "cross_references": {
+        "prositedoc": {
+          "displayName": "PROSITE Doc",
+          "description": "PROSITE is a database of protein families and domains.",
+          "rank": 18,
+          "accessions": [
+            {
+              "accession": "PDOC00020",
+              "url": "http://prosite.expasy.org/PDOC00020"
+            }
+          ]
+        },
+        "ec": {
+          "displayName": "ENZYME",
+          "description": "ENZYME is a repository of information relative to the nomenclature of enzymes. It is primarily based on the recommendations of the Nomenclature Committee of the International Union of Biochemistry and Molecular Biology (IUBMB) and it describes each type of characterized enzyme for which an EC (Enzyme Commission) number has been provided.",
+          "rank": 19,
+          "accessions": [
+            {
+              "accession": "3.4.21",
+              "url": "https://enzyme.expasy.org/EC/3.4.21"
+            }
+          ]
+        }
+      },
+      "is_llm": false,
+      "is_reviewed_llm": false,
+      "is_updated_llm": false,
+      "representative_structure": {
+        "accession": "4bvc",
+        "name": "Identification of small molecule inhibitors selective for apo(a) kringles KIV-7, KIV-10 and KV."
+      }
+    }
+  }
+}

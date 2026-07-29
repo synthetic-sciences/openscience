@@ -1,0 +1,15 @@
+{
+  "id": "WP554",
+  "payload": {
+    "id": "WP554",
+    "url": "https://www.wikipathways.org/instance/WP554",
+    "name": "ACE inhibitor pathway",
+    "species": "Homo sapiens",
+    "revision": "2025-07-10",
+    "authors": "C.F.Thorn, MaintBot, Jinwook, Khanspers, AlexanderPico, Thomas, MartijnVanIersel, Egonw, Christine Chichester, Nuno, DeSl, Mkutmon, Eweitz",
+    "description": "The core of this pathway was elucidated over a century ago and involves the conversion of angiotensinogen to angiotensin I (Ang I) by renin, its subsequent conversion to angiotensin II (Ang II) by ...",
+    "datanodes": "ACE, ACE inhibitor, ACE2, AGT, AGTR1, AGTR2, ATP6AP2, Aldosterone, Ang 1-5, Ang 1-7, Ang 1-9, Angiotensin I, Angiotensin II, BDKRB1, BDKRB2, Bradykinin, CMA1, CTSG, CYP11B2, Ca²⁺, Deoxycorticosterone, KNG1, MAS1, NOS3, NR3C2, Prostacyclin, REN, TGFB1",
+    "annotations": "signaling pathway, angiotensin signaling pathway, hypertension, ACE inhibitor drug pathway, mesangial cell",
+    "citedIn": ""
+  }
+}

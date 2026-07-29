@@ -1,0 +1,153 @@
+{
+  "id": "7157",
+  "payload": {
+    "uid": "7157",
+    "name": "TP53",
+    "description": "tumor protein p53",
+    "status": "",
+    "currentid": "",
+    "chromosome": "17",
+    "geneticsource": "genomic",
+    "maplocation": "17p13.1",
+    "otheraliases": "BCC7, BMFS5, LFS1, P53, TRP53",
+    "otherdesignations": "cellular tumor antigen p53|antigen NY-CO-13|mutant tumor protein 53|phosphoprotein p53|transformation-related protein 53|tumor protein 53|tumor supressor p53",
+    "nomenclaturesymbol": "TP53",
+    "nomenclaturename": "tumor protein p53",
+    "nomenclaturestatus": "Official",
+    "mim": [
+      "191170"
+    ],
+    "genomicinfo": [
+      {
+        "chrloc": "17",
+        "chraccver": "NC_000017.11",
+        "chrstart": 7687489,
+        "chrstop": 7668420,
+        "exoncount": 13
+      }
+    ],
+    "geneweight": 584428,
+    "summary": "This gene encodes a tumor suppressor protein containing transcriptional activation, DNA binding, and oligomerization domains. The encoded protein responds to diverse cellular stresses to regulate expression of target genes, thereby inducing cell cycle arrest, apoptosis, senescence, DNA repair, or changes in metabolism. Mutations in this gene are associated with a variety of human cancers, including hereditary cancers such as Li-Fraumeni syndrome. Alternative splicing of this gene and the use of alternate promoters result in multiple transcript variants and isoforms. Additional isoforms have also been shown to result from the use of alternate translation initiation codons from identical transcript variants (PMIDs: 12032546, 20937277). [provided by RefSeq, Dec 2016]",
+    "chrsort": "17",
+    "chrstart": 7668420,
+    "organism": {
+      "scientificname": "Homo sapiens",
+      "commonname": "human",
+      "taxid": 9606
+    },
+    "locationhist": [
+      {
+        "annotationrelease": "RS_2025_08",
+        "assemblyaccver": "GCF_000001405.40",
+        "chraccver": "NC_000017.11",
+        "chrstart": 7687489,
+        "chrstop": 7668420
+      },
+      {
+        "annotationrelease": "RS_2025_08",
+        "assemblyaccver": "GCF_009914755.1",
+        "chraccver": "NC_060941.1",
+        "chrstart": 7591593,
+        "chrstop": 7572543
+      },
+      {
+        "annotationrelease": "RS_2024_08",
+        "assemblyaccver": "GCF_000001405.40",
+        "chraccver": "NC_000017.11",
+        "chrstart": 7687489,
+        "chrstop": 7668420
+      },
+      {
+        "annotationrelease": "RS_2024_08",
+        "assemblyaccver": "GCF_009914755.1",
+        "chraccver": "NC_060941.1",
+        "chrstart": 7591593,
+        "chrstop": 7572543
+      },
+      {
+        "annotationrelease": "RS_2023_10",
+        "assemblyaccver": "GCF_000001405.40",
+        "chraccver": "NC_000017.11",
+        "chrstart": 7687489,
+        "chrstop": 7668420
+      },
+      {
+        "annotationrelease": "RS_2023_10",
+        "assemblyaccver": "GCF_009914755.1",
+        "chraccver": "NC_060941.1",
+        "chrstart": 7591593,
+        "chrstop": 7572543
+      },
+      {
+        "annotationrelease": "RS_2023_03",
+        "assemblyaccver": "GCF_000001405.40",
+        "chraccver": "NC_000017.11",
+        "chrstart": 7687489,
+        "chrstop": 7668420
+      },
+      {
+        "annotationrelease": "RS_2023_03",
+        "assemblyaccver": "GCF_009914755.1",
+        "chraccver": "NC_060941.1",
+        "chrstart": 7591593,
+        "chrstop": 7572543
+      },
+      {
+        "annotationrelease": "110",
+        "assemblyaccver": "GCF_000001405.40",
+        "chraccver": "NC_000017.11",
+        "chrstart": 7687489,
+        "chrstop": 7668420
+      },
+      {
+        "annotationrelease": "110",
+        "assemblyaccver": "GCF_009914755.1",
+        "chraccver": "NC_060941.1",
+        "chrstart": 7591593,
+        "chrstop": 7572543
+      },
+      {
+        "annotationrelease": "109.20211119",
+        "assemblyaccver": "GCF_000001405.39",
+        "chraccver": "NC_000017.11",
+        "chrstart": 7687489,
+        "chrstop": 7668420
+      },
+      {
+        "annotationrelease": "RS_2024_09",
+        "assemblyaccver": "GCF_000001405.25",
+        "chraccver": "NC_000017.10",
+        "chrstart": 7590807,
+        "chrstop": 7571738
+      },
+      {
+        "annotationrelease": "105.20220307",
+        "assemblyaccver": "GCF_000001405.25",
+        "chraccver": "NC_000017.10",
+        "chrstart": 7590807,
+        "chrstop": 7571738
+      },
+      {
+        "annotationrelease": "105",
+        "assemblyaccver": "GCF_000001405.25",
+        "chraccver": "NC_000017.10",
+        "chrstart": 7590867,
+        "chrstop": 7571719
+      },
+      {
+        "annotationrelease": "105",
+        "assemblyaccver": "GCF_000002125.1",
+        "chraccver": "AC_000149.1",
+        "chrstart": 7484282,
+        "chrstop": 7465168
+      },
+      {
+        "annotationrelease": "105",
+        "assemblyaccver": "GCF_000306695.2",
+        "chraccver": "NC_018928.2",
+        "chrstart": 7600002,
+        "chrstop": 7580865
+      }
+    ]
+  }
+}

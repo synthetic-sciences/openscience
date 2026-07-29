@@ -1,0 +1,9 @@
+{
+  "id": "ENSG00000141510",
+  "payload": {
+    "id": "ENSG00000141510",
+    "approvedSymbol": "TP53",
+    "approvedName": "tumor protein p53",
+    "biotype": "protein_coding"
+  }
+}

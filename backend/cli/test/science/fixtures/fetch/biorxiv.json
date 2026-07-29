@@ -1,0 +1,20 @@
+{
+  "id": "10.1101/2020.01.30.927871",
+  "payload": {
+    "title": "Uncanny similarity of unique inserts in the 2019-nCoV spike protein to HIV-1 gp120 and Gag",
+    "authors": "Pradhan, P.; Pandey, A. K.; Mishra, A.; Gupta, P.; Tripathi, P. K.; Menon, M. B.; Gomes, J.; Vivekanandan, P.; Kundu, B.",
+    "author_corresponding": "Bishwajit  Kundu",
+    "author_corresponding_institution": "Indian Institute of Technology Delhi",
+    "doi": "10.1101/2020.01.30.927871",
+    "date": "2020-02-02",
+    "version": "2",
+    "type": "withdrawn",
+    "license": "cc_by_nc_nd",
+    "category": "evolutionary biology",
+    "jatsxml": "https://www.biorxiv.org/content/early/2020/02/02/2020.01.30.927871.source.xml",
+    "abstract": "We are currently witnessing a major epidemic caused by the 2019 novel coronavirus (2019-nCoV). The evolution of 2019-nCoV remains elusive. We found 4 insertions in the spike glycoprotein (S) which are unique to the 2019-nCoV and are not present in other coronaviruses. Importantly, amino acid residues in all the 4 inserts have identity or similarity to those in the HIV-1 gp120 or HIV-1 Gag. Interestingly, despite the inserts being discontinuous on the primary amino acid sequence, 3D-modelling of the 2019-nCoV suggests that they converge to constitute the receptor binding site. The finding of 4 unique inserts in the 2019-nCoV, all of which have identity /similarity to amino acid residues in key structural proteins of HIV-1 is unlikely to be fortuitous in nature. This work provides yet unknown insights on 2019-nCoV and sheds light on the evolution and pathogenicity of this virus with important implications for diagnosis of this virus.",
+    "funder": "NA",
+    "published": "NA",
+    "server": "bioRxiv"
+  }
+}

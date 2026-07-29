@@ -1,0 +1,87 @@
+{
+  "id": "rs334",
+  "payload": {
+    "uid": "334",
+    "snp_id": 334,
+    "allele_origin": "",
+    "global_mafs": [
+      {
+        "study": "1000Genomes",
+        "freq": "A=0.027356/137"
+      },
+      {
+        "study": "1000Genomes_30X",
+        "freq": "A=0.028732/184"
+      },
+      {
+        "study": "ExAC",
+        "freq": "A=0.004384/532"
+      },
+      {
+        "study": "GnomAD_genomes",
+        "freq": "A=0.012876/1922"
+      },
+      {
+        "study": "HapMap",
+        "freq": "A=0.040373/13"
+      },
+      {
+        "study": "KOREAN",
+        "freq": "G=0.001711/5"
+      },
+      {
+        "study": "Korea1K",
+        "freq": "G=0.000546/1"
+      },
+      {
+        "study": "PRJEB36033",
+        "freq": "A=0./0"
+      },
+      {
+        "study": "Qatari",
+        "freq": "A=0.018519/4"
+      },
+      {
+        "study": "SGDP_PRJ",
+        "freq": "T=0.5/5"
+      },
+      {
+        "study": "ALFA",
+        "freq": "A=0.000785/35"
+      }
+    ],
+    "global_population": "",
+    "global_samplesize": "",
+    "suspected": "",
+    "clinical_significance": "not-provided,protective,likely-benign,pathogenic,other",
+    "genes": [
+      {
+        "name": "HBB",
+        "gene_id": "3043"
+      }
+    ],
+    "acc": "NC_000011.10",
+    "chr": "11",
+    "handle": "ILLUMINA,PERLEGEN,CLINSEQ_SNP,1000G_HIGH_COVERAGE,OMIM-CURATED-RECORDS,KHV_HUMAN_GENOMES,EVA_EXAC,KOGIC,WEILL_CORNELL_DGM,COMPLETE_GENOMICS,EXOME_CHIP,AFFY,HBVAR,GNOMAD,MILLER_NIDDK,ITMI,SGDP_PRJ,1000GENOMES,NHLBI-ESP,HUGCELL_USP,SANFORD_IMAGENETICS,SEATTLESEQ,JMKIDD_LAB,EVA,APPLERA_GI,RSG_UW,FSA-LAB,SEQUENOM,KRGDB,NCBI,HUMAN_LONGEVITY",
+    "spdi": "NC_000011.10:5227001:T:A,NC_000011.10:5227001:T:C,NC_000011.10:5227001:T:G",
+    "fxn_class": "coding_sequence_variant,missense_variant",
+    "validated": "by-frequency,by-alfa,by-cluster",
+    "docsum": "HGVS=NC_000011.10:g.5227002T>A,NC_000011.10:g.5227002T>C,NC_000011.10:g.5227002T>G,NC_000011.9:g.5248232T>A,NC_000011.9:g.5248232T>C,NC_000011.9:g.5248232T>G,NG_000007.3:g.70614A>T,NG_000007.3:g.70614A>G,NG_000007.3:g.70614A>C,NG_059281.1:g.5070A>T,NG_059281.1:g.5070A>G,NG_059281.1:g.5070A>C,NM_000518.5:c.20A>T,NM_000518.5:c.20A>G,NM_000518.5:c.20A>C,NM_000518.4:c.20A>T,NM_000518.4:c.20A>G,NM_000518.4:c.20A>C,NG_046672.1:g.4937T>A,NG_046672.1:g.4937T>C,NG_046672.1:g.4937T>G,NG_042296.1:g.533T>A,NG_042296.1:g.533T>C,NG_042296.1:g.533T>G,NP_000509.1:p.Glu7Val,NP_000509.1:p.Glu7Gly,NP_000509.1:p.Glu7Ala|SEQ=[T/A/C/G]|LEN=1|GENE=HBB:3043",
+    "tax_id": 9606,
+    "orig_build": 36,
+    "upd_build": 157,
+    "createdate": "2000/09/19 17:02",
+    "updatedate": "2024/11/01 07:22",
+    "ss": "335,24811263,48419811,49850538,49850540,49850542,49850544,49850546,49850548,49850550,49850552,49850554,49850555,65658196,69307501,79088884,79088886,79089796,159722269,168938347,212960460,225064977,263198838,263198960,342316075,491010799,491445404,491638176,533576724,1067519460,1077464818,1339939582,1690220976,1776567973,1931523242,2179830167,2738739466,2748543909,2895840074,2984931974,3626587887,3653703559,3814235341,3824585932,3875552707,3923775569,3969119145,3983994691,3985514791,3986512434,6255132812,6308070212,6404060656,6441907414,6441907415,6869890385,8286250469,8397462506,8481570498,8581295063,8650547108,8918652479,8941850074",
+    "allele": "N",
+    "snp_class": "snv",
+    "chrpos": "11:5227002",
+    "chrpos_prev_assm": "11:5248232",
+    "text": "",
+    "snp_id_sort": "0000000334",
+    "clinical_sort": "1",
+    "cited_sort": "",
+    "chrpos_sort": "0005227002",
+    "merged_sort": "0"
+  }
+}

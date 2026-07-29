@@ -1,0 +1,149 @@
+{
+  "id": "10508479",
+  "payload": {
+    "pmid": "10508479",
+    "url": "https://pubmed.ncbi.nlm.nih.gov/10508479/",
+    "summary": {
+      "uid": "10508479",
+      "pubdate": "1999 Nov 12",
+      "epubdate": "",
+      "source": "Int J Cancer",
+      "authors": [
+        {
+          "name": "Scanlan MJ",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Gordan JD",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Williamson B",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Stockert E",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Bander NH",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Jongeneel V",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Gure AO",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Jäger D",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Jäger E",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Knuth A",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Chen YT",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Old LJ",
+          "authtype": "Author",
+          "clusterid": ""
+        }
+      ],
+      "lastauthor": "Old LJ",
+      "title": "Antigens recognized by autologous antibody in patients with renal-cell carcinoma.",
+      "sorttitle": "antigens recognized by autologous antibody in patients with renal cell carcinoma",
+      "volume": "83",
+      "issue": "4",
+      "pages": "456-64",
+      "lang": [
+        "eng"
+      ],
+      "nlmuniqueid": "0042124",
+      "issn": "0020-7136",
+      "essn": "",
+      "pubtype": [
+        "Journal Article"
+      ],
+      "recordstatus": "PubMed - indexed for MEDLINE",
+      "pubstatus": "4",
+      "articleids": [
+        {
+          "idtype": "pubmed",
+          "idtypen": 1,
+          "value": "10508479"
+        },
+        {
+          "idtype": "doi",
+          "idtypen": 3,
+          "value": "10.1002/(sici)1097-0215(19991112)83:4<456::aid-ijc4>3.0.co;2-5"
+        },
+        {
+          "idtype": "pii",
+          "idtypen": 4,
+          "value": "10.1002/(SICI)1097-0215(19991112)83:4<456::AID-IJC4>3.0.CO;2-5"
+        }
+      ],
+      "history": [
+        {
+          "pubstatus": "pubmed",
+          "date": "1999/10/03 00:00"
+        },
+        {
+          "pubstatus": "medline",
+          "date": "1999/10/03 00:01"
+        },
+        {
+          "pubstatus": "entrez",
+          "date": "1999/10/03 00:00"
+        }
+      ],
+      "references": [],
+      "attributes": [
+        "Has Abstract"
+      ],
+      "pmcrefcount": "",
+      "fulljournalname": "International journal of cancer",
+      "elocationid": "",
+      "doctype": "citation",
+      "srccontriblist": [],
+      "booktitle": "",
+      "medium": "",
+      "edition": "",
+      "publisherlocation": "",
+      "publishername": "",
+      "srcdate": "",
+      "reportnumber": "",
+      "availablefromurl": "",
+      "locationlabel": "",
+      "doccontriblist": [],
+      "docdate": "",
+      "bookname": "",
+      "chapter": "",
+      "sortpubdate": "1999/11/12 00:00",
+      "sortfirstauthor": "Scanlan MJ",
+      "vernaculartitle": ""
+    },
+    "abstract": "1. Int J Cancer. 1999 Nov 12;83(4):456-64. doi: \n10.1002/(sici)1097-0215(19991112)83:4<456::aid-ijc4>3.0.co;2-5.\n\nAntigens recognized by autologous antibody in patients with renal-cell \ncarcinoma.\n\nScanlan MJ(1), Gordan JD, Williamson B, Stockert E, Bander NH, Jongeneel V, Gure \nAO, Jäger D, Jäger E, Knuth A, Chen YT, Old LJ.\n\nAuthor information:\n(1)Ludwig Institute for Cancer Research, New York Branch at Memorial \nSloan-Kettering Cancer Center, New York, New York 10021, USA. scanlanm@mskcc.org\n\nThe screening of cDNA expression libraries derived from human tumors with \nautologous antibody (SEREX) is a powerful method for defining the structure of \ntumor antigens recognized by the humoral immune system. Sixty-five distinct \nantigens (NY-REN-1 to NY-REN-65) reactive with autologous IgG were identified by \nSEREX analysis of 4 renal cancer patients and were characterized in terms of \ncDNA sequence, mRNA expression pattern, and reactivity with allogeneic sera. \nREN-9, -10, -19, and -26 have a known association with human cancer. REN-9 \n(LUCA-15) and REN-10 (gene 21) map to the small cell lung cancer tumor \nsuppressor gene locus on chromosome 3p21.3. REN-19 is equivalent to LKB1/STK11, \na gene that is defective in Peutz-Jeghers syndrome and cancer. REN-26 is encoded \nby the bcr gene involved in the [t(9:22)] bcr/abl translocation. Genes encoding \n3 of the antigens in the series showed differential mRNA expression; REN-3 \ndisplays a pattern of tissue-specific isoforms, and REN-21 and REN-43 are \nexpressed at a high level in testis in comparison to 15 other normal tissues. \nThe other 62 antigens were broadly expressed in normal tissues. With regard to \nimmunogenicity, 20 of the 65 antigens reacted only with autologous sera. \nThirty-three antigens reacted with sera from normal donors, indicating that \ntheir immunogenicity is not restricted to cancer. The remaining 12 antigens \nreacted with sera from 5-25% of the cancer patients but not with sera from \nnormal donors. Seventy percent of the renal cancer patients had antibodies \ndirected against one or more of these 12 antigens. Our results demonstrate the \npotential of the SEREX approach for the analysis of the humoral immune response \nagainst human cancer.\n\nCopyright 1999 Wiley-Liss, Inc.\n\nDOI: 10.1002/(sici)1097-0215(19991112)83:4<456::aid-ijc4>3.0.co;2-5\nPMID: 10508479 [Indexed for MEDLINE]"
+  }
+}
