@@ -181,6 +181,99 @@
   font-size: 14px;
 }
 
+/* Composer dock — one quiet, opaque working surface with controls in normal
+   document flow. Keeping the action group out of absolute positioning prevents
+   model and reasoning controls from colliding with send on narrow screens. */
+.session-prompt-dock {
+  position: absolute;
+  z-index: 50;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  justify-content: center;
+  padding: 14px 16px 16px;
+  pointer-events: none;
+}
+
+.session-prompt-dock__inner {
+  width: min(100%, 800px);
+  padding: 0 16px;
+  pointer-events: auto;
+}
+
+.workspace-composer {
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-solid);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+
+.workspace-composer:focus-within {
+  border-color: color-mix(in srgb, var(--color-text) 34%, var(--color-border));
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--color-text) 9%, transparent);
+}
+
+.workspace-composer__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 11px;
+}
+
+.workspace-composer__controls {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.workspace-composer__controls::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace-composer__controls > * {
+  flex: 0 0 auto;
+}
+
+.workspace-composer__actions {
+  position: static;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .session-prompt-dock {
+    padding: 10px 8px 12px;
+  }
+
+  .session-prompt-dock__inner {
+    padding: 0;
+  }
+
+  .workspace-composer__footer {
+    gap: 6px;
+    padding: 8px 9px 9px;
+  }
+
+  .workspace-composer__controls {
+    gap: 4px;
+  }
+
+  .workspace-composer__controls [data-component="button"],
+  .workspace-composer__controls [data-component="select"] {
+    max-width: 138px;
+  }
+
+  .workspace-composer__controls [data-component="button"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace-composer__actions {
+    gap: 5px;
+  }
+}
+
 /* The old light-mode "cream neutralisation" remap block is gone: the default
    openscience theme now ships the product's neutral greys directly, so the ui
    semantic layer needs no app-side patching (and non-default themes render
@@ -751,6 +844,42 @@ html[data-color-scheme="dark"] .atlas-agent-orbit {
   flex-grow: 0;
   overflow-y: visible;
   overflow-x: visible;
+}
+
+.session-scroller [data-slot="session-turn-sticky"] {
+  position: static;
+  width: 100%;
+  margin-left: 0;
+  padding-left: 0;
+  background: transparent;
+}
+
+.session-scroller [data-slot="session-turn-sticky"]::before,
+.session-scroller [data-slot="session-turn-sticky"]::after {
+  display: none;
+}
+
+.session-scroller [data-slot="session-turn-message-content"] {
+  width: fit-content;
+  max-width: min(84%, 680px);
+  margin-left: auto;
+}
+
+.session-scroller [data-component="user-message"] [data-slot="user-message-text"] {
+  padding: 9px 13px;
+  border-color: var(--color-border);
+  border-radius: 11px;
+  background: var(--color-bg-subtle);
+}
+
+.session-turn-divider {
+  height: 22px;
+}
+
+@media (max-width: 640px) {
+  .session-scroller [data-slot="session-turn-message-content"] {
+    max-width: 92%;
+  }
 }
 
 /* ==========================================================

@@ -49,4 +49,27 @@ describe("focused workspace shell", () => {
     expect(session).not.toContain(">New session</span> above.")
     expect(session).toContain(">New research</span> above.")
   })
+
+  test("keeps the composer calm and gives narrow screens non-overlapping controls", () => {
+    const session = read("./session.tsx")
+    const prompt = read("../components/prompt-input.tsx")
+
+    expect(session).toContain('class="session-prompt-dock"')
+    expect(session).toContain('class="session-prompt-dock__inner"')
+    expect(session).not.toContain("bg-gradient-to-t")
+    expect(prompt).toContain('"workspace-composer": true')
+    expect(prompt).toContain('class="workspace-composer__footer"')
+    expect(prompt).toContain('class="workspace-composer__controls')
+    expect(prompt).toContain('class="workspace-composer__actions')
+  })
+
+  test("lets research turns flow without sticky cards or heavy dividers", () => {
+    const session = read("./session.tsx")
+    const styles = read("../styles/atlas.css")
+
+    expect(session).toContain('class="session-turn-divider"')
+    expect(session).not.toContain('class="h-[2px] bg-border-weak-base rounded-full"')
+    expect(styles).toContain('.session-scroller [data-slot="session-turn-sticky"]')
+    expect(styles).toContain('.session-scroller [data-slot="session-turn-message-content"]')
+  })
 })

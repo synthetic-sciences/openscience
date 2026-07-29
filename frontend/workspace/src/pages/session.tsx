@@ -669,9 +669,7 @@ export default function Page(): JSX.Element {
                                   compaction row, which already draws its own "context
                                   compacted" divider (avoids a doubled rule). */}
                               <Show when={index() < turnMessages().length - 1 && !hasCompactionPart(message.id)}>
-                                <div class="w-full px-4 md:px-6 pt-2 pb-1">
-                                  <div class="h-[2px] bg-border-weak-base rounded-full" />
-                                </div>
+                                <div class="session-turn-divider" />
                               </Show>
                             </div>
                           )}
@@ -719,9 +717,8 @@ export default function Page(): JSX.Element {
                 </Match>
               </Switch>
 
-              {/* Prompt dock — gradient fade + centered PromptInput (v1.1.116) */}
-              <div class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-base via-background-base to-transparent pointer-events-none">
-                <div class="w-full px-4 pointer-events-auto md:max-w-200 md:mx-auto">
+              <div class="session-prompt-dock">
+                <div class="session-prompt-dock__inner">
                   <Show when={revertInfo()}>
                     <div
                       class="mb-3"

@@ -1778,6 +1778,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleSubmit}
         classList={{
           "group/prompt-input": true,
+          "workspace-composer": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
           "rounded-[14px] overflow-clip focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.dragging,
@@ -1946,8 +1947,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </Show>
         </div>
-        <div class="relative p-3 flex items-center justify-between">
-          <div data-slot="prompt-controls" class="flex items-center justify-start gap-2">
+        <div class="workspace-composer__footer">
+          <div data-slot="prompt-controls" class="workspace-composer__controls flex items-center justify-start gap-2">
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
@@ -2110,7 +2111,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-3 absolute right-3 bottom-3">
+          <div class="workspace-composer__actions flex items-center gap-3">
             <input
               ref={fileInputRef}
               type="file"

@@ -33,14 +33,14 @@ test("session lifecycle works through the sidebar UI", async ({ page, slug, sdk,
   try {
     await gotoSession()
 
-    const search = page.getByPlaceholder("Search sessions")
-    const sidebar = page.getByRole("complementary").filter({ has: search })
+    const newResearch = page.getByRole("button", { name: "New research", exact: true })
+    const sidebar = page.getByRole("complementary").filter({ has: newResearch })
     const rows = sidebar.locator('div[role="button"]')
     await expect(sidebar).toBeVisible()
     const baselineCount = await rows.count()
 
     const createResponsePromise = page.waitForResponse((response) => isSessionResponse(response, "POST"))
-    await sidebar.getByRole("button", { name: "New session" }).click()
+    await newResearch.click()
     const createResponse = await createResponsePromise
     expect(createResponse.ok()).toBe(true)
 
