@@ -23,9 +23,13 @@ test("turns a scientific workflow into an editable research brief", async ({ pag
   const launchpad = page.locator('[data-component="research-launchpad"]')
   await expect(launchpad).toBeVisible()
   await expect(launchpad.getByRole("heading", { name: "What are we trying to find out?" })).toBeVisible()
+  await expect(launchpad.locator(".research-launchpad__quick-action")).toHaveCount(6)
+  await expect(launchpad.getByRole("button", { name: /artifacts$/ })).toBeVisible()
+  await expect(launchpad.locator("[data-workflow]")).toHaveCount(0)
+  await expect(launchpad.locator("[data-starter]")).toHaveCount(0)
+  await launchpad.getByRole("button", { name: /Browse all workflows/ }).click()
   await expect(launchpad.locator("[data-workflow]")).toHaveCount(23)
   await expect(launchpad.locator("[data-starter]")).toHaveCount(3)
-  await expect(launchpad.getByText("Research artifacts", { exact: true })).toBeVisible()
   await expect(page.locator(".session-right-pane")).toHaveCount(0)
 
   await launchpad.locator('[data-starter="dose-response"]').click()
@@ -40,6 +44,7 @@ test("turns a scientific workflow into an editable research brief", async ({ pag
 
   await page.reload()
   await expect(launchpad).toBeVisible()
+  await launchpad.getByRole("button", { name: /Browse all workflows/ }).click()
   await launchpad.getByRole("button", { name: /Compute 7/ }).click()
   await expect(launchpad.locator("[data-workflow]")).toHaveCount(7)
   await expect(launchpad.locator('[data-workflow="protein-design"]')).toBeVisible()
@@ -51,6 +56,7 @@ test("recovers starter controls when the local server request drops", async ({ p
   await page.route("**/file/starters?**", (route) => route.abort("connectionfailed"))
   await gotoSession()
 
+  await page.getByRole("button", { name: /Browse all workflows/ }).click()
   const starter = page.locator('[data-starter="single-cell"]')
   await starter.click()
   await expect(page.getByText("starter could not be created", { exact: true })).toBeVisible()

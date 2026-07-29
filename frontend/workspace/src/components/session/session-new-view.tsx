@@ -5,7 +5,7 @@ import { useModels } from "@/context/models"
 import { useSDK } from "@/context/sdk"
 import { usePlatform } from "@/context/platform"
 import { useDialog } from "@synsci/ui/context/dialog"
-import { getDirectory, getFilename } from "@synsci/util/path"
+import { getFilename } from "@synsci/util/path"
 import { DialogSettings } from "@/components/dialog-settings"
 import { centerTabs } from "@/atlas/store/centerTabs"
 import { uiStore } from "@/atlas/store/ui"
@@ -15,9 +15,8 @@ import {
   IconArrowRight,
   IconAtom,
   IconBraces,
-  IconCheckCircle,
+  IconChevronDown,
   IconFile,
-  IconFolder,
   IconLayoutGrid,
   IconNetwork,
   IconRefresh,
@@ -33,6 +32,14 @@ import {
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
+const FEATURED_WORKFLOWS = [
+  "analyze-data",
+  "run-notebook",
+  "survey-literature",
+  "inspect-structure",
+  "reproduce-result",
+  "write-report",
+] as const
 
 interface NewSessionViewProps {
   worktree: string
@@ -62,8 +69,6 @@ export function NewSessionView(props: NewSessionViewProps) {
   const sandboxes = createMemo(() => sync.project?.sandboxes ?? [])
   const options = createMemo(() => [MAIN_WORKTREE, ...sandboxes(), CREATE_WORKTREE])
   const current = createMemo(() => (options().includes(props.worktree) ? props.worktree : MAIN_WORKTREE))
-  const projectRoot = createMemo(() => sync.project?.worktree ?? sync.data.path.directory)
-  const projectName = createMemo(() => getFilename(projectRoot()) || "research project")
   const branch = createMemo(() => sync.data.vcs?.branch || "working tree")
   const [artifacts] = createResource(
     () => sdk.directory,
@@ -75,6 +80,12 @@ export function NewSessionView(props: NewSessionViewProps) {
   )
   const [workflowGroup, setWorkflowGroup] = createSignal<ResearchWorkflow["group"] | "all">("all")
   const [creating, setCreating] = createSignal<ResearchStarter["id"]>()
+  const [catalogOpen, setCatalogOpen] = createSignal(false)
+  const featuredWorkflows = createMemo(() =>
+    FEATURED_WORKFLOWS.map((id) => researchWorkflows.find((workflow) => workflow.id === id)).filter(
+      (workflow): workflow is ResearchWorkflow => Boolean(workflow),
+    ),
+  )
   const visibleWorkflows = createMemo(() =>
     workflowGroup() === "all"
       ? researchWorkflows
@@ -129,184 +140,50 @@ export function NewSessionView(props: NewSessionViewProps) {
     <main class="atlas-scroll research-launchpad" data-component="research-launchpad">
       <div class="research-launchpad__inner">
         <section class="research-launchpad__intro" aria-labelledby="research-launchpad-title">
-          <div>
-            <div class="research-launchpad__eyebrow">Research workspace</div>
-            <h1 id="research-launchpad-title">What are we trying to find out?</h1>
-            <p>
-              Start with a concrete workflow or describe the result you need. OpenScience can inspect project files, run
-              code, edit notebooks, and keep the evidence next to the work.
-            </p>
-          </div>
-          <div class="research-launchpad__project" title={projectRoot()}>
-            <IconFolder size={15} strokeWidth={1.45} />
-            <div>
-              <strong>{projectName()}</strong>
-              <span>
-                {getDirectory(projectRoot())}
-                {projectName()}
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <section class="research-launchpad__status" aria-label="Workspace readiness">
-          <button
-            type="button"
-            class="research-launchpad__status-item"
-            data-state={noModel() ? "attention" : "ready"}
-            onClick={() => {
-              if (noModel()) dialog.show(() => <DialogSettings />)
-            }}
-          >
-            <span class="research-launchpad__status-dot" />
-            <span>
-              <strong>{noModel() ? "Connect a model" : `${models.list().length} models ready`}</strong>
-              <small>{noModel() ? "required before the first run" : "choose one in the composer"}</small>
-            </span>
-          </button>
-          <div class="research-launchpad__status-item" data-state="ready">
-            <span class="research-launchpad__status-dot" />
-            <span>
-              <strong>{local() ? "Local compute ready" : "Remote compute connected"}</strong>
-              <small>{local() ? "terminal and notebook kernels available" : sdk.url}</small>
-            </span>
-          </div>
-          <button type="button" class="research-launchpad__status-item" onClick={() => centerTabs.setActive("files")}>
-            <span class="research-launchpad__status-count">
-              <Show when={!artifacts.loading} fallback="··">
-                {(artifacts.latest?.length ?? 0).toLocaleString()}
-              </Show>
-            </span>
-            <span>
-              <strong>Research artifacts</strong>
-              <small>
-                {artifacts.error ? "scan unavailable · open Files" : "notebooks, data, figures, and models"}
-              </small>
-            </span>
-          </button>
+          <div class="research-launchpad__eyebrow">New research</div>
+          <h1 id="research-launchpad-title">What are we trying to find out?</h1>
+          <p>
+            Ask a question below or choose a starting point. OpenScience can inspect the project, run code and
+            notebooks, and keep the evidence beside the result.
+          </p>
         </section>
 
         <Show when={noModel()}>
-          <section class="research-launchpad__notice" role="status">
-            <div>
-              <strong>No model is connected yet</strong>
-              <span>
-                Add OpenAI, Anthropic, Gemini, OpenRouter, or a local model. Your project files stay on the selected
-                compute host.
-              </span>
-            </div>
-            <button type="button" onClick={() => dialog.show(() => <DialogSettings />)}>
-              open model settings
-              <IconArrowRight size={12} strokeWidth={1.7} />
-            </button>
-          </section>
+          <button type="button" class="research-launchpad__setup" onClick={() => dialog.show(() => <DialogSettings />)}>
+            <span>
+              <strong>Connect a model</strong>
+              <small>Required before the first run</small>
+            </span>
+            <IconArrowRight size={13} strokeWidth={1.7} />
+          </button>
         </Show>
 
-        <section class="research-launchpad__starters" aria-labelledby="research-starters-title">
+        <section class="research-launchpad__quick" aria-labelledby="research-quick-title">
           <div class="research-launchpad__section-heading">
             <div>
-              <h2 id="research-starters-title">Start with working science</h2>
-              <p>
-                Create a valid notebook, sample data, and a short local README in one click. No download or gateway.
-              </p>
+              <h2 id="research-quick-title">Start here</h2>
+              <p>These open as editable prompts in the composer.</p>
             </div>
-            <span class="research-launchpad__local-badge">local · reproducible</span>
+            <button type="button" class="research-launchpad__artifacts" onClick={() => centerTabs.setActive("files")}>
+              <Show when={!artifacts.loading} fallback="Scanning files">
+                {(artifacts.latest?.length ?? 0).toLocaleString()} artifacts
+              </Show>
+            </button>
           </div>
-          <div class="research-launchpad__starter-grid">
-            <For each={researchStarters}>
-              {(starter) => (
-                <button
-                  type="button"
-                  class="research-launchpad__starter"
-                  data-starter={starter.id}
-                  disabled={Boolean(creating())}
-                  onClick={() => void createStarter(starter)}
-                  style={{ "--starter-accent": starter.accent }}
-                >
-                  <span class="research-launchpad__starter-visual">
-                    <For each={Array.from({ length: 9 })}>
-                      {(_, index) => <i style={{ height: `${22 + ((index() * 31 + starter.title.length) % 65)}%` }} />}
-                    </For>
-                  </span>
-                  <span class="research-launchpad__starter-copy">
-                    <strong>{starter.title}</strong>
-                    <span>{starter.description}</span>
-                    <small>{starter.files.join(" · ")}</small>
-                  </span>
-                  <span class="research-launchpad__starter-action">
-                    {creating() === starter.id ? "creating…" : "create starter"}
-                    <IconArrowRight size={12} strokeWidth={1.7} />
-                  </span>
-                </button>
-              )}
-            </For>
-          </div>
-        </section>
-
-        <section class="research-launchpad__workflows" aria-labelledby="research-workflows-title">
-          <div class="research-launchpad__section-heading">
-            <div>
-              <h2 id="research-workflows-title">Start from a workflow</h2>
-              <p>Each one writes a detailed, editable brief into the composer.</p>
-            </div>
-            <label class="research-launchpad__worktree">
-              <span>Run on</span>
-              <select value={current()} onChange={(event) => props.onWorktreeChange(event.currentTarget.value)}>
-                <For each={options()}>{(option) => <option value={option}>{worktreeLabel(option)}</option>}</For>
-              </select>
-            </label>
-          </div>
-
-          <nav class="research-launchpad__workflow-filters" aria-label="Workflow categories">
-            <For
-              each={
-                [
-                  ["all", "All workflows"],
-                  ["analyze", "Analyze"],
-                  ["compute", "Compute"],
-                  ["discover", "Discover"],
-                  ["communicate", "Communicate"],
-                ] as const
-              }
-            >
-              {(item) => (
-                <button
-                  type="button"
-                  data-active={workflowGroup() === item[0] ? "true" : "false"}
-                  onClick={() => setWorkflowGroup(item[0])}
-                >
-                  {item[1]}
-                  <span>
-                    {item[0] === "all"
-                      ? researchWorkflows.length
-                      : researchWorkflows.filter((workflow) => workflow.group === item[0]).length}
-                  </span>
-                </button>
-              )}
-            </For>
-          </nav>
-
-          <div class="research-launchpad__grid">
-            <For each={visibleWorkflows()}>
-              {(workflow, index) => {
+          <div class="research-launchpad__quick-list">
+            <For each={featuredWorkflows()}>
+              {(workflow) => {
                 const Icon = icons[workflow.icon]
                 return (
-                  <button
-                    type="button"
-                    class="research-launchpad__workflow"
-                    data-workflow={workflow.id}
-                    data-featured={index() === 0 ? "true" : "false"}
-                    onClick={() => start(workflow)}
-                  >
-                    <span class="research-launchpad__workflow-icon">
-                      <Icon size={16} strokeWidth={1.45} />
+                  <button type="button" class="research-launchpad__quick-action" onClick={() => start(workflow)}>
+                    <span class="research-launchpad__quick-icon">
+                      <Icon size={15} strokeWidth={1.45} />
                     </span>
-                    <span class="research-launchpad__workflow-copy">
+                    <span>
                       <strong>{workflow.title}</strong>
-                      <span>{workflow.description}</span>
-                      <small>{workflow.shortcut}</small>
+                      <small>{workflow.description}</small>
                     </span>
-                    <IconArrowRight class="research-launchpad__workflow-arrow" size={13} strokeWidth={1.7} />
+                    <IconArrowRight size={13} strokeWidth={1.7} />
                   </button>
                 )
               }}
@@ -314,22 +191,143 @@ export function NewSessionView(props: NewSessionViewProps) {
           </div>
         </section>
 
+        <div class="research-launchpad__controls">
+          <button
+            type="button"
+            class="research-launchpad__catalog-toggle"
+            aria-expanded={catalogOpen() ? "true" : "false"}
+            onClick={() => setCatalogOpen((open) => !open)}
+          >
+            <span>Browse all workflows</span>
+            <small>{researchWorkflows.length + researchStarters.length}</small>
+            <IconChevronDown
+              size={13}
+              strokeWidth={1.7}
+              style={{ transform: catalogOpen() ? "rotate(180deg)" : "rotate(0deg)" }}
+            />
+          </button>
+          <label class="research-launchpad__worktree">
+            <span>Run on</span>
+            <select value={current()} onChange={(event) => props.onWorktreeChange(event.currentTarget.value)}>
+              <For each={options()}>{(option) => <option value={option}>{worktreeLabel(option)}</option>}</For>
+            </select>
+          </label>
+        </div>
+
+        <Show when={catalogOpen()}>
+          <div class="research-launchpad__catalog">
+            <section class="research-launchpad__starters" aria-labelledby="research-starters-title">
+              <div class="research-launchpad__section-heading">
+                <div>
+                  <h2 id="research-starters-title">Starter projects</h2>
+                  <p>Create a valid local notebook and sample data.</p>
+                </div>
+              </div>
+              <div class="research-launchpad__starter-list">
+                <For each={researchStarters}>
+                  {(starter) => (
+                    <button
+                      type="button"
+                      class="research-launchpad__starter"
+                      data-starter={starter.id}
+                      disabled={Boolean(creating())}
+                      onClick={() => void createStarter(starter)}
+                    >
+                      <span class="research-launchpad__starter-copy">
+                        <strong>{starter.title}</strong>
+                        <span>{starter.description}</span>
+                        <small>{starter.files.join(" · ")}</small>
+                      </span>
+                      <span class="research-launchpad__starter-action">
+                        {creating() === starter.id ? "Creating…" : "Create"}
+                        <IconArrowRight size={12} strokeWidth={1.7} />
+                      </span>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </section>
+
+            <section class="research-launchpad__workflows" aria-labelledby="research-workflows-title">
+              <div class="research-launchpad__section-heading">
+                <div>
+                  <h2 id="research-workflows-title">All workflows</h2>
+                  <p>Choose a detailed brief, then edit it before sending.</p>
+                </div>
+              </div>
+
+              <nav class="research-launchpad__workflow-filters" aria-label="Workflow categories">
+                <For
+                  each={
+                    [
+                      ["all", "All"],
+                      ["analyze", "Analyze"],
+                      ["compute", "Compute"],
+                      ["discover", "Discover"],
+                      ["communicate", "Communicate"],
+                    ] as const
+                  }
+                >
+                  {(item) => (
+                    <button
+                      type="button"
+                      data-active={workflowGroup() === item[0] ? "true" : "false"}
+                      onClick={() => setWorkflowGroup(item[0])}
+                    >
+                      {item[1]}
+                      <span>
+                        {item[0] === "all"
+                          ? researchWorkflows.length
+                          : researchWorkflows.filter((workflow) => workflow.group === item[0]).length}
+                      </span>
+                    </button>
+                  )}
+                </For>
+              </nav>
+
+              <div class="research-launchpad__grid">
+                <For each={visibleWorkflows()}>
+                  {(workflow) => {
+                    const Icon = icons[workflow.icon]
+                    return (
+                      <button
+                        type="button"
+                        class="research-launchpad__workflow"
+                        data-workflow={workflow.id}
+                        onClick={() => start(workflow)}
+                      >
+                        <span class="research-launchpad__workflow-icon">
+                          <Icon size={15} strokeWidth={1.45} />
+                        </span>
+                        <span class="research-launchpad__workflow-copy">
+                          <strong>{workflow.title}</strong>
+                          <span>{workflow.description}</span>
+                          <small>{workflow.shortcut}</small>
+                        </span>
+                        <IconArrowRight class="research-launchpad__workflow-arrow" size={13} strokeWidth={1.7} />
+                      </button>
+                    )
+                  }}
+                </For>
+              </div>
+            </section>
+          </div>
+        </Show>
+
         <footer class="research-launchpad__footer">
-          <span>
-            <IconCheckCircle size={13} strokeWidth={1.5} />
-            {branch()}
-          </span>
+          <span>{branch()}</span>
+          <span>{local() ? "Local compute" : "Remote compute"}</span>
+          <span>{models.list().length.toLocaleString()} models</span>
           <Show when={sync.project}>
             {(project) => (
               <span>
-                updated{" "}
+                Updated{" "}
                 {DateTime.fromMillis(project().time.updated ?? project().time.created)
                   .setLocale("en")
                   .toRelative()}
               </span>
             )}
           </Show>
-          <span>or describe your goal below</span>
         </footer>
       </div>
     </main>

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { researchStarters, researchWorkflows, workflowGroups, workflowPrompt } from "./research-launchpad"
+
+const view = () => readFileSync(fileURLToPath(new URL("./session-new-view.tsx", import.meta.url)), "utf8")
 
 describe("research launchpad", () => {
   test("ships launch-ready workflows across the core scientific loop", () => {
@@ -62,5 +66,16 @@ describe("research launchpad", () => {
   test("ships local-first starter projects with valid backend template ids", () => {
     expect(researchStarters.map((starter) => starter.id)).toEqual(["single-cell", "dose-response", "protein-structure"])
     expect(researchStarters.every((starter) => starter.files.length >= 2)).toBe(true)
+  })
+
+  test("keeps the first screen focused and progressively reveals the full catalog", () => {
+    const source = view()
+
+    expect(source).toContain('class="research-launchpad__quick"')
+    expect(source).toContain("Browse all workflows")
+    expect(source).toContain('aria-expanded={catalogOpen() ? "true" : "false"}')
+    expect(source).toContain("<Show when={catalogOpen()}>")
+    expect(source).not.toContain('class="research-launchpad__status"')
+    expect(source).not.toContain('class="research-launchpad__starter-visual"')
   })
 })

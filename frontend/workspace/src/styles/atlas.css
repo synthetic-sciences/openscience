@@ -1792,6 +1792,417 @@ button.research-launchpad__status-item:hover {
   }
 }
 
+/* Focused launch state. The workflow catalog stays available without turning
+   the first screen into a dashboard. */
+.research-launchpad {
+  padding: clamp(38px, 7vh, 76px) clamp(24px, 6vw, 72px) calc(var(--prompt-height, 11.25rem) + 78px);
+  background: var(--color-bg);
+}
+
+.research-launchpad__inner {
+  width: min(100%, 800px);
+  gap: 24px;
+}
+
+.research-launchpad__intro {
+  display: block;
+}
+
+.research-launchpad__intro h1 {
+  max-width: 660px;
+  font-size: clamp(34px, 4.5vw, 48px);
+  line-height: 1.04;
+}
+
+.research-launchpad__intro p {
+  max-width: 620px;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.research-launchpad__setup {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 28%, var(--color-border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--color-warning-muted) 34%, transparent);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.research-launchpad__setup > span {
+  display: grid;
+  gap: 2px;
+}
+
+.research-launchpad__setup strong {
+  font-family: var(--font-family-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.research-launchpad__setup small {
+  font-family: var(--font-family-sans);
+  font-size: 10px;
+  color: var(--color-text-faint);
+}
+
+.research-launchpad__quick {
+  display: grid;
+  gap: 12px;
+}
+
+.research-launchpad__section-heading {
+  align-items: end;
+}
+
+.research-launchpad__section-heading h2 {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.research-launchpad__section-heading p {
+  margin-top: 2px;
+  font-size: 10px;
+}
+
+.research-launchpad__artifacts {
+  all: unset;
+  box-sizing: border-box;
+  font-family: var(--font-family-mono);
+  font-size: 9px;
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+
+.research-launchpad__artifacts:hover {
+  color: var(--color-text);
+}
+
+.research-launchpad__quick-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--color-border);
+}
+
+.research-launchpad__quick-action {
+  all: unset;
+  box-sizing: border-box;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.research-launchpad__quick-action:nth-child(odd) {
+  border-right: 1px solid var(--color-border);
+}
+
+.research-launchpad__quick-action:hover {
+  background: var(--color-bg-subtle);
+}
+
+.research-launchpad__quick-icon {
+  width: 27px;
+  height: 27px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+}
+
+.research-launchpad__quick-action > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.research-launchpad__quick-action strong {
+  overflow: hidden;
+  font-family: var(--font-family-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.research-launchpad__quick-action small {
+  overflow: hidden;
+  font-family: var(--font-family-sans);
+  font-size: 9px;
+  color: var(--color-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.research-launchpad__quick-action > svg {
+  color: var(--color-text-faint);
+  transition: transform 140ms ease;
+}
+
+.research-launchpad__quick-action:hover > svg {
+  transform: translateX(2px);
+}
+
+.research-launchpad__controls {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.research-launchpad__catalog-toggle {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 2px;
+  font-family: var(--font-family-sans);
+  font-size: 10px;
+  font-weight: 550;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.research-launchpad__catalog-toggle:hover {
+  color: var(--color-text);
+}
+
+.research-launchpad__catalog-toggle small {
+  font-family: var(--font-family-mono);
+  font-size: 8px;
+  color: var(--color-text-faint);
+}
+
+.research-launchpad__catalog-toggle svg {
+  transition: transform 160ms ease;
+}
+
+.research-launchpad__worktree {
+  padding-right: 2px;
+}
+
+.research-launchpad__worktree select {
+  max-width: 180px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.research-launchpad__worktree select:hover {
+  border-color: var(--color-border);
+  background: var(--color-bg-subtle);
+}
+
+.research-launchpad__catalog {
+  display: grid;
+  gap: 32px;
+  padding-top: 4px;
+}
+
+.research-launchpad__starters,
+.research-launchpad__workflows {
+  gap: 12px;
+}
+
+.research-launchpad__starter-list {
+  display: grid;
+  border-top: 1px solid var(--color-border);
+}
+
+.research-launchpad__starter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  transition: background 140ms ease;
+}
+
+.research-launchpad__starter:hover {
+  transform: none;
+  border-color: var(--color-border);
+  background: var(--color-bg-subtle);
+  box-shadow: none;
+}
+
+.research-launchpad__starter-copy {
+  padding: 0;
+  gap: 3px;
+}
+
+.research-launchpad__starter-copy strong {
+  font-size: 11px;
+}
+
+.research-launchpad__starter-copy > span {
+  font-size: 10px;
+}
+
+.research-launchpad__starter-copy small {
+  font-size: 8px;
+}
+
+.research-launchpad__starter-action {
+  justify-content: flex-start;
+  padding: 0;
+  border: 0;
+  color: var(--color-text-muted);
+}
+
+.research-launchpad__workflow-filters {
+  gap: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.research-launchpad__workflow-filters button {
+  gap: 5px;
+  padding: 7px 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+}
+
+.research-launchpad__workflow-filters button:hover {
+  border-color: transparent;
+}
+
+.research-launchpad__workflow-filters button[data-active="true"] {
+  border-color: var(--color-text-muted);
+  background: transparent;
+  color: var(--color-text);
+}
+
+.research-launchpad__workflow-filters button span {
+  min-width: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.research-launchpad__grid {
+  gap: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.research-launchpad__workflow {
+  gap: 10px;
+  padding: 12px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  transition: background 140ms ease;
+}
+
+.research-launchpad__workflow:nth-child(odd) {
+  border-right: 1px solid var(--color-border);
+}
+
+.research-launchpad__workflow:hover {
+  transform: none;
+  border-color: var(--color-border);
+  background: var(--color-bg-subtle);
+  box-shadow: none;
+}
+
+.research-launchpad__workflow-icon {
+  width: 27px;
+  height: 27px;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.research-launchpad__workflow-copy {
+  gap: 3px;
+}
+
+.research-launchpad__workflow-copy strong {
+  font-size: 11px;
+}
+
+.research-launchpad__workflow-copy > span {
+  font-size: 10px;
+}
+
+.research-launchpad__workflow-copy small {
+  display: none;
+}
+
+.research-launchpad__footer {
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding-top: 0;
+  font-size: 8px;
+}
+
+@media (max-width: 640px) {
+  .research-launchpad {
+    padding: 30px 16px calc(var(--prompt-height, 11.25rem) + 72px);
+  }
+
+  .research-launchpad__inner {
+    gap: 21px;
+  }
+
+  .research-launchpad__intro h1 {
+    font-size: 32px;
+  }
+
+  .research-launchpad__quick-list,
+  .research-launchpad__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .research-launchpad__quick-action:nth-child(odd),
+  .research-launchpad__workflow:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .research-launchpad__controls {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0;
+    padding-bottom: 8px;
+  }
+
+  .research-launchpad__worktree {
+    padding-bottom: 2px;
+  }
+
+  .research-launchpad__footer {
+    flex-direction: row;
+  }
+}
+
 /* ==========================================================
    Compact workspace shell
 
