@@ -1214,13 +1214,13 @@ Create `backend/cli/test/science/connector-ratelimit.test.ts`:
 
 ```ts
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { readFileSync } from "fs"
-import path from "path"
 import { clearCache, resetRateLimits } from "../../src/science/connectors/http"
 import { semanticScholar } from "../../src/science/connectors/literature/semantic-scholar"
+import { dbsnp } from "../../src/science/connectors/genomics/dbsnp"
+import { pubmed } from "../../src/science/connectors/literature/pubmed"
+import { geo } from "../../src/science/connectors/omics/geo"
 
 const realFetch = globalThis.fetch
-const root = path.join(__dirname, "../../src/science/connectors")
 
 beforeEach(() => {
   clearCache()
@@ -1233,22 +1233,34 @@ afterEach(() => {
 
 // science_fetch makes back-to-back record retrieval an ordinary action, and a
 // second full pass over the connector set trips Semantic Scholar's keyless
-// limiter. These sources must declare a pace.
+// limiter. These assertions are on observed pacing, not on source text: the
+// rateLimit option is consumed inside http.ts and never reaches globalThis.fetch,
+// so the only honest way to test it is to measure the delay it imposes.
+//
+// Every call below uses a DISTINCT id. The http cache is keyed by `${method} ${url}`
+// (http.ts:164), so identical ids would be served from cache and never paced.
 describe("rate limits on the hosts that need them", () => {
-  test("semantic-scholar passes a rateLimit to the http layer", async () => {
-    let opts: unknown
-    globalThis.fetch = (async (_url: string, init: unknown) => {
-      opts = init
-      return new Response(JSON.stringify({ paperId: "x", title: "t" }), { status: 200 })
-    }) as unknown as typeof fetch
-    await semanticScholar.fetch("649def34f8be52c8b66281af98ae884c09aef38b")
-    expect(opts).toBeDefined()
-    expect(readFileSync(path.join(root, "literature/semantic-scholar.ts"), "utf8")).toContain("rateLimit")
+  test("semantic-scholar paces successive requests about a second apart", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ paperId: "x", title: "t" }), { status: 200 })) as unknown as typeof fetch
+    const started = Date.now()
+    await semanticScholar.fetch("1111111111111111111111111111111111111111")
+    await semanticScholar.fetch("2222222222222222222222222222222222222222")
+    expect(Date.now() - started).toBeGreaterThanOrEqual(900)
   })
 
-  test("all three eutils consumers declare a pace for the shared host", () => {
-    for (const f of ["genomics/eutils.ts", "literature/pubmed.ts", "omics/geo.ts"])
-      expect(readFileSync(path.join(root, f), "utf8")).toContain("rateLimit")
+  test("the shared eutils host is paced across all three of its consumers", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ result: { uids: [] } }), { status: 200 })) as unknown as typeof fetch
+    const started = Date.now()
+    // Three DIFFERENT connectors hitting one server. This is the whole reason
+    // pacing is per-host rather than per-connector: pacing only some of them
+    // would leave eutils.ncbi.nlm.nih.gov unpaced.
+    await dbsnp.fetch("rs334")
+    await pubmed.fetch("10508479")
+    await geo.fetch("GSE1000")
+    // Two gaps at 350ms each.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(700)
   })
 })
 ```
@@ -1365,14 +1377,30 @@ describe("connector fetch conformance", () => {
     test(`${c.id} resolves and classifies`, async () => {
       globalThis.fetch = (async () =>
         new Response(JSON.stringify({ id: "x", title: "t" }), { status: 200 })) as unknown as typeof fetch
-      // arxiv is the documented exception: it rejects a non-Atom body by design.
-      if (c.id === "arxiv") return
+      // A connector that rejects is not a failure of this contract — science_fetch
+      // catches and classifies. `.catch` turns it into undefined, which sentinelOf
+      // reads as a miss. arxiv is the one connector that takes this path by design.
       const payload = await c.fetch("TEST123").catch(() => undefined)
       const outcome = outcomeFor({ db: c.id, id: "TEST123", payload })
       expect(["record", "file", "miss", "error"]).toContain(outcome.kind)
     })
   }
+
+  // Assert arxiv's documented contract explicitly rather than exempting it above.
+  test("arxiv rejects a non-Atom body instead of returning a bogus record", async () => {
+    globalThis.fetch = (async () =>
+      new Response("<html><body>503 Service Temporarily Unavailable</body></html>", {
+        status: 200,
+      })) as unknown as typeof fetch
+    await expect(arxiv.fetch("1706.03762")).rejects.toThrow(/non-Atom/)
+  })
 })
+```
+
+Add `arxiv` to the imports at the top of the file:
+
+```ts
+import { arxiv } from "../../src/science/connectors/literature/arxiv"
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1381,7 +1409,7 @@ describe("connector fetch conformance", () => {
 cd backend/cli && bun test test/science/connector-fetch.test.ts
 ```
 
-Expected: FAIL on the count assertion if any connector failed to register, otherwise PASS for the loop. If it passes immediately, that is acceptable — this test is a regression net, and the recorder in Step 3 is the discovery mechanism.
+Expected: FAIL. The `arxiv` import does not resolve until you add it, and the arxiv contract test fails without it. If the whole file passes on the first run, stop — you have written a test that cannot fail, and the red-first step exists precisely to catch that.
 
 - [ ] **Step 3: Write the recorder**
 
