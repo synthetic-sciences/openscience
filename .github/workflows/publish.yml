@@ -156,8 +156,8 @@ jobs:
 
       - name: Setup git committer
         run: |
-          git config user.email "openscience@syntheticsciences.dev"
-          git config user.name "openscience"
+          git config user.email "aayambansal@gmail.com"
+          git config user.name "Aayam Bansal"
 
       - name: Restore CLI build
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
