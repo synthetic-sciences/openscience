@@ -23,7 +23,6 @@ describe("installStaleBuildRecovery", () => {
       target,
       storage,
       reload: () => reloads++,
-      now: () => 1_000,
     })
 
     const event = preloadError()
@@ -42,7 +41,6 @@ describe("installStaleBuildRecovery", () => {
       target: firstTarget,
       storage,
       reload: () => reloads++,
-      now: () => 1_000,
     })
     firstTarget.dispatchEvent(preloadError())
     cleanup()
@@ -52,7 +50,6 @@ describe("installStaleBuildRecovery", () => {
       target: reloadedTarget,
       storage,
       reload: () => reloads++,
-      now: () => 1_001,
     })
 
     const repeatedError = preloadError()
@@ -62,27 +59,24 @@ describe("installStaleBuildRecovery", () => {
     expect(reloads).toBe(1)
   })
 
-  test("allows another recovery after the cooldown", () => {
+  test("never automatically reloads the same tab more than once", () => {
     const target = new EventTarget()
     const storage = memoryStorage()
     let reloads = 0
-    let now = 1_000
 
     installStaleBuildRecovery({
       target,
       storage,
       reload: () => reloads++,
-      now: () => now,
-      cooldownMs: 30_000,
     })
 
     target.dispatchEvent(preloadError())
-    now += 30_000
+    storage.setItem("openscience.stale-build.reload-at", "0")
     const laterError = preloadError()
     target.dispatchEvent(laterError)
 
-    expect(laterError.defaultPrevented).toBe(true)
-    expect(reloads).toBe(2)
+    expect(laterError.defaultPrevented).toBe(false)
+    expect(reloads).toBe(1)
   })
 
   test("does not reload when the durable loop guard is unavailable", () => {
