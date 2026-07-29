@@ -109,11 +109,12 @@ describe("science_list_dbs reports formats", () => {
       directory: dir,
       fn: async () => (await ScienceListDbsTool.init()).execute({ domain: "chemistry" }, ctx),
     })
-    expect(out.output).toContain("chembl")
-    expect(out.output).not.toContain("chembl** (ChEMBL) — formats:")
+    const row = out.output.split("\n").find((l) => l.includes("chembl"))
+    expect(row).toBeDefined()
+    expect(row).not.toContain("· formats:")
   })
 
-  test("the catalog carries formats when a connector declares them", async () => {
+  test("the catalog projection preserves the formats key", async () => {
     const { registry } = await import("../../src/science/connectors")
     const entry = registry.catalog().find((e) => e.id === "rcsb-pdb")
     expect(entry).toBeDefined()
