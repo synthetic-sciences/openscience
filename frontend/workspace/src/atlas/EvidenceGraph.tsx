@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, type JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, createResource, createSignal, on, type JSX } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { usePlatform } from "@/context/platform"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
@@ -64,7 +64,7 @@ const colors: Record<Kind, string> = {
   claim: "#9c6ade",
 }
 
-export function EvidenceGraph(): JSX.Element {
+export function EvidenceGraph(props: { active: boolean }): JSX.Element {
   const sdk = useSDK()
   const platform = usePlatform()
   const fetchFn = platform.fetch ?? fetch
@@ -73,18 +73,23 @@ export function EvidenceGraph(): JSX.Element {
     url.searchParams.set("directory", sdk.directory)
     return url.toString()
   }
+  const [latest, setLatest] = createSignal<Graph>()
   const load = async () => {
     const response = await fetchFn(endpoint())
     if (!response.ok) throw new Error(await response.text())
-    return (await response.json()) as Graph
+    const value = (await response.json()) as Graph
+    setLatest(value)
+    return value
   }
   const [graph, graphApi] = createResource(() => sdk.directory, load)
+  const data = createMemo(() => latest() ?? (graph.error ? undefined : graph()))
+  const refresh = () => Promise.resolve(graphApi.refetch()).catch(() => undefined)
   const [query, setQuery] = createSignal("")
   const [filter, setFilter] = createSignal<Filter>("all")
   const [selected, setSelected] = createSignal<string>()
   const nodes = createMemo(() => {
     const value = query().trim().toLowerCase()
-    return (graph()?.nodes ?? [])
+    return (data()?.nodes ?? [])
       .filter((node) => filter() === "all" || node.kind === filter() || (filter() === "review" && node.meta?.review))
       .filter(
         (node) =>
@@ -95,9 +100,9 @@ export function EvidenceGraph(): JSX.Element {
       )
       .toSorted((a, b) => Date.parse(b.recordedAt) - Date.parse(a.recordedAt))
   })
-  const current = createMemo(() => graph()?.nodes.find((node) => node.id === selected()))
+  const current = createMemo(() => data()?.nodes.find((node) => node.id === selected()))
   const related = createMemo(() =>
-    (graph()?.edges ?? []).filter((edge) => edge.from === selected() || edge.to === selected()),
+    (data()?.edges ?? []).filter((edge) => edge.from === selected() || edge.to === selected()),
   )
   const positions = createMemo(() => layout(nodes().slice(0, 48)))
 
@@ -110,8 +115,15 @@ export function EvidenceGraph(): JSX.Element {
     if (!selected() || !list.some((node) => node.id === selected())) setSelected(list[0].id)
   })
 
-  const timer = setInterval(() => void graphApi.refetch(), 2_500)
-  onCleanup(() => clearInterval(timer))
+  createEffect(
+    on(
+      () => props.active,
+      (active, previous) => {
+        if (!active || previous !== false || graph.loading) return
+        void refresh()
+      },
+    ),
+  )
 
   const exportAudit = async () => {
     const response = await fetchFn(endpoint("/export"))
@@ -142,7 +154,7 @@ export function EvidenceGraph(): JSX.Element {
           <div style={{ display: "flex", "flex-direction": "column", "min-width": 0 }}>
             <span style={title}>evidence & lineage</span>
             <span style={subtitle}>
-              {graph()?.summary.total ?? 0} nodes · {graph()?.summary.edges ?? 0} links
+              {data()?.summary.total ?? 0} nodes · {data()?.summary.edges ?? 0} links
             </span>
           </div>
         </div>
@@ -150,7 +162,7 @@ export function EvidenceGraph(): JSX.Element {
           <Action title="export audit" onClick={() => void exportAudit()}>
             <IconDownload size={12} />
           </Action>
-          <Action title="refresh evidence" onClick={() => void graphApi.refetch()}>
+          <Action title="refresh evidence" onClick={() => void refresh()}>
             <IconRefresh size={12} />
           </Action>
         </div>
@@ -158,12 +170,19 @@ export function EvidenceGraph(): JSX.Element {
 
       <Show when={graph.error}>
         <div role="alert" style={errorBox}>
-          Evidence is unavailable. {graph.error instanceof Error ? graph.error.message : String(graph.error)}
+          <span>
+            {data()
+              ? "Evidence could not refresh. The last available lineage is still shown."
+              : "Evidence is unavailable."}
+          </span>
+          <button type="button" style={primaryButton} onClick={() => void refresh()}>
+            retry
+          </button>
         </div>
       </Show>
 
       <Show
-        when={(graph()?.nodes.length ?? 0) > 0}
+        when={(data()?.nodes.length ?? 0) > 0}
         fallback={
           <div style={empty}>
             <span style={emptyMark}>
@@ -180,17 +199,17 @@ export function EvidenceGraph(): JSX.Element {
         }
       >
         <section style={scoreRow} aria-label="Evidence summary">
-          <Score label="sources" value={graph()?.summary.kinds.source ?? 0} color={colors.source} />
-          <Score label="runs" value={graph()?.summary.kinds.run ?? 0} color={colors.run} />
-          <Score label="artifacts" value={graph()?.summary.kinds.artifact ?? 0} color={colors.artifact} />
-          <Score label="claims" value={graph()?.summary.kinds.claim ?? 0} color={colors.claim} />
+          <Score label="sources" value={data()?.summary.kinds.source ?? 0} color={colors.source} />
+          <Score label="runs" value={data()?.summary.kinds.run ?? 0} color={colors.run} />
+          <Score label="artifacts" value={data()?.summary.kinds.artifact ?? 0} color={colors.artifact} />
+          <Score label="claims" value={data()?.summary.kinds.claim ?? 0} color={colors.claim} />
         </section>
 
-        <Show when={(graph()?.summary.reviews.blocking ?? 0) + (graph()?.summary.reviews.major ?? 0) > 0}>
+        <Show when={(data()?.summary.reviews.blocking ?? 0) + (data()?.summary.reviews.major ?? 0) > 0}>
           <div style={warning}>
             <IconAlertCircle size={12} />
             <span>
-              {graph()?.summary.reviews.blocking ?? 0} blocking · {graph()?.summary.reviews.major ?? 0} major findings
+              {data()?.summary.reviews.blocking ?? 0} blocking · {data()?.summary.reviews.major ?? 0} major findings
             </span>
           </div>
         </Show>
@@ -235,7 +254,7 @@ export function EvidenceGraph(): JSX.Element {
             aria-label="Evidence lineage graph"
             style={{ width: "100%", height: "188px" }}
           >
-            <For each={(graph()?.edges ?? []).filter((edge) => positions().has(edge.from) && positions().has(edge.to))}>
+            <For each={(data()?.edges ?? []).filter((edge) => positions().has(edge.from) && positions().has(edge.to))}>
               {(edge) => {
                 const from = () => positions().get(edge.from)!
                 const to = () => positions().get(edge.to)!
@@ -297,7 +316,7 @@ export function EvidenceGraph(): JSX.Element {
                   <span style={{ display: "flex", "flex-direction": "column", gap: "2px", flex: 1, "min-width": 0 }}>
                     <strong>{node.label}</strong>
                     <small>
-                      {node.kind} · {status(node, graph()?.edges ?? [])}
+                      {node.kind} · {status(node, data()?.edges ?? [])}
                     </small>
                   </span>
                 </button>
@@ -318,7 +337,7 @@ export function EvidenceGraph(): JSX.Element {
                       {node().kind} · {node().id}
                     </small>
                   </span>
-                  <State node={node()} edges={graph()?.edges ?? []} />
+                  <State node={node()} edges={data()?.edges ?? []} />
                 </div>
                 <Show when={node().path}>
                   <div style={property}>
@@ -349,7 +368,7 @@ export function EvidenceGraph(): JSX.Element {
                   <For each={related()}>
                     {(edge) => {
                       const other = () =>
-                        graph()?.nodes.find((item) => item.id === (edge.from === node().id ? edge.to : edge.from))
+                        data()?.nodes.find((item) => item.id === (edge.from === node().id ? edge.to : edge.from))
                       return (
                         <button
                           type="button"

@@ -1,4 +1,4 @@
-import { createSignal, createMemo, createEffect, onCleanup, onMount, type JSX, For, Show } from "solid-js"
+import { createSignal, createMemo, createEffect, onCleanup, onMount, type JSX, For, Show, Suspense } from "solid-js"
 import { FONT_MONO, FONT_SANS, sectionTitle } from "@/styles/tokens"
 import { useSDK } from "@/context/sdk"
 import { useDialog } from "@synsci/ui/context/dialog"
@@ -12,6 +12,7 @@ import { EvidenceGraph } from "@/atlas/EvidenceGraph"
 import { artifactContext } from "@/artifacts/context"
 import { ArtifactInspector } from "@/artifacts/ArtifactInspector"
 import { toast } from "@/atlas/Toast"
+import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
 import {
   IconAtom,
   IconLayoutGrid,
@@ -296,7 +297,9 @@ export function RightPane(): JSX.Element {
                 <ComputeJobs />
               </KeepAlive>
               <KeepAlive show={tab() === "evidence"} mounted={visited().has("evidence")}>
-                <EvidenceGraph />
+                <Suspense fallback={<EvidenceLoading />}>
+                  <EvidenceGraph active={tab() === "evidence"} />
+                </Suspense>
               </KeepAlive>
               <KeepAlive show={tab() === "terminal"} mounted={visited().has("terminal")}>
                 <TerminalTab />
@@ -606,6 +609,17 @@ function KeepAlive(props: { show: boolean; mounted: boolean; children: JSX.Eleme
         {props.children}
       </div>
     </Show>
+  )
+}
+
+function EvidenceLoading(): JSX.Element {
+  return (
+    <div
+      data-component="evidence-loading"
+      style={{ flex: 1, display: "flex", "align-items": "center", "justify-content": "center" }}
+    >
+      <AsciiSpinner size={10} label="loading evidence…" color="var(--color-text-faint)" />
+    </div>
   )
 }
 
