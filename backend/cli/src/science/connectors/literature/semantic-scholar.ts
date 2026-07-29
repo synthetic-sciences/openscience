@@ -13,6 +13,11 @@ import { raw, snippet } from "./shared"
 const BASE = "https://api.semanticscholar.org/graph/v1/paper"
 const FIELDS = "title,abstract,url,year,venue,citationCount,externalIds,authors.name"
 
+// Keyless Semantic Scholar throttles hard — a second pass over the connector
+// set returned HTTP 429. With an API key the ceiling is far higher, but pacing
+// costs nothing when one is set.
+const RATE_LIMIT = { minIntervalMs: 1000 }
+
 // Optional Semantic Scholar API key — set in settings ▸ Credentials → "Literature
 // access" (injected as SEMANTIC_SCHOLAR_API_KEY by the credential store). It lifts
 // the shared, key-free 429 rate limit. Read at call time so a key saved
@@ -72,7 +77,7 @@ export const semanticScholar: Connector = {
     const limit = Math.min(opts?.limit ?? 10, 50)
     const data = await getJSON<SearchResponse>(
       `${BASE}/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=${FIELDS}`,
-      { signal: opts?.signal, headers: apiHeaders() },
+      { signal: opts?.signal, headers: apiHeaders(), rateLimit: RATE_LIMIT },
     )
     return (data.data ?? []).map(toHit)
   },
@@ -83,6 +88,7 @@ export const semanticScholar: Connector = {
     const data = await getJSON<Paper>(`${BASE}/${id.trim()}?fields=${FIELDS},references.title,citations.title`, {
       signal: opts?.signal,
       headers: apiHeaders(),
+      rateLimit: RATE_LIMIT,
     })
     return data ?? null
   },

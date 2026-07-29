@@ -14,6 +14,10 @@ import { getJSON, orFallback } from "../http"
 
 const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
+// NCBI allows ~3 requests/second without an API key, counted per host across
+// every eutils consumer (this module, literature/pubmed.ts, omics/geo.ts).
+const RATE_LIMIT = { minIntervalMs: 350 }
+
 interface ESearchResult {
   esearchresult?: {
     count?: string
@@ -58,7 +62,10 @@ function toHit(uid: string, s: GeoSummary | undefined): ConnectorHit {
 
 async function summaries(ids: string[], signal?: AbortSignal): Promise<ESummaryResult> {
   if (ids.length === 0) return {}
-  return getJSON<ESummaryResult>(`${EUTILS}/esummary.fcgi?db=gds&id=${ids.join(",")}&retmode=json`, { signal })
+  return getJSON<ESummaryResult>(`${EUTILS}/esummary.fcgi?db=gds&id=${ids.join(",")}&retmode=json`, {
+    signal,
+    rateLimit: RATE_LIMIT,
+  })
 }
 
 export const geo: Connector = {
@@ -73,7 +80,7 @@ export const geo: Connector = {
     const search = await orFallback(
       getJSON<ESearchResult>(
         `${EUTILS}/esearch.fcgi?db=gds&term=${encodeURIComponent(query)}&retmode=json&retmax=${limit}`,
-        { signal: opts?.signal },
+        { signal: opts?.signal, rateLimit: RATE_LIMIT },
       ),
       {} as ESearchResult,
       opts?.signal,
@@ -92,7 +99,7 @@ export const geo: Connector = {
       const search = await orFallback(
         getJSON<ESearchResult>(
           `${EUTILS}/esearch.fcgi?db=gds&term=${encodeURIComponent(trimmed)}[ACCN]&retmode=json&retmax=20`,
-          { signal: opts?.signal },
+          { signal: opts?.signal, rateLimit: RATE_LIMIT },
         ),
         {} as ESearchResult,
         opts?.signal,

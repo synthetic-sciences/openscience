@@ -11,6 +11,10 @@ import { arr, asRecord, type Rec } from "./util"
 const BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 const TOOL = "openscience-science"
 
+// NCBI allows ~3 requests/second without an API key, counted per host across
+// every eutils consumer (this module, literature/pubmed.ts, omics/geo.ts).
+const RATE_LIMIT = { minIntervalMs: 350 }
+
 interface ESearchEnvelope {
   esearchresult?: { idlist?: unknown; count?: string }
 }
@@ -24,7 +28,7 @@ export async function esearch(db: string, term: string, retmax: number, signal?:
   const url =
     `${BASE}/esearch.fcgi?db=${encodeURIComponent(db)}` +
     `&term=${encodeURIComponent(term)}&retmode=json&retmax=${retmax}&tool=${TOOL}`
-  const data = await getJSON<ESearchEnvelope>(url, { signal })
+  const data = await getJSON<ESearchEnvelope>(url, { signal, rateLimit: RATE_LIMIT })
   return arr(data.esearchresult?.idlist)
     .map((id) => (typeof id === "string" ? id : String(id)))
     .filter((id) => id.length > 0)
@@ -36,7 +40,7 @@ export async function esummary(db: string, ids: string[], signal?: AbortSignal):
   const url =
     `${BASE}/esummary.fcgi?db=${encodeURIComponent(db)}` +
     `&id=${ids.map(encodeURIComponent).join(",")}&retmode=json&tool=${TOOL}`
-  const data = await getJSON<ESummaryEnvelope>(url, { signal })
+  const data = await getJSON<ESummaryEnvelope>(url, { signal, rateLimit: RATE_LIMIT })
   const result = data.result
   if (!result) return []
   const uids = arr(result["uids"]).map((u) => (typeof u === "string" ? u : String(u)))
