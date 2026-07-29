@@ -20,8 +20,8 @@ const ctx = {
 const realFetch = globalThis.fetch
 let dir = ""
 
-function stub(body: string, status = 200) {
-  globalThis.fetch = (async () => new Response(body, { status })) as unknown as typeof fetch
+function stub(body: string, status = 200, headers?: Record<string, string>) {
+  globalThis.fetch = (async () => new Response(body, { status, headers })) as unknown as typeof fetch
 }
 
 beforeEach(async () => {
@@ -87,7 +87,10 @@ describe("science_fetch degradation", () => {
   })
 
   test("a 429 is reported as rate_limited and never thrown", async () => {
-    stub("rate limited", 429)
+    // Retry-After: 0 collapses http.ts's exponential backoff so this test
+    // doesn't spend several real seconds sleeping through retries — matches
+    // the stub in test/science/science-tool.test.ts:90.
+    stub("rate limited", 429, { "Retry-After": "0" })
     const out = await run({ db: "chembl", id: "CHEMBL25" })
     expect(out.metadata.error).toBe("rate_limited")
     expect(out.output).toMatch(/retry/i)
