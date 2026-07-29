@@ -183,9 +183,9 @@ export function ManuscriptWorkbench(props: {
     toast.success("figure inserted", figure.path)
   }
   const openReview = () => {
+    uiStore.setArtifactPaneTab("review")
     uiStore.setRightPaneMode("artifact")
     uiStore.setRightPaneOpen(true)
-    requestAnimationFrame(() => document.getElementById("artifact-inspector-tab-review")?.click())
     setReviewKey((value) => value + 1)
     void reviewApi.refetch()
   }

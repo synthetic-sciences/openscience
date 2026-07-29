@@ -819,7 +819,6 @@ export default function Page(): JSX.Element {
                       directory={doc.directory}
                       active={centerTabs.active() === doc.id}
                       subtitle={`This computer · ${doc.directory.replace(/\/$/, "")}/${doc.path}`}
-                      onClose={() => centerTabs.closeDoc(doc.id)}
                     />
                   </Suspense>
                 </div>

@@ -3,7 +3,6 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { centerTabs } from "@/atlas/store/centerTabs"
-import { ArtifactGallery } from "@/artifacts/ArtifactGallery"
 import {
   IconFolder,
   IconFile,
@@ -15,7 +14,6 @@ import {
   IconLayoutGrid,
   IconHome,
   IconCpu,
-  IconArchive,
 } from "@/atlas/shared/Icon"
 
 interface FileNode {
@@ -118,8 +116,7 @@ function ListGlyph(props: { size?: number }): JSX.Element {
  * Host file explorer. Navigates real directories via sdk.client.file.list
  * (the `directory` query param re-roots the backend Instance, so any absolute
  * path is browsable). Clicking a folder navigates in; clicking a file opens a
- * center-pane document tab. An "artifacts" toggle swaps in the project's
- * Atlas artifacts instead of the host filesystem.
+ * center-pane document tab.
  */
 export function FileExplorer(): JSX.Element {
   const sdk = useSDK()
@@ -147,7 +144,6 @@ export function FileExplorer(): JSX.Element {
   }
   onCleanup(() => clearTimeout(filterTimer))
   const [view, setView] = createSignal<"list" | "grid">("list")
-  const [mode, setMode] = createSignal<"host" | "artifacts">("host")
   const [pathDraft, setPathDraft] = createSignal(cwd())
   const [refreshKey, setRefreshKey] = createSignal(0)
   const [machineMenu, setMachineMenu] = createSignal(false)
@@ -176,9 +172,8 @@ export function FileExplorer(): JSX.Element {
   const goUp = () => navigate(parentOf(cwd()))
 
   const [entries] = createResource(
-    () => [cwd(), refreshKey(), mode()] as const,
-    async ([dir, , m]) => {
-      if (m !== "host") return [] as FileNode[]
+    () => [cwd(), refreshKey()] as const,
+    async ([dir]) => {
       setPermissionError(null)
       if (!dir) return [] as FileNode[]
       try {
@@ -289,191 +284,172 @@ export function FileExplorer(): JSX.Element {
 
         <span style={{ flex: 1 }} />
 
-        {/* host / artifacts pill toggle */}
+        {/* list / grid pill toggle */}
         <div style={pill()}>
-          <button type="button" style={pillBtn(mode() === "host")} onClick={() => setMode("host")}>
-            <IconFolder size={11} strokeWidth={1.6} />
-            files
+          <button type="button" title="list" style={pillBtn(view() === "list")} onClick={() => setView("list")}>
+            <ListGlyph size={12} />
           </button>
-          <button type="button" style={pillBtn(mode() === "artifacts")} onClick={() => setMode("artifacts")}>
-            <IconArchive size={11} strokeWidth={1.6} />
-            artifacts
+          <button type="button" title="grid" style={pillBtn(view() === "grid")} onClick={() => setView("grid")}>
+            <IconLayoutGrid size={12} strokeWidth={1.6} />
           </button>
         </div>
-
-        {/* list / grid pill toggle */}
-        <Show when={mode() === "host"}>
-          <div style={pill()}>
-            <button type="button" title="list" style={pillBtn(view() === "list")} onClick={() => setView("list")}>
-              <ListGlyph size={12} />
-            </button>
-            <button type="button" title="grid" style={pillBtn(view() === "grid")} onClick={() => setView("grid")}>
-              <IconLayoutGrid size={12} strokeWidth={1.6} />
-            </button>
-          </div>
-        </Show>
       </div>
 
-      <Show
-        when={mode() === "host"}
-        fallback={<ArtifactGallery directory={cwd()} onOpen={(path) => centerTabs.openFile(cwd(), path)} />}
+      {/* toolbar row 2: back / up / path bar / refresh */}
+      <div
+        style={{
+          display: "flex",
+          "align-items": "center",
+          gap: "6px",
+          padding: "8px 12px",
+          "border-bottom": "1px solid var(--color-border)",
+          "flex-shrink": 0,
+        }}
       >
-        {/* toolbar row 2: back / up / path bar / refresh */}
-        <div
-          style={{
-            display: "flex",
-            "align-items": "center",
-            gap: "6px",
-            padding: "8px 12px",
-            "border-bottom": "1px solid var(--color-border)",
-            "flex-shrink": 0,
-          }}
+        <button
+          type="button"
+          title="back"
+          disabled={!history().length}
+          style={navBtn(!history().length)}
+          onClick={goBack}
         >
-          <button
-            type="button"
-            title="back"
-            disabled={!history().length}
-            style={navBtn(!history().length)}
-            onClick={goBack}
-          >
-            <IconChevronLeft size={13} strokeWidth={1.6} />
-          </button>
-          <button type="button" title="up" style={navBtn(false)} onClick={goUp}>
-            <IconArrowUp size={13} strokeWidth={1.6} />
-          </button>
-          <div style={pathBar()}>
-            <input
-              value={pathDraft()}
-              spellcheck={false}
-              onFocus={() => (editing = true)}
-              onBlur={() => {
-                editing = false
-                setPathDraft(cwd())
-              }}
-              onInput={(e) => setPathDraft(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  editing = false
-                  navigate(pathDraft().trim())
-                  e.currentTarget.blur()
-                }
-                if (e.key === "Escape") {
-                  setPathDraft(cwd())
-                  e.currentTarget.blur()
-                }
-              }}
-              placeholder="/absolute/path"
-              style={{
-                all: "unset",
-                flex: 1,
-                "min-width": 0,
-                "font-family": FONT_MONO,
-                "font-size": "11px",
-                color: "var(--color-text)",
-              }}
-            />
-          </div>
-          <button type="button" title="refresh" style={navBtn(false)} onClick={() => setRefreshKey((k) => k + 1)}>
-            <IconRefresh size={12} strokeWidth={1.6} />
-          </button>
-        </div>
-
-        {/* search */}
-        <div
-          style={{
-            display: "flex",
-            "align-items": "center",
-            gap: "6px",
-            padding: "8px 14px",
-            "border-bottom": "1px solid var(--color-border)",
-            "flex-shrink": 0,
-          }}
-        >
-          <IconSearch size={11} strokeWidth={1.5} />
+          <IconChevronLeft size={13} strokeWidth={1.6} />
+        </button>
+        <button type="button" title="up" style={navBtn(false)} onClick={goUp}>
+          <IconArrowUp size={13} strokeWidth={1.6} />
+        </button>
+        <div style={pathBar()}>
           <input
-            value={filter()}
-            onInput={(e) => setFilterDebounced(e.currentTarget.value)}
-            placeholder="filter this folder…"
+            value={pathDraft()}
+            spellcheck={false}
+            onFocus={() => (editing = true)}
+            onBlur={() => {
+              editing = false
+              setPathDraft(cwd())
+            }}
+            onInput={(e) => setPathDraft(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                editing = false
+                navigate(pathDraft().trim())
+                e.currentTarget.blur()
+              }
+              if (e.key === "Escape") {
+                setPathDraft(cwd())
+                e.currentTarget.blur()
+              }
+            }}
+            placeholder="/absolute/path"
             style={{
               all: "unset",
               flex: 1,
+              "min-width": 0,
               "font-family": FONT_MONO,
               "font-size": "11px",
               color: "var(--color-text)",
             }}
           />
-          <span style={{ "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-text-faint)" }}>
-            {filtered().length} items
-          </span>
         </div>
+        <button type="button" title="refresh" style={navBtn(false)} onClick={() => setRefreshKey((k) => k + 1)}>
+          <IconRefresh size={12} strokeWidth={1.6} />
+        </button>
+      </div>
 
-        {/* body */}
-        <div class="atlas-scroll" style={{ flex: 1, "min-height": 0, "overflow-y": "auto", "overflow-x": "hidden" }}>
-          <Show when={!entries.loading || entries.latest} fallback={<div style={emptyMsg()}>loading…</div>}>
-            <Show
-              when={!permissionError()}
-              fallback={
+      {/* search */}
+      <div
+        style={{
+          display: "flex",
+          "align-items": "center",
+          gap: "6px",
+          padding: "8px 14px",
+          "border-bottom": "1px solid var(--color-border)",
+          "flex-shrink": 0,
+        }}
+      >
+        <IconSearch size={11} strokeWidth={1.5} />
+        <input
+          value={filter()}
+          onInput={(e) => setFilterDebounced(e.currentTarget.value)}
+          placeholder="filter this folder…"
+          style={{
+            all: "unset",
+            flex: 1,
+            "font-family": FONT_MONO,
+            "font-size": "11px",
+            color: "var(--color-text)",
+          }}
+        />
+        <span style={{ "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-text-faint)" }}>
+          {filtered().length} items
+        </span>
+      </div>
+
+      {/* body */}
+      <div class="atlas-scroll" style={{ flex: 1, "min-height": 0, "overflow-y": "auto", "overflow-x": "hidden" }}>
+        <Show when={!entries.loading || entries.latest} fallback={<div style={emptyMsg()}>loading…</div>}>
+          <Show
+            when={!permissionError()}
+            fallback={
+              <div
+                style={{
+                  display: "flex",
+                  "flex-direction": "column",
+                  "align-items": "center",
+                  gap: "8px",
+                  padding: "40px 22px",
+                  "text-align": "center",
+                }}
+              >
+                <IconFolder size={20} strokeWidth={1.4} />
                 <div
                   style={{
-                    display: "flex",
-                    "flex-direction": "column",
-                    "align-items": "center",
-                    gap: "8px",
-                    padding: "40px 22px",
-                    "text-align": "center",
+                    "font-family": FONT_SANS,
+                    "font-size": "13px",
+                    "font-weight": 500,
+                    color: "var(--color-text)",
                   }}
                 >
-                  <IconFolder size={20} strokeWidth={1.4} />
-                  <div
-                    style={{
-                      "font-family": FONT_SANS,
-                      "font-size": "13px",
-                      "font-weight": 500,
-                      color: "var(--color-text)",
-                    }}
-                  >
-                    Can't read this folder
-                  </div>
-                  <div
-                    style={{
-                      "font-family": FONT_SANS,
-                      "font-size": "12px",
-                      color: "var(--color-text-faint)",
-                      "line-height": 1.5,
-                      "max-width": "320px",
-                    }}
-                  >
-                    {permissionError()}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setRefreshKey((k) => k + 1)}
-                    style={{
-                      all: "unset",
-                      cursor: "pointer",
-                      "margin-top": "2px",
-                      padding: "5px 12px",
-                      "border-radius": "4px",
-                      border: "1px solid var(--color-border)",
-                      "font-family": FONT_MONO,
-                      "font-size": "11px",
-                      color: "var(--color-text)",
-                    }}
-                  >
-                    retry
-                  </button>
+                  Can't read this folder
                 </div>
-              }
-            >
-              <Show when={filtered().length > 0} fallback={<div style={emptyMsg()}>empty folder</div>}>
-                <Show when={view() === "list"} fallback={<GridBody nodes={filtered()} onClick={onRowClick} />}>
-                  <ListBody nodes={filtered()} onClick={onRowClick} />
-                </Show>
+                <div
+                  style={{
+                    "font-family": FONT_SANS,
+                    "font-size": "12px",
+                    color: "var(--color-text-faint)",
+                    "line-height": 1.5,
+                    "max-width": "320px",
+                  }}
+                >
+                  {permissionError()}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRefreshKey((k) => k + 1)}
+                  style={{
+                    all: "unset",
+                    cursor: "pointer",
+                    "margin-top": "2px",
+                    padding: "5px 12px",
+                    "border-radius": "4px",
+                    border: "1px solid var(--color-border)",
+                    "font-family": FONT_MONO,
+                    "font-size": "11px",
+                    color: "var(--color-text)",
+                  }}
+                >
+                  retry
+                </button>
+              </div>
+            }
+          >
+            <Show when={filtered().length > 0} fallback={<div style={emptyMsg()}>empty folder</div>}>
+              <Show when={view() === "list"} fallback={<GridBody nodes={filtered()} onClick={onRowClick} />}>
+                <ListBody nodes={filtered()} onClick={onRowClick} />
               </Show>
             </Show>
           </Show>
-        </div>
-      </Show>
+        </Show>
+      </div>
     </div>
   )
 }

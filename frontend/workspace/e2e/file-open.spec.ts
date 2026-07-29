@@ -16,6 +16,19 @@ test("can open a file tab from the Files pane", async ({ page, gotoSession }) =>
   const tab = page.locator('[role="tab"][title="package.json"]')
   await expect(tab).toBeVisible()
   await expect(tab).toHaveAttribute("aria-selected", "true")
+
+  const view = page.locator('[data-component="file-view"]')
+  await expect(view).toBeVisible()
+  await expect(view).toContainText("@synsci/monorepo")
+  await expect(page.getByRole("button", { name: "show panel", exact: true })).toBeVisible()
+  await expect(view.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(0)
+  await expect(view.getByTitle("close", { exact: true })).toHaveCount(0)
+  await expect(tab.getByRole("button", { name: "close tab" })).toBeVisible()
+
+  await page.getByRole("button", { name: "Atlas", exact: true }).click()
+  const pane = page.locator(".session-right-pane")
+  await expect(pane.getByRole("tab", { name: "Atlas", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.locator('[data-component="artifact-inspector"]')).toHaveCount(0)
 })
 
 test("can edit, reset, save, and close a text file", async ({ page, gotoSession }) => {

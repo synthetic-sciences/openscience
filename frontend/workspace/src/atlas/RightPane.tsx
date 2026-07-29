@@ -72,12 +72,6 @@ export function RightPane(): JSX.Element {
     const vis = visibleTabs()
     if (vis.length && !vis.some((t) => t.k === tab())) setTab(vis[0].k)
   })
-  createEffect(() => {
-    const id = artifact()?.id
-    if (!id) return
-    uiStore.setRightPaneMode("artifact")
-    uiStore.setRightPaneOpen(true)
-  })
   // Run a command requested from elsewhere (e.g. the Local models settings
   // panel's "run in terminal") in a fresh terminal tab, then reveal it.
   const terminal = useTerminal()

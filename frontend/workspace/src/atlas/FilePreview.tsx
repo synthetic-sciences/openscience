@@ -30,7 +30,7 @@ import { ManuscriptWorkbench } from "@/manuscript/ManuscriptWorkbench"
 import { artifactContext, createArtifactContext } from "@/artifacts/context"
 import type { ArtifactInspection } from "@/science/renderers"
 import { toast } from "@/atlas/Toast"
-import { IconFile, IconX, IconCopy, IconDownload, IconBookOpen, IconBraces, IconRefresh } from "@/atlas/shared/Icon"
+import { IconFile, IconX, IconCopy, IconDownload, IconBookOpen, IconBraces } from "@/atlas/shared/Icon"
 
 /**
  * Slide-in SIDE PREVIEW pane for opening a file from the Files tree.
@@ -358,22 +358,6 @@ export function FileView(props: {
             </span>
           </Show>
         </div>
-        <span
-          style={{
-            "flex-shrink": 0,
-            padding: "2px 8px",
-            "border-radius": "4px",
-            border: "1px solid var(--color-border)",
-            background: "var(--color-bg-subtle)",
-            "font-family": FONT_MONO,
-            "font-size": "10px",
-            color: "var(--color-text-faint)",
-            "letter-spacing": "0.03em",
-          }}
-        >
-          {badge()}
-        </span>
-
         <Show when={dirty()}>
           <button type="button" onClick={() => setDraft(savedText())} style={ctlBtn()}>
             reset
@@ -389,19 +373,17 @@ export function FileView(props: {
             onClick={() => setShowSource((v) => !v)}
             title={showSource() ? "rendered view" : kind() === "code" ? "edit source" : "raw source"}
             aria-label={showSource() ? "Rendered view" : "Source"}
-            style={headerBtn(showSource())}
+            style={iconBtn(showSource())}
           >
             <Show when={showSource()} fallback={<IconBraces size={13} strokeWidth={1.6} />}>
               <IconBookOpen size={13} strokeWidth={1.6} />
             </Show>
-            <span>{showSource() ? "view" : "source"}</span>
           </button>
         </Show>
 
         <Show when={!isBinary()}>
-          <button type="button" onClick={() => void copy()} title="copy contents" aria-label="Copy" style={headerBtn()}>
+          <button type="button" onClick={() => void copy()} title="copy contents" aria-label="Copy" style={iconBtn()}>
             <IconCopy size={13} strokeWidth={1.6} />
-            <span>copy</span>
           </button>
         </Show>
         <Show when={isBinary()}>
@@ -410,23 +392,11 @@ export function FileView(props: {
             onClick={() => void download()}
             title="download"
             aria-label="Download"
-            style={headerBtn()}
+            style={iconBtn()}
           >
             <IconDownload size={13} strokeWidth={1.6} />
-            <span>download</span>
           </button>
         </Show>
-
-        <button
-          type="button"
-          onClick={() => setRefreshKey((k) => k + 1)}
-          title="refresh"
-          aria-label="Refresh"
-          style={headerBtn()}
-        >
-          <IconRefresh size={13} strokeWidth={1.6} />
-          <span>refresh</span>
-        </button>
 
         <Show when={props.onClose}>
           <button type="button" onClick={() => props.onClose!()} title="close" style={iconBtn()}>
@@ -796,29 +766,6 @@ function iconBtn(active = false): JSX.CSSProperties {
     "flex-shrink": 0,
     transition: "background 120ms ease, color 120ms ease",
   } as JSX.CSSProperties
-}
-
-function headerBtn(active = false): JSX.CSSProperties {
-  return {
-    all: "unset",
-    cursor: "pointer",
-    height: "28px",
-    display: "inline-flex",
-    "align-items": "center",
-    "justify-content": "center",
-    gap: "5px",
-    padding: "0 7px",
-    "border-radius": "5px",
-    border: "1px solid var(--color-border)",
-    color: active ? "var(--color-text)" : "var(--color-text-muted)",
-    background: active ? "var(--color-accent-subtle)" : "var(--color-bg-subtle)",
-    "font-family": FONT_SANS,
-    "font-size": "10px",
-    "font-weight": 550,
-    "text-transform": "capitalize",
-    "flex-shrink": 0,
-    transition: "background 120ms ease, color 120ms ease",
-  }
 }
 
 function retryBtn(): JSX.CSSProperties {

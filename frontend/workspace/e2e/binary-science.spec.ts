@@ -28,7 +28,7 @@ test("inspects and streams scientific binary containers", async ({ page, gotoSes
     await expect(h5ad.getByText("python -m pip install h5py anndata", { exact: true })).toBeVisible()
 
     const download = page.waitForEvent("download")
-    await page.getByRole("button", { name: "download", exact: true }).click()
+    await page.getByRole("button", { name: "Download", exact: true }).click()
     expect((await download).suggestedFilename()).toBe("cells.h5ad")
 
     await page.getByRole("tab", { name: "Files", exact: true }).click()

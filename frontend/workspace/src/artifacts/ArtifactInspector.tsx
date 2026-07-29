@@ -3,6 +3,7 @@ import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { centerTabs } from "@/atlas/store/centerTabs"
+import { uiStore } from "@/atlas/store/ui"
 import { toast } from "@/atlas/Toast"
 import {
   IconBookOpen,
@@ -129,6 +130,13 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
   createEffect(() => {
     props.context.id
     setTab("details")
+  })
+  createEffect(() => {
+    const next = uiStore.artifactPaneTab()
+    if (!next) return
+    props.context.id
+    setTab(next)
+    uiStore.setArtifactPaneTab(undefined)
   })
 
   const copy = async () => {

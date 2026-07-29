@@ -70,7 +70,7 @@ test("XYZ files open as interactive 3D chemistry with source access", async ({ p
   await expect(summary).toContainText("O 1")
   await expect(page.getByRole("button", { name: "Source", exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "Copy", exact: true })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(0)
 
   const structure = artifact.locator('[data-component="mol-structure"]')
   await expect(structure).toHaveAttribute("data-status", "ready", { timeout: 30_000 })

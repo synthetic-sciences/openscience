@@ -17,6 +17,7 @@ async function openFile(page: Page, directory: string, relativePath: string) {
     .first()
     .click()
   await expect(page.locator(`[role="tab"][title="${filename}"]`)).toHaveAttribute("aria-selected", "true")
+  await page.getByRole("button", { name: "inspect artifact", exact: true }).click()
 }
 
 test("opened files drive a contextual artifact inspector without stale state", async ({

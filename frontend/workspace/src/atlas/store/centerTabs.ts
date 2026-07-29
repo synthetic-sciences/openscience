@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js"
+import { uiStore } from "@/atlas/store/ui"
 
 /**
  * Center-pane tab model. The center area is a tab strip:
@@ -28,6 +29,7 @@ function openFile(directory: string, path: string) {
   const name = path.split("/").pop() || path
   const id = docId(directory, path)
   setDocs((prev) => (prev.some((d) => d.id === id) ? prev : [...prev, { id, directory, path, name }]))
+  uiStore.setRightPaneOpen(false)
   setActive(id)
 }
 
