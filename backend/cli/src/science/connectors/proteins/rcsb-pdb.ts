@@ -8,8 +8,8 @@
  * (best-effort, in parallel) with a title and experimental metadata from the
  * data API. Enrichment failures degrade gracefully to the bare identifier.
  */
-import type { Connector, ConnectorHit, FetchOptions, SearchOptions } from "../types"
-import { getJSON, orFallback } from "../http"
+import type { Connector, ConnectorHit, FetchedFile, FetchOptions, SearchOptions } from "../types"
+import { getJSON, getText, orFallback } from "../http"
 import { asArray, clampLimit, firstString, toRaw } from "./util"
 
 interface SearchResult {
@@ -29,6 +29,8 @@ interface EntryCore {
 }
 
 const DATA_ENTRY = "https://data.rcsb.org/rest/v1/core/entry"
+// Coordinates live on a different host from the JSON entry record.
+const FILES = "https://files.rcsb.org/download"
 
 async function enrich(id: string, signal?: AbortSignal): Promise<ConnectorHit> {
   const base: ConnectorHit = {
@@ -84,5 +86,13 @@ export const rcsbPdb: Connector = {
 
   async fetch(id, opts?: FetchOptions): Promise<unknown> {
     return getJSON(`${DATA_ENTRY}/${encodeURIComponent(id)}`, { signal: opts?.signal })
+  },
+
+  formats: ["pdb", "cif"],
+
+  async fetchFile(id, format, opts?: FetchOptions): Promise<FetchedFile> {
+    const name = `${id.toUpperCase()}.${format}`
+    const body = await getText(`${FILES}/${encodeURIComponent(name)}`, { signal: opts?.signal })
+    return { body, contentType: format === "cif" ? "chemical/x-cif" : "chemical/x-pdb", filename: name }
   },
 }

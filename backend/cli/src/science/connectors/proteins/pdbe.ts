@@ -7,8 +7,8 @@
  * Same underlying archive as RCSB but with EBI's own annotations, summaries,
  * and cross-references.
  */
-import type { Connector, ConnectorHit, FetchOptions, SearchOptions } from "../types"
-import { getJSON, orFallback } from "../http"
+import type { Connector, ConnectorHit, FetchedFile, FetchOptions, SearchOptions } from "../types"
+import { getJSON, getText, orFallback } from "../http"
 import { asArray, clampLimit, firstString, toRaw } from "./util"
 
 interface SolrDoc {
@@ -75,5 +75,15 @@ export const pdbe: Connector = {
     // PDBe wraps records as { "<pdbid>": [ {...} ] } — unwrap when present.
     const entry = asArray(data[key])[0]
     return entry ?? data
+  },
+
+  formats: ["cif"],
+
+  async fetchFile(id, format, opts?: FetchOptions): Promise<FetchedFile> {
+    const name = `${id.toLowerCase()}.${format}`
+    const body = await getText(`https://www.ebi.ac.uk/pdbe/entry-files/download/${encodeURIComponent(name)}`, {
+      signal: opts?.signal,
+    })
+    return { body, contentType: "chemical/x-cif", filename: name }
   },
 }
