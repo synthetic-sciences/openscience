@@ -11,7 +11,10 @@ test("keeps a slow Evidence load inside the inspector", async ({ page, gotoSessi
   await page.getByTitle("evidence").click()
   await expect(page.locator(".session-workspace")).toBeVisible()
   await expect(page.locator('.session-right-pane [data-component="evidence-loading"]')).toBeVisible()
-  await expect(page.locator(".session-right-pane").getByText("evidence & lineage", { exact: true })).toBeVisible()
+  const pane = page.locator(".session-right-pane")
+  await expect(pane.getByText("evidence & lineage", { exact: true })).toBeVisible()
+  await expect(pane.getByText("No recorded lineage yet", { exact: true })).toBeVisible()
+  await expect(pane.getByText(/Local project content stays in Files/)).toBeVisible()
 })
 
 test("refreshes Evidence only after deliberate user activity", async ({ page, gotoSession }) => {
@@ -48,7 +51,7 @@ test("keeps the last Evidence view available when refresh fails", async ({ page,
   const alert = pane.getByRole("alert")
   await expect(alert).toContainText("Evidence could not refresh. The last available lineage is still shown.")
   await expect(alert.getByRole("button", { name: "retry", exact: true })).toBeVisible()
-  await expect(pane.getByText("No evidence graph yet", { exact: true })).toBeVisible()
+  await expect(pane.getByText("No recorded lineage yet", { exact: true })).toBeVisible()
 })
 
 test("visualizes project lineage and reviewer findings in the evidence pane", async ({
@@ -72,6 +75,11 @@ test("visualizes project lineage and reviewer findings in the evidence pane", as
     label: "Playwright trial registry",
     meta: { doi: "10.1000/playwright" },
   })
+  await post("/provenance/nodes", {
+    kind: "artifact",
+    label: "Playwright result table",
+    derived_from: source.id,
+  })
   const claim = await post("/provenance/nodes", {
     kind: "claim",
     label: "Playwright response claim",
@@ -90,6 +98,9 @@ test("visualizes project lineage and reviewer findings in the evidence pane", as
   const pane = page.locator(".session-right-pane")
   await expect(pane.getByText("evidence & lineage", { exact: true })).toBeVisible()
   await expect(pane.getByRole("img", { name: "Evidence lineage graph" })).toBeVisible()
+  await expect(pane.getByText("outputs", { exact: true })).toBeVisible()
+  await expect(pane.getByRole("button", { name: "output", exact: true })).toBeVisible()
+  await expect(pane.getByRole("button", { name: "artifact", exact: true })).toHaveCount(0)
   const claimRow = pane.getByRole("button", { name: /Playwright response claim/ }).first()
   await expect(claimRow).toBeVisible()
   await claimRow.click()

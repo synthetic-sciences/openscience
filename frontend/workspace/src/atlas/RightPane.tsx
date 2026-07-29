@@ -188,7 +188,7 @@ export function RightPane(): JSX.Element {
               <Show when={artifact()}>
                 <TabBtn
                   k="artifact"
-                  label="Inspect"
+                  label="Details"
                   Icon={IconAtom}
                   active={artifactMode()}
                   onClick={() => uiStore.setRightPaneMode("artifact")}
@@ -475,8 +475,8 @@ function CollapsedRail(props: {
         <button
           class="research-tool-rail__button"
           onClick={props.onInspect}
-          title="inspect artifact"
-          aria-label="inspect artifact"
+          title="file details"
+          aria-label="file details"
         >
           <IconAtom size={15} strokeWidth={1.5} />
         </button>

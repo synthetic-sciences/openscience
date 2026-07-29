@@ -17,7 +17,7 @@ async function openFile(page: Page, directory: string, relativePath: string) {
     .first()
     .click()
   await expect(page.locator(`[role="tab"][title="${filename}"]`)).toHaveAttribute("aria-selected", "true")
-  await page.getByRole("button", { name: "inspect artifact", exact: true }).click()
+  await page.getByRole("button", { name: "file details", exact: true }).click()
 }
 
 test("opened files drive a contextual artifact inspector without stale state", async ({
@@ -30,6 +30,7 @@ test("opened files drive a contextual artifact inspector without stale state", a
 
   const inspector = page.locator('[data-component="artifact-inspector"]')
   await expect(inspector).toBeVisible()
+  await expect(inspector.getByRole("tablist", { name: "File details", exact: true })).toBeVisible()
   await expect(inspector).toHaveAttribute("data-artifact-id", /water\.xyz/)
   await expect(inspector.locator("header strong")).toHaveText("water.xyz")
   await expect(inspector.getByRole("tab")).toHaveCount(7)

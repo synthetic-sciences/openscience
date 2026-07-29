@@ -165,8 +165,8 @@ export function NewSessionView(props: NewSessionViewProps) {
               <p>These open as editable prompts in the composer.</p>
             </div>
             <button type="button" class="research-launchpad__artifacts" onClick={() => centerTabs.setActive("files")}>
-              <Show when={!artifacts.loading} fallback="Scanning files">
-                {(artifacts.latest?.length ?? 0).toLocaleString()} artifacts
+              <Show when={!artifacts.loading} fallback="Scanning research files">
+                {(artifacts.latest?.length ?? 0).toLocaleString()} research files
               </Show>
             </button>
           </div>

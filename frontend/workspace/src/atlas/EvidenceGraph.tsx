@@ -188,9 +188,10 @@ export function EvidenceGraph(props: { active: boolean }): JSX.Element {
             <span style={emptyMark}>
               <IconNetwork size={19} />
             </span>
-            <strong>No evidence graph yet</strong>
+            <strong>No recorded lineage yet</strong>
             <span>
-              Notebook runs and research agents record sources, runs, artifacts, and claims here automatically.
+              Local project content stays in Files. Notebook runs and research agents record sources, runs, outputs,
+              claims, and reviews here.
             </span>
             <button type="button" style={primaryButton} onClick={audit}>
               audit this workspace
@@ -201,7 +202,7 @@ export function EvidenceGraph(props: { active: boolean }): JSX.Element {
         <section style={scoreRow} aria-label="Evidence summary">
           <Score label="sources" value={data()?.summary.kinds.source ?? 0} color={colors.source} />
           <Score label="runs" value={data()?.summary.kinds.run ?? 0} color={colors.run} />
-          <Score label="artifacts" value={data()?.summary.kinds.artifact ?? 0} color={colors.artifact} />
+          <Score label="outputs" value={data()?.summary.kinds.artifact ?? 0} color={colors.artifact} />
           <Score label="claims" value={data()?.summary.kinds.claim ?? 0} color={colors.claim} />
         </section>
 
@@ -240,7 +241,7 @@ export function EvidenceGraph(props: { active: boolean }): JSX.Element {
                   style={filterButton(filter() === value)}
                   onClick={() => setFilter(value)}
                 >
-                  {value}
+                  {value === "artifact" ? "output" : value}
                 </button>
               )}
             </For>
@@ -278,7 +279,7 @@ export function EvidenceGraph(props: { active: boolean }): JSX.Element {
                   <g
                     role="button"
                     tabindex="0"
-                    aria-label={`${node.kind}: ${node.label}`}
+                    aria-label={`${node.kind === "artifact" ? "output" : node.kind}: ${node.label}`}
                     onClick={() => setSelected(node.id)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") setSelected(node.id)
@@ -302,7 +303,7 @@ export function EvidenceGraph(props: { active: boolean }): JSX.Element {
           <div style={legend}>
             <span>source</span>
             <span>run</span>
-            <span>artifact</span>
+            <span>output</span>
             <span>claim / review</span>
           </div>
         </div>
@@ -316,7 +317,7 @@ export function EvidenceGraph(props: { active: boolean }): JSX.Element {
                   <span style={{ display: "flex", "flex-direction": "column", gap: "2px", flex: 1, "min-width": 0 }}>
                     <strong>{node.label}</strong>
                     <small>
-                      {node.kind} · {status(node, data()?.edges ?? [])}
+                      {node.kind === "artifact" ? "output" : node.kind} · {status(node, data()?.edges ?? [])}
                     </small>
                   </span>
                 </button>
@@ -334,7 +335,7 @@ export function EvidenceGraph(props: { active: boolean }): JSX.Element {
                   <span style={{ display: "flex", "flex-direction": "column", gap: "3px", flex: 1, "min-width": 0 }}>
                     <strong>{node().label}</strong>
                     <small>
-                      {node().kind} · {node().id}
+                      {node().kind === "artifact" ? "output" : node().kind} · {node().id}
                     </small>
                   </span>
                   <State node={node()} edges={data()?.edges ?? []} />

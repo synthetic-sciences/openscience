@@ -283,7 +283,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
             {props.context.kind} · {props.context.format.toUpperCase()}
           </span>
         </div>
-        <button type="button" title="refresh artifact records" style={iconButton()} onClick={() => void api.refetch()}>
+        <button type="button" title="refresh file details" style={iconButton()} onClick={() => void api.refetch()}>
           <IconRefresh size={13} />
         </button>
         <Show when={props.onClose}>
@@ -307,7 +307,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
 
       <div
         role="tablist"
-        aria-label="Artifact inspector"
+        aria-label="File details"
         class="atlas-scroll"
         style={{
           display: "flex",
@@ -610,7 +610,7 @@ function Review(props: {
             <strong style={{ "font-family": FONT_SANS, "font-size": "12px", color: "var(--color-text)" }}>
               No annotations yet
             </strong>
-            <p style={copyStyle()}>Add the first review note. Threads persist with this project and artifact.</p>
+            <p style={copyStyle()}>Add the first review note. Threads persist with this project and file.</p>
           </div>
         }
       >
@@ -803,7 +803,7 @@ function AnnotationThread(props: {
     if (value.kind === "molecule") return value.selection ?? "Molecular selection"
     if (value.kind === "genome") return `${value.chromosome}:${value.start}–${value.end}`
     if (value.kind === "notebook") return `Cell ${value.cellId}`
-    return value.label ?? "Whole artifact"
+    return value.label ?? "Whole file"
   }
   return (
     <article data-component="artifact-annotation" data-status={props.annotation.status} style={card()}>
@@ -969,7 +969,7 @@ function Details(props: { data: InspectorData }): JSX.Element {
   return (
     <div style={{ display: "grid", gap: "12px" }}>
       <section style={card()}>
-        <Heading icon="details">Artifact</Heading>
+        <Heading icon="details">File</Heading>
         <Fact label="name" value={props.data.context.name} />
         <Fact label="kind" value={props.data.context.kind} />
         <Fact label="format" value={props.data.context.format.toUpperCase()} mono />
@@ -1018,7 +1018,7 @@ function Details(props: { data: InspectorData }): JSX.Element {
         <Heading icon="history">Provenance</Heading>
         <Show
           when={props.data.provenance}
-          fallback={<p style={copyStyle()}>No Git provenance is recorded for this local artifact.</p>}
+          fallback={<p style={copyStyle()}>No Git provenance is recorded for this local file.</p>}
         >
           {(value) => (
             <>
