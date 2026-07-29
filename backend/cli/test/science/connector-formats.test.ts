@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { rcsbPdb } from "../../src/science/connectors/proteins/rcsb-pdb"
 import { pdbe } from "../../src/science/connectors/proteins/pdbe"
+import { alphafold } from "../../src/science/connectors/proteins/alphafold"
 import { clearCache, resetRateLimits } from "../../src/science/connectors/http"
 
 const realFetch = globalThis.fetch
@@ -61,5 +62,39 @@ describe("pdbe fetchFile", () => {
     const out = await pdbe.fetchFile!("6LU7", "cif")
     expect(s.url()).toBe("https://www.ebi.ac.uk/pdbe/entry-files/download/6lu7.cif")
     expect(out.filename).toBe("6lu7.cif")
+  })
+})
+
+describe("alphafold fetchFile", () => {
+  test("declares pdb and cif", () => {
+    expect(alphafold.formats).toEqual(["pdb", "cif"])
+  })
+
+  test("reads the file URL out of the JSON response, then fetches it", async () => {
+    const urls: string[] = []
+    globalThis.fetch = (async (url: string) => {
+      urls.push(String(url))
+      // First call: the prediction API, which returns an ARRAY.
+      if (urls.length === 1)
+        return new Response(
+          JSON.stringify([
+            { entryId: "AF-P04637-F1", cifUrl: "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v4.cif" },
+          ]),
+          { status: 200 },
+        )
+      return new Response("data_AF-P04637-F1\n", { status: 200 })
+    }) as unknown as typeof fetch
+
+    const out = await alphafold.fetchFile!("P04637", "cif")
+    expect(urls[0]).toContain("alphafold.ebi.ac.uk/api/prediction/P04637")
+    expect(urls[1]).toBe("https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v4.cif")
+    expect(out.filename).toBe("AF-P04637-F1-model_v4.cif")
+    expect(out.body).toContain("data_AF-P04637-F1")
+  })
+
+  test("a prediction without the requested URL is an actionable error", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify([{ entryId: "AF-X-F1" }]), { status: 200 })) as unknown as typeof fetch
+    await expect(alphafold.fetchFile!("P04637", "cif")).rejects.toThrow(/no cif/i)
   })
 })

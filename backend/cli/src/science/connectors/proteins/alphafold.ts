@@ -7,8 +7,8 @@
  * is first tried as an accession; if that yields nothing it is resolved to
  * accessions via UniProt and each prediction is fetched.
  */
-import type { Connector, ConnectorHit, FetchOptions, SearchOptions } from "../types"
-import { getJSON } from "../http"
+import type { Connector, ConnectorHit, FetchedFile, FetchOptions, SearchOptions } from "../types"
+import { getJSON, getText } from "../http"
 import { asArray, clampLimit, firstString, looksLikeAccession, resolveUniProtAccessions, toRaw } from "./util"
 
 interface Prediction {
@@ -68,5 +68,23 @@ export const alphafold: Connector = {
 
   async fetch(id, opts?: FetchOptions): Promise<unknown> {
     return getJSON(`${API}/${encodeURIComponent(id)}`, { signal: opts?.signal })
+  },
+
+  formats: ["pdb", "cif"],
+
+  // AlphaFold's file URLs are only discoverable inside the JSON record, so this
+  // fetches the prediction first and follows the URL it carries. That is why
+  // format resolution lives in the connector rather than an id -> URL map.
+  async fetchFile(id, format, opts?: FetchOptions): Promise<FetchedFile> {
+    const predictions = await predict(id, opts?.signal)
+    const first = predictions[0]
+    const url = format === "pdb" ? first?.pdbUrl : first?.cifUrl
+    if (!url) throw new Error(`AlphaFold has no ${format} file for "${id}".`)
+    const body = await getText(url, { signal: opts?.signal })
+    return {
+      body,
+      contentType: format === "cif" ? "chemical/x-cif" : "chemical/x-pdb",
+      filename: url.split("/").pop() ?? `${id}.${format}`,
+    }
   },
 }
