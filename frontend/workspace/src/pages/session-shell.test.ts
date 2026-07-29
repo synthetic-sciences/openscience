@@ -72,4 +72,14 @@ describe("focused workspace shell", () => {
     expect(styles).toContain('.session-scroller [data-slot="session-turn-sticky"]')
     expect(styles).toContain('.session-scroller [data-slot="session-turn-message-content"]')
   })
+
+  test("keeps research tools in a compact contextual inspector", () => {
+    const pane = read("../atlas/RightPane.tsx")
+
+    expect(pane).toContain('const RIGHT_PANE_WIDTH_KEY = "openscience-research-inspector-width-v2"')
+    expect(pane).toContain("return 360")
+    expect(pane).toContain('class="research-inspector__tabs"')
+    expect(pane).toContain('class="research-inspector__tab"')
+    expect(pane).toContain('class="research-tool-rail"')
+  })
 })

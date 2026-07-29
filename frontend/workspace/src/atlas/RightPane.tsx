@@ -24,16 +24,16 @@ import {
   IconNetwork,
 } from "@/atlas/shared/Icon"
 
-const RIGHT_PANE_WIDTH_KEY = "thesis-right-pane-width-v1"
+const RIGHT_PANE_WIDTH_KEY = "openscience-research-inspector-width-v2"
 const MIN_PANE_WIDTH = 280
-const MAX_PANE_WIDTH = 880
+const MAX_PANE_WIDTH = 680
 
 function readSavedWidth(): number {
   try {
     const v = Number(localStorage.getItem(RIGHT_PANE_WIDTH_KEY))
     if (Number.isFinite(v) && v >= MIN_PANE_WIDTH && v <= MAX_PANE_WIDTH) return v
   } catch {}
-  return 420
+  return 360
 }
 
 export function RightPane(): JSX.Element {
@@ -154,20 +154,16 @@ export function RightPane(): JSX.Element {
         </Show>
         <aside
           class="session-right-pane"
+          data-overlay={narrow() ? "true" : "false"}
           style={{
             flex: narrow() ? "none" : `0 0 ${width()}px`,
-            width: narrow() ? "min(420px, calc(100vw - 52px))" : `${width()}px`,
-            display: "flex",
-            "flex-direction": "column",
-            "border-left": "1px solid var(--color-border)",
-            background: "var(--color-bg-subtle)",
+            width: narrow() ? "min(380px, calc(100vw - 44px))" : `${width()}px`,
             "min-width": narrow() ? "280px" : `${MIN_PANE_WIDTH}px`,
             position: narrow() ? "fixed" : "relative",
             top: narrow() ? "0" : undefined,
             right: narrow() ? "0" : undefined,
             bottom: narrow() ? "0" : undefined,
             "z-index": narrow() ? 70 : undefined,
-            "box-shadow": narrow() ? "-18px 0 48px rgba(0, 0, 0, 0.22)" : "none",
           }}
         >
           {/* Drag handle on the left edge of the right pane. 6px wide, full
@@ -192,26 +188,8 @@ export function RightPane(): JSX.Element {
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-accent-subtle)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           />
-          <div
-            role="tablist"
-            style={{
-              display: "flex",
-              "align-items": "stretch",
-              "border-bottom": "1px solid var(--color-border)",
-              background: "var(--color-bg-subtle)",
-              "flex-shrink": 0,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                gap: "5px",
-                padding: "7px 10px",
-                flex: 1,
-                "min-width": 0,
-                "overflow-x": "auto",
-              }}
-            >
+          <div class="research-inspector__tabs" role="tablist">
+            <div class="research-inspector__tab-list">
               <Show when={artifact()}>
                 <TabBtn
                   k="artifact"
@@ -236,11 +214,16 @@ export function RightPane(): JSX.Element {
                 )}
               </For>
             </div>
-            <div style={{ position: "relative", display: "flex", "align-items": "center", "flex-shrink": 0 }}>
-              <button onClick={openSkillLibrary} title="skill library" style={paneCtl(false)}>
+            <div class="research-inspector__controls">
+              <button class="research-inspector__control" onClick={openSkillLibrary} title="skill library">
                 <IconBraces size={12} strokeWidth={1.5} />
               </button>
-              <button onClick={() => setPanelMenu((v) => !v)} title="panel settings" style={paneCtl(panelMenu())}>
+              <button
+                class="research-inspector__control"
+                data-active={panelMenu() ? "true" : "false"}
+                onClick={() => setPanelMenu((v) => !v)}
+                title="panel settings"
+              >
                 <IconSettings size={12} strokeWidth={1.5} />
               </button>
               <Show when={panelMenu()}>
@@ -291,7 +274,11 @@ export function RightPane(): JSX.Element {
                   </button>
                 </div>
               </Show>
-              <button onClick={() => uiStore.setRightPaneOpen(false)} title="hide panel" style={paneCtl(false)}>
+              <button
+                class="research-inspector__control"
+                onClick={() => uiStore.setRightPaneOpen(false)}
+                title="hide panel"
+              >
                 <IconChevronRight size={13} strokeWidth={1.5} />
               </button>
             </div>
@@ -477,35 +464,33 @@ function CollapsedRail(props: {
   onOpen: (t?: RightPaneTab) => void
 }): JSX.Element {
   return (
-    <aside
-      style={{
-        flex: "0 0 40px",
-        width: "40px",
-        display: "flex",
-        "flex-direction": "column",
-        "align-items": "center",
-        gap: "4px",
-        padding: "10px 0",
-        "border-left": "1px solid var(--color-border)",
-        background: "var(--color-bg-subtle)",
-      }}
-    >
-      <button onClick={() => props.onOpen()} title="show panel" aria-label="show panel" style={railBtn()}>
+    <aside class="research-tool-rail">
+      <button
+        class="research-tool-rail__button"
+        onClick={() => props.onOpen()}
+        title="show panel"
+        aria-label="show panel"
+      >
         <IconChevronLeft size={14} strokeWidth={1.5} />
       </button>
-      <span style={{ width: "18px", height: "1px", background: "var(--color-border)", margin: "4px 0" }} />
+      <span class="research-tool-rail__divider" />
       <Show when={props.artifact}>
-        <button onClick={props.onInspect} title="inspect artifact" aria-label="inspect artifact" style={railBtn()}>
+        <button
+          class="research-tool-rail__button"
+          onClick={props.onInspect}
+          title="inspect artifact"
+          aria-label="inspect artifact"
+        >
           <IconAtom size={15} strokeWidth={1.5} />
         </button>
       </Show>
       <For each={props.tabs}>
         {(t) => (
           <button
+            class="research-tool-rail__button"
             onClick={() => props.onOpen(t.k)}
             title={t.label ?? t.k}
             aria-label={t.label ?? t.k}
-            style={railBtn()}
           >
             <t.Icon size={15} strokeWidth={1.5} />
           </button>
@@ -513,18 +498,6 @@ function CollapsedRail(props: {
       </For>
     </aside>
   )
-}
-
-function paneCtl(active: boolean): JSX.CSSProperties {
-  return {
-    all: "unset",
-    cursor: "pointer",
-    display: "inline-flex",
-    "align-items": "center",
-    "justify-content": "center",
-    padding: "0 8px",
-    color: active ? "var(--color-text)" : "var(--color-text-faint)",
-  } as JSX.CSSProperties
 }
 
 const paneMenuLabel: JSX.CSSProperties = {
@@ -571,21 +544,6 @@ function emptyAction(): JSX.CSSProperties {
   } as JSX.CSSProperties
 }
 
-function railBtn(): JSX.CSSProperties {
-  return {
-    all: "unset",
-    cursor: "pointer",
-    position: "relative",
-    width: "30px",
-    height: "30px",
-    display: "inline-flex",
-    "align-items": "center",
-    "justify-content": "center",
-    "border-radius": "4px",
-    color: "var(--color-text-muted)",
-  } as JSX.CSSProperties
-}
-
 function TabBtn(props: {
   k: string
   label?: string
@@ -596,42 +554,13 @@ function TabBtn(props: {
 }): JSX.Element {
   return (
     <button
+      class="research-inspector__tab"
+      data-active={props.active ? "true" : "false"}
       role="tab"
       aria-selected={props.active}
       onClick={props.onClick}
-      style={{
-        all: "unset",
-        cursor: "pointer",
-        display: "inline-flex",
-        "align-items": "center",
-        gap: "7px",
-        padding: "6px 10px",
-        "border-radius": "4px",
-        border: props.active ? "1px solid var(--color-border-strong)" : "1px solid transparent",
-        background: props.active ? "var(--color-surface-solid)" : "transparent",
-        "box-shadow": props.active ? "0 1px 2px rgba(0,0,0,0.10)" : "none",
-        "font-family": FONT_MONO,
-        "font-size": "11px",
-        "font-weight": props.active ? 700 : 400,
-        color: props.active ? "var(--color-text)" : "var(--color-text-muted)",
-        transition:
-          "background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard)",
-        "flex-shrink": 0,
-      }}
-      onMouseEnter={(e) => {
-        if (!props.active) e.currentTarget.style.background = "var(--color-accent-subtle)"
-      }}
-      onMouseLeave={(e) => {
-        if (!props.active) e.currentTarget.style.background = "transparent"
-      }}
     >
-      <span
-        style={{
-          display: "inline-flex",
-          color: props.active ? "var(--color-text)" : "var(--color-text-faint)",
-          "flex-shrink": 0,
-        }}
-      >
+      <span class="research-inspector__tab-icon">
         <props.Icon size={12} strokeWidth={1.6} />
       </span>
       <span>{props.label ?? props.k}</span>

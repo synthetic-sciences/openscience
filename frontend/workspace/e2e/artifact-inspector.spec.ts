@@ -32,7 +32,7 @@ test("opened files drive a contextual artifact inspector without stale state", a
   await expect(inspector).toHaveAttribute("data-artifact-id", /water\.xyz/)
   await expect(inspector.locator("header strong")).toHaveText("water.xyz")
   await expect(inspector.getByRole("tab")).toHaveCount(7)
-  expect((await inspector.boundingBox())?.width).toBeGreaterThanOrEqual(400)
+  expect((await inspector.boundingBox())?.width).toBeGreaterThanOrEqual(340)
   await expect(inspector.getByText("3 atoms", { exact: true })).toBeVisible()
   await expect(inspector.getByText("PNG export", { exact: true })).toBeVisible()
 
