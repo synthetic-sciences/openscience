@@ -22,12 +22,12 @@ all 42 `fetch()` implementations against live APIs — their first execution eve
 
 **Outcome distribution (both runs):**
 
-| Outcome            | Count | Notes                                                             |
-| ------------------ | ----- | ------------------------------------------------------------------- |
-| Record, inline     | 31    | Stable across both runs                                            |
-| Record, spill      | 6–7   | uniprot, mygene, sifts, bindingdb, pfam, ensembl (+semantic-scholar) |
-| Clean miss         | 2     | expression-atlas, depmap — both `found: false`                     |
-| Error              | 1–3   | biogrid (no key), myvariant (bad sample id), semantic-scholar (429) |
+| Outcome        | Count | Notes                                                                |
+| -------------- | ----- | -------------------------------------------------------------------- |
+| Record, inline | 31    | Stable across both runs                                              |
+| Record, spill  | 6–7   | uniprot, mygene, sifts, bindingdb, pfam, ensembl (+semantic-scholar) |
+| Clean miss     | 2     | expression-atlas, depmap — both `found: false`                       |
+| Error          | 1–3   | biogrid (no key), myvariant (bad sample id), semantic-scholar (429)  |
 
 **Size distribution:** median 10.9 KB · max 2.15 MB · largest inline 46.5 KB (`rcsb-pdb`) · smallest spill
 82.4 KB (`semantic-scholar`).
@@ -123,15 +123,15 @@ given and hardcodes `type: "unknown"` on `list()`; repairing it is roadmap item 
 Extends the degradation pattern `science_search` already implements — never throw a raw `HTTP 429`, always
 return an actionable result carrying `metadata.error`.
 
-| Condition                             | Result                                                          |
-| ------------------------------------- | ----------------------------------------------------------------- |
-| Unknown `db`                          | List available ids, `metadata.error = "unknown_db"`              |
-| Sentinel: `null`, `{}`, `found:false` | Clean miss. **Not** an error. `metadata.count = 0`               |
-| Sentinel: `{error: string}`           | Error carrying the connector's own message (e.g. biogrid key)    |
-| Thrown, 429/503/408 or /rate.?limit/  | `metadata.error = "rate_limited"`, actionable retry guidance     |
-| Thrown, anything else                 | `metadata.error = "source_error"`, message preserved             |
-| `format` requested, no `formats`      | Report that the connector serves records only                    |
-| `format` not in `formats`             | List what the connector does support                             |
+| Condition                             | Result                                                        |
+| ------------------------------------- | ------------------------------------------------------------- |
+| Unknown `db`                          | List available ids, `metadata.error = "unknown_db"`           |
+| Sentinel: `null`, `{}`, `found:false` | Clean miss. **Not** an error. `metadata.count = 0`            |
+| Sentinel: `{error: string}`           | Error carrying the connector's own message (e.g. biogrid key) |
+| Thrown, 429/503/408 or /rate.?limit/  | `metadata.error = "rate_limited"`, actionable retry guidance  |
+| Thrown, anything else                 | `metadata.error = "source_error"`, message preserved          |
+| `format` requested, no `formats`      | Report that the connector serves records only                 |
+| `format` not in `formats`             | List what the connector does support                          |
 
 ### 5. Rate limiting (scoped)
 
@@ -148,15 +148,15 @@ Out of scope: the other 36. Roadmap item 98 stays open for them.
 Seven connectors gain `formats` + `fetchFile`, chosen because they serve files a user actually wants and that
 existing renderers can display:
 
-| Connector   | `formats`   | URL shape                                            |
-| ----------- | ----------- | ------------------------------------------------------ |
-| `rcsb-pdb`  | pdb, cif    | Different host — `files.rcsb.org/download/{id}.cif`   |
-| `pdbe`      | cif         | `ebi.ac.uk/pdbe/entry-files/download/{id}.cif`        |
-| `alphafold` | pdb, cif    | URLs live **inside** the JSON response — fetch first  |
-| `uniprot`   | fasta, txt  | Query param — `?format=fasta`                         |
-| `pubchem`   | sdf         | Path segment — `/compound/cid/{id}/SDF`               |
-| `ensembl`   | fasta       | Different path — `/sequence/id/{id}`                  |
-| `kegg`      | fasta       | Path suffix — `/get/{id}/aaseq`                       |
+| Connector   | `formats`  | URL shape                                            |
+| ----------- | ---------- | ---------------------------------------------------- |
+| `rcsb-pdb`  | pdb, cif   | Different host — `files.rcsb.org/download/{id}.cif`  |
+| `pdbe`      | cif        | `ebi.ac.uk/pdbe/entry-files/download/{id}.cif`       |
+| `alphafold` | pdb, cif   | URLs live **inside** the JSON response — fetch first |
+| `uniprot`   | fasta, txt | Query param — `?format=fasta`                        |
+| `pubchem`   | sdf        | Path segment — `/compound/cid/{id}/SDF`              |
+| `ensembl`   | fasta      | Different path — `/sequence/id/{id}`                 |
+| `kegg`      | fasta      | Path suffix — `/get/{id}/aaseq`                      |
 
 `alphafold` is why format resolution lives in the connector rather than a declarative `id → URL` map: its file
 URLs are only discoverable by reading the JSON record first, which a pure function of `id` cannot express.

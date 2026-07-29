@@ -73,9 +73,7 @@ describe("safeSegment", () => {
 
 describe("filenameFor", () => {
   test("defaults to json under the db directory", () => {
-    expect(filenameFor("crossref", "10.1038/nature12373")).toBe(
-      ".openscience/fetch/crossref/10.1038_nature12373.json",
-    )
+    expect(filenameFor("crossref", "10.1038/nature12373")).toBe(".openscience/fetch/crossref/10.1038_nature12373.json")
   })
 
   test("uses the requested format as the extension", () => {

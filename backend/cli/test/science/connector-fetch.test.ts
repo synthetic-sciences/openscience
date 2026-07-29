@@ -66,7 +66,8 @@ describe("connector fetch conformance", () => {
   }
 
   test("myvariant and semantic-scholar produced no fixture in the live run", () => {
-    for (const id of ["myvariant", "semantic-scholar"]) expect(existsSync(path.join(FIXTURES, `${id}.json`))).toBe(false)
+    for (const id of ["myvariant", "semantic-scholar"])
+      expect(existsSync(path.join(FIXTURES, `${id}.json`))).toBe(false)
   })
 
   // Assert arxiv's documented contract explicitly rather than exempting it above.

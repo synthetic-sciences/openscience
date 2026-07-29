@@ -31,7 +31,7 @@ Three things the spec got wrong, discovered while reading the code. Implement wh
 2. **`Tool.define` auto-truncates output.** `src/tool/tool.ts:71-73` runs `Truncate.output(...)` on every
    result **unless** `result.metadata.truncated !== undefined`. Because `science_fetch` does its own spilling,
    it MUST set `metadata.truncated` or the output gets spilled twice, to two different places.
-3. **Rate limiting needs four files, not two.** The eutils host `eutils.ncbi.nlm.nih.gov` has *five*
+3. **Rate limiting needs four files, not two.** The eutils host `eutils.ncbi.nlm.nih.gov` has _five_
    consumers, not four: `genomics/eutils.ts` (shared by `ncbi-gene`, `dbsnp`, `clinvar`), `literature/pubmed.ts`
    (its own `BASE` at line 13), and `omics/geo.ts` (its own `EUTILS` at line 15). Leaving `geo` unpaced
    undermines the pacing of the others against the same host.
@@ -39,6 +39,7 @@ Three things the spec got wrong, discovered while reading the code. Implement wh
 ## File Structure
 
 **Create**
+
 - `src/science/connectors/fetch-outcome.ts` — pure classification: sentinel detection, error classification, path sanitising, summarising, inline-vs-spill. No I/O. Lifted from the validated prototype.
 - `test/science/fetch-outcome.test.ts` — unit tests for the above.
 - `test/science/science-fetch-tool.test.ts` — end-to-end tool tests.
@@ -46,6 +47,7 @@ Three things the spec got wrong, discovered while reading the code. Implement wh
 - `script/record-fetch-fixtures.ts` — one-time live fixture recorder. Not run in CI.
 
 **Modify**
+
 - `src/science/connectors/types.ts` — add `formats?`, `fetchFile?`, `FetchedFile`.
 - `src/tool/science.ts` — add `ScienceFetchTool`; `science_list_dbs` reports formats; extend `ScienceTools`.
 - `src/science/connectors/proteins/{rcsb-pdb,pdbe,alphafold,uniprot}.ts` — add `formats` + `fetchFile`.
@@ -53,6 +55,7 @@ Three things the spec got wrong, discovered while reading the code. Implement wh
 - `src/science/connectors/literature/semantic-scholar.ts`, `genomics/eutils.ts`, `literature/pubmed.ts`, `omics/geo.ts` — add `rateLimit`.
 
 **Delete at the end**
+
 - `src/science/connectors/PROTOTYPE-fetch-outcome.ts`, `PROTOTYPE-fetch-repl.ts`, and the `prototype:fetch` script in `package.json`.
 
 ---
@@ -62,11 +65,13 @@ Three things the spec got wrong, discovered while reading the code. Implement wh
 Lifts the prototype logic — already validated against all 42 live APIs — into real source with tests.
 
 **Files:**
+
 - Create: `backend/cli/src/science/connectors/fetch-outcome.ts`
 - Test: `backend/cli/test/science/fetch-outcome.test.ts`
 - Reference (do not modify): `backend/cli/src/science/connectors/PROTOTYPE-fetch-outcome.ts`
 
 **Interfaces:**
+
 - Consumes: `Truncate.MAX_BYTES` from `src/tool/truncation.ts`.
 - Produces: `sentinelOf(payload): {kind:"miss"|"error", note:string} | null`, `classifyError(err): {retryable:boolean, message:string}`, `safeSegment(raw:string): string`, `filenameFor(db,id,format?): string`, `summarize(payload, format?): string`, `serialize(payload): string`, `formatBytes(n): string`, `outcomeFor({db,id,format?,payload,capBytes?}): FetchOutcome`, and the `FetchOutcome` union.
 
@@ -150,9 +155,7 @@ describe("safeSegment", () => {
 
 describe("filenameFor", () => {
   test("defaults to json under the db directory", () => {
-    expect(filenameFor("crossref", "10.1038/nature12373")).toBe(
-      ".openscience/fetch/crossref/10.1038_nature12373.json",
-    )
+    expect(filenameFor("crossref", "10.1038/nature12373")).toBe(".openscience/fetch/crossref/10.1038_nature12373.json")
   })
 
   test("uses the requested format as the extension", () => {
@@ -264,10 +267,12 @@ those with failures renders an ordinary miss as an outage."
 ### Task 2: Connector interface — `formats` and `fetchFile`
 
 **Files:**
+
 - Modify: `backend/cli/src/science/connectors/types.ts:88-92`
 - Test: `backend/cli/test/science/connector-contract.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks.
 - Produces: `FetchedFile` interface; optional `Connector.formats?: string[]` and `Connector.fetchFile?(id: string, format: string, opts?: FetchOptions): Promise<FetchedFile>`.
 
@@ -366,10 +371,12 @@ spill policy structural rather than a threshold applied to opaque data."
 The record path only. Formats arrive in Tasks 5-7; until then a `format` argument reports that the connector serves records only.
 
 **Files:**
+
 - Modify: `backend/cli/src/tool/science.ts` (append tool, extend `ScienceTools` at :143 and `SCIENCE_TOOL_IDS` at :145)
 - Test: `backend/cli/test/science/science-fetch-tool.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `outcomeFor`, `formatBytes` from Task 1; `Connector.formats`/`fetchFile` from Task 2.
 - Produces: `ScienceFetchTool`, exported and included in `ScienceTools`. No change to `src/tool/registry.ts` is needed — it spreads `...ScienceTools` at `registry.ts:132`.
 
@@ -665,10 +672,12 @@ over a result this tool has already spilled itself."
 Without this the model has no way to learn which formats exist and would guess.
 
 **Files:**
+
 - Modify: `backend/cli/src/tool/science.ts` (the `ScienceListDbsTool` rows at :49 and the registry `catalog()` at `src/science/connectors/types.ts:135-143`)
 - Test: `backend/cli/test/science/science-fetch-tool.test.ts` (append)
 
 **Interfaces:**
+
 - Consumes: `Connector.formats` from Task 2.
 - Produces: `CatalogEntry.formats?: string[]`; `science_list_dbs` output gains a `formats: …` suffix per database.
 
@@ -732,16 +741,16 @@ and change `ConnectorRegistry.catalog()` to include it:
 In `src/tool/science.ts`, change the row builder inside `ScienceListDbsTool` from:
 
 ```ts
-      const rows = list.map((e) => `- **${e.id}** (${e.name}) — ${e.description}`)
+const rows = list.map((e) => `- **${e.id}** (${e.name}) — ${e.description}`)
 ```
 
 to:
 
 ```ts
-      const rows = list.map((e) => {
-        const formats = e.formats?.length ? ` · formats: ${e.formats.join(", ")}` : ""
-        return `- **${e.id}** (${e.name}) — ${e.description}${formats}`
-      })
+const rows = list.map((e) => {
+  const formats = e.formats?.length ? ` · formats: ${e.formats.join(", ")}` : ""
+  return `- **${e.id}** (${e.name}) — ${e.description}${formats}`
+})
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -769,10 +778,12 @@ would guess at them."
 The two simplest cases — both are plain URL swaps. RCSB serves coordinates from a **different host** than its JSON entry API.
 
 **Files:**
+
 - Modify: `backend/cli/src/science/connectors/proteins/rcsb-pdb.ts`, `proteins/pdbe.ts`
 - Test: `backend/cli/test/science/connector-formats.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `FetchedFile` from Task 2, `getText` from `../http`.
 - Produces: `rcsbPdb.formats = ["pdb", "cif"]`, `pdbe.formats = ["cif"]`, both with `fetchFile`.
 
@@ -921,10 +932,12 @@ entry API the connector already used."
 The case that justifies putting format resolution inside connectors: AlphaFold's file URLs are only discoverable **inside** the JSON response, so a pure `id → URL` function cannot express it. Its `fetch()` also resolves to an **array**, so the URL fields need `[0]`.
 
 **Files:**
+
 - Modify: `backend/cli/src/science/connectors/proteins/alphafold.ts`
 - Test: `backend/cli/test/science/connector-formats.test.ts` (append)
 
 **Interfaces:**
+
 - Consumes: `FetchedFile` from Task 2; the existing module-private `Prediction` interface with its `pdbUrl`/`cifUrl` fields.
 - Produces: `alphafold.formats = ["pdb", "cif"]` plus `fetchFile`.
 
@@ -1035,10 +1048,12 @@ the URL it carries."
 Four different URL shapes: a query param, a path segment, a different path, and a path suffix.
 
 **Files:**
+
 - Modify: `backend/cli/src/science/connectors/proteins/uniprot.ts`, `chemistry/pubchem.ts`, `genomics/ensembl.ts`, `pathways/kegg.ts`
 - Test: `backend/cli/test/science/connector-formats.test.ts` (append)
 
 **Interfaces:**
+
 - Consumes: `FetchedFile` from Task 2.
 - Produces: `formats` + `fetchFile` on all four. `pubchem`, `ensembl`, and `kegg` currently use the short form `async fetch(id, opts)` and import neither `FetchOptions` nor (except kegg) `getText` — both imports must be added.
 
@@ -1199,10 +1214,12 @@ against roughly a kilobyte for the same record as FASTA."
 Driven by evidence, not guesswork: a second batch run of all 42 connectors tripped `semantic-scholar` into HTTP 429. Only `arxiv` sets `rateLimit` today, of 42 connectors.
 
 **Files:**
+
 - Modify: `backend/cli/src/science/connectors/literature/semantic-scholar.ts`, `genomics/eutils.ts`, `literature/pubmed.ts`, `omics/geo.ts`
 - Test: `backend/cli/test/science/connector-ratelimit.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `HttpOptions.rateLimit` — shape `{ minIntervalMs?: number; maxConcurrent?: number }`, applied per URL host by the shared http layer.
 - Produces: no exported surface. Behavioural only.
 
@@ -1287,11 +1304,11 @@ const RATE_LIMIT = { minIntervalMs: 1000 }
 and add `rateLimit: RATE_LIMIT` to the options object of every `getJSON(...)` **call site** in the file — one in `search`, one in `fetch`. (Verify with `grep -n "getJSON(" src/science/connectors/literature/semantic-scholar.ts`; the import line is not a call site.) For example:
 
 ```ts
-    const data = await getJSON<Paper>(`${BASE}/${id.trim()}?fields=${FIELDS},references.title,citations.title`, {
-      signal: opts?.signal,
-      headers: apiHeaders(),
-      rateLimit: RATE_LIMIT,
-    })
+const data = await getJSON<Paper>(`${BASE}/${id.trim()}?fields=${FIELDS},references.title,citations.title`, {
+  signal: opts?.signal,
+  headers: apiHeaders(),
+  rateLimit: RATE_LIMIT,
+})
 ```
 
 In **`genomics/eutils.ts`**, add below its `BASE` constant (line 11):
@@ -1335,10 +1352,12 @@ geo.ts -- and pacing only some of them leaves the host unpaced."
 The recorder is run by hand, never in CI. Its output makes the offline suite's fixtures recorded truth rather than authored guesses — the distinction that stops a connector from passing its test while failing for a user.
 
 **Files:**
+
 - Create: `backend/cli/script/record-fetch-fixtures.ts`, `backend/cli/test/science/connector-fetch.test.ts`
 - Reference: `backend/cli/script/pack-native-smoke.ts` (shebang + argv style)
 
 **Interfaces:**
+
 - Consumes: `registry`, `outcomeFor` from Task 1, the sample-id map (copy it from `PROTOTYPE-fetch-repl.ts`, which already carries all 42 entries).
 - Produces: `test/science/fixtures/fetch/<db>.json` files; no exported code surface.
 
@@ -1531,10 +1550,12 @@ Known-degraded connectors are asserted as such rather than skipped."
 The decision has been absorbed into `fetch-outcome.ts`. The TUI shell was optimised for being driven by hand and must not ship.
 
 **Files:**
+
 - Delete: `backend/cli/src/science/connectors/PROTOTYPE-fetch-outcome.ts`, `PROTOTYPE-fetch-repl.ts`
 - Modify: `backend/cli/package.json` (remove the `prototype:fetch` script added at line 15)
 
 **Interfaces:**
+
 - Consumes: nothing. Confirms no production code imports either file.
 - Produces: nothing.
 
@@ -1601,17 +1622,17 @@ size has to be measured at runtime rather than annotated."
 
 Acceptance criteria from `docs/specs/science-fetch-design.md`, mapped to the task that satisfies each:
 
-| # | Criterion                                                     | Task |
-| - | ------------------------------------------------------------- | ---- |
-| 1 | `science_fetch` registered and reachable by all agents        | 3    |
-| 2 | `science_list_dbs` reports `formats`                          | 4    |
-| 3 | Record inline under 50 KB, spills over it with path + summary | 1, 3 |
-| 4 | `rcsb-pdb` + `cif` writes a `.cif` file                       | 5    |
-| 5 | Sentinel families render as misses; `{error}` as an error     | 1, 3 |
-| 6 | No call throws; every failure carries `metadata.error`        | 3, 9 |
-| 7 | ids with `/`, `:`, `>` produce valid filenames                | 1    |
-| 8 | `semantic-scholar` and eutils declare `rateLimit`             | 8    |
-| 9 | `bun test` passes with no network                             | 9    |
-| 10 | Fixture recorder runs and reports per-connector status       | 9    |
+| #   | Criterion                                                     | Task |
+| --- | ------------------------------------------------------------- | ---- |
+| 1   | `science_fetch` registered and reachable by all agents        | 3    |
+| 2   | `science_list_dbs` reports `formats`                          | 4    |
+| 3   | Record inline under 50 KB, spills over it with path + summary | 1, 3 |
+| 4   | `rcsb-pdb` + `cif` writes a `.cif` file                       | 5    |
+| 5   | Sentinel families render as misses; `{error}` as an error     | 1, 3 |
+| 6   | No call throws; every failure carries `metadata.error`        | 3, 9 |
+| 7   | ids with `/`, `:`, `>` produce valid filenames                | 1    |
+| 8   | `semantic-scholar` and eutils declare `rateLimit`             | 8    |
+| 9   | `bun test` passes with no network                             | 9    |
+| 10  | Fixture recorder runs and reports per-connector status        | 9    |
 
 Registry-wide coverage is enforced structurally rather than by inspection: the paired-declaration test in Task 2 fails if any connector declares `formats` without `fetchFile` or vice versa, and the Task 9 loop covers all 42 by iterating `registry.all()` rather than a hand-maintained list.
