@@ -36,6 +36,7 @@ jobs:
       - name: Scan working tree
         run: gitleaks dir . --redact --exit-code 1
       # `dir` only sees the checkout; a secret committed and later deleted
-      # passes it forever. `git` mode scans the full fetched history.
+      # passes it forever. Scan every commit reachable from the checked-out
+      # PR/main SHA without walking unrelated remote branches.
       - name: Scan git history
-        run: gitleaks git . --redact --exit-code 1
+        run: gitleaks git . --log-opts="${GITHUB_SHA}" --redact --exit-code 1
