@@ -3,7 +3,8 @@ import { test, expect } from "./fixtures"
 test("settings dialog navigates between sections and closes", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  await page.getByRole("button", { name: "settings", exact: true }).click()
+  await page.getByRole("button", { name: "More", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByRole("heading", { name: "Connectors" })).toBeVisible()
 

@@ -64,6 +64,140 @@ const SETTINGS_STYLES = `
   min-height: 0;
   overflow: hidden;
 }
+
+.settings-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+.settings-nav {
+  width: 184px;
+  flex: 0 0 184px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px 8px;
+  border-right: 1px solid var(--border-weak-base);
+  background: var(--surface-weak);
+}
+.settings-nav__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 2px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.settings-nav__sections::-webkit-scrollbar {
+  display: none;
+}
+.settings-nav__section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav__label {
+  padding: 0 9px 4px;
+}
+.settings-nav__item {
+  min-width: 0;
+  height: 31px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-weak);
+  text-align: left;
+  transition: background 120ms ease, color 120ms ease;
+}
+.settings-nav__item:hover {
+  background: var(--surface-raised-base);
+  color: var(--text-strong);
+}
+.settings-nav__item[data-active="true"] {
+  background: var(--surface-raised-base-active);
+  color: var(--text-strong);
+}
+.settings-nav__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 9px 0;
+  color: var(--text-weak);
+}
+.settings-main {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.settings-main__header {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-weak-base);
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  [data-component="dialog"]:has([data-slot="dialog-content"].settings-dialog) [data-slot="dialog-container"] {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 20px);
+  }
+  .settings-layout {
+    flex-direction: column;
+  }
+  .settings-nav {
+    width: 100%;
+    height: 42px;
+    flex: 0 0 42px;
+    padding: 0 4px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-weak-base);
+    overflow: hidden;
+  }
+  .settings-nav__sections {
+    flex-direction: row;
+    gap: 0;
+    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .settings-nav__section {
+    flex: 0 0 auto;
+    flex-direction: row;
+    gap: 0;
+  }
+  .settings-nav__label,
+  .settings-nav__footer {
+    display: none;
+  }
+  .settings-nav__item {
+    height: 42px;
+    flex: 0 0 auto;
+    gap: 6px;
+    padding: 0 9px;
+    border-bottom: 1px solid transparent;
+    border-radius: 0;
+    font-size: 11px;
+  }
+  .settings-nav__item:hover {
+    background: transparent;
+  }
+  .settings-nav__item[data-active="true"] {
+    border-bottom-color: var(--text-base);
+    background: transparent;
+  }
+  .settings-main__header {
+    min-height: 44px;
+  }
+}
 `
 
 export const DialogSettings: Component = () => {
@@ -92,24 +226,20 @@ export const DialogSettings: Component = () => {
   return (
     <Dialog size="x-large" transition class="settings-dialog" classList={{ "settings-expanded": expanded() }}>
       <style>{SETTINGS_STYLES}</style>
-      <div class="flex h-full w-full">
+      <div class="settings-layout">
         {/* ── Left rail ── */}
-        <nav class="flex flex-col justify-between w-[224px] flex-shrink-0 border-r border-border-weak-base bg-surface-base/30 py-3 px-2.5">
-          <div class="flex flex-col gap-5 overflow-y-auto no-scrollbar pt-1">
+        <nav class="settings-nav">
+          <div class="settings-nav__sections">
             <For each={SETTINGS_SECTIONS}>
               {(section) => (
-                <div class="flex flex-col gap-1">
-                  <span class="px-2.5 pb-1 atlas-section-label">{section.label}</span>
+                <div class="settings-nav__section">
+                  <span class="settings-nav__label atlas-section-label">{section.label}</span>
                   <For each={SETTINGS_PANELS.filter((p) => p.section === section.id)}>
                     {(panel) => (
                       <button
                         type="button"
-                        class="flex items-center gap-2.5 h-8 px-2.5 rounded-xs text-13-medium transition-colors text-left"
-                        classList={{
-                          "bg-surface-raised-base-active text-text-strong": current().id === panel.id,
-                          "text-text-weak hover:text-text-strong hover:bg-surface-raised-base/60":
-                            current().id !== panel.id,
-                        }}
+                        class="settings-nav__item"
+                        data-active={current().id === panel.id ? "true" : "false"}
                         onClick={() => navigate(panel.id)}
                         aria-current={current().id === panel.id ? "page" : undefined}
                       >
@@ -122,16 +252,16 @@ export const DialogSettings: Component = () => {
               )}
             </For>
           </div>
-          <div class="flex flex-col gap-0.5 px-2.5 pt-2 text-text-weak">
+          <div class="settings-nav__footer">
             <span class="text-12-medium">OpenScience</span>
             <span class="text-11-regular">v{platform.version}</span>
           </div>
         </nav>
 
         {/* ── Right column ── */}
-        <div class="flex flex-col flex-1 min-w-0">
+        <div class="settings-main">
           {/* Header */}
-          <header class="flex items-center justify-between gap-2 min-h-[52px] px-3 border-b border-border-weak-base flex-shrink-0">
+          <header class="settings-main__header">
             <div class="flex items-center gap-1 min-w-0">
               <IconButton icon="arrow-left" variant="ghost" disabled={!canBack()} onClick={back} aria-label="Back" />
               <IconButton

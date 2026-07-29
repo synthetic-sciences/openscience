@@ -3,7 +3,8 @@ import { test, expect } from "./fixtures"
 test("credentials settings exposes provider connection controls", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  await page.getByRole("button", { name: "settings", exact: true }).click()
+  await page.getByRole("button", { name: "More", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click()
   const dialog = page.getByRole("dialog")
   await dialog.getByRole("button", { name: "Credentials", exact: true }).click()
 
@@ -22,7 +23,8 @@ test("credentials settings saves and removes a local provider key", async ({ pag
 
   try {
     await gotoSession()
-    await page.getByRole("button", { name: "settings", exact: true }).click()
+    await page.getByRole("button", { name: "More", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Settings", exact: true }).click()
     const dialog = page.getByRole("dialog")
     await dialog.getByRole("button", { name: "Credentials", exact: true }).click()
 

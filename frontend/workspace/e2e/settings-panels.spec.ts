@@ -20,7 +20,8 @@ test("every settings panel loads inside the fixed dialog shell", async ({ page, 
   page.on("pageerror", (error) => pageErrors.push(error.message))
 
   await gotoSession()
-  await page.getByRole("button", { name: "settings", exact: true }).click()
+  await page.getByRole("button", { name: "More", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog).toBeVisible()
 
