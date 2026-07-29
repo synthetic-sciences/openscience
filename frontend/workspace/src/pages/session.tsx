@@ -22,8 +22,7 @@ import { useTheme } from "@synsci/ui/theme"
 import { PromptInput } from "@/components/prompt-input"
 import { NewSessionView } from "@/components/session/session-new-view"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
-import { Wordmark } from "@/atlas/Wordmark"
-import { AppHeader, HeaderIconButton, HeaderDivider } from "@/atlas/AppHeader"
+import { AppHeader, HeaderIconButton } from "@/atlas/AppHeader"
 import { RightPane } from "@/atlas/RightPane"
 import { FileExplorer } from "@/atlas/FileExplorer"
 import { FileView } from "@/atlas/FilePreview"
@@ -55,6 +54,8 @@ import {
   IconFile,
   IconBrain,
   IconX,
+  IconLayoutGrid,
+  IconMoreH,
 } from "@/atlas/shared/Icon"
 import { StatusDot } from "@/atlas/shared/StatusDot"
 import { DateTime } from "luxon"
@@ -470,6 +471,7 @@ export default function Page(): JSX.Element {
         onOpenSettings={() => dialog.show(() => <DialogSettings />)}
         onToggleTheme={() => theme.setColorScheme(isDark() ? "light" : "dark")}
         onToggleSessions={() => setMobileSessionsOpen((open) => !open)}
+        onOpenTools={() => uiStore.setRightPaneOpen(true)}
       />
 
       <div
@@ -849,19 +851,7 @@ function PaneLoading(): JSX.Element {
 function CenterTabStrip(props: { chatTitle: string }): JSX.Element {
   const active = centerTabs.active
   return (
-    <div
-      class="atlas-scroll"
-      style={{
-        display: "flex",
-        "align-items": "stretch",
-        gap: "5px",
-        padding: "7px 10px",
-        "border-bottom": "1px solid var(--color-border)",
-        background: "var(--color-bg-subtle)",
-        "overflow-x": "auto",
-        "flex-shrink": 0,
-      }}
-    >
+    <div class="workspace-tabs atlas-scroll" role="tablist" aria-label="Open work">
       <CenterTab active={active() === "chat"} label={props.chatTitle} onClick={() => centerTabs.setActive("chat")}>
         <IconMessageSquare size={12} strokeWidth={1.6} />
       </CenterTab>
@@ -896,70 +886,23 @@ function CenterTab(props: {
 }): JSX.Element {
   return (
     <div
+      class="workspace-tab"
       role="tab"
       aria-selected={props.active}
+      data-active={props.active ? "true" : "false"}
       onClick={props.onClick}
       title={props.label}
-      style={{
-        cursor: "pointer",
-        display: "inline-flex",
-        "align-items": "center",
-        gap: "7px",
-        "max-width": "220px",
-        padding: "6px 10px",
-        "border-radius": "4px",
-        border: props.active ? "1px solid var(--color-border-strong)" : "1px solid transparent",
-        background: props.active ? "var(--color-surface-solid)" : "transparent",
-        "box-shadow": props.active ? "0 1px 2px rgba(0,0,0,0.10)" : "none",
-        "font-family": FONT_MONO,
-        "font-size": "11px",
-        "font-weight": props.active ? 700 : 400,
-        color: props.active ? "var(--color-text)" : "var(--color-text-muted)",
-        transition: "background 120ms ease, color 120ms ease, border-color 120ms ease",
-        "flex-shrink": 0,
-      }}
-      onMouseEnter={(e) => {
-        if (!props.active) e.currentTarget.style.background = "var(--color-accent-subtle)"
-      }}
-      onMouseLeave={(e) => {
-        if (!props.active) e.currentTarget.style.background = "transparent"
-      }}
     >
-      <span
-        style={{
-          display: "inline-flex",
-          color: props.active ? "var(--color-text)" : "var(--color-text-faint)",
-          "flex-shrink": 0,
-        }}
-      >
-        {props.children}
-      </span>
+      <span class="workspace-tab__icon">{props.children}</span>
       <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{props.label}</span>
       <Show when={props.onClose}>
         <span
+          class="workspace-tab__close"
           role="button"
           aria-label="close tab"
           onClick={(e) => {
             e.stopPropagation()
             props.onClose!()
-          }}
-          style={{
-            display: "inline-flex",
-            "align-items": "center",
-            "justify-content": "center",
-            width: "16px",
-            height: "16px",
-            "border-radius": "4px",
-            color: "var(--color-text-faint)",
-            "flex-shrink": 0,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--color-accent-subtle)"
-            e.currentTarget.style.color = "var(--color-text)"
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent"
-            e.currentTarget.style.color = "var(--color-text-faint)"
           }}
         >
           <IconX size={11} strokeWidth={1.8} />
@@ -979,77 +922,78 @@ function Header(props: {
   onOpenSettings: () => void
   onToggleTheme: () => void
   onToggleSessions: () => void
+  onOpenTools: () => void
 }): JSX.Element {
+  const [menu, setMenu] = createSignal(false)
   return (
-    <AppHeader>
-      <HeaderIconButton class="session-sidebar-toggle" onClick={props.onToggleSessions} title="sessions">
+    <AppHeader class="workspace-header">
+      <HeaderIconButton class="session-sidebar-toggle" onClick={props.onToggleSessions} title="Show sessions">
         <IconMessageSquare size={13} strokeWidth={1.5} />
       </HeaderIconButton>
       <button
+        class="workspace-header__back"
         onClick={props.onBack}
-        title="back to projects"
-        style={{
-          all: "unset",
-          cursor: "pointer",
-          display: "inline-flex",
-          "align-items": "center",
-          gap: "5px",
-          padding: "5px 10px",
-          "border-radius": "4px",
-          "font-family": FONT_MONO,
-          "font-size": "11px",
-          color: "var(--color-text-muted)",
-          transition: "background 120ms ease",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-accent-subtle)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        title="Back to projects"
+        aria-label="Back to projects"
       >
-        <IconChevronLeft size={11} strokeWidth={1.5} />
-        <span class="session-back-label">projects</span>
+        <IconChevronLeft size={14} strokeWidth={1.6} />
       </button>
-      <HeaderDivider />
-      <Wordmark size="sm" />
-      <HeaderDivider />
-      <span
-        class="session-project-name"
-        style={{
-          "font-family": FONT_SANS,
-          "font-size": "13px",
-          "font-weight": 400,
-          color: "var(--color-text)",
-        }}
-      >
-        {props.projectName}
-      </span>
-      <span
-        class="session-project-path"
-        style={{
-          "font-family": FONT_MONO,
-          "font-size": "10px",
-          color: "var(--color-text-faint)",
-          overflow: "hidden",
-          "text-overflow": "ellipsis",
-          "white-space": "nowrap",
-          "max-width": "320px",
-        }}
-      >
-        {props.projectPath}
-      </span>
-      <span style={{ flex: 1 }} />
-      <HeaderIconButton onClick={props.onOpenPalette} title="command palette">
+      <div class="workspace-header__title" title={props.projectPath}>
+        <strong>{props.projectName}</strong>
+        <span>Research workspace</span>
+      </div>
+      <span class="workspace-header__spacer" />
+      <button class="workspace-header__tools" type="button" onClick={props.onOpenTools}>
+        <IconLayoutGrid size={13} strokeWidth={1.5} />
+        <span>Tools</span>
+      </button>
+      <HeaderIconButton class="workspace-header__search" onClick={props.onOpenPalette} title="Search and commands">
         <IconSearch size={13} strokeWidth={1.5} />
       </HeaderIconButton>
-      <HeaderIconButton class="session-header-secondary" onClick={props.onOpenHelp} title="help">
-        <IconBookOpen size={13} strokeWidth={1.5} />
-      </HeaderIconButton>
-      <HeaderIconButton onClick={props.onOpenSettings} title="settings">
-        <IconSettings size={13} strokeWidth={1.5} />
-      </HeaderIconButton>
-      <HeaderIconButton class="session-header-secondary" onClick={props.onToggleTheme} title="toggle theme">
-        <Show when={props.isDark} fallback={<IconMoon size={13} strokeWidth={1.5} />}>
-          <IconSun size={13} strokeWidth={1.5} />
+      <div class="workspace-header__menu-wrap" onMouseLeave={() => setMenu(false)}>
+        <HeaderIconButton class="workspace-header__menu" onClick={() => setMenu((open) => !open)} title="More">
+          <IconMoreH size={14} strokeWidth={1.7} />
+        </HeaderIconButton>
+        <Show when={menu()}>
+          <div class="workspace-header__popover" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenu(false)
+                props.onOpenHelp()
+              }}
+            >
+              <IconBookOpen size={13} strokeWidth={1.5} />
+              Help and shortcuts
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenu(false)
+                props.onOpenSettings()
+              }}
+            >
+              <IconSettings size={13} strokeWidth={1.5} />
+              Settings
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenu(false)
+                props.onToggleTheme()
+              }}
+            >
+              <Show when={props.isDark} fallback={<IconMoon size={13} strokeWidth={1.5} />}>
+                <IconSun size={13} strokeWidth={1.5} />
+              </Show>
+              {props.isDark ? "Use light theme" : "Use dark theme"}
+            </button>
+          </div>
         </Show>
-      </HeaderIconButton>
+      </div>
     </AppHeader>
   )
 }
@@ -1135,156 +1079,22 @@ function SessionsSidebar(props: {
   onDelete: (id: string) => void
   onRename: (id: string, title: string) => void
 }): JSX.Element {
-  const [query, setQuery] = createSignal("")
-  const searching = () => query().trim().length > 0
-  const filtered = createMemo(() => {
-    const q = query().trim().toLowerCase()
-    if (!q) return props.sessions
-    return props.sessions.filter((s) => (s.title || "session").toLowerCase().includes(q))
-  })
   return (
-    <aside
-      class="atlas-scroll session-sidebar"
-      data-mobile-open={props.mobileOpen ? "true" : "false"}
-      style={{
-        width: "240px",
-        "min-width": "240px",
-        "border-right": "1px solid var(--color-border)",
-        background: "var(--color-bg-subtle)",
-        display: "flex",
-        "flex-direction": "column",
-        "overflow-y": "auto",
-      }}
-    >
-      <div
-        style={{
-          padding: "12px 12px 8px",
-          display: "flex",
-          "flex-direction": "column",
-          gap: "8px",
-        }}
-      >
-        <button
-          onClick={props.onNew}
-          disabled={props.creating}
-          style={{
-            all: "unset",
-            cursor: "pointer",
-            display: "flex",
-            "align-items": "center",
-            "justify-content": "center",
-            gap: "6px",
-            padding: "7px 12px",
-            "border-radius": "8px",
-            background: "var(--color-surface-solid)",
-            border: "1px solid var(--color-border-strong)",
-            "font-family": FONT_MONO,
-            "font-size": "12px",
-            "font-weight": 400,
-            color: "var(--color-text)",
-            transition: "all 120ms ease",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-bg-elevated)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--color-surface-solid)")}
-          onFocusIn={(e) => (e.currentTarget.style.background = "var(--color-bg-elevated)")}
-          onFocusOut={(e) => (e.currentTarget.style.background = "var(--color-surface-solid)")}
-        >
-          <IconPlus size={12} strokeWidth={2} />
-          {props.creating ? "creating…" : "New session"}
+    <aside class="atlas-scroll session-sidebar" data-mobile-open={props.mobileOpen ? "true" : "false"}>
+      <div class="session-sidebar__top">
+        <button class="session-sidebar__new" onClick={props.onNew} disabled={props.creating}>
+          <IconPlus size={13} strokeWidth={1.8} />
+          {props.creating ? "Creating…" : "New research"}
         </button>
-
-        {/* Search — filters the loaded list live; Esc clears. */}
-        <div style={{ position: "relative", display: "flex", "align-items": "center" }}>
-          <span
-            style={{
-              position: "absolute",
-              left: "10px",
-              display: "inline-flex",
-              "align-items": "center",
-              color: "var(--color-text-faint)",
-              "pointer-events": "none",
-            }}
-          >
-            <IconSearch size={13} strokeWidth={1.6} />
-          </span>
-          <input
-            aria-label="search sessions"
-            value={query()}
-            onInput={(e) => setQuery(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.preventDefault()
-                setQuery("")
-                e.currentTarget.blur()
-              }
-            }}
-            placeholder="Search sessions"
-            spellcheck={false}
-            autocomplete="off"
-            style={{
-              all: "unset",
-              "box-sizing": "border-box",
-              width: "100%",
-              padding: "8px 28px 8px 30px",
-              "border-radius": "8px",
-              background: "var(--color-surface-solid)",
-              border: "1px solid var(--color-border)",
-              "font-family": FONT_MONO,
-              "font-size": "12.5px",
-              color: "var(--color-text)",
-              transition: "border-color 120ms ease",
-            }}
-            onFocusIn={(e) => (e.currentTarget.style.borderColor = "var(--color-border-strong)")}
-            onFocusOut={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
-          />
-          <Show when={searching()}>
-            <button
-              type="button"
-              title="clear search"
-              aria-label="clear search"
-              onClick={() => setQuery("")}
-              style={{
-                all: "unset",
-                position: "absolute",
-                right: "8px",
-                cursor: "pointer",
-                display: "inline-flex",
-                "align-items": "center",
-                "justify-content": "center",
-                width: "18px",
-                height: "18px",
-                "border-radius": "5px",
-                color: "var(--color-text-faint)",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-text)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-faint)")}
-            >
-              <IconX size={12} strokeWidth={1.8} />
-            </button>
-          </Show>
-        </div>
       </div>
 
-      {/* Quiet section label — sentence case, no shouty uppercase. */}
-      <div
-        style={{
-          display: "flex",
-          "align-items": "baseline",
-          "justify-content": "space-between",
-          padding: "2px 14px 6px",
-          "font-family": FONT_MONO,
-          "font-size": "11px",
-          color: "var(--color-text-faint)",
-        }}
-      >
-        <span>{searching() ? "Results" : "Sessions"}</span>
-        <span style={{ "font-variant-numeric": "tabular-nums" }}>
-          {searching() ? `${filtered().length} of ${props.sessions.length}` : props.sessions.length}
-        </span>
+      <div class="session-sidebar__label">
+        <span>Recent</span>
+        <span>{props.sessions.length}</span>
       </div>
 
-      <div style={{ display: "flex", "flex-direction": "column", gap: "1px", padding: "0 8px 10px" }}>
-        <For each={filtered()}>
+      <div class="session-sidebar__list">
+        <For each={props.sessions}>
           {(s) => (
             <SessionRow
               session={s}
@@ -1305,20 +1115,7 @@ function SessionsSidebar(props: {
               "line-height": 1.55,
             }}
           >
-            No sessions yet — click <span style={{ color: "var(--color-text-muted)" }}>New session</span> above.
-          </div>
-        </Show>
-        <Show when={props.sessions.length > 0 && filtered().length === 0}>
-          <div
-            style={{
-              padding: "12px 10px",
-              "font-family": FONT_MONO,
-              "font-size": "11px",
-              color: "var(--color-text-faint)",
-              "line-height": 1.55,
-            }}
-          >
-            No sessions match “{query().trim()}”.
+            No sessions yet — click <span style={{ color: "var(--color-text-muted)" }}>New research</span> above.
           </div>
         </Show>
       </div>

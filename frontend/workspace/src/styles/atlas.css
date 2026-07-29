@@ -1804,6 +1804,283 @@ button.research-launchpad__status-item:hover {
   display: none !important;
 }
 
+/* The workspace frame is intentionally quieter than the marketing/home shell.
+   The active research surface owns the visual hierarchy; navigation recedes. */
+.workspace-header.g-strip {
+  min-height: 52px;
+  gap: 8px !important;
+  padding: 8px 12px !important;
+  background: color-mix(in srgb, var(--color-bg) 96%, var(--color-bg-subtle)) !important;
+  border-bottom-color: color-mix(in srgb, var(--color-border) 72%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.workspace-header__back,
+.workspace-header__tools {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  transition:
+    background 160ms var(--agent-ease),
+    color 160ms var(--agent-ease),
+    transform 120ms var(--agent-ease);
+}
+
+.workspace-header__back {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+.workspace-header__back:hover,
+.workspace-header__tools:hover {
+  color: var(--color-text);
+  background: var(--color-accent-subtle);
+}
+
+.workspace-header__back:active,
+.workspace-header__tools:active {
+  transform: scale(0.97);
+}
+
+.workspace-header__title {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 2px;
+}
+
+.workspace-header__title strong,
+.workspace-header__title span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-header__title strong {
+  max-width: min(32vw, 360px);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.workspace-header__title span {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--color-text-faint);
+}
+
+.workspace-header__spacer {
+  flex: 1;
+}
+
+.workspace-header__tools {
+  height: 30px;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.workspace-header .workspace-header__search,
+.workspace-header .workspace-header__menu {
+  width: 30px !important;
+  height: 30px !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  border-radius: 6px !important;
+}
+
+.workspace-header__menu-wrap {
+  position: relative;
+  display: flex;
+}
+
+.workspace-header__popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--z-overlay);
+  width: 190px;
+  padding: 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-solid);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+  animation: atlas-pop-up 140ms var(--agent-ease);
+  transform-origin: top right;
+}
+
+.workspace-header__popover button {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.workspace-header__popover button:hover {
+  background: var(--color-accent-subtle);
+  color: var(--color-text);
+}
+
+.session-sidebar {
+  width: 228px;
+  min-width: 228px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border-right: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  background: color-mix(in srgb, var(--color-bg-subtle) 62%, var(--color-bg));
+}
+
+.session-sidebar__top {
+  padding: 12px 10px 14px;
+}
+
+.session-sidebar__new {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text);
+  transition:
+    background 160ms var(--agent-ease),
+    transform 120ms var(--agent-ease);
+}
+
+.session-sidebar__new:hover {
+  background: var(--color-accent-subtle);
+}
+
+.session-sidebar__new:active {
+  transform: scale(0.985);
+}
+
+.session-sidebar__new:disabled {
+  cursor: wait;
+  color: var(--color-text-faint);
+}
+
+.session-sidebar__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 7px 14px 6px;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--color-text-faint);
+}
+
+.session-sidebar__label span:last-child {
+  font-family: var(--font-code);
+  font-variant-numeric: tabular-nums;
+  font-size: 9.5px;
+}
+
+.session-sidebar__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 7px 16px;
+}
+
+.workspace-tabs {
+  min-height: 40px;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 5px 8px 4px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 68%, transparent);
+  background: var(--color-bg);
+}
+
+.workspace-tab {
+  min-width: 0;
+  max-width: 220px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--color-text-faint);
+  transition:
+    background 160ms var(--agent-ease),
+    color 160ms var(--agent-ease);
+}
+
+.workspace-tab:hover {
+  color: var(--color-text-muted);
+  background: var(--color-accent-subtle);
+}
+
+.workspace-tab[data-active="true"] {
+  color: var(--color-text);
+  background: var(--color-bg-subtle);
+}
+
+.workspace-tab__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.workspace-tab__close {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 4px;
+  color: var(--color-text-faint);
+}
+
+.workspace-tab__close:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+}
+
 @media (max-width: 640px) {
   .g-strip {
     gap: 8px !important;
@@ -1840,6 +2117,16 @@ button.research-launchpad__status-item:hover {
   .session-project-path,
   .session-header-secondary {
     display: none !important;
+  }
+
+  .workspace-header__title span,
+  .workspace-header__tools span {
+    display: none;
+  }
+
+  .workspace-header__tools {
+    width: 30px;
+    padding: 0;
   }
 
   .session-sidebar-backdrop {

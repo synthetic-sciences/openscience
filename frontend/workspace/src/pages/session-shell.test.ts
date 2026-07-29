@@ -34,3 +34,19 @@ describe("session render boundary", () => {
     expect(children).toBeGreaterThan(code)
   })
 })
+
+describe("focused workspace shell", () => {
+  test("keeps navigation quiet and gives each shell region a semantic contract", () => {
+    const session = read("./session.tsx")
+
+    expect(session).toContain('class="workspace-header"')
+    expect(session).toContain('class="session-sidebar__new"')
+    expect(session).toContain('class="workspace-tabs')
+    expect(session).toContain('class="workspace-header__menu"')
+    expect(session).not.toContain("<HeaderDivider")
+    expect(session).not.toContain('<Wordmark size="sm"')
+    expect(session).not.toContain('placeholder="Search sessions"')
+    expect(session).not.toContain(">New session</span> above.")
+    expect(session).toContain(">New research</span> above.")
+  })
+})

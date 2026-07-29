@@ -5,10 +5,10 @@
  */
 import { type JSX } from "solid-js"
 
-export function AppHeader(props: { children: JSX.Element }): JSX.Element {
+export function AppHeader(props: { children: JSX.Element; class?: string }): JSX.Element {
   return (
     <header
-      class="g-strip"
+      class={`g-strip${props.class ? ` ${props.class}` : ""}`}
       style={{
         display: "flex",
         "align-items": "center",
