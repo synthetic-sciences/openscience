@@ -14,6 +14,10 @@ dist/
 backend/cli/skills/
 .astro/
 
+# recorded live-API responses, replayed verbatim by the connector conformance
+# suite (regenerate with: bun run script/record-fetch-fixtures.ts)
+backend/cli/test/science/fixtures/
+
 # local Playwright output
 frontend/workspace/e2e/playwright-report/
 frontend/workspace/e2e/test-results/
