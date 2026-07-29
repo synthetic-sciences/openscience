@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { ScienceFetchTool } from "../../src/tool/science"
+import { ScienceFetchTool, ScienceListDbsTool } from "../../src/tool/science"
 import { Instance } from "../../src/project/instance"
 import { clearCache, resetRateLimits } from "../../src/science/connectors/http"
 
@@ -100,5 +100,23 @@ describe("science_fetch degradation", () => {
     const out = await run({ db: "chembl", id: "CHEMBL25", format: "sdf" })
     expect(out.metadata.error).toBe("unsupported_format")
     expect(out.output).toMatch(/records only/i)
+  })
+})
+
+describe("science_list_dbs reports formats", () => {
+  test("a records-only connector shows no formats suffix", async () => {
+    const out = await Instance.provide({
+      directory: dir,
+      fn: async () => (await ScienceListDbsTool.init()).execute({ domain: "chemistry" }, ctx),
+    })
+    expect(out.output).toContain("chembl")
+    expect(out.output).not.toContain("chembl** (ChEMBL) — formats:")
+  })
+
+  test("the catalog carries formats when a connector declares them", async () => {
+    const { registry } = await import("../../src/science/connectors")
+    const entry = registry.catalog().find((e) => e.id === "rcsb-pdb")
+    expect(entry).toBeDefined()
+    expect("formats" in entry!).toBe(true)
   })
 })

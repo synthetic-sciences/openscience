@@ -115,6 +115,7 @@ export interface CatalogEntry {
   domain: ConnectorDomain
   description: string
   homepage?: string
+  formats?: string[]
 }
 
 /**
@@ -149,12 +150,13 @@ export class ConnectorRegistry {
 
   /** Serializable catalog for tools / UI (drops the search/fetch functions). */
   catalog(): CatalogEntry[] {
-    return this.all().map(({ id, name, domain, description, homepage }) => ({
+    return this.all().map(({ id, name, domain, description, homepage, formats }) => ({
       id,
       name,
       domain,
       description,
       homepage,
+      formats,
     }))
   }
 }

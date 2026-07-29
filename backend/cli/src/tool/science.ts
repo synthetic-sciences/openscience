@@ -47,7 +47,10 @@ export const ScienceListDbsTool = Tool.define("science_list_dbs", {
     }
 
     const sections = [...byDomain.entries()].map(([domain, list]) => {
-      const rows = list.map((e) => `- **${e.id}** (${e.name}) — ${e.description}`)
+      const rows = list.map((e) => {
+        const formats = e.formats?.length ? ` · formats: ${e.formats.join(", ")}` : ""
+        return `- **${e.id}** (${e.name}) — ${e.description}${formats}`
+      })
       return `### ${domain}\n${rows.join("\n")}`
     })
 
