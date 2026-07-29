@@ -5,7 +5,7 @@ import { Tool } from "./tool"
 import { registry } from "../science/connectors"
 import type { ConnectorHit } from "../science/connectors"
 import { Instance } from "../project/instance"
-import { outcomeFor, formatBytes } from "../science/connectors/fetch-outcome"
+import { outcomeFor, formatBytes, classifyError } from "../science/connectors/fetch-outcome"
 
 /**
  * Small, database-agnostic surface over the scientific connector registry.
@@ -194,8 +194,7 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
           : await connector.fetch(params.id, { signal: ctx.abort })
     } catch (err) {
       if (ctx.abort.aborted) throw err
-      const message = err instanceof Error ? err.message : String(err)
-      const rateLimited = /\b(429|503|408)\b/.test(message) || /rate.?limit/i.test(message)
+      const { retryable: rateLimited, message } = classifyError(err)
       const guidance = rateLimited
         ? `${connector.name} is rate limiting requests. Wait a few seconds, then retry.`
         : `${connector.name} returned an error: ${message}`
