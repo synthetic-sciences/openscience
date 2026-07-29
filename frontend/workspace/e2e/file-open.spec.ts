@@ -68,3 +68,38 @@ test("can edit, reset, save, and close a text file", async ({ page, gotoSession 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("opens ordinary Markdown as a focused document", async ({ page, gotoSession }) => {
+  const directory = mkdtempSync(path.join(tmpdir(), "openscience-markdown-e2e-"))
+  const filename = "notes.md"
+  const filepath = path.join(directory, filename)
+  writeFileSync(filepath, "# Notes\n\nA focused research note.\n")
+
+  try {
+    await gotoSession()
+    await page.getByRole("tab", { name: "Files", exact: true }).click()
+
+    const location = page.getByPlaceholder("/absolute/path")
+    await location.fill(directory)
+    await location.press("Enter")
+    await page.getByPlaceholder("filter this folder…").fill(filename)
+    await page.getByRole("button", { name: new RegExp(`^${filename}\\b`) }).click()
+
+    const view = page.locator('[data-component="file-view"]')
+    await expect(view.getByRole("heading", { name: "Notes", exact: true })).toBeVisible()
+    await expect(view.locator('[data-component="manuscript-workbench"]')).toHaveCount(0)
+    await expect(view.getByRole("button", { name: "Citations", exact: true })).toHaveCount(0)
+    await expect(view.getByRole("button", { name: "Figures", exact: true })).toHaveCount(0)
+    await expect(view.getByRole("button", { name: "Review", exact: true })).toHaveCount(0)
+    await expect(view.getByRole("button", { name: "Publish", exact: true })).toHaveCount(0)
+
+    await view.getByRole("button", { name: "Source", exact: true }).click()
+    const editor = view.getByLabel("File source")
+    await expect(editor).toHaveValue("# Notes\n\nA focused research note.\n")
+    await editor.fill("# Notes\n\nA calmer research note.\n")
+    await view.getByRole("button", { name: "save", exact: true }).click()
+    await expect.poll(() => readFileSync(filepath, "utf8")).toBe("# Notes\n\nA calmer research note.\n")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

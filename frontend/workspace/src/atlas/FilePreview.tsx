@@ -27,6 +27,7 @@ import { NotebookView } from "@/notebook/NotebookView"
 import { DataTableView } from "@/data/DataTableView"
 import type { TableFormat } from "@/data/table"
 import { ManuscriptWorkbench } from "@/manuscript/ManuscriptWorkbench"
+import { parseManuscript } from "@/manuscript/model"
 import { artifactContext, createArtifactContext } from "@/artifacts/context"
 import type { ArtifactInspection } from "@/science/renderers"
 import { toast } from "@/atlas/Toast"
@@ -204,6 +205,7 @@ export function FileView(props: {
     // KaTeX, which blanks on a full \documentclass document.
     return "code"
   })
+  const manuscript = createMemo(() => parseManuscript(draft()).bibliographies.length > 0)
 
   const badge = () => {
     const k = kind()
@@ -500,8 +502,8 @@ export function FileView(props: {
                   <pre style={{ margin: 0, "white-space": "pre-wrap", "overflow-wrap": "anywhere" }}>{draft()}</pre>
                 </div>
               </Match>
-              {/* markdown */}
-              <Match when={kind() === "markdown" && !showSource()}>
+              {/* citation-aware manuscripts keep the research authoring workbench */}
+              <Match when={kind() === "markdown" && !showSource() && manuscript()}>
                 <ManuscriptWorkbench
                   directory={directory()}
                   path={props.path}
@@ -510,6 +512,13 @@ export function FileView(props: {
                   saving={saving()}
                   onChange={setDraft}
                 />
+              </Match>
+
+              {/* ordinary Markdown opens as a quiet document */}
+              <Match when={kind() === "markdown" && !showSource() && !manuscript()}>
+                <div style={{ padding: "24px 28px 48px", width: "100%", "max-width": "920px", margin: "0 auto" }}>
+                  <Markdown class="atlas-md" text={draft()} />
+                </div>
               </Match>
 
               {/* notebook */}
@@ -624,6 +633,7 @@ export function FileView(props: {
               <Match
                 when={
                   (kind() === "code" ||
+                    kind() === "markdown" ||
                     kind() === "science" ||
                     kind() === "scientific-data" ||
                     kind() === "notebook" ||
@@ -632,6 +642,7 @@ export function FileView(props: {
                 }
               >
                 <textarea
+                  aria-label="File source"
                   value={draft()}
                   spellcheck={false}
                   onInput={(ev) => setDraft(ev.currentTarget.value)}
@@ -652,7 +663,7 @@ export function FileView(props: {
                   }}
                 />
               </Match>
-              <Match when={kind() === "code" || (kind() === "markdown" && showSource())}>
+              <Match when={kind() === "code"}>
                 <div style={{ padding: "14px 16px" }}>
                   <Markdown
                     class="atlas-md"
