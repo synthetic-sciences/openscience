@@ -11,8 +11,7 @@ import { currentDirectory } from "@/utils/base64"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { useGlobalSync } from "@/context/global-sync"
-import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
-import { IconBrain } from "@/atlas/shared/Icon"
+import { FONT_SANS } from "@/styles/tokens"
 import type { Config } from "@synsci/sdk/v2/client"
 import {
   SearchInput,
@@ -131,84 +130,21 @@ export default function SkillsPage(): JSX.Element {
   })
 
   return (
-    <div
-      style={{
-        flex: 1,
-        "min-height": 0,
-        display: "flex",
-        "flex-direction": "column",
-        background: "var(--color-background-base)",
-      }}
-    >
-      {/* ── Hero + toolbar ─────────────────────────────────────────────── */}
-      <div
-        style={{
-          "flex-shrink": 0,
-          padding: "22px 24px 16px",
-          "border-bottom": "1px solid var(--color-border)",
-          background: "var(--color-bg-subtle)",
-        }}
-      >
-        <div style={{ display: "flex", "align-items": "flex-start", gap: "13px", "max-width": "1080px" }}>
-          <div
-            style={{
-              display: "flex",
-              "align-items": "center",
-              "justify-content": "center",
-              width: "38px",
-              height: "38px",
-              "border-radius": "9px",
-              border: "1px solid var(--color-border)",
-              background: "var(--color-surface-solid)",
-              color: "var(--color-text)",
-              "flex-shrink": 0,
-            }}
-          >
-            <IconBrain size={20} strokeWidth={1.6} />
+    <div class="skills-workspace">
+      <div class="skills-workspace__header">
+        <div class="skills-workspace__heading">
+          <div>
+            <h1>Skills</h1>
+            <p>Playbooks available to this workspace and its research agents.</p>
           </div>
-          <div style={{ display: "flex", "flex-direction": "column", gap: "3px", "min-width": 0 }}>
-            <h1
-              style={{ "font-family": FONT_SANS, "font-size": "19px", "font-weight": 600, color: "var(--color-text)" }}
-            >
-              Skills
-            </h1>
-            <p
-              style={{
-                "font-family": FONT_SANS,
-                "font-size": "13px",
-                "line-height": 1.5,
-                color: "var(--color-text-muted)",
-                "max-width": "560px",
-              }}
-            >
-              Expert playbooks your agents load on demand — bundled, learned, and installed. Toggle one off to hide it
-              from every agent.
-            </p>
-            <div
-              style={{
-                display: "flex",
-                gap: "14px",
-                "margin-top": "5px",
-                "font-family": FONT_MONO,
-                "font-size": "11px",
-                color: "var(--color-text-faint)",
-              }}
-            >
-              <span>
-                <span style={{ color: "var(--color-text)" }}>{enabledCount()}</span> enabled
-              </span>
-              <span>
-                <span style={{ color: "var(--color-text)" }}>{all().length}</span> total
-              </span>
-              <span>
-                <span style={{ color: "var(--color-text)" }}>{Math.max(0, categories().length - 1)}</span> categories
-              </span>
-            </div>
+          <div class="skills-workspace__summary">
+            <span>{enabledCount()} enabled</span>
+            <span>{all().length} total</span>
           </div>
         </div>
 
         <Show when={view() === "list"}>
-          <div style={{ "margin-top": "14px", "max-width": "1080px" }}>
+          <div class="skills-workspace__toolbar">
             <Toolbar>
               <FilterMenu options={categories()} value={category()} onSelect={setCategory} />
               <SearchInput value={search()} onInput={setSearch} placeholder="Search skills" />
@@ -252,9 +188,8 @@ export default function SkillsPage(): JSX.Element {
         }}
       />
 
-      {/* ── Body ───────────────────────────────────────────────────────── */}
-      <div class="atlas-scroll" style={{ flex: 1, "min-height": 0, "overflow-y": "auto", padding: "20px 24px 40px" }}>
-        <div style={{ "max-width": "1080px", margin: "0 auto" }}>
+      <div class="atlas-scroll skills-workspace__body">
+        <div class="skills-workspace__content">
           <Show when={view() === "scratch"}>
             <ScratchForm
               busy={busy()}
@@ -316,28 +251,18 @@ export default function SkillsPage(): JSX.Element {
                   </div>
                 }
               >
-                <div style={{ display: "flex", "flex-direction": "column", gap: "26px" }}>
+                <div class="skills-workspace__list">
                   <For each={shelves()}>
                     {([cat, items]) => (
-                      <section style={{ display: "flex", "flex-direction": "column", gap: "11px" }}>
-                        <div style={{ display: "flex", "align-items": "baseline", gap: "8px" }}>
+                      <section class="skills-workspace__group">
+                        <div class="skills-workspace__group-heading">
                           <span class="atlas-section-label">{cat}</span>
-                          <span
-                            style={{ "font-family": FONT_MONO, "font-size": "10px", color: "var(--color-text-faint)" }}
-                          >
-                            {items.length}
-                          </span>
+                          <span>{items.length}</span>
                         </div>
-                        <div
-                          style={{
-                            display: "grid",
-                            "grid-template-columns": "repeat(auto-fill, minmax(280px, 1fr))",
-                            gap: "10px",
-                          }}
-                        >
+                        <div class="skills-workspace__rows">
                           <For each={items}>
                             {(skill) => (
-                              <SkillCard
+                              <SkillRow
                                 skill={skill}
                                 on={enabled(skill.name)}
                                 onToggle={(v) => void toggle(skill.name, v)}
@@ -376,103 +301,28 @@ export default function SkillsPage(): JSX.Element {
   }
 }
 
-function SkillCard(props: { skill: Skill; on: boolean; onToggle: (v: boolean) => void }): JSX.Element {
+function SkillRow(props: { skill: Skill; on: boolean; onToggle: (v: boolean) => void }): JSX.Element {
   const source = () => sourceOf(props.skill.location)
   return (
-    <div
-      style={{
-        display: "flex",
-        "flex-direction": "column",
-        gap: "8px",
-        padding: "13px 14px",
-        "border-radius": "8px",
-        border: "1px solid var(--color-border)",
-        background: props.on ? "var(--color-surface-solid)" : "transparent",
-        opacity: props.on ? 1 : 0.62,
-        transition: "opacity 120ms ease, border-color 120ms ease, background 120ms ease",
-        "min-width": 0,
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--color-border-strong)")}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
-    >
-      <div style={{ display: "flex", "align-items": "center", gap: "8px" }}>
-        <span
-          style={{
-            "font-family": FONT_MONO,
-            "font-size": "13px",
-            "font-weight": 600,
-            color: "var(--color-text)",
-            flex: 1,
-            "min-width": 0,
-            overflow: "hidden",
-            "text-overflow": "ellipsis",
-            "white-space": "nowrap",
-          }}
-          title={props.skill.name}
-        >
-          {props.skill.name}
+    <div class="skills-workspace__row" data-enabled={props.on ? "true" : "false"}>
+      <div class="skills-workspace__identity">
+        <strong title={props.skill.name}>{props.skill.name}</strong>
+        <span>
+          <i style={{ background: SOURCE_DOT[source()] }} />
+          {source()}
         </span>
-        <Switch data-action="skill-toggle" checked={props.on} onChange={props.onToggle} hideLabel>
-          {props.skill.name}
-        </Switch>
       </div>
 
       <Show when={props.skill.description}>
-        <p
-          style={{
-            "font-family": FONT_SANS,
-            "font-size": "12px",
-            "line-height": 1.5,
-            color: "var(--color-text-muted)",
-            display: "-webkit-box",
-            "-webkit-line-clamp": "2",
-            "-webkit-box-orient": "vertical",
-            overflow: "hidden",
-          }}
-        >
-          {props.skill.description}
-        </p>
+        <p>{props.skill.description}</p>
       </Show>
 
-      <div style={{ display: "flex", "align-items": "center", gap: "6px", "flex-wrap": "wrap", "margin-top": "1px" }}>
-        <span
-          style={{
-            display: "inline-flex",
-            "align-items": "center",
-            gap: "5px",
-            "font-family": FONT_MONO,
-            "font-size": "10px",
-            color: "var(--color-text-faint)",
-          }}
-        >
-          <span
-            style={{
-              width: "5px",
-              height: "5px",
-              "border-radius": "50%",
-              background: SOURCE_DOT[source()],
-              "flex-shrink": 0,
-            }}
-          />
-          {source()}
-        </span>
-        <For each={(props.skill.tags ?? []).slice(0, 3)}>
-          {(tag) => (
-            <span
-              style={{
-                "font-family": FONT_MONO,
-                "font-size": "10px",
-                color: "var(--color-text-faint)",
-                padding: "1px 6px",
-                "border-radius": "4px",
-                background: "var(--color-accent-subtle)",
-              }}
-            >
-              {tag}
-            </span>
-          )}
-        </For>
+      <div class="skills-workspace__tags">
+        <For each={(props.skill.tags ?? []).slice(0, 3)}>{(tag) => <span>{tag}</span>}</For>
       </div>
+      <Switch data-action="skill-toggle" checked={props.on} onChange={props.onToggle} hideLabel>
+        {props.skill.name}
+      </Switch>
     </div>
   )
 }

@@ -2752,6 +2752,220 @@ button.research-launchpad__status-item:hover {
   background: var(--color-border);
 }
 
+.skills-workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+}
+
+.skills-workspace__header {
+  flex-shrink: 0;
+  padding: 17px 24px 14px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.skills-workspace__heading {
+  max-width: 1080px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.skills-workspace__heading h1 {
+  margin: 0;
+  font-family: var(--font-family-sans);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+}
+
+.skills-workspace__heading p {
+  margin: 3px 0 0;
+  font-family: var(--font-family-sans);
+  font-size: 11px;
+  color: var(--color-text-faint);
+}
+
+.skills-workspace__summary {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+  font-family: var(--font-family-mono);
+  font-size: 9px;
+  color: var(--color-text-faint);
+}
+
+.skills-workspace__toolbar {
+  max-width: 1080px;
+  margin-top: 12px;
+}
+
+.skills-workspace__body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 24px 40px;
+  overflow-y: auto;
+}
+
+.skills-workspace__content {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.skills-workspace__list,
+.skills-workspace__group {
+  display: flex;
+  flex-direction: column;
+}
+
+.skills-workspace__group-heading {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.skills-workspace__group-heading > span:last-child {
+  font-family: var(--font-family-mono);
+  font-size: 9px;
+  color: var(--color-text-faint);
+}
+
+.skills-workspace__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.skills-workspace__row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(220px, 1.5fr) minmax(90px, 0.7fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--color-border);
+  transition:
+    background 120ms ease,
+    opacity 120ms ease;
+}
+
+.skills-workspace__row:hover {
+  background: var(--color-bg-subtle);
+}
+
+.skills-workspace__row[data-enabled="false"] {
+  opacity: 0.56;
+}
+
+.skills-workspace__identity {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.skills-workspace__identity strong {
+  overflow: hidden;
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-workspace__identity span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-family-mono);
+  font-size: 8px;
+  color: var(--color-text-faint);
+}
+
+.skills-workspace__identity i {
+  width: 4px;
+  height: 4px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.skills-workspace__row > p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-family-sans);
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.skills-workspace__tags {
+  min-width: 0;
+  display: flex;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.skills-workspace__tags span {
+  overflow: hidden;
+  font-family: var(--font-family-mono);
+  font-size: 8px;
+  color: var(--color-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-workspace__tags span + span::before {
+  margin-right: 5px;
+  color: var(--color-border-strong);
+  content: "·";
+}
+
+@media (max-width: 760px) {
+  .skills-workspace__header {
+    padding: 14px 16px 12px;
+  }
+
+  .skills-workspace__body {
+    padding: 0 16px 32px;
+  }
+
+  .skills-workspace__heading p,
+  .skills-workspace__summary {
+    display: none;
+  }
+
+  .skills-workspace__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px 12px;
+    padding: 11px 2px;
+  }
+
+  .skills-workspace__row > p,
+  .skills-workspace__tags {
+    grid-column: 1 / -1;
+  }
+
+  .skills-workspace__row > [data-action="skill-toggle"] {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .skills-workspace__row > p {
+    -webkit-line-clamp: 1;
+  }
+}
+
 @media (max-width: 640px) {
   .g-strip {
     gap: 8px !important;
