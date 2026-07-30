@@ -89,6 +89,17 @@ describe("ComputeMode.usable", () => {
     expect(result.providers).toEqual(["modal"])
   })
 
+  test("each of modal's three skill names resolves modal on its own", async () => {
+    const names = ["modal-serverless-gpu", "modal-ml-training", "modal-research-gpu"]
+    for (const name of names) {
+      clearEnv()
+      process.env["MODAL_TOKEN_ID"] = "ak-abc"
+      process.env["MODAL_TOKEN_SECRET"] = "as-def"
+      const result = await withSkills([name], () => ComputeMode.usable())
+      expect(result.providers).toEqual(["modal"])
+    }
+  })
+
   test("an empty-string key does not count as set", async () => {
     clearEnv()
     process.env["TENSORPOOL_KEY"] = ""
@@ -114,10 +125,19 @@ describe("ComputeMode.usable", () => {
     }
   })
 
-  test("SKILLS covers every name in PROVIDERS and nothing else", async () => {
-    const declared = Object.values(ComputeMode.PROVIDERS).flatMap((p) => p.skills)
-    expect([...ComputeMode.SKILLS].sort()).toEqual([...new Set(declared)].sort())
-    expect(ComputeMode.SKILLS.size).toBeGreaterThan(0)
+  test("SKILLS covers every name in PROVIDERS and nothing else", () => {
+    const required = [
+      "modal-serverless-gpu",
+      "modal-ml-training",
+      "modal-research-gpu",
+      "lambda-labs-gpu-cloud",
+      "tensorpool-gpu-cloud",
+      "prime-intellect-lab",
+      "runpod-gpu-cloud",
+      "vast-ai-gpu-cloud",
+    ]
+    expect([...ComputeMode.SKILLS].sort()).toEqual([...required].sort())
+    expect(ComputeMode.SKILLS.size).toBe(required.length)
   })
 
   test("a key injected after the first call is seen on the next call", async () => {
@@ -127,5 +147,27 @@ describe("ComputeMode.usable", () => {
       process.env["LAMBDA_API_KEY"] = "secret_late"
       expect((await ComputeMode.usable()).providers).toEqual(["lambda"])
     })
+  })
+
+  test("providers keyed together return in PROVIDERS declaration order, not set order", async () => {
+    clearEnv()
+    process.env["VAST_API_KEY"] = "v"
+    process.env["MODAL_TOKEN_ID"] = "ak-a"
+    process.env["MODAL_TOKEN_SECRET"] = "as-b"
+    process.env["LAMBDA_API_KEY"] = "l"
+    const result = await withSkills(["vast-ai-gpu-cloud", "modal-serverless-gpu", "lambda-labs-gpu-cloud"], () =>
+      ComputeMode.usable(),
+    )
+    expect(result.providers).toEqual(["modal", "lambda", "vast"])
+  })
+
+  test("unusable providers also return in PROVIDERS declaration order, not set order", async () => {
+    clearEnv()
+    process.env["PRIME_API_KEY"] = "p"
+    process.env["TENSORPOOL_KEY"] = "t"
+    process.env["LAMBDA_API_KEY"] = "l"
+    const result = await withSkills(["lambda-labs-gpu-cloud"], () => ComputeMode.usable())
+    expect(result.providers).toEqual(["lambda"])
+    expect(result.unusable).toEqual(["tensorpool", "prime"])
   })
 })
