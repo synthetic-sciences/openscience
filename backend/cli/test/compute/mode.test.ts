@@ -27,7 +27,7 @@ afterEach(clearEnv)
  *  without a network catalog. `OPENSCIENCE_DISABLE_BUNDLED_SKILLS` in preload.ts
  *  keeps the dev skills/ dir and the server index out, so the test controls the
  *  catalog exactly. */
-async function withSkills<T>(names: string[], fn: () => Promise<T>): Promise<T> {
+async function withSkills<T>(names: string[], fn: () => T): Promise<T> {
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {
@@ -47,38 +47,33 @@ describe("ComputeMode.usable", () => {
     clearEnv()
     process.env["LAMBDA_API_KEY"] = "secret_abc"
     const result = await withSkills(["lambda-labs-gpu-cloud"], () => ComputeMode.usable())
-    expect(result.providers).toEqual(["lambda"])
-    expect(result.unusable).toEqual([])
+    expect(result).toEqual(["lambda"])
   })
 
   test("the alternate env spelling also counts", async () => {
     clearEnv()
     process.env["LAMBDA_LABS_API_KEY"] = "secret_abc"
     const result = await withSkills(["lambda-labs-gpu-cloud"], () => ComputeMode.usable())
-    expect(result.providers).toEqual(["lambda"])
+    expect(result).toEqual(["lambda"])
   })
 
-  test("a key with NO catalogued skill is not usable", async () => {
+  test("a key with NO catalogued skill IS usable — the agent drives the provider API directly", async () => {
     clearEnv()
     process.env["RUNPOD_API_KEY"] = "rpa_abc"
-    const result = await withSkills([], () => ComputeMode.usable())
-    expect(result.providers).toEqual([])
-    expect(result.unusable).toEqual(["runpod"])
+    expect(await withSkills([], () => ComputeMode.usable())).toEqual(["runpod"])
   })
 
   test("a catalogued skill with NO key is not usable", async () => {
     clearEnv()
     const result = await withSkills(["lambda-labs-gpu-cloud"], () => ComputeMode.usable())
-    expect(result.providers).toEqual([])
-    expect(result.unusable).toEqual([])
+    expect(result).toEqual([])
   })
 
   test("modal needs BOTH token vars — id alone is not a key", async () => {
     clearEnv()
     process.env["MODAL_TOKEN_ID"] = "ak-abc"
     const result = await withSkills(["modal-serverless-gpu"], () => ComputeMode.usable())
-    expect(result.providers).toEqual([])
-    expect(result.unusable).toEqual([])
+    expect(result).toEqual([])
   })
 
   test("modal with both token vars is usable", async () => {
@@ -86,26 +81,29 @@ describe("ComputeMode.usable", () => {
     process.env["MODAL_TOKEN_ID"] = "ak-abc"
     process.env["MODAL_TOKEN_SECRET"] = "as-def"
     const result = await withSkills(["modal-serverless-gpu"], () => ComputeMode.usable())
-    expect(result.providers).toEqual(["modal"])
+    expect(result).toEqual(["modal"])
   })
 
-  test("each of modal's three skill names resolves modal on its own", async () => {
-    const names = ["modal-serverless-gpu", "modal-ml-training", "modal-research-gpu"]
-    for (const name of names) {
-      clearEnv()
-      process.env["MODAL_TOKEN_ID"] = "ak-abc"
-      process.env["MODAL_TOKEN_SECRET"] = "as-def"
-      const result = await withSkills([name], () => ComputeMode.usable())
-      expect(result.providers).toEqual(["modal"])
-    }
+  test("PROVIDERS pins the exact skill names the catalog filter matches on", async () => {
+    expect([...ComputeMode.SKILLS].sort()).toEqual(
+      [
+        "lambda-labs-gpu-cloud",
+        "modal-ml-training",
+        "modal-research-gpu",
+        "modal-serverless-gpu",
+        "prime-intellect-lab",
+        "tensorpool-gpu-cloud",
+      ].sort(),
+    )
+    expect(ComputeMode.PROVIDERS["runpod"].skills).toEqual([])
+    expect(ComputeMode.PROVIDERS["vast"].skills).toEqual([])
   })
 
   test("an empty-string key does not count as set", async () => {
     clearEnv()
     process.env["TENSORPOOL_KEY"] = ""
     const result = await withSkills(["tensorpool-gpu-cloud"], () => ComputeMode.usable())
-    expect(result.providers).toEqual([])
-    expect(result.unusable).toEqual([])
+    expect(result).toEqual([])
   })
 
   test("every provider resolves in isolation, given its own skill", async () => {
@@ -121,7 +119,7 @@ describe("ComputeMode.usable", () => {
       clearEnv()
       Object.assign(process.env, env)
       const result = await withSkills([skill], () => ComputeMode.usable())
-      expect(result.providers).toEqual([id])
+      expect(result).toEqual([id])
     }
   })
 
@@ -133,8 +131,6 @@ describe("ComputeMode.usable", () => {
       "lambda-labs-gpu-cloud",
       "tensorpool-gpu-cloud",
       "prime-intellect-lab",
-      "runpod-gpu-cloud",
-      "vast-ai-gpu-cloud",
     ]
     expect([...ComputeMode.SKILLS].sort()).toEqual([...required].sort())
     expect(ComputeMode.SKILLS.size).toBe(required.length)
@@ -143,9 +139,9 @@ describe("ComputeMode.usable", () => {
   test("a key injected after the first call is seen on the next call", async () => {
     clearEnv()
     await withSkills(["lambda-labs-gpu-cloud"], async () => {
-      expect((await ComputeMode.usable()).providers).toEqual([])
+      expect(await ComputeMode.usable()).toEqual([])
       process.env["LAMBDA_API_KEY"] = "secret_late"
-      expect((await ComputeMode.usable()).providers).toEqual(["lambda"])
+      expect(await ComputeMode.usable()).toEqual(["lambda"])
     })
   })
 
@@ -158,16 +154,6 @@ describe("ComputeMode.usable", () => {
     const result = await withSkills(["vast-ai-gpu-cloud", "modal-serverless-gpu", "lambda-labs-gpu-cloud"], () =>
       ComputeMode.usable(),
     )
-    expect(result.providers).toEqual(["modal", "lambda", "vast"])
-  })
-
-  test("unusable providers also return in PROVIDERS declaration order, not set order", async () => {
-    clearEnv()
-    process.env["PRIME_API_KEY"] = "p"
-    process.env["TENSORPOOL_KEY"] = "t"
-    process.env["LAMBDA_API_KEY"] = "l"
-    const result = await withSkills(["lambda-labs-gpu-cloud"], () => ComputeMode.usable())
-    expect(result.providers).toEqual(["lambda"])
-    expect(result.unusable).toEqual(["tensorpool", "prime"])
+    expect(result).toEqual(["modal", "lambda", "vast"])
   })
 })

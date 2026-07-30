@@ -1,5 +1,3 @@
-import { Skill } from "@/skill"
-
 /**
  * Runtime resolution of how GPU compute is funded.
  *
@@ -22,10 +20,6 @@ export namespace ComputeMode {
   export type Source = "byok" | "managed" | "none"
 
   /**
-   * A provider is BYOK-usable only with BOTH a credential and a skill: the agent
-   * runs GPU work by loading a provider's skill, so a key with no skill gives it
-   * nothing to act on.
-   *
    * `env` is a list of ALTERNATIVE groups; a group is satisfied when every var in
    * it is set and non-empty. Modal is the only pair — its single pasted key
    * splits into a token id + secret, and a half-pasted one maps to nothing
@@ -56,11 +50,11 @@ export namespace ComputeMode {
     },
     runpod: {
       env: [["RUNPOD_API_KEY"]],
-      skills: ["runpod-gpu-cloud"],
+      skills: [],
     },
     vast: {
       env: [["VAST_API_KEY"]],
-      skills: ["vast-ai-gpu-cloud"],
+      skills: [],
     },
   }
 
@@ -75,20 +69,17 @@ export namespace ComputeMode {
   }
 
   /**
-   * Split configured providers into those the agent can actually act on and
-   * those with a stored key but no catalogued skill. The second list exists so
-   * `none` can say *why* — a user who connected a key and is then told no
-   * compute is available deserves better than silence.
+   * The credentialed GPU providers, in declaration order.
+   *
+   * A credential is the whole test. An earlier revision also required a
+   * matching skill, on the theory that a provider with no skill gives the agent
+   * nothing to act on — but a capable agent drives a documented cloud API from a
+   * key, so that conjunction only produced a false "no compute available" for
+   * users holding a perfectly workable key. A skill, where one exists, is a
+   * quality boost; the catalog filter still offers a provider's skills only when
+   * that provider is credentialed.
    */
-  export async function usable() {
-    const catalog = new Set(await Skill.all().then((all) => all.map((skill) => skill.name)))
-    const providers: string[] = []
-    const unusable: string[] = []
-    for (const [id, spec] of Object.entries(PROVIDERS)) {
-      if (!keyed(spec.env)) continue
-      if (spec.skills.some((name) => catalog.has(name))) providers.push(id)
-      else unusable.push(id)
-    }
-    return { providers, unusable }
+  export function usable(): string[] {
+    return Object.keys(PROVIDERS).filter((id) => keyed(PROVIDERS[id].env))
   }
 }
