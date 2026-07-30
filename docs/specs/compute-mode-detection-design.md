@@ -87,13 +87,14 @@ that doesn't exist. Where keys _do_ exist, that fallback spends on the user's ow
 export type ComputeSource = "byok" | "managed" | "none"
 ```
 
-| Provider keys present? | Managed available? | Resolved  | Agent is told                                                    |
-| ---------------------- | ------------------ | --------- | ---------------------------------------------------------------- |
-| yes                    | —                  | `byok`    | use the user's connected providers via the cloud-compute skills  |
-| no                     | yes                | `managed` | use managed compute, billed to the wallet                        |
-| no                     | no                 | `none`    | **no compute is available — connect a provider key in Settings** |
+| Usable provider? | Managed available? | Resolved  | Agent is told                                                    |
+| ---------------- | ------------------ | --------- | ---------------------------------------------------------------- |
+| yes              | —                  | `byok`    | use the user's connected providers via the cloud-compute skills  |
+| no               | yes                | `managed` | use managed compute, billed to the wallet                        |
+| no               | no                 | `none`    | **no compute is available — connect a provider key in Settings** |
 
-BYOK wins when keys are present. It is free to the user, it works today, and it needs nothing from Atlas.
+BYOK wins when a usable provider is present. It is free to the user, it works today, and it needs nothing from
+Atlas. "Usable" means a key **and** a skill — see below, because two providers have a key and no skill.
 
 ### `billing.compute` becomes an override, not the source of truth
 
@@ -101,26 +102,58 @@ Detection supplies the default; the existing setting still lets a user force a m
 meaningful without letting it assert something false.
 
 - unset → use detection
-- `"byok"` → force BYOK. If no keys are present, resolve to `none` rather than pretending.
+- `"byok"` → force BYOK. If no _usable_ provider is present, resolve to `none` rather than pretending.
 - `"managed"` → force managed. If managed is unavailable, resolve to `none`.
 
 An override may narrow the outcome to `none`; it may never manufacture a capability that isn't there.
 
-### What counts as a provider key
+### What counts as a usable provider: a key **and** a skill
 
-From `PROVIDER_ENV` in `src/server/routes/settings/compute.ts:170` plus Modal's pair:
+A key alone is not enough. The agent runs GPU work by loading a provider's skill, so a provider with a
+credential but no skill gives the agent nothing to act on.
 
-| Provider        | Env vars                                                      |
-| --------------- | ------------------------------------------------------------- |
-| Modal           | `MODAL_TOKEN_ID` **and** `MODAL_TOKEN_SECRET` (both required) |
-| Lambda          | `LAMBDA_API_KEY` or `LAMBDA_LABS_API_KEY`                     |
-| RunPod          | `RUNPOD_API_KEY`                                              |
-| Vast            | `VAST_API_KEY`                                                |
-| Prime Intellect | `PRIME_API_KEY` or `PRIME_INTELLECT_API_KEY`                  |
-| TensorPool      | `TENSORPOOL_KEY` or `TENSORPOOL_API_KEY`                      |
+From `PROVIDER_ENV` (`src/server/routes/settings/compute.ts:170`) plus Modal's pair, cross-referenced against
+the skill tree:
 
-Any one provider fully configured is sufficient for `byok`. Modal is the only pair — a half-pasted Modal
-credential maps to nothing and must not count, which mirrors the existing behaviour at `compute.ts:185`.
+| Provider        | Env vars                                                      | Skill                                                    | Usable |
+| --------------- | ------------------------------------------------------------- | -------------------------------------------------------- | ------ |
+| Modal           | `MODAL_TOKEN_ID` **and** `MODAL_TOKEN_SECRET` (both required) | `cloud-compute/modal`, `cloud-compute/modal-ml-training` | yes    |
+| Lambda          | `LAMBDA_API_KEY` or `LAMBDA_LABS_API_KEY`                     | `cloud-compute/lambda-labs`                              | yes    |
+| TensorPool      | `TENSORPOOL_KEY` or `TENSORPOOL_API_KEY`                      | `cloud-compute/tensorpool`                               | yes    |
+| Prime Intellect | `PRIME_API_KEY` or `PRIME_INTELLECT_API_KEY`                  | `ml-training/prime-intellect-lab`                        | yes    |
+| **RunPod**      | `RUNPOD_API_KEY`                                              | **none**                                                 | **no** |
+| **Vast**        | `VAST_API_KEY`                                                | **none**                                                 | **no** |
+
+**Rule: a provider is BYOK-usable only when it has both.** So `byok` requires at least one provider with a key
+_and_ a skill. A user whose only credential is RunPod resolves to `managed`/`none` with an honest message,
+rather than to `byok` with an empty toolbox.
+
+Modal is the only credential pair — a half-pasted Modal token maps to nothing and must not count, mirroring
+`compute.ts:185`.
+
+This rule surfaces roadmap item **5** rather than causing it: RunPod and Vast keys inject with no consumer
+today, and `RUNPOD_API_KEY` is even named to the model in all six session prompts. Detection makes that gap
+visible instead of silent. Either write those two skills or stop offering the providers — see open questions.
+
+### Filtering the skill catalog
+
+`SkillTool` (`src/tool/skill.ts:32`) is defined with an async init that builds its catalog and already filters
+it — today by `PermissionNext.evaluate("skill", skill.name, agent.permission)`. Crucially,
+`registry.ts:187` calls `await t.init({ agent })` inside `tools()`, so **that init runs per request**.
+
+That makes it the right seam, for two reasons:
+
+- **Freshness is free.** The catalog is rebuilt every turn, so a credential connected mid-session appears on
+  the next turn with no cache to invalidate.
+- **Ordering is guaranteed by construction.** By the time a turn is served, every env injection at
+  `src/index.ts:102` and `:106` has long since run, so detection cannot observe a half-initialised environment.
+
+**Filter the catalog; do not auto-load the markdown.** Only the skills of usable providers are listed, so the
+agent picks the right one because it is the only one offered. Auto-injecting a provider's markdown would fight
+the existing mechanism — `tool/skill.ts` exists precisely so content is pulled on demand — and these files are
+large enough that unprompted injection is expensive on turns that have nothing to do with compute.
+
+In `managed` and `none`, no BYOK provider skill is listed at all.
 
 ### Ordering requirement — the main footgun
 
@@ -133,10 +166,14 @@ Keys reach `process.env` from three places, all legitimate BYOK:
 **Detection must run after line 106.** Both injections are wrapped in `.catch(() => {})` and fail silently, so
 detecting too early reports `none` for a user who has keys configured through the UI.
 
-The robust way to guarantee that is not to order boot steps carefully — it is to **resolve on demand, when the
-tool is called, and never at startup.** By then every injection has run, so the ordering constraint cannot be
-violated and cannot silently regress if someone reorders `src/index.ts` later. This is the same property that
-makes a tool the right shape in the first place.
+The robust way to guarantee that is not to order boot steps carefully — it is to **resolve on demand and never
+at startup**, at either of the two points that already run per request: `SkillTool`'s init when the catalog is
+built, and `compute_status` when the agent calls it. By then every injection has run, so the constraint cannot
+be violated and cannot silently regress if someone reorders `src/index.ts` later.
+
+**Resolution must be a single shared function** used by both call sites. Two independent implementations of
+"which providers are usable" would drift, and the failure would be quiet: a catalog listing a provider the
+status tool says is unavailable, or the reverse.
 
 ### Determining whether managed is available
 
@@ -148,7 +185,7 @@ Treat a failed, unauthenticated, or timed-out call as **unavailable** — failin
 "connect a key" message, whereas failing toward `managed` reproduces today's bug of promising a capability we
 haven't confirmed.
 
-**This is only reached when no provider keys are present**, so a BYOK user never pays the network call.
+**This is only reached when no usable provider is present**, so a BYOK user never pays the network call.
 
 **Caching:** a short in-process TTL (single-digit seconds) is fine to stop a chatty agent hammering the endpoint
 within one turn, but it must not be a startup-time or process-lifetime cache. The whole reason this is a tool
@@ -224,7 +261,8 @@ reshaping this one.
 
 House pattern: no mocks, exercise the real resolver, no network in tests.
 
-- Each provider in isolation resolves to `byok`.
+- Each provider **that has a skill**, in isolation, resolves to `byok`.
+- **A RunPod-only or Vast-only environment does NOT resolve to `byok`** — key without skill is not usable.
 - **Modal with only `MODAL_TOKEN_ID` and no other provider** does not resolve to `byok` — it falls through to
   the managed/none branch exactly as if no key were set.
 - No keys plus managed available → `managed`.
@@ -240,10 +278,22 @@ House pattern: no mocks, exercise the real resolver, no network in tests.
 For the tool, following the house pattern of stubbing `globalThis.fetch` and exercising the real tool:
 
 - `compute_status` returns each of the three modes with matching `guidance` text.
-- `byok` lists the configured providers in `providers`.
+- `byok` lists the usable providers in `providers`.
 - `managed` includes `balance_usd`; `byok` and `none` do not.
 - No prompt in `session/prompt/*.txt` or `prompt.ts` references `compute:up` or `atlas doctor` for compute
   availability.
+
+For the catalog filtering, exercising the real `SkillTool.init`:
+
+- With only a Modal credential, the catalog lists the Modal skills and **not** `lambda-labs`, `tensorpool`, or
+  `prime-intellect-lab`.
+- With a RunPod-only credential, **no** provider skill is listed.
+- In `managed` and in `none`, no BYOK provider skill is listed.
+- A credential added between two `init()` calls changes the catalog on the second — the per-turn freshness
+  property, and the reason this lives in init rather than at startup.
+- Non-compute skills are unaffected by mode in every case.
+- `SkillTool.init` and `compute_status` never disagree about which providers are usable (they call the same
+  resolver).
 
 Every new assertion must be demonstrated failing against the specific mutation it guards — ideally the
 _deletion_ of the logic, not merely its inversion. On the preceding `science_fetch` branch seven assertion
@@ -263,37 +313,47 @@ against deletion.
 
 ## Acceptance criteria
 
-1. A resolver returns `byok | managed | none` from the runtime environment, not from a static default.
-2. Any single fully-configured provider yields `byok`; a half-configured Modal credential does not.
-3. With no keys and managed unavailable — including when the availability check fails — the result is `none`.
-4. `billing.compute` can narrow the result to `none` but can never assert an unavailable capability.
-5. A key injected by either settings panel at boot is detected (resolution happens after `src/index.ts:106`).
-6. The availability call is skipped entirely when provider keys are present.
-7. A `compute_status` tool returns the mode, the configured providers, and mode-specific `guidance`, resolving
+1. A resolver returns `byok | managed | none` from the runtime environment, not from a static default, and is
+   the single shared implementation used by both `SkillTool.init` and `compute_status`.
+2. A provider counts toward `byok` only with both a key and a skill; a half-configured Modal credential does
+   not count, and a RunPod-only or Vast-only environment does not resolve to `byok`.
+3. The skill catalog lists provider skills only for usable providers, and lists none in `managed` or `none`.
+   Non-compute skills are unaffected.
+4. Provider markdown is never auto-injected — the agent still loads it through the `skill` tool.
+5. With no keys and managed unavailable — including when the availability check fails — the result is `none`.
+6. `billing.compute` can narrow the result to `none` but can never assert an unavailable capability.
+7. A key injected by either settings panel at boot is detected (resolution happens after `src/index.ts:106`).
+8. The availability call is skipped entirely when a usable provider is present.
+9. A `compute_status` tool returns the mode, the usable providers, and mode-specific `guidance`, resolving
    on each call rather than from a value cached at startup.
-8. A credential connected mid-session is reflected on the next `compute_status` call without a restart.
-9. Nothing is injected into the prompt per turn for compute mode; the tool's description carries the
-   "check before running GPU work" instruction.
-10. No prompt references `atlas compute:up` or `atlas doctor` for compute availability.
-11. In `none`, the tool's `guidance` tells the agent not to attempt GPU work and how the user can enable it.
-12. `bun test` passes with no network access.
+10. A credential connected mid-session is reflected on the next `compute_status` call without a restart.
+11. Nothing is injected into the prompt per turn for compute mode; the tool's description carries the
+    "check before running GPU work" instruction.
+12. No prompt references `atlas compute:up` or `atlas doctor` for compute availability.
+13. In `none`, the tool's `guidance` tells the agent not to attempt GPU work and how the user can enable it.
+14. `bun test` passes with no network access.
 
 ## Open questions for review
 
 1. **Should a BYOK user with keys for one provider but asking about another get `byok` or a
    partial answer?** This design says `byok` if any provider is configured, and leaves provider choice to the
    agent and the skills. A per-provider resolution would be more precise and more complex.
-2. **Should `none` be a hard block or a warning?** The tool's `guidance` tells the agent not to attempt GPU
+2. **What do we do about RunPod and Vast?** Both accept a key in Settings, inject env vars, and have no skill
+   for the agent to load — so under this design they never make a user BYOK-usable. Three options: write the
+   two skills, remove the providers from the Compute panel, or keep them and show "key stored — skill coming".
+   Doing nothing means a user can connect RunPod, see it accepted, and still be told no compute is available.
+   This is roadmap item **5**; it is listed here because this design is what makes it user-visible.
+3. **Should `none` be a hard block or a warning?** The tool's `guidance` tells the agent not to attempt GPU
    work, but nothing enforces it — it still has `bash` and the cloud-compute skills. Enforcement would mean
    gating those skills, which is a larger change. Worth deciding explicitly rather than by omission.
-3. **Should the prompt keep a one-line pointer to the tool?** The default position here is no injection at all,
+4. **Should the prompt keep a one-line pointer to the tool?** The default position here is no injection at all,
    on the grounds that the tool description already carries the instruction. The risk is an agent that never
    calls the tool and reaches for `bash` directly. A single line — _"call `compute_status` before GPU work"_ —
    would cost a handful of tokens per turn and close that gap. This is the one place where the tool-versus-prompt
    trade-off is genuinely unresolved.
-4. **Does the `billing.compute` description need updating** in the config schema? It currently says
+5. **Does the `billing.compute` description need updating** in the config schema? It currently says
    _"Unset = byok"_, which this change makes false.
-5. **How long may `compute_status` block?** In `none`/`managed` it makes one authenticated call to
+6. **How long may `compute_status` block?** In `none`/`managed` it makes one authenticated call to
    `/api/compute/options`. A slow or hanging Atlas would stall the agent mid-turn, so it needs a short timeout
    with `none` as the timeout result — but "short" should be a stated number, not left to the implementer.
 
