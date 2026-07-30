@@ -148,6 +148,21 @@ export namespace ComputeMode {
     }
   }
 
+  /** Build a Resolution purely from an availability probe's verdict — never
+   *  from `providers`, which is passed through only for display. Shared by the
+   *  managed-override arm and the no-override/no-provider fallback: both trust
+   *  `available()` completely and must never fall back to "byok" just because
+   *  a credential happens to be present (that would silently defeat the
+   *  managed override — see the "managed with a usable provider" test). */
+  function funded(providers: string[], state: { managed: boolean; balance?: number }): Resolution {
+    return {
+      mode: state.managed ? "managed" : "none",
+      providers,
+      managed: state.managed,
+      balance: state.managed ? state.balance : undefined,
+    }
+  }
+
   /**
    * The single shared entry point. `billing.compute` is an OVERRIDE, not the
    * source of truth: it may narrow the outcome to "none", but it may never
@@ -162,13 +177,7 @@ export namespace ComputeMode {
     }
 
     if (override === "managed") {
-      const managed = await available()
-      return {
-        mode: managed.managed ? "managed" : "none",
-        providers,
-        managed: managed.managed,
-        balance: managed.managed ? managed.balance : undefined,
-      }
+      return funded(providers, await available())
     }
 
     // BYOK wins when a credentialed provider is present: it is free to the user,
@@ -176,12 +185,6 @@ export namespace ComputeMode {
     // user never pays for the availability call.
     if (providers.length) return { mode: "byok", providers, managed: false }
 
-    const managed = await available()
-    return {
-      mode: managed.managed ? "managed" : "none",
-      providers,
-      managed: managed.managed,
-      balance: managed.managed ? managed.balance : undefined,
-    }
+    return funded(providers, await available())
   }
 }

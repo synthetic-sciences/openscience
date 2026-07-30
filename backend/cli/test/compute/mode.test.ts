@@ -163,6 +163,7 @@ describe("ComputeMode.usable", () => {
 const OPTIONS_URL = "/api/compute/options"
 const SESSION = path.join(Global.Path.data, "openscience-session.json")
 const realFetch = globalThis.fetch
+const realNow = Date.now
 
 /** Record of every URL the resolver fetched, so "the call is skipped" is a
  *  positive assertion rather than an absence of failure. */
@@ -208,6 +209,7 @@ describe("ComputeMode.resolve", () => {
 
   afterEach(async () => {
     globalThis.fetch = realFetch
+    Date.now = realNow
     await fs.rm(SESSION, { force: true }).catch(() => {})
   })
 
@@ -278,11 +280,30 @@ describe("ComputeMode.resolve", () => {
   test("the availability answer is cached within the TTL", async () => {
     await signIn()
     stubOptions(MANAGED_ON)
+    let now = realNow()
+    Date.now = () => now
     await withSkills([], async () => {
       await ComputeMode.resolve()
+      now += 4_999 // still inside the 5s TTL
       await ComputeMode.resolve()
     })
     expect(calls.filter((url) => url.includes(OPTIONS_URL)).length).toBe(1)
+  })
+
+  test("the cache expires once the TTL elapses, forcing a re-probe", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    let now = realNow()
+    Date.now = () => now
+    await withSkills([], async () => {
+      const first = await ComputeMode.resolve()
+      expect(first.mode).toBe("managed")
+      now += 5_001 // past the 5s TTL — the cached verdict must be treated as stale
+      stubOptions(MANAGED_OFF)
+      const second = await ComputeMode.resolve()
+      expect(second.mode).toBe("none")
+    })
+    expect(calls.filter((url) => url.includes(OPTIONS_URL)).length).toBe(2)
   })
 
   test("invalidate() drops the cache", async () => {
@@ -347,6 +368,17 @@ describe("ComputeMode.resolve override", () => {
     stubOptions(MANAGED_OFF)
     const result = await withOverride("managed", [], () => ComputeMode.resolve())
     expect(result.mode).toBe("none")
+  })
+
+  test("override managed with a usable provider still narrows to none when managed is unavailable", async () => {
+    await signIn()
+    stubOptions(MANAGED_OFF)
+    process.env["LAMBDA_API_KEY"] = "k"
+    const result = await withOverride("managed", ["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())
+    expect(result.mode).toBe("none")
+    // The credential is real — it's just not the funded path under a forced
+    // managed override, so it must still be reported, not hidden.
+    expect(result.providers).toEqual(["lambda"])
   })
 
   test("override managed beats a usable provider when managed IS available", async () => {
