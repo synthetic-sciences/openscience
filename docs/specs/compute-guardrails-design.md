@@ -1,7 +1,58 @@
 # Managed compute budget cap — design
 
-Status: approved, ready for implementation planning
-Date: 2026-07-30
+Status: **PARKED — do not implement.** Superseded for now by
+[`compute-mode-detection-design.md`](./compute-mode-detection-design.md).
+Date: 2026-07-30 · parked 2026-07-30
+
+> ## ⚠️ Read this before anything below
+>
+> **This design was reviewed and found unsound, and the problem it solves is not currently reachable.**
+> The analysis below is kept because it is still the best record of how Atlas compute billing works. The
+> _proposal_ should not be built as written.
+>
+> ### Why it is parked
+>
+> **1. Managed compute is switched off.** Atlas gates it on `COMPUTE_RESELL_ENABLED`, which defaults to
+> `false` (`backend/app/config.py:383`), plus a configured operator key. Without both, every provider reports
+> `funding: "unavailable"` and `POST /leases` refuses. **There is no live overspend to guard**, so this is a
+> guardrail for a road that is not open.
+>
+> **2. An independent review returned "Unsound as written."** Five findings, each verified in source:
+>
+> - **The lease reaper kills these leases at ten minutes.** `lease_reaper` sweeps every 60s over all
+>   unfinished leases and reaps anything silent for `HEARTBEAT_STALE_SECONDS` = 600. A workload run over SSH
+>   emits no `agent_telemetry`, so a $30 budget lease would be terminated having spent about $1.17. The budget
+>   would never bind. This also falsifies the claim below that no agent liveness is needed — Atlas requires
+>   liveness in the form of telemetry.
+> - **`budget_cents` already exists** on the agent-spawn path with a default of `500`
+>   (`agent_tools.py:1386`). Making the cap real converts a display-only $5 into a hard kill on a shipped
+>   feature. The migration section below calls this a no-op; it is not.
+> - **The acquire-time debit is never rolled back**, so re-debiting per tick double-counts hour one. A $10
+>   budget at $6.99/h would die at 25.8 minutes rather than ~1.4 hours; a one-hour budget would buy 60 seconds.
+>   The test list below does not catch this — the property that matters, _a budget of $B at $R/h lasts ≈B/R
+>   hours_, appears in neither the tests nor the acceptance criteria.
+> - **Sequential leases are unbounded.** The cap is per-grant and a grant is per-lease, so an agent can release
+>   and re-acquire without limit. The concurrency cap of 2 does not bound cumulative spend.
+> - **No idempotency on the money path.** The billing tick performs independent committing writes; a crash
+>   between them double-charges on the next tick, and adding a grant debit widens the window.
+>
+> ### Two factual errors in the text below
+>
+> - **"`atlas compute:up` exists"** — it exists in the Atlas repo (`cli/…/commands.mjs:922`) but **not in the
+>   published `@synsci/atlas@0.13.2`**, which is what `^0.13.2` resolves to. Source and npm disagree at the
+>   same version number. The "Corrections to earlier analysis" section below asserts the opposite and is wrong.
+> - **The system prompt is therefore still broken**, contrary to what that section says. It instructs the agent
+>   to run a command absent from the installed CLI, then to check `atlas doctor` for managed availability —
+>   which reports no compute field at all — and offers "the user's own GPU providers" as the fallback.
+>
+> ### What to do instead
+>
+> Fixing that prompt is the live work, and it is handled by
+> [`compute-mode-detection-design.md`](./compute-mode-detection-design.md), which needs nothing from Atlas.
+>
+> **Revive this document only when managed compute is actually switched on somewhere**, and then treat the five
+> findings above as the implementation checklist rather than as blockers.
+
 Roadmap items: **55** (budget guardrails + kill switches), **103** (cost approval gates), and the gate half of
 **51/2** (agent-facing compute tool)
 
@@ -194,14 +245,24 @@ with, and change 1 begins enforcing it from the next tick, which is the safe dir
 
 Recorded because both errors reached a draft of this document.
 
-- **`atlas compute:up` exists.** It is at `cli/src/atlas-runtime/commands.mjs:922` as a `LOCAL` command (aliases
-  `compute:launch`, `compute:lease`), alongside `compute:list` and `compute:ssh`. An earlier draft claimed it
-  existed in no version — that was wrong, caused by a comment two lines below it saying compute provisioning is
-  not part of the CLI. **Consequence: the system prompt at `session/prompt.ts:1554-1562` is not broken** and
-  needs no fix. It was previously an acceptance criterion; it is removed.
-- **`compute:up` already takes `max_price` and `dry_run`.** A per-hour price ceiling and a no-spend preview
-  already exist in the CLI's parameter set, closer to this design than earlier drafts represented. Adding
-  `budget_cents` to `compute:up` as well would let CLI users have the same cap — worth doing, out of scope here.
+- ~~**`atlas compute:up` exists.**~~ **This correction was itself wrong — see the banner at the top.** It exists
+  in the Atlas _repo_ but not in the published `@synsci/atlas@0.13.2`, which is what the `^0.13.2` pin
+  resolves to. Source and npm disagree at an identical version number. The original finding — that the prompt
+  points at a command the installed CLI does not have — was right, and the retraction below is the error.
+  It is at `cli/src/atlas-runtime/commands.mjs:922` as a `LOCAL` command (aliases
+  `compute:launch`, `compute:lease`), alongside `compute:list` and `compute:ssh` — **in the repo.** An earlier
+  draft claimed it existed in no version, which was wrong about the source and right about the artifact.
+  ~~**Consequence: the system prompt at `session/prompt.ts:1554-1562` is not broken** and needs no fix. It was
+  previously an acceptance criterion; it is removed.~~ **That consequence does not follow.** The published
+  package has no `compute:` command, so the prompt does point at something the installed CLI cannot run. The
+  prompt fix belongs back in scope — it now lives in `compute-mode-detection-design.md`.
+- **`compute:up` already takes `max_price` and `dry_run`** — again, **in the repo only**. A per-hour price
+  ceiling and a no-spend preview exist in the source parameter set but ship to nobody until the CLI is
+  published. Adding `budget_cents` there too would let CLI users have the same cap, once any of it ships.
+
+**The lesson worth carrying:** three separate conclusions in this investigation came from reading source and
+were wrong about the deployed reality — the CLI's contents, whether the prompt was broken, and whether managed
+compute was reachable at all. Verify against the running system before designing against it.
 
 ## Out of scope
 
