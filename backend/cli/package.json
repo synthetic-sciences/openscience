@@ -11,7 +11,8 @@
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 15000",
     "build": "bun run script/build.ts",
-    "dev": "bun run --conditions=browser ./src/index.ts"
+    "dev": "bun run --conditions=browser ./src/index.ts",
+    "prototype:guardrail": "bun run ./src/compute/PROTOTYPE-guardrail-repl.ts"
   },
   "bin": {
     "openscience": "./bin/openscience"
