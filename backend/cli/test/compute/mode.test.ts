@@ -1,7 +1,9 @@
-import { test, expect, afterEach, describe } from "bun:test"
+import { test, expect, afterEach, beforeEach, describe } from "bun:test"
 import path from "path"
+import fs from "fs/promises"
 import { ComputeMode } from "../../src/compute/mode"
 import { Instance } from "../../src/project/instance"
+import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
 
 const ENV = [
@@ -155,5 +157,203 @@ describe("ComputeMode.usable", () => {
       ComputeMode.usable(),
     )
     expect(result).toEqual(["modal", "lambda", "vast"])
+  })
+})
+
+const OPTIONS_URL = "/api/compute/options"
+const SESSION = path.join(Global.Path.data, "openscience-session.json")
+const realFetch = globalThis.fetch
+
+/** Record of every URL the resolver fetched, so "the call is skipped" is a
+ *  positive assertion rather than an absence of failure. */
+let calls: string[] = []
+
+function stubOptions(body: unknown, status = 200) {
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input instanceof Request ? input.url : input)
+    calls.push(url)
+    if (!url.includes(OPTIONS_URL)) return realFetch(input as never)
+    return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
+  }) as typeof fetch
+}
+
+async function signIn() {
+  await fs.mkdir(Global.Path.data, { recursive: true })
+  await Bun.write(SESSION, JSON.stringify({ api_key: "thk_test.secret", user_id: "u1" }))
+}
+
+const MANAGED_ON = {
+  options: [],
+  providers: [
+    { provider: "lambda", has_byok: false, has_operator: true, funding: "managed", count: 3 },
+    { provider: "vast", has_byok: false, has_operator: false, funding: "unavailable", count: 0 },
+  ],
+  resell_enabled: true,
+  cli_effective_balance_cents: 1234,
+}
+
+const MANAGED_OFF = {
+  options: [],
+  providers: [{ provider: "lambda", has_byok: false, has_operator: false, funding: "unavailable", count: 0 }],
+  resell_enabled: false,
+  cli_effective_balance_cents: 1234,
+}
+
+describe("ComputeMode.resolve", () => {
+  beforeEach(() => {
+    clearEnv()
+    calls = []
+    ComputeMode.invalidate()
+  })
+
+  afterEach(async () => {
+    globalThis.fetch = realFetch
+    await fs.rm(SESSION, { force: true }).catch(() => {})
+  })
+
+  test("a usable provider resolves to byok WITHOUT calling the availability endpoint", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    process.env["LAMBDA_API_KEY"] = "k"
+    const result = await withSkills(["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())
+    expect(result.mode).toBe("byok")
+    expect(result.providers).toEqual(["lambda"])
+    expect(result.balance).toBeUndefined()
+    expect(calls.filter((url) => url.includes(OPTIONS_URL))).toEqual([])
+  })
+
+  test("no keys plus managed available resolves to managed, with the balance", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    const result = await withSkills(["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())
+    expect(result.mode).toBe("managed")
+    expect(result.managed).toBe(true)
+    expect(result.balance).toBe(12.34)
+  })
+
+  test("no keys plus managed unavailable resolves to none", async () => {
+    await signIn()
+    stubOptions(MANAGED_OFF)
+    const result = await withSkills(["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())
+    expect(result.mode).toBe("none")
+    expect(result.managed).toBe(false)
+    expect(result.balance).toBeUndefined()
+  })
+
+  test("a failing availability call resolves to none, not managed", async () => {
+    await signIn()
+    globalThis.fetch = (async (input: string | URL | Request): Promise<Response> => {
+      throw new Error("network down")
+    }) as typeof fetch
+    const result = await withSkills([], () => ComputeMode.resolve())
+    expect(result.mode).toBe("none")
+    expect(result.managed).toBe(false)
+  })
+
+  test("a non-ok availability response resolves to none", async () => {
+    await signIn()
+    stubOptions({ detail: "unauthorized" }, 401)
+    const result = await withSkills([], () => ComputeMode.resolve())
+    expect(result.mode).toBe("none")
+  })
+
+  test("no session means managed is unavailable and no call is made", async () => {
+    await fs.rm(SESSION, { force: true }).catch(() => {})
+    stubOptions(MANAGED_ON)
+    const result = await withSkills([], () => ComputeMode.resolve())
+    expect(result.mode).toBe("none")
+    expect(calls.filter((url) => url.includes(OPTIONS_URL))).toEqual([])
+  })
+
+  test("a key with no skill still resolves to byok and skips the availability call", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    process.env["RUNPOD_API_KEY"] = "rpa_x"
+    const result = await withSkills([], () => ComputeMode.resolve())
+    expect(result.mode).toBe("byok")
+    expect(result.providers).toEqual(["runpod"])
+    expect(calls.filter((url) => url.includes(OPTIONS_URL))).toEqual([])
+  })
+
+  test("the availability answer is cached within the TTL", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    await withSkills([], async () => {
+      await ComputeMode.resolve()
+      await ComputeMode.resolve()
+    })
+    expect(calls.filter((url) => url.includes(OPTIONS_URL)).length).toBe(1)
+  })
+
+  test("invalidate() drops the cache", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    await withSkills([], async () => {
+      await ComputeMode.resolve()
+      ComputeMode.invalidate()
+      await ComputeMode.resolve()
+    })
+    expect(calls.filter((url) => url.includes(OPTIONS_URL)).length).toBe(2)
+  })
+})
+
+describe("ComputeMode.resolve override", () => {
+  beforeEach(() => {
+    clearEnv()
+    calls = []
+    ComputeMode.invalidate()
+  })
+  afterEach(async () => {
+    globalThis.fetch = realFetch
+    await fs.rm(SESSION, { force: true }).catch(() => {})
+  })
+
+  /** Same tmpdir fixture as withSkills, plus an openscience.json setting
+   *  billing.compute. */
+  async function withOverride<T>(mode: "byok" | "managed", skills: string[], fn: () => Promise<T>): Promise<T> {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        for (const name of skills) {
+          await Bun.write(
+            path.join(dir, ".openscience", "skill", name, "SKILL.md"),
+            `---\nname: ${name}\ndescription: Test fixture for ${name}.\ncategory: cloud-compute\n---\n\n# ${name}\n`,
+          )
+        }
+        await Bun.write(path.join(dir, "openscience.json"), JSON.stringify({ billing: { compute: mode } }))
+      },
+    })
+    return Instance.provide({ directory: tmp.path, fn })
+  }
+
+  test("override byok with a usable provider stays byok", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    process.env["LAMBDA_API_KEY"] = "k"
+    const result = await withOverride("byok", ["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())
+    expect(result.mode).toBe("byok")
+  })
+
+  test("override byok with NO usable provider narrows to none, never managed", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    const result = await withOverride("byok", ["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())
+    expect(result.mode).toBe("none")
+    expect(calls.filter((url) => url.includes(OPTIONS_URL))).toEqual([])
+  })
+
+  test("override managed with managed unavailable narrows to none", async () => {
+    await signIn()
+    stubOptions(MANAGED_OFF)
+    const result = await withOverride("managed", [], () => ComputeMode.resolve())
+    expect(result.mode).toBe("none")
+  })
+
+  test("override managed beats a usable provider when managed IS available", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    process.env["LAMBDA_API_KEY"] = "k"
+    const result = await withOverride("managed", ["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())
+    expect(result.mode).toBe("managed")
   })
 })

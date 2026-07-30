@@ -16,6 +16,9 @@
  * ordering constraint cannot be violated and cannot silently regress if someone
  * reorders src/index.ts later.
  */
+import { Config } from "@/config/config"
+import { API_BASE, OpenScience } from "@/openscience"
+
 export namespace ComputeMode {
   export type Source = "byok" | "managed" | "none"
 
@@ -81,5 +84,104 @@ export namespace ComputeMode {
    */
   export function usable(): string[] {
     return Object.keys(PROVIDERS).filter((id) => keyed(PROVIDERS[id].env))
+  }
+
+  export interface Resolution {
+    mode: Source
+    /** Credentialed BYOK providers, in PROVIDERS declaration order. */
+    providers: string[]
+    managed: boolean
+    /** Wallet balance in USD. Present only when mode === "managed". */
+    balance?: number
+  }
+
+  /** Hard ceiling on how long resolution may block an agent turn. Atlas's own
+   *  60s default is far too long to sit in front of a tool call; a slow or
+   *  hanging backend must degrade to "none", not stall the turn. */
+  const TIMEOUT = 3_000
+
+  /** Short in-process TTL, enough to stop a chatty agent hammering the endpoint
+   *  inside one turn and no longer. The whole reason this is a tool rather than
+   *  a prompt injection is that the answer changes mid-session, so a long cache
+   *  would reintroduce exactly the staleness the tool exists to avoid. */
+  const TTL = 5_000
+
+  let cache: { at: number; value: { managed: boolean; balance?: number } } | undefined
+
+  /** Drop the availability cache. Called by tests; also safe after a connect. */
+  export function invalidate() {
+    cache = undefined
+  }
+
+  /**
+   * One authenticated call to /api/compute/options, which already annotates each
+   * provider with `funding` — "managed" when reselling is on and an operator key
+   * exists, else "unavailable". A failed, unauthenticated or timed-out call is
+   * treated as UNAVAILABLE: failing toward "none" produces an honest "connect a
+   * key" message, whereas failing toward "managed" would reproduce the bug this
+   * design exists to fix, promising a capability we never confirmed.
+   */
+  async function available() {
+    if (cache && Date.now() - cache.at < TTL) return cache.value
+    const value = await probe()
+    cache = { at: Date.now(), value }
+    return value
+  }
+
+  async function probe(): Promise<{ managed: boolean; balance?: number }> {
+    const session = await OpenScience.getSession().catch(() => null)
+    if (!session) return { managed: false }
+    try {
+      const res = await fetch(`${API_BASE}/api/compute/options`, {
+        headers: { Authorization: `Bearer ${session.api_key}` },
+        signal: AbortSignal.timeout(TIMEOUT),
+      })
+      if (!res.ok) return { managed: false }
+      const data = await res.json()
+      const providers = Array.isArray(data?.providers) ? data.providers : []
+      const managed = providers.some((entry: { funding?: string }) => entry?.funding === "managed")
+      if (!managed) return { managed: false }
+      const cents = data?.cli_effective_balance_cents
+      return { managed: true, balance: typeof cents === "number" ? cents / 100 : undefined }
+    } catch {
+      return { managed: false }
+    }
+  }
+
+  /**
+   * The single shared entry point. `billing.compute` is an OVERRIDE, not the
+   * source of truth: it may narrow the outcome to "none", but it may never
+   * manufacture a capability that isn't there.
+   */
+  export async function resolve(): Promise<Resolution> {
+    const providers = usable()
+    const override = (await Config.get()).billing?.compute
+
+    if (override === "byok") {
+      return { mode: providers.length ? "byok" : "none", providers, managed: false }
+    }
+
+    if (override === "managed") {
+      const managed = await available()
+      return {
+        mode: managed.managed ? "managed" : "none",
+        providers,
+        managed: managed.managed,
+        balance: managed.managed ? managed.balance : undefined,
+      }
+    }
+
+    // BYOK wins when a credentialed provider is present: it is free to the user,
+    // it works today, and it needs nothing from Atlas. This is also why a BYOK
+    // user never pays for the availability call.
+    if (providers.length) return { mode: "byok", providers, managed: false }
+
+    const managed = await available()
+    return {
+      mode: managed.managed ? "managed" : "none",
+      providers,
+      managed: managed.managed,
+      balance: managed.managed ? managed.balance : undefined,
+    }
   }
 }
