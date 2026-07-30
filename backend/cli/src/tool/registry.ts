@@ -33,6 +33,7 @@ import { ArtifactTool } from "./artifact"
 import { LearnTool } from "./learn"
 import { ScienceTools } from "./science"
 import { ProvenanceTools } from "./provenance"
+import { ComputeTools } from "./compute"
 import { NotebookTool } from "./notebook"
 import { RKernelTool } from "./rkernel"
 
@@ -131,6 +132,7 @@ export namespace ToolRegistry {
       ...BiologyTools,
       ...ScienceTools,
       ...ProvenanceTools,
+      ...ComputeTools,
       NotebookTool,
       RKernelTool,
       ArtifactTool,
