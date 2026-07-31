@@ -1059,7 +1059,7 @@ export namespace Config {
             .enum(["managed", "byok"])
             .optional()
             .describe(
-              "How GPU/compute is paid for. 'managed' runs on Atlas-provisioned compute billed to your wallet (via the bundled atlas CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.",
+              "How GPU/compute is paid for. 'managed' runs on Atlas-provisioned compute billed to your wallet; 'byok' uses your own connected GPU providers (Modal, Lambda Labs, TensorPool, Prime Intellect, RunPod, Vast.ai). Unset = auto-detect from your connected providers. Setting this can only narrow the result — if the mode you pick isn't actually available, compute resolves to none rather than pretending.",
             ),
         })
         .optional()

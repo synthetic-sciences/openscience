@@ -43,7 +43,6 @@ import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { Config } from "../config/config"
-import { computeBillingMode } from "./billing-gate"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@synsci/util/error"
 import { fn } from "@/util/fn"
@@ -1547,19 +1546,18 @@ export namespace SessionPrompt {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
 
-    // Compute spend preference — make the user's explicit managed/BYOK choice
-    // authoritative for GPU work. Only injected when the toggle is explicitly set
-    // (unset = the agent's own atlas-doctor-driven default, unchanged).
-    if (COMPUTE_AGENTS.has(input.agent.name) && (await Config.get()).billing?.compute) {
-      const managed = (await computeBillingMode()) === "managed"
+    // Compute funding is PULLED from the `compute_status` tool, not injected —
+    // the mode changes mid-session (a key connected in Settings ▸ Compute at
+    // turn 3 makes a reminder injected then false by turn 12). This line is a
+    // stateless pointer: it carries no mode, so it can never go stale, and it
+    // closes the gap where an agent reaches for bash without ever looking.
+    if (COMPUTE_AGENTS.has(input.agent.name)) {
       userMessage.parts.push({
         id: Identifier.ascending("part"),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        text: managed
-          ? "<system-reminder>Compute spend is set to MANAGED. Run GPU/training work through the bundled `atlas compute` CLI (e.g. `atlas compute:up`), which bills Credits. Do not fall back to the user's own GPU providers unless `atlas doctor` reports managed compute unavailable.</system-reminder>"
-          : "<system-reminder>Compute spend is set to BYOK. Run GPU/training work on the user's own connected providers (Modal, Tinker, TensorPool, …) via the cloud-compute skills — do not launch managed `atlas compute` leases that bill Credits.</system-reminder>",
+        text: "<system-reminder>Call `compute_status` before running GPU, training, or cluster work. It reports how compute is funded and which providers are usable right now.</system-reminder>",
         synthetic: true,
       })
     }
