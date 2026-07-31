@@ -1210,7 +1210,7 @@ export class Billing extends HeyApiClient {
   public update<ThrowOnError extends boolean = false>(
     parameters?: {
       llm?: "managed" | "byok" | null
-      compute?: "managed" | "byok"
+      compute?: "managed" | "byok" | null
     },
     options?: Options<never, ThrowOnError>,
   ) {

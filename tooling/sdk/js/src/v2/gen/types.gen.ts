@@ -1710,9 +1710,9 @@ export type Config = {
      */
     llm?: "managed" | "byok" | null
     /**
-     * How GPU/compute is paid for. 'managed' runs on Atlas-provisioned compute billed to your wallet (via the bundled atlas CLI); 'byok' uses your own connected GPU providers (Modal, Tinker, TensorPool, …). Unset = byok.
+     * How GPU/compute is paid for. 'managed' runs on Atlas-provisioned compute billed to your wallet; 'byok' uses your own connected GPU providers (Modal, Lambda Labs, TensorPool, Prime Intellect, RunPod, Vast.ai). Unset or null = auto-detect from your connected providers. Setting this can only narrow the result — if the mode you pick isn't actually available, compute resolves to none rather than pretending.
      */
-    compute?: "managed" | "byok"
+    compute?: "managed" | "byok" | null
   }
   /**
    * Custom username to display in conversations instead of system username
@@ -3761,7 +3761,7 @@ export type SettingsBillingGetResponses = {
    */
   200: {
     llm: "managed" | "byok" | null
-    compute: "managed" | "byok"
+    compute: "managed" | "byok" | null
     wallet: {
       /**
        * Whether an Atlas session (thk_ key) is available
@@ -3780,7 +3780,7 @@ export type SettingsBillingGetResponse = SettingsBillingGetResponses[keyof Setti
 export type SettingsBillingUpdateData = {
   body?: {
     llm?: "managed" | "byok" | null
-    compute?: "managed" | "byok"
+    compute?: "managed" | "byok" | null
   }
   path?: never
   query?: never
@@ -3793,7 +3793,7 @@ export type SettingsBillingUpdateResponses = {
    */
   200: {
     llm: "managed" | "byok" | null
-    compute: "managed" | "byok"
+    compute: "managed" | "byok" | null
     wallet: {
       /**
        * Whether an Atlas session (thk_ key) is available
