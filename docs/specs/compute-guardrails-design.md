@@ -470,6 +470,16 @@ about this exact failure repeated it one section later.
 - **Fixing the CLI's usability gaps.** Reviewed 2026-07-31: it prints the one-time SSH private key and never
   saves it (so the `ssh_command` it prints cannot work), has no file-transfer command, no exec, and no compute
   tests. Its resolver is genuinely good; everything around it is unfinished. Separate workstream.
+- **The `compute:up` SKU race.** Verified by running the CLI from source against production: `compute:up`
+  fetches `/compute/options`, picks, then calls `/compute/estimate` — and Vast's SKUs are ephemeral marketplace
+  offer IDs that churn in between. Since Vast supplies 204 of the 292 live options it is almost always the
+  cheapest pick, so **the default path and `--gpu h100` both fail** with a raw `HTTP 400: Unknown SKU`, while
+  `--provider lambda` and `--provider runpod` (stable instance types) succeed. There is no retry.
+
+  Two fixes, either sufficient: re-resolve once on a 400 and pick the next-best offer, or make selection
+  server-side so fetch-and-lease is atomic inside Atlas. The second also removes the duplicate resolver
+  described under "OpenScience — one tool".
+
 - **Vast and Prime Intellect SSH key leaks** — one public key per lease left in the operator account forever.
   Lambda's delete-on-release pattern is the fix.
 
