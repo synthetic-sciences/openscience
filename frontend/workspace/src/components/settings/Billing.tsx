@@ -83,6 +83,11 @@ const COMPUTE_MODES = [
     title: "BYOK",
     body: "Your own connected GPU providers (Settings → Compute). Your provider bills you directly.",
   },
+  {
+    value: null,
+    title: "Auto",
+    body: "Detect from your setup — a connected provider key runs BYOK, otherwise managed compute when available.",
+  },
 ]
 
 export default function Billing(): JSX.Element {
@@ -117,7 +122,7 @@ export default function Billing(): JSX.Element {
     if (res.data) return setBilling(res.data)
     setBillingError("Couldn't load spend settings.")
   }
-  const updateBilling = async (patch: { llm?: "managed" | "byok" | null; compute?: "managed" | "byok" }) => {
+  const updateBilling = async (patch: { llm?: "managed" | "byok" | null; compute?: "managed" | "byok" | null }) => {
     setBillingBusy(true)
     setBillingError(undefined)
     const res = await sdk.client.settings.billing.update(patch)
@@ -275,7 +280,7 @@ export default function Billing(): JSX.Element {
           </div>
           <div class="flex flex-col gap-2">
             <span class="text-12-regular text-text-weak">Compute</span>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <For each={COMPUTE_MODES}>
                 {(m) => (
                   <ModeCard

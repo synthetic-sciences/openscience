@@ -10,11 +10,13 @@ const log = Log.create({ service: "settings-billing" })
 
 // The two independent spend toggles (Settings → Spend), backed by the strict
 // config (`billing.llm` / `billing.compute`). "managed" runs on Credits;
-// "byok" runs on the user's own keys/OAuth and is never billed. LLM is nullable
-// (unset = auto-detect from the resolved credential); compute defaults to byok.
+// "byok" runs on the user's own keys/OAuth and is never billed. Both are
+// nullable: unset/null means auto-detect — llm from the resolved credential,
+// compute from ComputeMode.resolve() (connected providers, then managed
+// availability).
 export const BillingState = z.object({
   llm: z.enum(["managed", "byok"]).nullable(),
-  compute: z.enum(["managed", "byok"]),
+  compute: z.enum(["managed", "byok"]).nullable(),
   wallet: z.object({
     signedIn: z.boolean().describe("Whether an Atlas session (thk_ key) is available"),
     balanceUsd: z.number().describe("Credit balance in USD; -1 when signed out or unavailable"),
@@ -22,11 +24,11 @@ export const BillingState = z.object({
 })
 export type BillingState = z.infer<typeof BillingState>
 
-// `llm: null` sets the toggle back to auto (auto-detect from the resolved
-// credential); omitting a field leaves it untouched.
+// `llm: null` / `compute: null` sets the toggle back to auto (auto-detect);
+// omitting a field leaves it untouched.
 const BillingPatch = z.object({
   llm: z.enum(["managed", "byok"]).nullable().optional(),
-  compute: z.enum(["managed", "byok"]).optional(),
+  compute: z.enum(["managed", "byok"]).nullable().optional(),
 })
 
 async function readState(): Promise<BillingState> {
@@ -35,7 +37,7 @@ async function readState(): Promise<BillingState> {
   const balanceUsd = (session ? await OpenScience.getBalance().catch(() => null) : null) ?? -1
   return {
     llm: cfg.billing?.llm ?? null,
-    compute: cfg.billing?.compute ?? "byok",
+    compute: cfg.billing?.compute ?? null,
     wallet: { signedIn: !!session, balanceUsd },
   }
 }
