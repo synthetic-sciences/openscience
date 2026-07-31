@@ -95,9 +95,19 @@ have separate test runs and deploys.
 - `atlas` (Python/FastAPI) — the decision and the enforcement
 - `openscience` (Bun/TypeScript) — a thin client that relays a proposal and obeys the verdict
 
-> **The Atlas behaviour described below was read from source, not verified at runtime.** Treat every claim about
-> current behaviour as "what the code appears to do" and confirm against the deployed service before relying on
-> it. The prototype models each such assumption as a toggle for exactly this reason.
+> **Verification status (updated 2026-07-31).** The original draft was written entirely from source, which is
+> how it acquired four wrong conclusions about deployed reality. Much of it has since been checked against the
+> running system, so distinguish:
+>
+> - **Verified against production `thesis-synsc`:** reselling is on with four operator providers and 292 live
+>   options; `/compute/estimate` returns `funding: "managed"` with a real rate and runway; the published npm
+>   artifact contains no `compute:` command; the CLI runs from source and its `compute:up` default path fails
+>   on the Vast SKU race while `--provider lambda|runpod` succeeds.
+> - **Still read from source only:** the billing tick's debit behaviour, grant accounting, the reaper's exact
+>   reap path, and every claim about what changing them would do. Confirm these against the deployed service —
+>   or better, against a test — before relying on them.
+>
+> The prototype models each unverified assumption as a toggle for exactly this reason.
 
 ## The problem, stated narrowly
 
