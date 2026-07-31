@@ -83,7 +83,16 @@ describe("compute prompt text", () => {
 
   test("the billing.compute config description no longer claims 'Unset = byok'", async () => {
     const text = await Bun.file(path.join(root, "config", "config.ts")).text()
-    expect(text).not.toContain("Unset = byok")
-    expect(text).toContain("auto-detect")
+    // Scoped to the compute field's own description, not the whole file —
+    // billing.llm's untouched description already contains "auto-detect", so
+    // an unscoped scan would pass even if compute's description regressed to
+    // something like "Defaults to byok when unset".
+    const start = text.indexOf("compute: z")
+    expect(start).toBeGreaterThan(-1)
+    const end = text.indexOf("username: z", start)
+    expect(end).toBeGreaterThan(start)
+    const description = text.slice(start, end)
+    expect(description).not.toContain("Unset = byok")
+    expect(description).toContain("auto-detect")
   })
 })

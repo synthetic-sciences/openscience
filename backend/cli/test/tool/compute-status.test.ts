@@ -8,7 +8,12 @@ import { Instance } from "../../src/project/instance"
 import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
 
-const ENV = ["LAMBDA_API_KEY", "RUNPOD_API_KEY", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"]
+// Every credential variable across ComputeMode.PROVIDERS, derived rather than
+// hand-typed so it can never drift out of sync with the sibling scrub list in
+// test/tool/skill-compute-filter.test.ts (a hand-typed subset previously let
+// an ambient PRIME_API_KEY, TENSORPOOL_KEY, VAST_API_KEY, or
+// LAMBDA_LABS_API_KEY leak into these tests and produce false failures).
+const ENV = Object.values(ComputeMode.PROVIDERS).flatMap((provider) => provider.env.flat())
 const SESSION = path.join(Global.Path.data, "openscience-session.json")
 const realFetch = globalThis.fetch
 
