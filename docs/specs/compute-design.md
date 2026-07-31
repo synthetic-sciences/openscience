@@ -122,7 +122,8 @@ and obeys a verdict.
 ```
 agent  compute_status                       → mode=managed, balance_usd
 
-agent  compute_launch { gpu:"h100", count:1, budget_cents:3000, max_hourly_cents?, volume_id? }
+agent  compute_launch { gpu:"H100-SXM", count:1, budget_cents:3000, max_hourly_cents?, volume_id? }
+       (gpu is a canonical model id — "h100" is too coarse, interconnect changes price and throughput)
 
 OS  →  POST /api/compute/quote { gpu, count, max_hourly_cents, budget_cents }          (change 4)
        ← { provider, sku, hourly_cents, effective_cap_cents, balance_cents, funding }  ADVISORY
@@ -278,6 +279,20 @@ death from 10 minutes to 10 minutes. **Both, or neither.**
 User leases then stay bounded by plan TTL, wallet exhaustion, explicit release, and the budget cap. The
 provider-terminal branch (`:117-131`) continues to apply to everything.
 
+**Part (a) also produces the boot-time dataset** change 10 ranks on, because flipping to `ready` is what
+stamps `ready_at`.
+
+#### `PROVISION_TIMEOUT_SECONDS` = 600 is a guess, and cheapest-first tests it
+
+It is a single global number (`config.py:70`) applied to every provider. Measured 7-day boot distributions
+put RunPod's median near 59s but Vast's tail past **6 minutes** — so under cheapest-first, which sends
+most launches to Vast, a slice of legitimate provisions runs close to the limit and some will exceed it.
+A box reaped mid-provision is a launch the user paid for and never received.
+
+**Make the timeout per-provider and set it from the p99 of measured boot times** (change 10), not from a
+round number. Until that data exists, raise it for the providers whose observed tail demands it rather
+than leaving one value covering a 6× spread.
+
 **Ships first, with its own test, before any budget work.**
 
 ### Change 1 — make `hard_cap_cents` a real running cap
@@ -354,8 +369,27 @@ Accept `{gpu, count, max_hourly_cents?}` in place of an explicit `sku`; rank **e
 options by `price_cents_per_hour`; lease the cheapest match in the same request. Explicit `provider`/`sku`
 continues to work for the dashboard and the CLI.
 
-Needs a canonical GPU-model map — providers spell the same card differently, and a substring match on
-`name` will silently mis-rank.
+Ranking is **cheapest above a reliability floor**, not cheapest outright — see change 10.
+
+#### The canonical GPU map
+
+Providers spell the same card differently, and a substring match on `name` will silently mis-rank.
+`"h100"` is too coarse to be an input: **interconnect is part of the model identity**, and the three H100
+variants differ in both throughput and price.
+
+```
+A10 · A40 · A100-40GB-PCIe · A100-40GB-SXM · A100-80GB-PCIe · A100-80GB-SXM
+H100-PCIe · H100-NVL · H100-SXM · H200-NVL · H200-SXM · B200
+L4 · L40 · L40S · RTX-3090 · RTX-4090 · RTX-5090 · RTX-6000-Ada
+RTX-A6000 · RTX-PRO-6000 · RTX-PRO-6000-WK
+```
+
+The resolver takes a canonical id from this set plus `count`. Each provider module maps its own naming
+into it, and an option that cannot be mapped is **excluded from ranking rather than guessed at** — a
+mis-mapped card is a wrong machine at the wrong price, silently.
+
+This taxonomy is the one a comparable aggregator settled on, which is a reasonable signal that it is the
+right granularity rather than over-specification.
 
 **The retry is not optional here.** Vast supplies most of the catalog and its SKUs are ephemeral offer IDs,
 so the cheapest pick is usually the raciest one. On a provider `400`, re-resolve against a re-fetched
@@ -479,6 +513,62 @@ acquire that dies after key registration does not leak either.
 Ships with change 3. A resolver that makes Vast the common path without this is a resolver that turns a
 known defect into a scaling one.
 
+### Change 10 — measure boot and availability, and rank on it
+
+**Cheapest per hour is a proxy that inverts.** Boot time is billed wall-clock: a six-minute provision on a
+$2.16/h H100 spends $0.22 before any work starts, and a box that boots six times slower is not the cheap
+one. A comparable aggregator publishes exactly this measurement across providers, and its 7-day
+distribution is stark — RunPod a ~59s median with a tight spread, Vast a ~1m9s median with a tail running
+past **6m** and a long scatter across the whole range. Vast is worse on the median and far worse on the
+variance, and cheapest-first sends most launches to Vast.
+
+**The dataset is free once change 0(a) lands.** `compute_leases.ready_at` already exists
+(`migrations.py:555`, `pg_migrations.py:806`) and `update_lease_status` already stamps it on the
+transition to ready (`compute_repo.py:425-427`) — nothing populates it today only because nothing flips a
+GPU lease to `ready`. So `ready_at - created_at` per lease is the boot-time series, and reaped or failed
+launches are the availability series. No new instrumentation, no new table required to start.
+
+Aggregate per `(provider, canonical_gpu)` over a rolling window and use it two ways:
+
+- **A floor.** Exclude offers from a provider whose recent failure rate or p95 boot time is beyond
+  threshold, then rank the survivors by price. This keeps the product rule — cheapest wins — while
+  measuring "cheapest" correctly.
+- **Timeouts** (below).
+
+**Cold start must degrade to today's behaviour.** With no history a provider is not penalised; ranking is
+pure price until enough leases exist to say otherwise. A floor that silently excludes every provider on
+day one is worse than no floor.
+
+Vendor-published signals are worth folding in where they exist and cost nothing —
+`VastProvider.list_options` currently discards `reliability2`, `dlperf_per_dphtotal` and `inet_down` from
+every offer it reads. `inet_down` matters more than it looks: pulling a 200 GB dataset at 50 Mbit instead
+of 5 Gbit is hours of GPU time billed for waiting. **But measured beats published** — vendor scores
+describe the host, our telemetry describes what actually happened to our leases.
+
+### Change 11 — pin the image, per provider
+
+**Nothing in this design says what is on the box**, and the answer today is inconsistent in a way that
+breaks reproducibility:
+
+| Provider        | Image                                                                           |
+| --------------- | ------------------------------------------------------------------------------- |
+| RunPod          | `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` (pinned, has `nvcc`) |
+| Vast            | `pytorch/pytorch:latest` (`vast_provider.py:220`) — **a floating tag**          |
+| Lambda          | none set — whatever the provider defaults to                                    |
+| Prime Intellect | none set                                                                        |
+
+Under cheapest-first the provider varies per launch, so **the environment varies per launch too** — and
+`latest` means the same experiment run a month apart gets a different toolchain with no record of it.
+For a tool whose purpose is reproducible research, that is a correctness bug, not an ergonomics one.
+
+Define a **minimum environment contract** the agent may rely on and nothing more — a pinned CUDA runtime,
+a pinned Python, and a package manager — and pin an image satisfying it for every provider the resolver
+can select. Record the resolved image on the lease row so a run can be reproduced later.
+
+Anything beyond the contract the agent installs itself, and **that install is billed at GPU rates out of
+the user's budget**, which is the argument for keeping the contract small and the image warm rather than
+bootstrapping from bare Ubuntu on every launch.
+
 ## OpenScience changes
 
 ### Three verbs
@@ -503,8 +593,12 @@ Behaviour:
 - On `429` (concurrency cap) and `409` (already released, `routes/compute.py:531-535`), surface rather
   than retry.
 - A non-2xx or malformed launch response **writes no `.pem` and reports no lease**.
-- If the readiness poll times out, **release the lease** and report. A paid box the agent cannot reach is
-  worse than no box.
+- **The readiness poll outlives the server's provisioning timeout, and defers to it.** Poll until Atlas
+  reports a terminal status, bounded at that provider's `PROVISION_TIMEOUT_SECONDS` plus a margin. A
+  client bound set _shorter_ than the server's is the bug to avoid: measured Vast boots run past six
+  minutes, so a three-minute client timeout would kill a meaningful share of launches that were about to
+  succeed. On timeout with the lease still live, **release it** — a paid box the agent cannot reach is
+  worse than no box — but a lease the server has already reaped needs reporting, not releasing.
 - **No client-side deadline timer**, price table, or SKU ranking.
 
 ### SSH coordinates do not exist at launch
@@ -622,6 +716,10 @@ creation stays in the workspace UI rather than becoming a fourth tool.
   specific one passes `provider`/`sku` explicitly, which still works.
 - **Durable storage narrows the pool.** Asking for a volume means paying the cheapest volume-capable
   provider, not the cheapest provider.
+- **Boot time is billed and varies by minutes across providers.** The floor bounds how bad it gets; it
+  does not make a marketplace box boot like a datacenter one.
+- **The environment is a contract, not a guarantee of parity.** Two providers satisfying the same pinned
+  CUDA/Python contract are still different machines.
 - **`none` is guidance, not enforcement.** The agent still has `bash`.
 
 ## Known defects, owned elsewhere
@@ -667,8 +765,15 @@ mocks, no network.
 - Resolution picks the **globally cheapest** matching offer across all operator providers — asserted with
   a fake catalog where the cheapest match is deliberately not the first provider polled, and again where
   it is not the provider the previous test picked. A resolver that always returns one provider must fail.
-- GPU-model matching is canonical, not substring: an `h100` request does not match `h100`-shaped names
-  from a different card, and does match the same card spelled differently across providers.
+- GPU-model matching is canonical, not substring: `H100-SXM`, `H100-PCIe` and `H100-NVL` are three
+  distinct targets and never satisfy each other; the same card spelled differently across providers maps
+  to one id; an unmappable option is excluded rather than guessed.
+- The reliability floor excludes a provider whose recent record is beyond threshold **and** leaves ranking
+  on pure price when there is no history — a cold-start floor that excludes everything must fail.
+- Boot telemetry accumulates: `ready_at` is stamped on the transition to ready, and the rolling aggregate
+  reflects it.
+- A provision that exceeds a short global timeout but fits that provider's measured p99 is **not** reaped.
+- The resolved image is recorded on the lease row, and no provider is launched on a floating tag.
 - Resolution leases the offer it ranked; a provider `400` triggers at most N re-resolves against a
   re-fetched catalog, then a structured error.
 - Vast and Prime Intellect release **deletes the registered public key** — on normal release and on failed
@@ -711,21 +816,28 @@ collapsed to one string.
 8. `POST /quote` returns provider, SKU, rate, effective cap, balance and funding, and **spends nothing**.
 9. Vast and Prime Intellect delete the registered public key on release **and** on failed launch, asserted
    against the provider's key list rather than the release return value.
-10. `volume_id` attaches a volume that survives lease release.
-11. Extension raises the cap when affordable, refuses with a structured `402` when not, never fires
+10. Ranking applies a reliability floor derived from measured boot and failure history, and falls back to
+    pure price when there is no history. `ready_at` is stamped on the transition to ready.
+11. `PROVISION_TIMEOUT_SECONDS` is per-provider and derived from measured boot times; a provision that
+    exceeds a short global constant but fits its provider's p99 is not reaped.
+12. Every launchable provider has a pinned image satisfying the environment contract, no floating tags,
+    and the resolved image is recorded on the lease.
+13. `volume_id` attaches a volume that survives lease release, and narrows the resolver to volume-capable
+    providers rather than failing.
+14. Extension raises the cap when affordable, refuses with a structured `402` when not, never fires
     automatically.
-12. BYOK ignores `budget_cents`. Plan TTL fires independently.
-13. A release whose provider teardown fails is not reported as a clean release.
-14. `compute_launch` on a non-2xx or malformed response writes no `.pem` and reports no lease; on a
-    readiness timeout it releases the lease; it never returns key material; it holds no pricing or
-    selection logic.
-15. The key is written `0600` inside a `0700` directory, under `Global.Path.config`, and a re-fetch over
+15. BYOK ignores `budget_cents`. Plan TTL fires independently.
+16. A release whose provider teardown fails is not reported as a clean release.
+17. `compute_launch` on a non-2xx or malformed response writes no `.pem` and reports no lease; its
+    readiness poll outlives the server's provisioning timeout and defers to the server's verdict; it never
+    returns key material; it holds no pricing or selection logic.
+18. The key is written `0600` inside a `0700` directory, under `Global.Path.config`, and a re-fetch over
     an existing loose-mode file tightens it.
-16. `compute_launch` calls `ctx.ask` and prompts by default; `permission.compute_launch: "allow"` silences
+19. `compute_launch` calls `ctx.ask` and prompts by default; `permission.compute_launch: "allow"` silences
     it.
-17. The connect string carries `-p <ssh_port>` when a real `/connection` payload reports a non-22 port.
-18. `compute_list` filters terminated leases and reflects Atlas, not local state.
-19. `pytest` and `bun test` pass with no network; change 0 and change 1 are each their own commit.
+20. The connect string carries `-p <ssh_port>` when a real `/connection` payload reports a non-22 port.
+21. `compute_list` filters terminated leases and reflects Atlas, not local state.
+22. `pytest` and `bun test` pass with no network; change 0 and change 1 are each their own commit.
 
 ---
 
