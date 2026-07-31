@@ -1,5 +1,6 @@
 import { test, expect, describe } from "bun:test"
 import path from "path"
+import { ComputeMode } from "../../src/compute/mode"
 
 const root = path.join(import.meta.dir, "..", "..", "src")
 
@@ -44,12 +45,20 @@ describe("compute prompt text", () => {
     expect(text).toContain("compute_status")
   })
 
-  test("prompts name skills that exist in the provider map", async () => {
-    // `modal` is not a skill name — the real ones are modal-serverless-gpu,
-    // modal-ml-training, modal-research-gpu. A prompt naming a skill the catalog
-    // does not have sends the agent to load something that cannot resolve.
+  test("modal skill mentions in research.txt resolve against ComputeMode.PROVIDERS", async () => {
+    // `modal` (bare, backticked or not) is a directory name, not a skill name —
+    // the frontmatter `name` values the skill tool actually resolves on are
+    // modal-serverless-gpu, modal-ml-training, modal-research-gpu, which is
+    // exactly ComputeMode.PROVIDERS.modal.skills. Pull every lowercase
+    // modal*-shaped token out of the prompt (skill tokens are always
+    // lowercase-hyphenated; "Modal" the company name in prose is capitalized
+    // and so never matches) and check it against that list — not the other way
+    // around, since the map trivially agrees with itself.
     const text = await Bun.file(path.join(root, "agent", "prompt", "research.txt")).text()
-    expect(text).not.toMatch(/`modal`/)
+    const tokens = [...new Set(text.match(/\bmodal[a-z-]*\b/g) ?? [])]
+    expect(tokens.length).toBeGreaterThan(0)
+    const valid = new Set(ComputeMode.PROVIDERS.modal.skills)
+    expect(tokens.filter((token) => !valid.has(token))).toEqual([])
   })
 
   test("the compute reminder points at compute_status and carries no mode", async () => {

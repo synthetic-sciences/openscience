@@ -352,7 +352,7 @@ Tracking: weights-and-biases, mlflow, tensorboard, langsmith, phoenix
 ### Inference & Deployment — serving, quantization, benchmarking
 Serving: vllm, sglang, tensorrt-llm, llama-cpp, outlines
 Quantization: bitsandbytes, awq, gptq, hqq, gguf
-Platforms: modal, lambda-labs, tensorpool, skypilot, fireworks-ai, groq, together-ai
+Platforms: modal-serverless-gpu, lambda-labs, tensorpool, skypilot, fireworks-ai, groq, together-ai
 Eval: lm-evaluation-harness, bigcode-evaluation-harness, llm-as-judge-evaluation, hugging-face-evaluation
 
 ### Data & Embeddings — DataFrames, datasets, tokenizers, vector stores
@@ -386,7 +386,7 @@ Writing: scientific-writing, ml-paper-writing, research-grants, venue-templates,
 Docs: scientific-slides, paper-2-web, latex-posters, pptx-posters, markitdown, market-research-reports
 
 ### Cloud Compute — GPU provisioning, serverless, distributed
-GPU: modal-research-gpu, modal, lambda-labs, tensorpool, prime-intellect-lab, skypilot
+GPU: modal-research-gpu, modal-serverless-gpu, lambda-labs, tensorpool, prime-intellect-lab, skypilot
 Distributed: ray-train, ray-data
 Managed: tinker, hugging-face-jobs
 Utility: get-available-resources
