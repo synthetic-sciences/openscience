@@ -59,7 +59,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
   // This is a LISTING filter, not a gate. `none` is guidance, not enforcement —
   // a hidden skill can still be loaded by exact name, and the agent still has
   // bash. Gating the load path is a larger change and is deliberately out of
-  // scope; see docs/specs/compute-mode-detection-design.md open question 3.
+  // scope; see docs/specs/compute-design.md, Part A.
   const offered = await ComputeMode.offered()
   const accessibleSkills = permitted.filter((skill) => !ComputeMode.SKILLS.has(skill.name) || offered.has(skill.name))
 
