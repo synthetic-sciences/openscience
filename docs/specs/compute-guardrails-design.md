@@ -1,23 +1,55 @@
 # Managed compute budget cap — design
 
-Status: **PARKED — do not implement.** Superseded for now by
-[`compute-mode-detection-design.md`](./compute-mode-detection-design.md).
-Date: 2026-07-30 · parked 2026-07-30
+Status: **REVIVED — ready to plan.** Parked 2026-07-30, revived 2026-07-31.
+Date: 2026-07-30 · revived 2026-07-31
 
 > ## ⚠️ Read this before anything below
 >
-> **This design was reviewed and found unsound, and the problem it solves is not currently reachable.**
-> The analysis below is kept because it is still the best record of how Atlas compute billing works. The
-> _proposal_ should not be built as written.
+> **The parking condition has expired, and the five findings below are now the implementation checklist —
+> exactly as the parked banner instructed.** The design's core (budget not duration, server decides,
+> `hard_cap_cents` made real) survives review intact. What changed is that the problem became reachable and
+> the gaps became work items.
 >
-> ### Why it is parked
+> ### What changed on 2026-07-31
 >
-> **1. Managed compute is switched off.** Atlas gates it on `COMPUTE_RESELL_ENABLED`, which defaults to
-> `false` (`backend/app/config.py:383`), plus a configured operator key. Without both, every provider reports
-> `funding: "unavailable"` and `POST /leases` refuses. **There is no live overspend to guard**, so this is a
-> guardrail for a road that is not open.
+> **Managed compute is switched ON in production.** The parked banner's first and load-bearing reason —
+> "there is no live overspend to guard" — is false as of a live check against `thesis-synsc`:
 >
-> **2. An independent review returned "Unsound as written."** Five findings, each verified in source:
+> ```
+> GET /api/compute/options  →  resell_enabled: true
+>                              lambda / runpod / vast / prime_intellect  →  funding: "managed"
+>                              292 launchable options
+> ```
+>
+> `COMPUTE_RESELL_ENABLED` still _defaults_ to `false` (`backend/app/config.py:383`), which is what the
+> original analysis read — but production sets it. **This is the third time in this investigation that reading
+> source gave the wrong answer about deployed reality.** Verify against the running system.
+>
+> So there is a live, unmetered spend path today: `POST /compute/leases` checks only the first hour, and
+> `atlas compute:up` is the human-facing door to it.
+>
+> ### The prerequisite that blocks everything
+>
+> **Finding 1 below is not a checklist item — it is a hard prerequisite, and it is a live defect independent
+> of this spec.** The lease reaper terminates _any_ lease that emits no telemetry roughly ten minutes after
+> creation:
+>
+> - `compute_repo.list_unfinished_leases` is explicitly category-agnostic —
+>   `WHERE status NOT IN ('released','failed')`, no exemption for user leases.
+> - `lease_reaper.sweep_once` branch 3 falls back to `_lease_started` (= `started_at or created_at`) when
+>   there is no telemetry, and reaps past `HEARTBEAT_STALE_SECONDS` = 600.
+> - `create_lease` mints **no runner token**, and `POST /api/agent/runner/telemetry` requires one
+>   (`x-thesis-runner-token`, scoped to a lease).
+>
+> **A user-launched lease therefore has no way to prove liveness, and is destroyed before it is useful.**
+> Provisioning eats several minutes of the ten. Until this is fixed, no budget can bind — a $30 budget lease
+> dies having spent about $1.17 — and `atlas compute:up` cannot run a research task no matter what else ships.
+>
+> The fix is to scope heartbeat staleness to leases that are _supposed_ to report: those with a runner token.
+> User leases are already bounded by three independent mechanisms — plan TTL, wallet exhaustion, and explicit
+> release — and adding a budget cap makes four. They do not need a liveness probe they cannot answer.
+>
+> ### The five findings, now the checklist
 >
 > - **The lease reaper kills these leases at ten minutes.** `lease_reaper` sweeps every 60s over all
 >   unfinished leases and reaps anything silent for `HEARTBEAT_STALE_SECONDS` = 600. A workload run over SSH
@@ -36,22 +68,22 @@ Date: 2026-07-30 · parked 2026-07-30
 > - **No idempotency on the money path.** The billing tick performs independent committing writes; a crash
 >   between them double-charges on the next tick, and adding a grant debit widens the window.
 >
-> ### Two factual errors in the text below
+> ### Status of the two factual errors
 >
-> - **"`atlas compute:up` exists"** — it exists in the Atlas repo (`cli/…/commands.mjs:922`) but **not in the
->   published `@synsci/atlas@0.13.2`**, which is what `^0.13.2` resolves to. Source and npm disagree at the
->   same version number. The "Corrections to earlier analysis" section below asserts the opposite and is wrong.
-> - **The system prompt is therefore still broken**, contrary to what that section says. It instructs the agent
->   to run a command absent from the installed CLI, then to check `atlas doctor` for managed availability —
->   which reports no compute field at all — and offers "the user's own GPU providers" as the fallback.
+> - **"`atlas compute:up` exists"** — still true only of the repo. Verified again 2026-07-31 by unpacking the
+>   registry artifact: published `@synsci/atlas@0.13.2` contains **155 command specs and zero `compute:`**.
+>   The chronology explains it — `3e1d1ca` removed the compute commands, `0.13.1` and `0.13.2` shipped without
+>   them, then `205bbc0` re-added them and four commits developed them further **with no version bump**. `main`
+>   still declares `0.13.2`, identical to the artifact that lacks them. The fix is a release, not code.
+> - **The system prompt was broken and is now FIXED.** Shipped on `feat/compute-guardrails` — the false
+>   `atlas compute:up` / `atlas doctor` guidance is deleted from both `session/prompt.ts` and the `research`
+>   agent prompt, replaced by a `compute_status` tool that resolves `byok | managed | none` at runtime.
 >
-> ### What to do instead
+> ### Scope note inherited from that work
 >
-> Fixing that prompt is the live work, and it is handled by
-> [`compute-mode-detection-design.md`](./compute-mode-detection-design.md), which needs nothing from Atlas.
->
-> **Revive this document only when managed compute is actually switched on somewhere**, and then treat the five
-> findings above as the implementation checklist rather than as blockers.
+> `compute_status` now tells an agent in `managed` mode to "run GPU work through managed compute" — and no
+> mechanism exists for it to do so. That guidance is honest about funding but not about capability, and it is
+> the user-visible reason this document is being revived rather than left parked.
 
 Roadmap items: **55** (budget guardrails + kill switches), **103** (cost approval gates), and the gate half of
 **51/2** (agent-facing compute tool)
@@ -89,8 +121,22 @@ per-lease `expires_at`, and client-side early release. Every one of those was an
 _succeed_, not to stop a bill running away — and each depended on something that does not exist (a completion
 signal for arbitrary SSH commands, a live agent session outliving a long job, or checkpointing).
 
-**This spec solves safety completely and does not pretend to solve productivity.** What that costs is stated
-under "What you are accepting".
+**Safety is still what this spec guarantees.** Changes 0–3 are the whole of it, and they depend on nothing
+outside Atlas.
+
+The 2026-07-31 revision adds two productivity changes — and the test that admitted them is deliberately narrow:
+**does it work when nobody is watching?**
+
+- **Change 4 (volumes) passes.** It moves files off the box before anything fails. It needs no completion
+  signal, no live session, and no client cooperation, because the volume simply outlives the pod.
+- **Change 5 (extension) passes only because it is optional.** If no extension arrives, exhaustion proceeds
+  unchanged. Nothing blocks on a decision, so a dead agent costs nothing.
+
+The rejected features failed that test: each needed something alive to act on a signal. That is the line —
+**a productivity feature is admissible here only if its absence changes nothing about enforcement.** A per-lease
+`expires_at`, client-side timers, and auto-extension remain out for exactly that reason.
+
+What still isn't solved is stated under "What you are accepting".
 
 ## Trust boundary
 
@@ -118,12 +164,38 @@ Three consequences, all simplifying:
   which matters because a lease is a VM, not a job — `POST /compute/leases` has no notion of the work running on
   it, and the only completion signal anywhere (`agent_telemetry` rows with `done`/`error_trace`) is written by
   the Atlas agent runtime, not by an arbitrary command run over SSH.
-- **No extension path needed.** Exhaustion is arithmetic, not a guess that might need revising.
+- **No extension path needed _for safety_.** Exhaustion is arithmetic, not a guess that might need revising.
+  An extension is therefore a convenience, never a correctness requirement — see change 5, which adds one
+  deliberately and keeps it outside the enforcement path.
 - **No agent liveness needed.** The server enforces whether or not the session that started the job survived.
+  This is the property change 0 restores: today the reaper demands a liveness signal that a user lease cannot
+  produce, which inverts exactly this design goal.
 
 And it uses a primitive that already exists rather than adding one — see below.
 
 ## What to build
+
+Six changes, in dependency order. **Change 0 is a prerequisite** — without it none of the rest can be observed
+to work, because the box dies first.
+
+### Atlas — change 0: stop the reaper killing user leases
+
+`lease_reaper.sweep_once` applies heartbeat staleness to every unfinished lease. Only agent-spawned leases can
+answer it, because only they are issued a runner token. Scope the check to leases that have one:
+
+```python
+# branch 3 — heartbeat staleness
+if reason is None and lease.get("status") != "provisioning" and _has_runner_token(lease):
+    ...
+```
+
+Leases without a runner token stay bounded by plan TTL, wallet exhaustion, explicit release, and (after change
+
+1. the budget cap. The reaper's other branches — provider-terminal and provisioning-timeout — continue to apply
+   to every lease and should not be narrowed.
+
+**This is a live user-facing bug, not scaffolding for this spec.** It ships first, on its own, with its own
+test: a lease with no runner token survives past `HEARTBEAT_STALE_SECONDS`; one with a token still gets reaped.
 
 ### Atlas — change 1: make `hard_cap_cents` a real running cap
 
@@ -173,6 +245,79 @@ so the agent can tell the user what was actually authorised rather than what was
 **Managed leases only.** BYOK runs on the user's own provider account, which we neither meter nor bill, so a
 budget cap there would be a number we cannot enforce. BYOK ignores `budget_cents`.
 
+### Atlas — change 3: bound cumulative spend, not just per-lease spend
+
+The cap is per-grant and a grant is per-lease, so an agent can release and re-acquire without limit. The
+concurrency cap of 2 bounds how many boxes run at once, not what they cost in total. A $30 budget honoured
+twenty times is $600.
+
+Add a **rolling window cap** checked at lease creation: the sum of grants opened by this user in the trailing
+window must not exceed the plan's ceiling. Window and ceiling are plan config, alongside
+`gpu_sandbox_max_ttl_hours`. Rejection reuses the `402` shape with a distinct `error` code so the client can
+tell "this box is too expensive" from "you have spent enough today".
+
+Design this in now. Retrofitting a cumulative cap after users depend on a per-lease one changes the meaning of
+a number they already trust.
+
+### Atlas — change 4: attach a persistent volume so exhaustion costs compute, not work
+
+Atlas already has a volumes API — `POST /api/compute/volumes` (10 GB–10 TB), `list_volumes`, `delete_volume`
+with a detach requirement. **Leases do not use it.** `LeaseRequest` has no volume field, and the RunPod
+provider passes `volumeInGb: 20`, which is a _pod-scoped_ volume RunPod destroys with the pod.
+
+- Add `volume_id?` to `LeaseRequest`.
+- Pass it to RunPod as `networkVolumeId`, mounted at `/workspace`.
+
+Budget exhaustion then destroys the pod and leaves the work. The user relaunches against the same volume and
+continues. The economics strongly favour it: a network volume costs cents per GB-month against dollars per
+GPU-hour, so preserving the work costs approximately nothing next to the compute that produced it.
+
+**Honest limit:** a volume preserves _files_, not _process state_. A run killed mid-epoch still dies; it
+resumes only if it was checkpointing to `/workspace`. The volume is the substrate roadmap **56** needs, not a
+replacement for it — but it converts "you lost the job" into "you lost the GPU", which is the difference
+between a wasted budget and a wasted hour.
+
+### Atlas — change 5: extend a live budget
+
+```
+POST /api/compute/leases/{lease_id}/budget
+Request:  { additional_cents }
+Response: { hard_cap_cents, spent_cents, effective_cap_cents }
+```
+
+Raises `hard_cap_cents` on the existing grant, clamped by the wallet and by the rolling cap from change 3.
+Same 402 shapes on refusal. Requires no new state — it edits a number change 1 already reads every tick.
+
+Three constraints keep this from re-opening the door the original draft closed:
+
+- **Extension is pull, never push.** Atlas never auto-extends from a remaining balance. Spending without being
+  asked is precisely what a budget exists to prevent, and a budget that quietly refills is not a budget.
+- **It is not part of enforcement.** If no extension arrives, exhaustion proceeds exactly as change 1 defines.
+  Nothing waits for a decision, so a dead agent changes nothing.
+- **No warning event is required for it to work.** A notification at ~80% is worth adding for humans, but it is
+  advice, not a mechanism, and the cap must not depend on anyone reading it.
+
+### Why RunPod is the managed default
+
+Verified across all four reseller providers: each generates a fresh Ed25519 keypair per lease and the provider
+only ever sees the public half, so **the key handed back opens exactly one box** everywhere. They differ in
+what they leave behind:
+
+| Provider        | How the public key attaches                                           | Account artifact | Cleaned up on release                |
+| --------------- | --------------------------------------------------------------------- | ---------------- | ------------------------------------ |
+| **RunPod**      | injected via the `PUBLIC_KEY` env var the base images consume on boot | **none**         | nothing to clean                     |
+| Lambda          | registered in the account key registry                                | yes              | yes — on release _and_ failed launch |
+| Vast            | posted to account `/ssh/` **and** `/instances/{id}/ssh/`              | yes              | **no**                               |
+| Prime Intellect | `POST /ssh_keys/`, referenced as `sshKeyId`                           | yes              | **no**                               |
+
+RunPod is the only one with no account-level trace at all, which is the right property when Atlas owns the box
+lifecycle. Its pod-creation body also takes an arbitrary `env` dict — the same lever the Modal spawn path uses
+to pass a token and callback URL — so anything Atlas later wants running on boot needs no SSH bootstrap.
+
+**Two Atlas bugs fall out of this table, in the operator account rather than users':** Vast and Prime Intellect
+leak one public key per lease, unbounded and forever. Lambda's pattern is the fix. Out of scope here; worth
+their own ticket.
+
 ### OpenScience — one tool
 
 The agent lists options, picks a SKU itself, and proposes a budget:
@@ -187,25 +332,34 @@ The agent lists options, picks a SKU itself, and proposes a budget:
 5. Release on request. **No client-side deadline timer** — the server is the enforcer, and the client has no
    completion signal to improve on it with.
 
-## The two clocks that remain
+## The bounds that remain
 
-| Bound            | Owner               | Fires when                     |
-| ---------------- | ------------------- | ------------------------------ |
-| `hard_cap_cents` | Atlas billing tick  | the approved money is spent    |
-| Plan TTL (24h)   | Atlas billing sweep | anything has run absurdly long |
+| Bound               | Owner                | Fires when                               | Status after this spec  |
+| ------------------- | -------------------- | ---------------------------------------- | ----------------------- |
+| `hard_cap_cents`    | Atlas billing tick   | the approved money is spent              | made functional (ch. 1) |
+| Rolling window cap  | Atlas lease creation | cumulative spend hits the period ceiling | new (ch. 3)             |
+| Wallet exhaustion   | Atlas billing tick   | the money actually runs out              | already works           |
+| Plan TTL (24h)      | Atlas billing sweep  | anything has run absurdly long           | already works           |
+| Heartbeat staleness | Atlas lease reaper   | an _agent-spawned_ lease stops reporting | narrowed (ch. 0)        |
 
-Both already exist as mechanisms; only the first is being made functional. **No `expires_at` column is added** —
-time is not the thing being authorised, and a second time bound alongside the plan TTL would be redundant.
+Every one is server-side; none can be influenced by the client. **No `expires_at` column is added** — time is
+not the thing being authorised, and a second time bound alongside the plan TTL would be redundant.
+
+Note the shape of change 0: it _removes_ a bound from user leases. That is safe precisely because the other
+four still apply, and it is required because the bound it removes is one those leases cannot satisfy.
 
 Billing ticks every 60 seconds, so a budget can overrun by up to a minute of rate (~$0.12 on an H100). Approved
 budgets are therefore ceilings-plus-a-minute and must never be described as exact.
 
 ## What you are accepting
 
-**A budget-exhausted job loses its work.** You paid the budget and got a partial run. This is already true
-today; the spec does not make it worse, but it does not fix it either. **Roadmap 56 (checkpointing) is the fix,
-and should be tracked as the follow-on that makes this good rather than merely safe.** Until then, a warning
-event before exhaustion would be advice nobody can act on.
+**A budget-exhausted job loses its GPU. With change 4 it need not lose its work.** Attaching a persistent
+volume moves the files off the box, so exhaustion costs the compute rather than the run — provided the job
+checkpointed to `/workspace`. Roadmap **56** (checkpointing) remains the thing that makes this genuinely good;
+change 4 is the substrate it needs, and without it roadmap 56 has nowhere durable to write.
+
+The residual loss is real and accepted: **a run killed mid-epoch that was not checkpointing is gone.** No
+server-side mechanism can fix that, because the server cannot know what the process was holding in memory.
 
 **Time is unbounded within a budget.** A cheap CPU lease could run for days inside a small budget. The 24-hour
 plan TTL is the only backstop, which is deliberate.
@@ -219,6 +373,18 @@ integration rather than being the code's first execution.
 
 Cases that must be covered:
 
+- **The property the last attempt missed: a budget of $B at $R/h lasts ≈ B/R hours.** Assert the elapsed
+  billable duration, not just that a release eventually happened. This is what catches the un-rolled-back
+  acquire-time debit — a $10 budget at $6.99/h dying at 25.8 minutes instead of ~1.4 hours passes every
+  release-happened assertion while being off by 3×.
+- A lease **with no runner token survives past `HEARTBEAT_STALE_SECONDS`**; one with a token is still reaped
+  (change 0). Without this, every budget test silently measures a ten-minute reap instead of the cap.
+- Money-path writes are **idempotent**: replaying a tick that already committed does not double-charge.
+- The **rolling window cap** rejects an N+1th lease whose grant would exceed the period ceiling, even when each
+  individual budget is affordable.
+- A lease created with `volume_id` mounts it, and **releasing the lease does not delete the volume**.
+- Extension raises the cap, is clamped by wallet and rolling cap, and **exhaustion proceeds normally when no
+  extension arrives**.
 - A tick whose delta would exceed `hard_cap_cents` **releases the lease**; one that fits does not.
 - `spent_cents` tracks cumulative charge across several ticks rather than freezing after the first.
 - A lease created **without** `budget_cents` behaves exactly as before (dashboard and `compute:up` compatibility).
@@ -241,6 +407,23 @@ code**; the ones that held up were proven against a _deletion_, not merely an in
 `budget_cents` only sizes the grant at creation. Existing in-flight grants keep whatever cap they were created
 with, and change 1 begins enforcing it from the next tick, which is the safe direction.
 
+Per change:
+
+- **Change 0** is behavioural only, and its direction is _fewer_ terminations. Leases currently being reaped at
+  ten minutes will start surviving — which is the intent, but it means live GPU boxes that used to die on their
+  own now run until a real bound fires. Ship it with change 1 close behind, or ship it while the only bounds are
+  plan TTL and wallet, and accept that a forgotten box costs up to the TTL.
+- **Change 3** needs plan config for the window and ceiling, and a query over recent grants. If grants are not
+  already indexed by `(user_id, created_at)`, that index is the migration.
+- **Change 4** adds a nullable `volume_id` to the lease row. Volume lifecycle is already modelled by
+  `compute_volume_repo`; releasing a lease must **not** cascade a delete.
+- **Change 5** adds no column — it edits `hard_cap_cents` in place.
+
+**One migration hazard, from finding 2.** `budget_cents` already exists on the agent-spawn path defaulting to
+`500`, where it is display-only. Change 1 makes caps real, so every already-shipped spawn silently acquires a
+hard $5 kill. Either raise that default deliberately or exempt spawn-path grants until their budgets are chosen
+with enforcement in mind. **This is not a no-op, and the previous draft called it one.**
+
 ## Corrections to earlier analysis
 
 Recorded because both errors reached a draft of this document.
@@ -253,16 +436,22 @@ Recorded because both errors reached a draft of this document.
   `compute:launch`, `compute:lease`), alongside `compute:list` and `compute:ssh` — **in the repo.** An earlier
   draft claimed it existed in no version, which was wrong about the source and right about the artifact.
   ~~**Consequence: the system prompt at `session/prompt.ts:1554-1562` is not broken** and needs no fix. It was
-  previously an acceptance criterion; it is removed.~~ **That consequence does not follow.** The published
-  package has no `compute:` command, so the prompt does point at something the installed CLI cannot run. The
-  prompt fix belongs back in scope — it now lives in `compute-mode-detection-design.md`.
+  previously an acceptance criterion; it is removed.~~ **That consequence did not follow.** The published
+  package has no `compute:` command, so the prompt did point at something the installed CLI cannot run.
+  **Resolved 2026-07-31** on `feat/compute-guardrails`: the guidance is deleted from `session/prompt.ts` and
+  from the `research` agent prompt, and replaced by runtime detection via a `compute_status` tool.
 - **`compute:up` already takes `max_price` and `dry_run`** — again, **in the repo only**. A per-hour price
   ceiling and a no-spend preview exist in the source parameter set but ship to nobody until the CLI is
   published. Adding `budget_cents` there too would let CLI users have the same cap, once any of it ships.
 
-**The lesson worth carrying:** three separate conclusions in this investigation came from reading source and
-were wrong about the deployed reality — the CLI's contents, whether the prompt was broken, and whether managed
-compute was reachable at all. Verify against the running system before designing against it.
+**The lesson worth carrying:** **four** separate conclusions in this investigation came from reading source and
+were wrong about the deployed reality — the CLI's contents, whether the prompt was broken, whether managed
+compute was reachable at all, and then (2026-07-31) the parked banner's own claim that reselling was off, which
+was read from a default and contradicted by production. Verify against the running system before designing
+against it.
+
+The fourth is the sharpest, because it was made _by the correction to the third_. A document written to warn
+about this exact failure repeated it one section later.
 
 ## Out of scope
 
@@ -272,22 +461,39 @@ compute was reachable at all. Verify against the running system before designing
 - **Roadmap 56** (checkpointing) — the follow-on that makes budget exhaustion survivable.
 - **Roadmap 4** (real BYOK provider API clients) — five separable vendor integrations.
 - **Roadmap 52** (`bun:sqlite` for the local runner's state).
-- Adding `budget_cents` to `atlas compute:up`, a per-lease `expires_at`, warning events, extension requests,
-  client-side deadline timers, and any client-side price table.
+- A per-lease `expires_at`, client-side deadline timers, and any client-side price table. (Extension requests
+  are now **in** scope — change 5 — but remain outside the enforcement path.)
+- **Publishing the Atlas CLI.** `compute:*` has sat unpublished in `main` since `205bbc0` with no version bump;
+  `npm` still serves the pre-removal `0.13.2`. Worth its own release, and worth adding `budget_cents` to
+  `compute:up` when it happens — but a release, not this design.
+- **Fixing the CLI's usability gaps.** Reviewed 2026-07-31: it prints the one-time SSH private key and never
+  saves it (so the `ssh_command` it prints cannot work), has no file-transfer command, no exec, and no compute
+  tests. Its resolver is genuinely good; everything around it is unfinished. Separate workstream.
+- **Vast and Prime Intellect SSH key leaks** — one public key per lease left in the operator account forever.
+  Lambda's delete-on-release pattern is the fix.
 
 ## Acceptance criteria
 
-1. The billing tick re-debits the grant, so `spent_cents` tracks cumulative spend instead of freezing at hour
+0. **A lease with no runner token is not reaped for heartbeat staleness**, and one with a token still is. Until
+   this holds, no other criterion can be observed — the box dies at ten minutes regardless.
+1. **A budget of $B at rate $R/h lasts ≈ B/R hours**, asserted on elapsed billable duration. This is the
+   headline property and the one the previous attempt's tests and criteria both omitted.
+2. The money path is idempotent: a replayed tick does not double-charge.
+3. A cumulative rolling cap bounds spend across sequential leases, not merely within one.
+4. `volume_id` attaches a persistent volume that **survives lease release**.
+5. Extension raises the cap when affordable, is refused with a structured `402` when not, and never fires
+   automatically.
+6. The billing tick re-debits the grant, so `spent_cents` tracks cumulative spend instead of freezing at hour
    one.
-2. A tick whose delta would exceed `hard_cap_cents` releases the lease via the existing release path.
-3. `POST /api/compute/leases` accepts optional `budget_cents` and sizes the grant to it.
-4. Omitting `budget_cents` preserves today's behaviour exactly — the dashboard and `compute:up` keep working.
-5. A budget that cannot fund the first hour is rejected with `402` carrying `affordable_budget_cents`.
-6. A budget exceeding the wallet is clamped to the effective balance, and the response reports the effective cap.
-7. BYOK leases ignore `budget_cents` and are never debited.
-8. The 24-hour plan TTL still fires independently.
-9. `pytest` passes with no network access; change 1 is a separate commit with its own tests.
-10. The OpenScience tool refuses to launch without an Atlas verdict, surfaces `402` and `429` without retrying,
+7. A tick whose delta would exceed `hard_cap_cents` releases the lease via the existing release path.
+8. `POST /api/compute/leases` accepts optional `budget_cents` and sizes the grant to it.
+9. Omitting `budget_cents` preserves today's behaviour exactly — the dashboard and `compute:up` keep working.
+10. A budget that cannot fund the first hour is rejected with `402` carrying `affordable_budget_cents`.
+11. A budget exceeding the wallet is clamped to the effective balance, and the response reports the effective cap.
+12. BYOK leases ignore `budget_cents` and are never debited.
+13. The 24-hour plan TTL still fires independently.
+14. `pytest` passes with no network access; changes 0 and 1 are each a separate commit with their own tests.
+15. The OpenScience tool refuses to launch without an Atlas verdict, surfaces `402` and `429` without retrying,
     and holds no pricing or approval logic.
 
 ## Prototype
