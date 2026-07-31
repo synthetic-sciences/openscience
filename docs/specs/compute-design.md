@@ -103,11 +103,14 @@ Atlas  resolve cheapest live offer matching gpu + count + max_hourly_cents
        check wallet funds 1h AND rolling window has headroom
        clamp budget to effective balance
        mint Ed25519 pair · size grant to effective cap · launch pod
-       ← { lease_id, ip, ssh_user, private_key, effective_cap_cents, hourly_cents, provider, sku }
-OS     write private_key → ~/.config/openscience/compute/<lease_id>.pem  (0600)
-       return { lease_id, ip, ssh_user, key_path, effective_cap_cents, hourly_cents } — no key material
-agent  bash: ssh -i <key_path> <ssh_user>@<ip> …   scp results back
+       ← { lease_id, ssh_host, ssh_port, ssh_user, private_key, effective_cap_cents, hourly_cents,
+           provider, sku }
+OS     write private_key → ~/.config/openscience/compute/<lease_id>.pem  (0600, a cache)
+       return { lease_id, ssh_host, ssh_port, ssh_user, key_path, … } — no key material
+agent  bash: ssh -i <key_path> -p <ssh_port> <ssh_user>@<ssh_host> …   scp results back
 agent  compute_release { lease_id } → Atlas terminates · OS deletes the .pem
+
+       (.pem missing? re-fetch from GET /leases/{id}/connection and rewrite it — Atlas holds it encrypted)
 ```
 
 ## Why budget, not balance
@@ -280,11 +283,11 @@ closed:
 
 ### Three verbs
 
-| Tool              | Input                                                             | Output                                                                          |
-| ----------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `compute_launch`  | `gpu`, `count`, `budget_cents`, `max_hourly_cents?`, `volume_id?` | `lease_id`, `ip`, `ssh_user`, `key_path`, `effective_cap_cents`, `hourly_cents` |
-| `compute_list`    | —                                                                 | running leases: id, provider, sku, ip, spent, cap                               |
-| `compute_release` | `lease_id`                                                        | released                                                                        |
+| Tool              | Input                                                             | Output                                                                                            |
+| ----------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `compute_launch`  | `gpu`, `count`, `budget_cents`, `max_hourly_cents?`, `volume_id?` | `lease_id`, `ssh_host`, `ssh_port`, `ssh_user`, `key_path`, `effective_cap_cents`, `hourly_cents` |
+| `compute_list`    | —                                                                 | unfinished leases: `lease_id`, `provider`, `sku`, `status`, `ssh_host`, `ssh_port`, rate, cap     |
+| `compute_release` | `lease_id`                                                        | released                                                                                          |
 
 Plus `compute_status` (shipped, unchanged). Each verb maps 1:1 to an Atlas endpoint. Separate tools rather
 than one `action` parameter, so the permission rule can ask on launch and allow on list.
@@ -303,18 +306,30 @@ Behaviour:
 
 ### The agent never holds key material
 
-`compute_launch` writes the one-time private key to `~/.config/openscience/compute/<lease_id>.pem` at
-`0600` and returns only `key_path`. The key stays out of the transcript, out of compaction, and out of
-session storage. `compute_release` deletes it.
+`compute_launch` writes the private key to `~/.config/openscience/compute/<lease_id>.pem` at `0600` and
+returns only `key_path`. The key stays out of the transcript, out of compaction, and out of session
+storage. `compute_release` deletes it.
 
-This is also the fix for the existing Atlas CLI defect: it prints the private key and never saves it, so
-the `ssh_command` it prints cannot work.
+**`-p <ssh_port>` is required, not optional.** RunPod NATs SSH to a high public port and Vast routes
+through an ssh-proxy port; a connect built as `ssh -i key user@host` simply times out on both. The tool
+returns `ssh_port` and the guidance must include it.
 
-### Atlas is the truth for what is running
+### Atlas is the truth for everything, including the key
 
-`compute_list` calls `GET /api/compute/leases` rather than reading a local ledger, so there is nothing to
-drift and nothing to orphan on crash. The `.pem` is the only local state, because it is the only value
-that cannot be re-fetched.
+The private key is **not** one-time and **not** local state. Atlas stores it encrypted on the lease row
+(`compute_leases.ssh_key`, via `secret_store`) and
+`GET /api/compute/leases/{lease_id}/connection` decrypts it for the authenticated owner —
+`routes/compute.py:450-508`, added so the Compute tab could offer a reliable download after a page
+reload. `GET /api/compute/leases` redacts the blob (`_redact_lease:424`); the connection endpoint is the
+one that returns it.
+
+So the `.pem` on disk is a **cache, not a record**. If it is missing — new machine, cleaned config dir,
+another session — re-fetch it from `/connection` and rewrite it. **OpenScience keeps no durable local
+state for compute at all**, which removes the last thing that could drift out of sync with Atlas.
+
+`compute_list` calls `GET /api/compute/leases`, which returns `SELECT *` over every lease for the user,
+newest first (`compute_repo.py:446-453`). It returns **terminated leases too**, so the tool filters to
+non-terminal status rather than presenting the raw list as "what is running".
 
 ### The approval gate
 
@@ -379,8 +394,9 @@ creation stays in the workspace UI rather than becoming a fourth tool.
 - **Atlas CLI unpublished.** `@synsci/atlas@0.13.2` on npm carries 155 command specs and zero `compute:`;
   `3e1d1ca` removed them, `205bbc0` re-added them, no version bump followed. Source and artifact disagree
   at an identical version. A release, not code.
-- **CLI usability.** Prints the one-time private key and never saves it; no file transfer, no exec, no
-  compute tests.
+- **CLI usability.** Prints the private key and never saves it, so the `ssh_command` it prints cannot
+  work as shown. Recoverable — `/leases/{id}/connection` re-serves the key — but the CLI does not call it.
+  No file transfer, no exec, no compute tests.
 - **Vast / Prime Intellect SSH key leaks** into the operator account, unbounded.
 - **`budget_cents` already exists** on the agent-spawn path defaulting to `500`, display-only. Change 1
   makes caps real, silently giving every shipped spawn a hard $5 kill. **Not a no-op** — raise the default
@@ -416,8 +432,10 @@ mocks, no network.
 - Extension raises the cap, is clamped, and **exhaustion proceeds normally when none arrives**.
 - A tick exceeding `hard_cap_cents` releases; one that fits does not. `spent_cents` accumulates.
 - No `budget_cents` → today's behaviour exactly. BYOK ignores it. Plan TTL still fires independently.
-- OpenScience: the key is written `0600` and **never appears in the tool result**; release deletes it;
-  `402`/`429` surface without retry; launch without a verdict is refused.
+- OpenScience: the key is written `0600` and **never appears in the tool result**; release deletes it; a
+  missing `.pem` is re-fetched from `/connection` instead of failing; the connect string carries
+  `-p <ssh_port>` off port 22; `compute_list` filters terminated leases; `402`/`429` surface without
+  retry; launch without a verdict is refused.
 
 Every new assertion must be shown failing against the specific mutation it guards — ideally the _deletion_
 of the logic, not its inversion. On this branch alone, five plan-authored test defects were caught in
@@ -442,8 +460,11 @@ collapsed to one string.
 11. `compute_launch` refuses to launch without a verdict, surfaces `402`/`429` without retrying, holds no
     pricing or selection logic, writes the key `0600`, and never returns key material.
 12. `compute_launch` prompts by default and is silenced only by explicit config.
-13. `compute_list` reflects Atlas, not local state — a lease released out-of-band disappears from it.
-14. `pytest` and `bun test` pass with no network; changes 0 and 1 are each their own commit.
+13. `compute_list` reflects Atlas, not local state — a lease released out-of-band disappears from it, and
+    terminated leases are filtered out.
+14. A deleted `.pem` is re-fetched from `/connection` rather than stranding the lease.
+15. The connect string carries `-p <ssh_port>` whenever the port is not 22.
+16. `pytest` and `bun test` pass with no network; changes 0 and 1 are each their own commit.
 
 ---
 
@@ -467,3 +488,12 @@ Labels in this document:
 
 A source-read claim is not a deployed-behaviour claim. Confirm the money path against `pytest` before
 relying on it.
+
+Three claims in the first draft of **this** document were wrong and were caught by checking the
+endpoints rather than assuming them — recorded so the pattern stays visible:
+
+- The private key was described as one-time and unrecoverable. It is neither; `/connection` re-serves it.
+  That deleted a whole category of local state from the design.
+- `ssh_port` was omitted from the flow entirely, which would have produced a connect string that times
+  out on both RunPod and Vast.
+- `GET /leases` was assumed to return running leases. It returns all of them.
