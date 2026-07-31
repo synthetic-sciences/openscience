@@ -2,14 +2,40 @@ import { test, expect, describe, beforeEach, afterEach } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { SkillTool } from "../../src/tool/skill"
+import { ComputeStatusTool } from "../../src/tool/compute"
 import { ComputeMode } from "../../src/compute/mode"
 import { Instance } from "../../src/project/instance"
 import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
 
-const ENV = ["LAMBDA_API_KEY", "RUNPOD_API_KEY", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "TENSORPOOL_KEY"]
+// All ten credential variables across ComputeMode.PROVIDERS (modal x2, lambda x2,
+// tensorpool x2, prime x2, runpod x1, vast x1) — matches test/compute/mode.test.ts's
+// ENV list. A partial list lets a developer's own ambient shell keys (e.g. a real
+// PRIME_API_KEY) leak into tests asserting an empty catalog.
+const ENV = [
+  "MODAL_TOKEN_ID",
+  "MODAL_TOKEN_SECRET",
+  "LAMBDA_API_KEY",
+  "LAMBDA_LABS_API_KEY",
+  "TENSORPOOL_KEY",
+  "TENSORPOOL_API_KEY",
+  "PRIME_API_KEY",
+  "PRIME_INTELLECT_API_KEY",
+  "RUNPOD_API_KEY",
+  "VAST_API_KEY",
+]
 const SESSION = path.join(Global.Path.data, "openscience-session.json")
 const realFetch = globalThis.fetch
+
+const CTX = {
+  sessionID: "s",
+  messageID: "m",
+  agent: "research",
+  abort: new AbortController().signal,
+  messages: [],
+  metadata: () => {},
+  ask: async () => {},
+}
 
 // Every provider skill, plus two skills that must never be filtered: a
 // non-compute one and a cloud-compute skill that maps to no panel provider.
@@ -58,17 +84,7 @@ async function offered(): Promise<string[]> {
   const tool = await SkillTool.init({})
   const found: string[] = []
   for (const category of ["cloud-compute", "ml-training"]) {
-    const result = await tool
-      .execute({ category }, {
-        sessionID: "s",
-        messageID: "m",
-        agent: "research",
-        abort: new AbortController().signal,
-        messages: [],
-        metadata: () => {},
-        ask: async () => {},
-      } as never)
-      .catch(() => undefined)
+    const result = await tool.execute({ category }, CTX as never).catch(() => undefined)
     if (result) found.push(result.output)
   }
   const text = found.join("\n")
@@ -77,30 +93,22 @@ async function offered(): Promise<string[]> {
 
 async function nonComputeVisible(): Promise<boolean> {
   const tool = await SkillTool.init({})
-  const result = await tool.execute({ category: "chemistry" }, {
-    sessionID: "s",
-    messageID: "m",
-    agent: "research",
-    abort: new AbortController().signal,
-    messages: [],
-    metadata: () => {},
-    ask: async () => {},
-  } as never)
+  const result = await tool.execute({ category: "chemistry" }, CTX as never)
   return result.output.includes("**rdkit**")
 }
 
 async function tinkerVisible(): Promise<boolean> {
   const tool = await SkillTool.init({})
-  const result = await tool.execute({ category: "cloud-compute" }, {
-    sessionID: "s",
-    messageID: "m",
-    agent: "research",
-    abort: new AbortController().signal,
-    messages: [],
-    metadata: () => {},
-    ask: async () => {},
-  } as never)
+  const result = await tool.execute({ category: "cloud-compute" }, CTX as never)
   return result.output.includes("**tinker-fine-tuning**")
+}
+
+/** The compute_status tool's own verdict — the second surface that must agree
+ *  with SkillTool's catalog filter about which providers are usable. */
+async function computeStatus(): Promise<{ mode: string; providers: string[] }> {
+  const tool = await ComputeStatusTool.init({})
+  const result = await tool.execute({}, CTX as never)
+  return result.metadata as { mode: string; providers: string[] }
 }
 
 describe("skill catalog filtering by compute mode", () => {
@@ -161,12 +169,25 @@ describe("skill catalog filtering by compute mode", () => {
       await using tmp = await project(async () => {})
       expect(await Instance.provide({ directory: tmp.path, fn: nonComputeVisible })).toBe(true)
     }
+
+    // byok: a credentialed provider must not affect a skill outside its scope either.
+    stub(false)
+    process.env["LAMBDA_API_KEY"] = "k"
+    ComputeMode.invalidate()
+    await using byok = await project(async () => {})
+    expect(await Instance.provide({ directory: byok.path, fn: nonComputeVisible })).toBe(true)
   })
 
   test("cloud-compute skills that map to no panel provider are never hidden", async () => {
     stub(false)
     await using tmp = await project(async () => {})
     expect(await Instance.provide({ directory: tmp.path, fn: tinkerVisible })).toBe(true)
+
+    // byok: a credentialed provider must not hide a skill outside ComputeMode.SKILLS either.
+    process.env["LAMBDA_API_KEY"] = "k"
+    ComputeMode.invalidate()
+    await using byok = await project(async () => {})
+    expect(await Instance.provide({ directory: byok.path, fn: tinkerVisible })).toBe(true)
   })
 
   test("a credential added between two init() calls changes the catalog on the second", async () => {
@@ -182,17 +203,27 @@ describe("skill catalog filtering by compute mode", () => {
     })
   })
 
-  test("SkillTool.init and compute_status never disagree about usable providers", async () => {
+  test("credentialed: SkillTool and compute_status agree lambda is the usable provider", async () => {
     stub(false)
     process.env["LAMBDA_API_KEY"] = "k"
     await using tmp = await project(async () => {})
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const state = await ComputeMode.resolve()
-        const names = await offered()
-        const expected = state.providers.flatMap((id) => ComputeMode.PROVIDERS[id].skills)
-        expect(names.sort()).toEqual([...new Set(expected)].sort())
+        expect(await offered()).toEqual(["lambda-labs-gpu-cloud"])
+        expect((await computeStatus()).providers).toEqual(["lambda"])
+      },
+    })
+  })
+
+  test("no credentials: SkillTool and compute_status agree nothing is usable", async () => {
+    stub(false)
+    await using tmp = await project(async () => {})
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await offered()).toEqual([])
+        expect((await computeStatus()).mode).toBe("none")
       },
     })
   })
