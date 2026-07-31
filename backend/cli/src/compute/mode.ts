@@ -187,4 +187,34 @@ export namespace ComputeMode {
 
     return funded(providers, await available())
   }
+
+  /**
+   * The skill names the catalog filter should offer: exactly the skills of
+   * the credentialed providers when — and only when — those providers are the
+   * FUNDED path, i.e. `resolve()`'s mode is "byok". Empty in every other
+   * state, including "managed" with a real credential sitting unused (see
+   * `Resolution.providers`'s doc comment) — offering it there would dangle
+   * the user's own uncapped provider account in front of an agent that has
+   * just been told not to touch it.
+   *
+   * This mirrors `resolve()`'s byok arms exactly but never reaches the
+   * availability probe, because it doesn't need to: whether the mode is
+   * "byok" is fully decided by `usable()` (env-only) and the override alone.
+   *
+   *   - override "byok"    -> byok iff a credential exists; no network either way.
+   *   - override "managed" -> mode is "managed" or "none"; either way offered is empty.
+   *   - unset              -> byok iff a credential exists; the network arm only
+   *                           runs when there are no credentials, and then offered
+   *                           is empty regardless of what it returns.
+   *
+   * So this is synchronous except for `Config.get()` — zero I/O, safe to call
+   * every LLM step.
+   */
+  export async function offered(): Promise<Set<string>> {
+    const providers = usable()
+    const override = (await Config.get()).billing?.compute
+    if (override === "managed") return new Set()
+    if (!providers.length) return new Set()
+    return new Set(providers.flatMap((id) => PROVIDERS[id].skills))
+  }
 }

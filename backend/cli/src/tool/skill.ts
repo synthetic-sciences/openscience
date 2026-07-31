@@ -49,12 +49,18 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
   // cache to invalidate, and resolution always happens after src/index.ts's env
   // injections rather than racing them.
   //
+  // ComputeMode.offered(), not resolve(): it answers the one question this
+  // filter needs (which skills are the FUNDED path) without the availability
+  // probe resolve() sometimes needs for the *mode label* — see its doc
+  // comment. That keeps this init synchronous-except-for-Config, so a
+  // signed-in user with no GPU keys never pays a per-step network round trip
+  // for a value this filter doesn't read.
+  //
   // This is a LISTING filter, not a gate. `none` is guidance, not enforcement —
   // a hidden skill can still be loaded by exact name, and the agent still has
   // bash. Gating the load path is a larger change and is deliberately out of
   // scope; see docs/specs/compute-mode-detection-design.md open question 3.
-  const compute = await ComputeMode.resolve()
-  const offered = new Set(compute.providers.flatMap((id) => ComputeMode.PROVIDERS[id].skills))
+  const offered = await ComputeMode.offered()
   const accessibleSkills = permitted.filter((skill) => !ComputeMode.SKILLS.has(skill.name) || offered.has(skill.name))
 
   // Group skills by category for the description

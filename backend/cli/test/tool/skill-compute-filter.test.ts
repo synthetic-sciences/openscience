@@ -148,11 +148,27 @@ describe("skill catalog filtering by compute mode", () => {
     })
   })
 
-  test("in managed, no BYOK provider skill is offered", async () => {
+  test("in managed, a credentialed provider's skill is still not offered — mode governs, not providers", async () => {
+    // Regression guard for the filter keying off `providers` (the credentialed
+    // set, reported verbatim in every mode) instead of `mode`. Lambda IS
+    // credentialed here — ComputeMode.resolve().providers is non-empty — but
+    // billing.compute forces the managed override and the probe confirms
+    // managed is funded, so mode is "managed", not "byok". A filter that
+    // trusted `providers` would offer lambda's skill anyway; this must not.
     stub(true)
-    await using tmp = await project(async () => {})
-    const names = await Instance.provide({ directory: tmp.path, fn: offered })
-    expect(names).toEqual([])
+    process.env["LAMBDA_API_KEY"] = "k"
+    await using tmp = await project(async (dir) => {
+      await Bun.write(path.join(dir, "openscience.json"), JSON.stringify({ billing: { compute: "managed" } }))
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await ComputeMode.resolve()
+        expect(resolved.mode).toBe("managed")
+        expect(resolved.providers).toEqual(["lambda"])
+        expect(await offered()).toEqual([])
+      },
+    })
   })
 
   test("in none, no BYOK provider skill is offered", async () => {

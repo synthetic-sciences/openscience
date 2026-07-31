@@ -389,3 +389,71 @@ describe("ComputeMode.resolve override", () => {
     expect(result.mode).toBe("managed")
   })
 })
+
+describe("ComputeMode.offered", () => {
+  beforeEach(() => {
+    clearEnv()
+    calls = []
+    ComputeMode.invalidate()
+  })
+  afterEach(async () => {
+    globalThis.fetch = realFetch
+    await fs.rm(SESSION, { force: true }).catch(() => {})
+  })
+
+  /** Prove the equivalence by construction rather than by example: across
+   *  every combination of credential presence, override, and managed
+   *  availability, `offered()` must be non-empty exactly when `resolve()`
+   *  reports mode "byok", must equal that mode's providers' skills, and must
+   *  never touch the network — a positive assertion (an empty recorded call
+   *  list), not merely the absence of a thrown error. */
+  test("offered() is non-empty iff resolve() is byok, matches its providers' skills, and never calls the availability endpoint", async () => {
+    const overrides = [undefined, "byok", "managed"] as const
+    for (const credential of [true, false]) {
+      for (const override of overrides) {
+        for (const managedAvailable of [true, false]) {
+          clearEnv()
+          calls = []
+          ComputeMode.invalidate()
+          await signIn()
+          stubOptions(managedAvailable ? MANAGED_ON : MANAGED_OFF)
+          if (credential) process.env["LAMBDA_API_KEY"] = "k"
+
+          await using tmp = await tmpdir({
+            git: true,
+            init: async (dir) => {
+              await Bun.write(
+                path.join(dir, ".openscience", "skill", "lambda-labs-gpu-cloud", "SKILL.md"),
+                `---\nname: lambda-labs-gpu-cloud\ndescription: Test fixture.\ncategory: cloud-compute\n---\n\n# lambda-labs-gpu-cloud\n`,
+              )
+              if (override) {
+                await Bun.write(path.join(dir, "openscience.json"), JSON.stringify({ billing: { compute: override } }))
+              }
+            },
+          })
+
+          await Instance.provide({
+            directory: tmp.path,
+            fn: async () => {
+              const state = `credential=${credential} override=${override ?? "unset"} managedAvailable=${managedAvailable}`
+              const resolved = await ComputeMode.resolve()
+              calls = [] // isolate the assertion below to offered()'s own network usage
+              const result = await ComputeMode.offered()
+
+              expect(calls.filter((url) => url.includes(OPTIONS_URL))).toEqual([])
+
+              if (resolved.mode === "byok") {
+                expect(result.size, state).toBeGreaterThan(0)
+                expect([...result].sort(), state).toEqual(
+                  resolved.providers.flatMap((id) => ComputeMode.PROVIDERS[id].skills).sort(),
+                )
+              } else {
+                expect(result.size, state).toBe(0)
+              }
+            },
+          })
+        }
+      }
+    }
+  })
+})
