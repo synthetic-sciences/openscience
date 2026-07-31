@@ -8,6 +8,7 @@ import { PermissionNext } from "../permission/next"
 import { OpenScience } from "@/openscience"
 import { RSILifecycle } from "@/session/rsi/lifecycle"
 import { Global } from "@/global"
+import { ComputeMode } from "@/compute/mode"
 
 // Lightweight fuzzy score: rewards substring containment + shared bigrams.
 // Returns 0..1. No external deps needed for a "did you mean?" hint.
@@ -34,12 +35,27 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
 
   // Filter skills by agent permissions if agent provided
   const agent = ctx?.agent
-  const accessibleSkills = agent
+  const permitted = agent
     ? skills.filter((skill) => {
         const rule = PermissionNext.evaluate("skill", skill.name, agent.permission)
         return rule.action !== "deny"
       })
     : skills
+
+  // Filter the GPU provider skills by the resolved compute mode, so the agent
+  // picks the right provider because it is the only one offered. This init runs
+  // per request (registry.ts calls it inside tools()), which buys two things for
+  // free: a credential connected mid-session shows up on the next turn with no
+  // cache to invalidate, and resolution always happens after src/index.ts's env
+  // injections rather than racing them.
+  //
+  // This is a LISTING filter, not a gate. `none` is guidance, not enforcement —
+  // a hidden skill can still be loaded by exact name, and the agent still has
+  // bash. Gating the load path is a larger change and is deliberately out of
+  // scope; see docs/specs/compute-mode-detection-design.md open question 3.
+  const compute = await ComputeMode.resolve()
+  const offered = new Set(compute.providers.flatMap((id) => ComputeMode.PROVIDERS[id].skills))
+  const accessibleSkills = permitted.filter((skill) => !ComputeMode.SKILLS.has(skill.name) || offered.has(skill.name))
 
   // Group skills by category for the description
   const categories: Record<string, Skill.Info[]> = {}
