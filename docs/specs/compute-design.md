@@ -126,8 +126,8 @@ agent  compute_launch { gpu:"h100", count:1, budget_cents:3000, max_hourly_cents
 
 OS  →  POST /api/compute/quote { gpu, count, max_hourly_cents, budget_cents }          (change 4)
        ← { provider, sku, hourly_cents, effective_cap_cents, balance_cents, funding }  ADVISORY
-       └─ permission gate (default ask):
-          "RunPod H100 · $2.79/hr · cap $30.00 · balance $198.83"
+       └─ permission gate (default ask) — names the provider, because cheapest-first means it varies:
+          "Vast H100 · $1.94/hr · cap $30.00 · balance $198.83"
 
 OS  →  POST /api/compute/leases { gpu, count, max_hourly_cents, budget_cents, volume_id? }
 Atlas  RE-RESOLVE — the quote is never trusted or reused
@@ -186,37 +186,55 @@ does not close it. No transaction can span a third-party marketplace. **The reso
 re-resolve and retry on a provider `400`, bounded to N attempts against a re-fetched catalog**, and give
 up with a structured error rather than looping.
 
-### The resolver's provider policy is not "cheapest"
+### Cheapest wins, across every operator provider
 
-By this document's own numbers, Vast supplies 204 of 292 options and is almost always cheapest — so a
-naive cheapest-first resolver picks the provider the next section argues against, on nearly every launch,
-and makes the per-lease key leak the norm rather than the exception. That contradiction was real and is
-resolved here:
+**The resolver ranks purely by price.** No provider allow-list, no default provider, no preference — the
+cheapest live offer matching the requirements is the one leased. That is the product decision, and the
+rest of this document conforms to it.
 
-**Rank by price within an allow-list of providers whose release cleans up after itself.** Today that is
-RunPod and Lambda. Vast and Prime Intellect are excluded until their key-cleanup defect is fixed, at which
-point they are added and the resolver changes nothing else. The allow-list is server config, not a client
-concern.
+Ranking is well-defined: every catalogued option carries a normalised `price_cents_per_hour` — the
+provider's exact pass-through rate, set uniformly for all six providers at `routes/compute.py:158-163`.
+Match on GPU model and `count`, honour `max_hourly_cents` if given, then take the minimum. The one real
+implementation detail is GPU-name normalisation: options expose `name`, `gpu_ram_gb` and `upstream`, and
+providers spell the same card differently, so the resolver needs a canonical model map rather than a
+substring match.
 
-## Why RunPod is the managed default
+An earlier draft of this section proposed an allow-list restricted to providers whose release cleans up
+after itself, which would have excluded Vast — and Vast supplies 204 of 292 live options. **That is
+overruled.** Two consequences follow, and both are now in scope rather than deferred:
+
+- **The key leak stops being rare and becomes the norm** — see below. Change 9 fixes it, and it is no
+  longer somebody else's ticket.
+- **The offer-ID race is live on the common path**, because Vast's SKUs are the ephemeral ones. Changes 3
+  and 4 are therefore mandatory, not optional. There is no version of this design where the agent picks a
+  SKU itself and the default path still works.
+
+**Vast is not spot, and a predecessor claim that it was is wrong.** `VastProvider.list_options` queries
+`"type": "on-demand"` (`vast_provider.py:110-115`), so cheapest-first does not buy preemption risk. It
+also runs two queries — cheapest-first alone never surfaces the datacenter cards, so the premium tier is
+fetched by name (`:105-121`) — which means an H100 request reaches real H100 offers rather than bottoming
+out in consumer GPUs.
+
+### What cheapest-first obliges us to fix
 
 Every provider generates a fresh Ed25519 keypair per lease and shows the provider only the public half,
 so the returned key opens exactly one box everywhere. They differ in what they leave behind:
 
 | Provider        | Key attachment                                 | Account artifact | Cleaned up on release                          |
 | --------------- | ---------------------------------------------- | ---------------- | ---------------------------------------------- |
-| **RunPod**      | `PUBLIC_KEY` env var consumed on boot          | **none**         | nothing to clean                               |
+| RunPod          | `PUBLIC_KEY` env var consumed on boot          | **none**         | nothing to clean                               |
 | Lambda          | account key registry                           | yes              | yes (`lambda_provider.py:248-268`)             |
 | Vast            | account `/ssh/` **and** `/instances/{id}/ssh/` | yes              | **no** (`vast_provider.py:307-325`)            |
 | Prime Intellect | `POST /ssh_keys/` → `sshKeyId`                 | yes              | **no** (`prime_intellect_provider.py:306-325`) |
 
-RunPod is the only one leaving no account-level trace, which is the right property when Atlas owns the
-box lifecycle. Its creation body also takes an arbitrary `env` dict, so anything Atlas later wants running
-on boot needs no SSH bootstrap.
+RunPod leaves no account-level trace and its creation body takes an arbitrary `env` dict, so boot-time
+setup needs no SSH bootstrap. That makes it the **easiest** provider to operate — it is not the default,
+and nothing in this design prefers it.
 
-**Vast and Prime Intellect leak one public key per lease into the operator account, forever.** Lambda's
-delete-on-release is the fix. Separate ticket — and until it lands, the resolver allow-list above keeps
-the leak from scaling with usage.
+`VastProvider.release` deletes only `/instances/{lease_id}/` (`vast_provider.py:307-325`); Prime
+Intellect's deletes only the pod. **Under cheapest-first, that is one public key leaked into the operator
+account per launch, unbounded and permanent.** Lambda's delete-on-release (`lambda_provider.py:248-268`)
+is the pattern. This is change 9, and it ships alongside the resolver rather than after it.
 
 ---
 
@@ -330,13 +348,21 @@ Fix it deliberately: size the default grant to `rate * (ttl + 1)`, or have the c
 for the acquire debit so the two do not stack. **Assert unchanged runtime, not merely an accepted
 request.**
 
-### Change 3 — resolve a SKU from requirements
+### Change 3 — resolve the cheapest SKU from requirements _(mandatory)_
 
-Accept `{gpu, count, max_hourly_cents?}` in place of an explicit `sku`; rank by price within the provider
-allow-list; lease in the same request. Explicit `provider`/`sku` continues to work.
+Accept `{gpu, count, max_hourly_cents?}` in place of an explicit `sku`; rank **every** operator provider's
+options by `price_cents_per_hour`; lease the cheapest match in the same request. Explicit `provider`/`sku`
+continues to work for the dashboard and the CLI.
 
-Retry on a provider `400` (stale offer) against a re-fetched catalog, bounded, then fail with a structured
-error. `GET /api/compute/options` (`routes/compute.py:214`) already does the read.
+Needs a canonical GPU-model map — providers spell the same card differently, and a substring match on
+`name` will silently mis-rank.
+
+**The retry is not optional here.** Vast supplies most of the catalog and its SKUs are ephemeral offer IDs,
+so the cheapest pick is usually the raciest one. On a provider `400`, re-resolve against a re-fetched
+catalog, bounded to N attempts, then fail with a structured error rather than looping.
+`GET /api/compute/options` (`routes/compute.py:214`) already does the read — but it is uncached and fans
+out to ten live provider APIs, so N retries is N full catalog rebuilds. **Cache the catalog server-side
+before shipping this**, or the retry path costs more than the lease.
 
 ### Change 4 — quote a proposal without spending
 
@@ -382,14 +408,25 @@ serialise per user.
 
 Design it in now — retrofitting changes the meaning of a number users already trust.
 
-### Change 6 — attach a persistent volume
+### Change 6 — attach a persistent volume _(larger than it looks, and cheapest-first makes it harder)_
 
-Atlas already has `POST /api/compute/volumes` (`routes/compute.py:565`), `list_volumes` and
-`delete_volume`. **Leases do not use them**, and the RunPod provider passes `volumeInGb: 20`
-(`runpod_provider.py:159`) — a pod-scoped volume destroyed with the pod.
+Atlas has `POST /api/compute/volumes` (`routes/compute.py:565`), `list_volumes` and `delete_volume` — but
+**they provision nothing.** `create_volume` clamps a size and writes a `compute_volume_repo` row; no
+provider API is called anywhere. The only volume in the compute providers is RunPod's `volumeInGb: 20`
+(`runpod_provider.py:159`), which is pod-scoped and destroyed with the pod. So this is not "pass an
+existing volume through" — it is "make volumes real", per provider.
 
-Add `volume_id?` to the lease request, pass it to RunPod as `networkVolumeId` mounted at `/workspace`.
-**Releasing a lease must not cascade a volume delete.**
+**Cheapest-first turns that into a per-provider matrix.** The volume has to exist wherever the resolver
+lands, and the four operator providers do not share a network-volume primitive with the same semantics.
+
+Resolution: **`volume_id` is a requirement, not a preference.** When the request carries one, the resolver
+ranks only providers with real network-volume support and takes the cheapest of those. That is still
+cheapest-first — a volume is a constraint like `gpu` or `count`, not an override of the pricing rule — and
+it degrades honestly: a user who wants durable storage pays whatever the cheapest volume-capable provider
+costs, and is told which one.
+
+Start with RunPod (`networkVolumeId`, mounted at `/workspace`) and add providers as their volume APIs are
+wired. **Releasing a lease must not cascade a volume delete.**
 
 Budget exhaustion then costs the compute, not the work — a network volume is cents per GB-month against
 dollars per GPU-hour.
@@ -428,7 +465,19 @@ Add a distinct terminal-pending status the reaper re-sweeps, or at minimum surfa
 so the caller knows teardown failed. Until then, "explicit release works" is only true when the provider
 call succeeds.
 
----
+### Change 9 — stop Vast and Prime Intellect leaking a key per lease _(forced by cheapest-first)_
+
+`VastProvider.release` deletes only `/instances/{lease_id}/` (`vast_provider.py:307-325`) and Prime
+Intellect's deletes only the pod (`prime_intellect_provider.py:306-325`). The per-lease public key stays
+in the operator account permanently.
+
+This was a background annoyance while RunPod was the default. **Cheapest-first makes Vast the usual
+winner, so the leak now grows one key per launch, forever.** Follow Lambda
+(`lambda_provider.py:248-268`): delete the registered key on release **and** on failed launch, so an
+acquire that dies after key registration does not leak either.
+
+Ships with change 3. A resolver that makes Vast the common path without this is a resolver that turns a
+known defect into a scaling one.
 
 ## OpenScience changes
 
@@ -568,6 +617,11 @@ creation stays in the workspace UI rather than becoming a fourth tool.
 - **Time is unbounded within a budget.** A cheap CPU lease could run for days inside a small budget. The
   24-hour plan TTL is the only backstop, deliberately.
 - **The quoted rate is advisory.** The lease re-resolves, so the billed rate can differ by cents.
+- **The provider varies per launch, and so does the box.** Cheapest-first means image, disk, region and
+  network differ run to run. The prompt names the provider for exactly this reason. A user who needs a
+  specific one passes `provider`/`sku` explicitly, which still works.
+- **Durable storage narrows the pool.** Asking for a volume means paying the cheapest volume-capable
+  provider, not the cheapest provider.
 - **`none` is guidance, not enforcement.** The agent still has `bash`.
 
 ## Known defects, owned elsewhere
@@ -577,8 +631,8 @@ creation stays in the workspace UI rather than becoming a fourth tool.
 - **CLI usability.** Prints the private key and never saves it, so the `ssh_command` it prints cannot
   work as shown. Recoverable — `/leases/{id}/connection` re-serves the key — but the CLI does not call it.
   No file transfer, no exec, no compute tests.
-- **Vast / Prime Intellect SSH key leaks** into the operator account, unbounded.
-- **The options catalog is uncached** and fans out to ten live provider APIs per call.
+- **The options catalog is uncached** and fans out to ten live provider APIs per call. Change 3's retry
+  path makes this urgent rather than merely wasteful.
 - **`budget_cents` already exists** on the agent-spawn path defaulting to `500` (`agent_tools.py:1386`,
   `models/agent.py:101`, `spawn_queue_service.py:69` → `create_grant` at `:1501`), display-only. Change 1
   makes caps real, silently giving every shipped spawn a hard $5 kill. **Not a no-op.**
@@ -610,8 +664,15 @@ mocks, no network.
 - A replayed tick does not double-charge and does not double-debit the grant.
 - **Two concurrent launches against a wallet that funds only one**: exactly one succeeds.
 - The rolling cap rejects an N+1th lease even when each individual budget is affordable.
+- Resolution picks the **globally cheapest** matching offer across all operator providers — asserted with
+  a fake catalog where the cheapest match is deliberately not the first provider polled, and again where
+  it is not the provider the previous test picked. A resolver that always returns one provider must fail.
+- GPU-model matching is canonical, not substring: an `h100` request does not match `h100`-shaped names
+  from a different card, and does match the same card spelled differently across providers.
 - Resolution leases the offer it ranked; a provider `400` triggers at most N re-resolves against a
-  re-fetched catalog, then a structured error. Resolution never picks a provider outside the allow-list.
+  re-fetched catalog, then a structured error.
+- Vast and Prime Intellect release **deletes the registered public key** — on normal release and on failed
+  launch. Asserted on the provider's key list, not on the release return value.
 - The quote spends nothing and creates no lease row.
 - `volume_id` mounts, and **release does not delete the volume**.
 - Extension raises the cap, is clamped, and **exhaustion proceeds normally when none arrives**.
@@ -642,24 +703,29 @@ collapsed to one string.
    accepted request.
 5. A budget exceeding the wallet is clamped, and the response reports the effective cap.
 6. Two concurrent launches against a wallet funding one: exactly one succeeds. Same for the rolling cap.
-7. `{gpu, count, max_hourly_cents}` resolves within the provider allow-list, retries a provider `400`
-   against a re-fetched catalog at most N times, then fails with a structured error.
+7. `{gpu, count, max_hourly_cents}` resolves to the **globally cheapest** matching offer across all
+   operator providers — proven against a catalog where the winner is neither the first provider polled nor
+   the same provider twice — honours `max_hourly_cents`, matches GPU models canonically rather than by
+   substring, retries a provider `400` against a re-fetched catalog at most N times, then fails with a
+   structured error.
 8. `POST /quote` returns provider, SKU, rate, effective cap, balance and funding, and **spends nothing**.
-9. `volume_id` attaches a volume that survives lease release.
-10. Extension raises the cap when affordable, refuses with a structured `402` when not, never fires
+9. Vast and Prime Intellect delete the registered public key on release **and** on failed launch, asserted
+   against the provider's key list rather than the release return value.
+10. `volume_id` attaches a volume that survives lease release.
+11. Extension raises the cap when affordable, refuses with a structured `402` when not, never fires
     automatically.
-11. BYOK ignores `budget_cents`. Plan TTL fires independently.
-12. A release whose provider teardown fails is not reported as a clean release.
-13. `compute_launch` on a non-2xx or malformed response writes no `.pem` and reports no lease; on a
+12. BYOK ignores `budget_cents`. Plan TTL fires independently.
+13. A release whose provider teardown fails is not reported as a clean release.
+14. `compute_launch` on a non-2xx or malformed response writes no `.pem` and reports no lease; on a
     readiness timeout it releases the lease; it never returns key material; it holds no pricing or
     selection logic.
-14. The key is written `0600` inside a `0700` directory, under `Global.Path.config`, and a re-fetch over
+15. The key is written `0600` inside a `0700` directory, under `Global.Path.config`, and a re-fetch over
     an existing loose-mode file tightens it.
-15. `compute_launch` calls `ctx.ask` and prompts by default; `permission.compute_launch: "allow"` silences
+16. `compute_launch` calls `ctx.ask` and prompts by default; `permission.compute_launch: "allow"` silences
     it.
-16. The connect string carries `-p <ssh_port>` when a real `/connection` payload reports a non-22 port.
-17. `compute_list` filters terminated leases and reflects Atlas, not local state.
-18. `pytest` and `bun test` pass with no network; change 0 and change 1 are each their own commit.
+17. The connect string carries `-p <ssh_port>` when a real `/connection` payload reports a non-22 port.
+18. `compute_list` filters terminated leases and reflects Atlas, not local state.
+19. `pytest` and `bun test` pass with no network; change 0 and change 1 are each their own commit.
 
 ---
 
@@ -675,8 +741,9 @@ Labels in this document:
   vast / prime_intellect operator-funded with 292 launchable options; `/compute/estimate` returns
   `funding: "managed"` with a real rate and runway; the published npm artifact contains no `compute:`
   command; `compute:up`'s default path fails on the Vast SKU race while `--provider lambda|runpod`
-  succeeds. **The 204-of-292 Vast share is load-bearing for the resolver's allow-list and comes from this
-  production check, not from source.**
+  succeeds. **The 204-of-292 Vast share is load-bearing — it is why cheapest-first makes Vast the common
+  path, and therefore why change 9 is in scope — and it comes from this production check, not from
+  source.**
 - **Verified against the Atlas checkout at HEAD `7b0e9b6` (source-read, 2026-07-31):** every `file:line`
   citation in Part B, re-checked after review.
 - **Not verified:** `compute:up`'s internal fetch→pick→estimate sequence. The Atlas CLI source is in
@@ -698,8 +765,10 @@ were, and an adversarial pass over the same source found:
   acquire. The criterion guarding this passed vacuously, since the port at launch is always 22.
 - **The approval gate had no endpoint to source its numbers from.** No dry-run, and `/estimate` needs an
   explicit SKU. The gate was specified as the UX centrepiece and could not have been built.
-- **"Cheapest offer" contradicted "RunPod is the default"** two sections apart, and would have made the
-  key-leaking providers the norm.
+- **"Cheapest offer" contradicted "RunPod is the default"** two sections apart. Settled by product
+  decision in favour of cheapest, which makes the key-leaking providers the common path — and so promotes
+  the leak fix from a background ticket into change 9, and makes changes 3 and 4 mandatory rather than
+  optional.
 - **`:209` is unreachable on the managed path**, so a correction this document made to a predecessor was
   itself the error — the same failure, one generation on.
 - **One plain citation miss** (`lease_manager.py:563` for `:508`), against a section claiming every
