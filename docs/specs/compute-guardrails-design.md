@@ -1,6 +1,13 @@
 # Managed compute budget cap — design
 
-Status: **REVIVED — ready to plan.** Parked 2026-07-30, revived 2026-07-31.
+> **SUPERSEDED 2026-07-31 by [`compute-management-design.md`](./compute-management-design.md), which is the
+> single current spec for compute and carries this design forward as its Part 2.**
+>
+> Kept for the material that did not survive the merge: the full five-finding review, the prototype's
+> gate-mode evidence, the corrections log, and the record of two false starts. **Build from the merged
+> document, not this one.**
+
+Status: **REVIVED — superseded by the merged spec.** Parked 2026-07-30, revived 2026-07-31, merged 2026-07-31.
 Date: 2026-07-30 · revived 2026-07-31
 
 > ## ⚠️ Read this before anything below

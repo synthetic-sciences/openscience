@@ -1,5 +1,19 @@
 # Compute mode detection — design
 
+> **SUPERSEDED 2026-07-31 by [`compute-management-design.md`](./compute-management-design.md), which is the
+> single current spec for compute. This document is kept as the historical record of the shipped work and is
+> no longer maintained.**
+>
+> Two things below are **wrong** and were corrected during implementation — do not build from them:
+>
+> - **The "key AND skill" rule was overruled.** A credential alone makes a provider usable; a capable agent
+>   drives a documented cloud API from a bare key. The conjunction only produced a false `none`.
+> - **The skill-name table matches nothing.** Real frontmatter names are `modal-serverless-gpu`,
+>   `modal-ml-training`, `modal-research-gpu`, `lambda-labs-gpu-cloud`, `tensorpool-gpu-cloud`,
+>   `prime-intellect-lab` — not `cloud-compute/modal` etc.
+>
+> Also stale: this document assumes managed compute is unavailable. **It is live in production.**
+
 Status: proposed, for review
 Date: 2026-07-30
 Scope: `openscience` only. **No Atlas changes required.**
