@@ -22,8 +22,9 @@ Date: 2026-07-30 · revived 2026-07-31
 > ```
 >
 > `COMPUTE_RESELL_ENABLED` still _defaults_ to `false` (`backend/app/config.py:383`), which is what the
-> original analysis read — but production sets it. **This is the third time in this investigation that reading
-> source gave the wrong answer about deployed reality.** Verify against the running system.
+> original analysis read — but production sets it. **This is the fourth time in this investigation that reading
+> source gave the wrong answer about deployed reality** (see "Corrections to earlier analysis"), and the first
+> one made _by_ a correction to an earlier mistake. Verify against the running system.
 >
 > So there is a live, unmetered spend path today: `POST /compute/leases` checks only the first hour, and
 > `atlas compute:up` is the human-facing door to it.
