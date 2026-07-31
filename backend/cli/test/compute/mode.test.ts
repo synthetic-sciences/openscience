@@ -403,11 +403,12 @@ describe("ComputeMode.offered", () => {
 
   /** Prove the equivalence by construction rather than by example: across
    *  every combination of credential presence, override, and managed
-   *  availability, `offered()` must be non-empty exactly when `resolve()`
-   *  reports mode "byok", must equal that mode's providers' skills, and must
-   *  never touch the network — a positive assertion (an empty recorded call
-   *  list), not merely the absence of a thrown error. */
-  test("offered() is non-empty iff resolve() is byok, matches its providers' skills, and never calls the availability endpoint", async () => {
+   *  availability, `offered()` must equal `resolve()`'s providers' skills
+   *  exactly when the resolved mode is "byok" (empty otherwise, including
+   *  when byok's providers carry no catalogued skill), and must never touch
+   *  the network — a positive assertion (an empty recorded call list), not
+   *  merely the absence of a thrown error. */
+  test("offered() equals resolve()'s byok providers' skills when mode is byok, empty otherwise, and never calls the availability endpoint", async () => {
     const overrides = [undefined, "byok", "managed"] as const
     for (const credential of [true, false]) {
       for (const override of overrides) {
@@ -438,6 +439,11 @@ describe("ComputeMode.offered", () => {
               const state = `credential=${credential} override=${override ?? "unset"} managedAvailable=${managedAvailable}`
               const resolved = await ComputeMode.resolve()
               calls = [] // isolate the assertion below to offered()'s own network usage
+              // resolve() may have just warmed the 5s availability cache — without
+              // dropping it, a probe-hitting offered() would be served from cache
+              // and never reach fetch, so the "no network call" assertion below
+              // would pass even for an implementation that calls available().
+              ComputeMode.invalidate()
               const result = await ComputeMode.offered()
 
               expect(calls.filter((url) => url.includes(OPTIONS_URL))).toEqual([])

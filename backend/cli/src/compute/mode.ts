@@ -189,13 +189,19 @@ export namespace ComputeMode {
   }
 
   /**
-   * The skill names the catalog filter should offer: exactly the skills of
-   * the credentialed providers when — and only when — those providers are the
-   * FUNDED path, i.e. `resolve()`'s mode is "byok". Empty in every other
-   * state, including "managed" with a real credential sitting unused (see
-   * `Resolution.providers`'s doc comment) — offering it there would dangle
-   * the user's own uncapped provider account in front of an agent that has
-   * just been told not to touch it.
+   * The skill names the catalog filter should offer. The invariant is two
+   * one-way implications, not a single "iff" on non-emptiness:
+   *   - `offered()` non-empty IMPLIES `resolve()`'s mode is "byok" — only the
+   *     funded path ever offers anything.
+   *   - mode "byok" IMPLIES `offered()` equals the credentialed providers'
+   *     skills exactly, which is the EMPTY set when those providers carry no
+   *     catalogued skill (`runpod`, `vast`: `skills: []`). A byok user with
+   *     only a RunPod key correctly sees nothing offered here — RunPod has no
+   *     skill to offer, though the agent can still drive its API directly.
+   * Empty in every other mode too, including "managed" with a real credential
+   * sitting unused (see `Resolution.providers`'s doc comment) — offering it
+   * there would dangle the user's own uncapped provider account in front of
+   * an agent that has just been told not to touch it.
    *
    * This mirrors `resolve()`'s byok arms exactly but never reaches the
    * availability probe, because it doesn't need to: whether the mode is
@@ -207,8 +213,14 @@ export namespace ComputeMode {
    *                           runs when there are no credentials, and then offered
    *                           is empty regardless of what it returns.
    *
-   * So this is synchronous except for `Config.get()` — zero I/O, safe to call
-   * every LLM step.
+   * `available()`/`probe()` — the per-LLM-step Atlas round trip this function
+   * exists to eliminate — is never reached here. The only I/O is
+   * `Config.get()`, which `Instance.state` memoizes per project instance
+   * after its first read within that instance; that first read can itself
+   * issue a fetch when a `wellknown` auth entry is configured
+   * (config.ts:82-105), but that cost belongs to `Config.get()` and is paid
+   * at most once per instance, not once per step — it is not a cost this
+   * function adds.
    */
   export async function offered(): Promise<Set<string>> {
     const providers = usable()
