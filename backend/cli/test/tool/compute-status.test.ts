@@ -22,9 +22,15 @@ const CTX = {
   ask: async () => {},
 }
 
+/** Every URL fetched since the last reset, so "only one network call" is a
+ *  positive assertion rather than an absence of failure (mirrors
+ *  test/compute/mode.test.ts's `calls`). */
+let calls: string[] = []
+
 function stub(body: unknown, status = 200) {
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input instanceof Request ? input.url : input)
+    calls.push(url)
     if (!url.includes("/api/compute/options")) return realFetch(input as never)
     return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
   }) as typeof fetch
@@ -62,6 +68,7 @@ async function run(skills: string[], fn?: () => Promise<void>) {
 describe("compute_status", () => {
   beforeEach(async () => {
     for (const name of ENV) delete process.env[name]
+    calls = []
     ComputeMode.invalidate()
     await fs.mkdir(Global.Path.data, { recursive: true })
     await Bun.write(SESSION, JSON.stringify({ api_key: "thk_t.s", user_id: "u1" }))
@@ -83,13 +90,16 @@ describe("compute_status", () => {
     expect(result.metadata.balance_usd).toBeUndefined()
   })
 
-  test("managed reports the balance and managed guidance", async () => {
+  test("managed reports the balance and managed guidance, from a single network call", async () => {
     stub(MANAGED_ON)
     const result = await run([])
     expect(result.metadata.mode).toBe("managed")
     expect(result.metadata.balance_usd).toBe(42)
     expect(result.output).toContain("42")
     expect(result.output.toLowerCase()).toContain("credits")
+    // balance_usd must come from the SAME /api/compute/options response that
+    // decided managed availability, never a second round trip.
+    expect(calls.filter((url) => url.includes("/api/compute/options")).length).toBe(1)
   })
 
   test("none tells the agent not to attempt GPU work and how to enable it", async () => {
@@ -121,14 +131,34 @@ describe("compute_status", () => {
     ComputeMode.invalidate()
     const none = await run([])
     // Comparing whole `output` strings is a false positive: the leading
-    // `**mode**: byok|managed|none` line always differs by itself, so the
-    // assertion would pass even if GUIDANCE collapsed to one shared string.
-    // Isolate the guidance sentence — the text after the blank-line
-    // separator the tool always inserts before it — so this actually
-    // exercises the property under test.
-    const guidance = (output: string) => output.split("\n\n").at(-1)
-    const texts = [byok.output, managed.output, none.output].map(guidance)
-    expect(new Set(texts).size).toBe(3)
+    // `**mode**: byok|managed|none` line always differs by itself, so a
+    // whole-string comparison would pass even if GUIDANCE collapsed to one
+    // shared string. A formatting-position trick (e.g. "text after the last
+    // blank line") is equally fragile — it breaks the moment the separator
+    // between the report and the guidance changes shape, which is a pure
+    // formatting edit that should never fail this test.
+    //
+    // Assert against the actual contract instead: each mode's GUIDANCE entry
+    // carries a short, semantically load-bearing phrase that could not
+    // survive a collapse to one shared string, and that phrase must appear
+    // in that mode's output and ONLY that mode's output.
+    const PHRASE = {
+      byok: "do not launch managed",
+      managed: "do not use the user's own provider keys",
+      none: "do not attempt gpu work",
+    }
+    const output = {
+      byok: byok.output.toLowerCase(),
+      managed: managed.output.toLowerCase(),
+      none: none.output.toLowerCase(),
+    }
+    for (const mode of Object.keys(PHRASE) as (keyof typeof PHRASE)[]) {
+      expect(output[mode]).toContain(PHRASE[mode])
+      for (const other of Object.keys(PHRASE) as (keyof typeof PHRASE)[]) {
+        if (other === mode) continue
+        expect(output[mode]).not.toContain(PHRASE[other])
+      }
+    }
   })
 
   test("a credential connected between two calls changes the answer, no restart", async () => {
