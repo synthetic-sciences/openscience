@@ -1,5 +1,36 @@
 # Managed compute budget cap — implementation plan
 
+> ## ✅ EXECUTED — 2026-08-01. Historical record; do not implement from it again.
+>
+> **Where:** `~/codes/InkVell/atlas`, branch `feat/compute-lease-prerequisites` (continuing).
+> **Not merged** — the PR is deliberately draft while the team waits for compute to be complete.
+> **Outcome:** all four tasks landed — `0a9da07` (set-to-total), `a4a79ca` (the cap binds),
+> `31fc598` (`budget_cents`), `71dccba` (the spawn kill). Suite **1689 passed / 1 skipped**, branch
+> 38 commits. Spec changes 1 and 2 landed together as this plan required. Ledger:
+> `.superpowers/sdd/2026-08-01-compute-budget-cap/progress.md`.
+>
+> **The headline property holds, measured:** a $10 budget at $6.99/h releases at **5160.0s** against a
+> theoretical 5150.21s — a 9.79s overshoot that is pure tick quantisation, well inside ±90s. The
+> central design decision (a set-to-total, not an increment) was confirmed by mutation: the naive
+> `debit_grant(delta)` misses the duration assertion by ~3590s and leaves `grant.spent_cents = 300`
+> where wall-clock is 180 — the acquire debit double-counted, exactly the trap this plan predicted.
+> Under that mutation `released == 1` and the wallet moved, so **every "a release happened" assertion
+> still passed**; only the duration assertion caught it.
+>
+> **Task 4's hazard was real and is now quantified.** Every spawn grant was `hard_cap_cents = 500`
+> flat for **every SKU** — no caller in either repo ever sent anything else. A spawn requests 4 hours:
+> $14.60 on an A100-40GB, $18.36 on an A100-80GB, $27.96 on an H100, so only T4 and A10G ever fitted.
+> Measured on the real spawn path against the real tick: **a 4-hour A100 spawn was killed at 1.38h**
+> and an **H100 was refused outright at acquire**. `budget_cents` is now `int | None`; `None` sizes
+> the ceiling to the spawn's own lifetime at the SKU rate, and an explicitly chosen budget still binds.
+>
+> **What execution proved this plan wrong about:** **Task 3's premise that the effective-balance
+> lookup is "already in scope" in `create_lease`.** It is not — see the correction marked inline at
+> Task 3, Step 3. Two judgement calls were also taken that this plan does not contain, both recorded
+> in the spec: the `402` keeps one body shape but carries **two** `error` values
+> (`insufficient_cli_credit` vs a new `budget_below_hourly_rate`), and the budget is deliberately
+> **not** clamped to `rate × ttl_hours`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement
 > this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -307,6 +338,14 @@ Add `budget_cents: int | None = None` to `LeaseRequest`. In `create_lease`, repl
 with a budget-aware version that keeps the wallet as the outer bound. Read the current code around it
 before editing — `charge_raw`, `ttl_hours` and the effective balance lookup are already in scope, and the
 existing `402` for insufficient credit is the one to extend rather than duplicate.
+
+> **⚠️ WRONG PREMISE — caught by the implementer, 2026-08-01. Do not follow this sentence.**
+> **The effective-balance lookup is NOT in scope in `create_lease`.** `create_lease` never reads the
+> balance at all; the wallet check lives in `lease_manager.acquire_lease`, and it is the **adjacent
+> `compute_estimate`** that has `effective_balance` in scope — which is presumably what this plan
+> misread. Clamping therefore required adding a **new conditional lookup**, taken only when
+> `budget_cents` is present, so the no-budget path adds no query. `charge_raw` and `ttl_hours` are in
+> scope as stated; only the balance claim is wrong.
 
 Report the effective cap on the response so a caller can tell the user what was actually authorised.
 

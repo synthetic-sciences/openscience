@@ -1,5 +1,39 @@
 # Compute lease prerequisites — implementation plan
 
+> ## ✅ EXECUTED — 2026-08-01. Historical record; do not implement from it again.
+>
+> **Where:** `~/codes/InkVell/atlas`, branch `feat/compute-lease-prerequisites`, base `8aa66d5`.
+> **Not merged** — the PR is deliberately draft while the team waits for compute to be complete.
+> **Outcome:** all four tasks landed, plus a six-finding fix wave from the whole-branch review.
+> Suite **1610 passed / 1 skipped**, 12 commits at plan completion. Ledger:
+> `.superpowers/sdd/2026-07-31-compute-lease-prerequisites/progress.md`.
+>
+> **The deliverable holds, and was later confirmed against a real provider rather than a fake clock:**
+> a user lease sat `ready` for 578s → 687s → **788s** un-reaped against the deployed reaper. Before
+> this branch it died at 600s. Task 1's deploy gate is discharged by a **cross-login test**: two
+> instances on one Vast operator account, each key accepted for its own box and **refused**
+> (`Permission denied (publickey)`) against the other's. The cross-tenant hole is closed, measured,
+> not inferred.
+>
+> **What execution proved this plan wrong about — read these before trusting any step below:**
+>
+> - **Task 3's promotion was under-specified and the first fix for it broke Modal.** The fix wave
+>   gated promotion on a non-empty `ssh_host`; Modal's `connection()` returns no `ssh_host` at all
+>   (it is exec-based, no SSH), so Modal CPU sandboxes stopped promoting and were reaped at 600s.
+>   The gate is now `if not ssh_host and lease.get("ssh_key_name")` — the four SSH providers set
+>   `ssh_key_name` in `acquire`, Modal does not. The gate itself was **justified by measurement**,
+>   not taste: RunPod returns `desiredStatus=RUNNING` from pod creation with **no address**, so
+>   provider status alone is not readiness. This plan's Step 5 does not say any of that.
+> - **The status mapping was wrong for a destroyed Vast instance.** `_get_instance` returned `{}` and
+>   `_map_status` read that as `provisioning` **forever**, so reaper branch 1 could never fire for
+>   Vast. Fixed in `9bc19a7` (empty payload → `terminated`). Later sharpened again: Vast returns
+>   HTTP 200 `{"instances": null}` for a destroyed id **and** for one that never existed, and never
+>   404s, while RunPod does 404 — both signals are needed.
+> - **Task 4's `_PROVISIONING` set omitted Lambda's in-flight strings.** Flagged during the task and
+>   deliberately left for a human ruling; fixed in the follow-on plan (`8748057`).
+> - **Task 1's minor deferral is still open:** `vast_provider`'s docstring API list still names
+>   `POST /ssh/` — the endpoint the task removed the call to.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement
 > this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

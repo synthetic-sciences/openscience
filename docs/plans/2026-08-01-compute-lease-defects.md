@@ -1,5 +1,50 @@
 # Compute lease defects — implementation plan
 
+> ## ✅ EXECUTED — 2026-08-01. Historical record; do not implement from it again.
+>
+> **Where:** `~/codes/InkVell/atlas`, branch `feat/compute-lease-prerequisites` (continuing).
+> **Not merged** — the PR is deliberately draft while the team waits for compute to be complete.
+> **Outcome:** all four tasks landed (`b8a4467`, `0eb33c2`, `f65dd47`, `8748057`), followed by an
+> eight-commit fix wave closing nine review findings. Ledger:
+> `.superpowers/sdd/2026-08-01-compute-lease-defects/progress.md`.
+>
+> **This branch was then deployed and driven end to end**, which is the part that matters: on a
+> deployed backend, `POST /api/compute/leases` → the real reaper promoted within one sweep with
+> **NATed** SSH coordinates (`ssh3.vast.ai:15650`, `194.68.245.163:22189` — never the placeholder
+> `22`) → SSH into a real GPU → release, with the instance verified gone at the provider. Done on
+> **both** Vast and RunPod. Prime Intellect no longer leaks a key per lease; provider releases now
+> report what actually happened; BYOK leases are polled with the owner's credential and managed
+> leases never are.
+>
+> **What execution proved wrong — including one finding that was wrong in the safe-looking direction:**
+>
+> - **A review finding was overturned by a live probe.** Finding M9 required an explicit `404` before
+>   treating a Vast instance as gone. Vast returns HTTP **200 `{"instances": null}`** for a destroyed
+>   id _and_ for an id that never existed — it never 404s — so M9 would have silently reversed
+>   `9bc19a7`, itself live-verified. The `410` it cited was on the `/instances/` **listing** endpoint,
+>   a different call. Corrected by restoring the null-payload verdict and guarding the original
+>   concern properly: two consecutive terminal observations before reaping.
+> - **Deploying found a real bug nothing else would have.** `uvicorn --workers 2` runs the lifespan in
+>   both workers, both ran `run_migrations` against the same sqlite file, both saw `provider_key_id`
+>   absent, both `ALTER`ed, one crashed with `duplicate column name` and failed startup. A
+>   **pre-existing pattern** at all 22 `ADD COLUMN` sites that this branch's new column exposed. Fixed
+>   in `84bbbb7`.
+> - **A tempting heuristic was falsified.** "Offers present in consecutive catalog fetches are
+>   launchable" had perfect separation at n=8 retrospectively, and **failed its first prospective
+>   test**. Retracted, along with the claim that spec change 12's cache would give change 3 its
+>   correctness fix for free. Retry remains unavoidable.
+> - **Task 3 carries a caveat that is still open:** Prime's `DELETE /ssh_keys/{id}` is
+>   documentation-verified only, never exercised against production. It fails safe — the delete is
+>   swallowed and cannot block the pod teardown — so a wrong endpoint would leak silently.
+> - **Measured facts this plan did not anticipate**, now feeding spec changes 3 and 10: Vast offer ids
+>   churn **~50% between two consecutive catalog fetches** (7 consecutive `Unknown SKU` failures
+>   across price ranks 0–25); RunPod advertises GPU types with **zero capacity** and its `500` is
+>   mapped to a `400` — the same status as Vast's stale offer, with a different message, so a
+>   resolver must discriminate on the message because the two need opposite responses.
+> - **Two openscience fixes came out of this wave**, on `feat/compute-guardrails`: `784633e` (stop
+>   claiming managed compute at a zero balance) and `a732396d` (tmpfs the XDG cache dir so
+>   `bubblewrap` stops failing tools with "Read-only file system").
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement
 > this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
