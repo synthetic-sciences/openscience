@@ -53,7 +53,9 @@ const MANAGED_ZERO = {
   cli_effective_balance_cents: 0,
 }
 
-async function run(skills: string[], fn?: () => Promise<void>) {
+/** `override` writes billing.compute into the project's openscience.json, the
+ *  only way to reach a config-forced origin. */
+async function run(skills: string[], override?: "byok" | "managed") {
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {
@@ -63,12 +65,14 @@ async function run(skills: string[], fn?: () => Promise<void>) {
           `---\nname: ${name}\ndescription: Fixture ${name}.\ncategory: cloud-compute\n---\n\n# ${name}\n`,
         )
       }
+      if (override) {
+        await Bun.write(path.join(dir, "openscience.json"), JSON.stringify({ billing: { compute: override } }))
+      }
     },
   })
   return Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      await fn?.()
       const tool = await ComputeStatusTool.init({})
       return tool.execute({}, CTX as never)
     },
@@ -106,7 +110,7 @@ describe("compute_status", () => {
     expect(result.metadata.mode).toBe("managed")
     expect(result.metadata.balance_usd).toBe(42)
     expect(result.output).toContain("42")
-    expect(result.output.toLowerCase()).toContain("credits")
+    expect(result.output.toLowerCase()).toContain("managed compute is funded")
     // balance_usd must come from the SAME /api/compute/options response that
     // decided managed availability, never a second round trip.
     expect(calls.filter((url) => url.includes("/api/compute/options")).length).toBe(1)
@@ -122,13 +126,45 @@ describe("compute_status", () => {
     stub(MANAGED_ZERO)
     const result = await run([])
     expect(result.output.toLowerCase()).not.toContain("run gpu work through managed compute")
-    expect(result.output.toLowerCase()).toContain("top up")
+    expect(result.output.toLowerCase()).toContain("wallet is empty")
+    expect(result.output.toLowerCase()).toContain("topping up")
   })
 
-  test("managed with a positive balance keeps today's guidance", async () => {
+  test("a funded managed wallet does not claim OpenScience can launch managed compute", async () => {
+    // There is no managed launch mechanism in this client: ComputeTools is
+    // [ComputeStatusTool] and the only /api/compute call anywhere is mode.ts's
+    // read-only /options probe. Telling a funded, keyless user (the default
+    // path for anyone signed in) to "run GPU work through managed compute"
+    // while forbidding the only fallback left the agent with nothing that works.
     stub(MANAGED_ON)
     const result = await run([])
-    expect(result.output.toLowerCase()).toContain("run gpu work through managed compute")
+    const output = result.output.toLowerCase()
+    expect(output).not.toContain("run gpu work through managed compute")
+    expect(output).not.toContain("do not use the user's own provider keys")
+    expect(output).toContain("cannot launch it")
+    expect(output).toContain("settings ▸ compute")
+  })
+
+  test("a managed override names billing.compute instead of advice that setting blocks", async () => {
+    // Under an explicit override, connecting a key flips nothing: funded()
+    // never consults `providers` and offered() returns empty, so the skills
+    // stay hidden too. "Connect a key to run BYOK instead" is advice the
+    // setting itself defeats.
+    stub(MANAGED_ZERO)
+    const result = await run([], "managed")
+    expect(result.metadata.mode).toBe("managed")
+    expect(result.output).toContain("billing.compute")
+    expect(result.output.toLowerCase()).toContain("will not switch")
+  })
+
+  test("managed resolved from the environment still says to connect a key", async () => {
+    // The mirror of the override case: with no override, mode is managed only
+    // because the user holds no credential, so connecting one really does flip
+    // the next call to byok.
+    stub(MANAGED_ZERO)
+    const result = await run([])
+    expect(result.output).not.toContain("billing.compute")
+    expect(result.output).toContain("Settings ▸ Compute")
   })
 
   test("a zero balance narrows guidance only — mode stays managed, balance stays reported", async () => {
@@ -145,6 +181,47 @@ describe("compute_status", () => {
     expect(result.output.toLowerCase()).toContain("do not attempt gpu work")
     expect(result.output).toContain("Settings")
     expect(result.metadata.balance_usd).toBeUndefined()
+  })
+
+  test("none never offers a top-up, which cannot move a user out of none", async () => {
+    // No path to `none` is balance-related: probe() returns managed:false only
+    // for no session, non-2xx, a network/parse failure, or no provider with
+    // funding "managed" — and Atlas reports managed regardless of balance.
+    stub(MANAGED_OFF)
+    const result = await run([])
+    expect(result.output.toLowerCase()).not.toContain("top up")
+  })
+
+  test("a none narrowed by a managed override names the setting that narrowed it", async () => {
+    stub(MANAGED_OFF)
+    process.env["LAMBDA_API_KEY"] = "k"
+    const result = await run(["lambda-labs-gpu-cloud"], "managed")
+    expect(result.metadata.mode).toBe("none")
+    expect(result.output).toContain("billing.compute")
+  })
+
+  test("byok reports managed availability as unchecked, never as 'no'", async () => {
+    // The byok arms skip the availability probe by design, so "managed
+    // available: no" would be a fact the tool never measured — harmless today,
+    // load-bearing the moment Part B reads managed_available from metadata.
+    stub(MANAGED_ON)
+    process.env["LAMBDA_API_KEY"] = "k"
+    const result = await run(["lambda-labs-gpu-cloud"])
+    expect(result.output).toContain("**managed available**: not checked")
+    expect(result.metadata.managed_available).toBeUndefined()
+    expect(calls.filter((url) => url.includes("/api/compute/options"))).toEqual([])
+  })
+
+  test("a probed mode still reports availability as measured yes/no", async () => {
+    stub(MANAGED_ON)
+    const managed = await run([])
+    expect(managed.output).toContain("**managed available**: yes")
+    expect(managed.metadata.managed_available).toBe(true)
+    ComputeMode.invalidate()
+    stub(MANAGED_OFF)
+    const none = await run([])
+    expect(none.output).toContain("**managed available**: no")
+    expect(none.metadata.managed_available).toBe(false)
   })
 
   test("a provider with a key but no skill is still reported as usable byok", async () => {
@@ -180,7 +257,7 @@ describe("compute_status", () => {
     // in that mode's output and ONLY that mode's output.
     const PHRASE = {
       byok: "do not launch managed",
-      managed: "do not use the user's own provider keys",
+      managed: "cannot launch it",
       none: "do not attempt gpu work",
     }
     const output = {
