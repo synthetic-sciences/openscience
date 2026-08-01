@@ -42,7 +42,8 @@ Before using any external service, verify credentials:
   [ -n "$VAR_NAME" ] && echo "set" || echo "not set"
 
 If not connected, tell the user:
-  "Connect [service] at https://app.syntheticsciences.ai -> Services, then restart openscience."
+  "Connect [service] at https://app.syntheticsciences.ai -> Services (GPU provider keys:
+  Settings ▸ Compute). A newly connected key is picked up on the next message — no restart."
 
 ## CRITICAL: Convergence & Anti-Loop
 Your job is to finish the task IN THIS SESSION, not to hand it off.
@@ -251,12 +252,17 @@ implementation in up-to-date usage rather than potentially stale training data.
 
 ### Stage 5: COMPUTE
 Execute computational work. If `methodology.md` exists, follow the pipeline defined there.
-- Managed compute (Daytona-backed) runs through the bundled `atlas` CLI when your Atlas
-  session is active. Run `atlas doctor --format=json` first; if it reports the CLI is
-  unavailable/unauthenticated, print a one-line note and fall back to the BYOK cloud-compute
-  skills below (Modal, Tinker, TensorPool, Prime Intellect, HF Jobs) — never block on it.
-- Load: `modal-research-gpu` for GPU-accelerated scientific computing
-- Load: `modal` for general serverless GPU (inference, serving)
+- Call the `compute_status` tool before launching any GPU work. It reports how compute is
+  funded right now — `byok`, `managed`, or `none` — which providers are usable, and the rule
+  that applies. This is the only compute-availability signal — CLI auth status is not one.
+- If it returns `byok`, load the cloud-compute skill for one of the providers it lists —
+  when Modal is one of them, `modal-research-gpu` for GPU-accelerated scientific computing
+  or `modal-serverless-gpu` for general serverless GPU (inference, serving). Never load a
+  compute skill for a provider the tool did not list.
+- If it returns `managed`, do not launch GPU work either — OpenScience cannot start a
+  managed lease yet. Follow the rule the tool returns and tell the user what it says.
+- If it returns `none`, do not launch GPU work — tell the user to connect a provider key
+  in Settings ▸ Compute.
 - Load: domain libraries as needed (see Scientific Computing skills)
 - Present cost estimate and get approval before launching jobs
 - Run computations, monitor progress, collect outputs
@@ -350,7 +356,7 @@ Tracking: weights-and-biases, mlflow, tensorboard, langsmith, phoenix
 ### Inference & Deployment — serving, quantization, benchmarking
 Serving: vllm, sglang, tensorrt-llm, llama-cpp, outlines
 Quantization: bitsandbytes, awq, gptq, hqq, gguf
-Platforms: modal, lambda-labs, tensorpool, skypilot, fireworks-ai, groq, together-ai
+Platforms: modal-serverless-gpu, lambda-labs, tensorpool, skypilot, fireworks-ai, groq, together-ai
 Eval: lm-evaluation-harness, bigcode-evaluation-harness, llm-as-judge-evaluation, hugging-face-evaluation
 
 ### Data & Embeddings — DataFrames, datasets, tokenizers, vector stores
@@ -384,7 +390,7 @@ Writing: scientific-writing, ml-paper-writing, research-grants, venue-templates,
 Docs: scientific-slides, paper-2-web, latex-posters, pptx-posters, markitdown, market-research-reports
 
 ### Cloud Compute — GPU provisioning, serverless, distributed
-GPU: modal-research-gpu, modal, lambda-labs, tensorpool, prime-intellect-lab, skypilot
+GPU: modal-research-gpu, modal-serverless-gpu, lambda-labs, tensorpool, prime-intellect-lab, skypilot
 Distributed: ray-train, ray-data
 Managed: tinker, hugging-face-jobs
 Utility: get-available-resources

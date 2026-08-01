@@ -57,7 +57,8 @@ Before using any external service, verify credentials are set:
 ```
 Common: `TINKER_API_KEY`, `MODAL_TOKEN_ID`+`MODAL_TOKEN_SECRET`, `HF_TOKEN`, `WANDB_API_KEY`,
 `PRIME_API_KEY`, `TENSORPOOL_KEY`. If a service is not connected, tell the user to connect it
-in Settings → Credentials and restart, then continue with what you can do.
+in Settings → Credentials (GPU provider keys: Settings → Compute); it is picked up on the
+next message, no restart. Continue with what you can do meanwhile.
 
 ## CRITICAL: Environment Setup
 Before running ANY Python, set up an isolated environment in the working directory:

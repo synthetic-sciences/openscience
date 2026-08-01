@@ -56,7 +56,8 @@ Before using any external service, verify credentials:
   [ -n "$VAR_NAME" ] && echo "set" || echo "not set"
 
 If not connected, tell the user:
-  "Connect [service] at https://app.syntheticsciences.ai -> Services, then restart openscience."
+  "Connect [service] at https://app.syntheticsciences.ai -> Services (GPU provider keys:
+  Settings ▸ Compute). A newly connected key is picked up on the next message — no restart."
 
 ## Native Database & Analysis Tools
 

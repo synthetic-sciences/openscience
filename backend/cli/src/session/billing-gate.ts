@@ -30,11 +30,6 @@ export async function llmBillingMode(): Promise<BillingMode | undefined> {
   return (await Config.get()).billing?.llm ?? undefined
 }
 
-/** The user-facing compute spend toggle. Defaults to "byok" (own GPU providers). */
-export async function computeBillingMode(): Promise<BillingMode> {
-  return (await Config.get()).billing?.compute ?? "byok"
-}
-
 /** First-party providers whose OAuth path runs on the user's own subscription
  *  and never debits Credits. */
 const OAUTH_FREE_PROVIDERS = new Set([
