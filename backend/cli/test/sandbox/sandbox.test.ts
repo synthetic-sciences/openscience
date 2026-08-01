@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import os from "os"
+import path from "path"
 import { Sandbox } from "../../src/sandbox/sandbox"
 
 const shell = "/bin/sh"
@@ -65,6 +66,23 @@ describe("Sandbox.bubblewrapArgs", () => {
 
   test("unshares the PID namespace so /proc escape vectors are closed", () => {
     expect(Sandbox.bubblewrapArgs({ writable: ["/w"], network: true })).toContain("--unshare-pid")
+  })
+
+  test("mounts a tmpfs over the XDG cache dir, after the root ro-bind and before writable binds", () => {
+    // $HOME is deliberately not writable (tooBroadToConfine), so tools that touch
+    // the XDG cache on startup (zsh compdump/history lock, pip/npm/uv caches, …)
+    // hit a read-only $HOME and fail — this is the regression this test pins.
+    const args = Sandbox.bubblewrapArgs({ writable: ["/work/project"], network: true })
+    const cache = process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache")
+    const cacheIdx = args.indexOf(cache)
+    expect(cacheIdx).toBeGreaterThan(-1)
+    expect(args[cacheIdx - 1]).toBe("--tmpfs")
+
+    const roIdx = args.indexOf("--ro-bind")
+    expect(cacheIdx).toBeGreaterThan(roIdx) // after the whole-fs read-only mount
+
+    const bindIdx = args.indexOf("--bind-try")
+    expect(cacheIdx).toBeLessThan(bindIdx) // before the explicit writable binds
   })
 })
 

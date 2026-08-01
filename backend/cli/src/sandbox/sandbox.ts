@@ -259,6 +259,16 @@ export namespace Sandbox {
     // Whole fs read-only, a fresh /dev and /proc, and a throwaway writable /tmp;
     // then re-mount the bits that must be writable on top.
     const args = ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp"]
+    // $HOME is deliberately refused as a writable root (tooBroadToConfine), which
+    // leaves the whole-fs --ro-bind covering the XDG cache dir too. Startup tools
+    // that write there unconditionally (zsh's compdump/history lock, pip/npm/uv
+    // caches, ...) then fail with "Read-only file system". A tmpfs — not a bind —
+    // is the fix: writes succeed so those tools stop erroring, but nothing here
+    // persists to the real home, so the containment tooBroadToConfine enforces
+    // stays intact. Mounted before the writable binds below, so an explicitly
+    // writable path under the cache dir still wins.
+    const cache = process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache")
+    args.push("--tmpfs", cache)
     for (const p of dedupe(policy.writable)) {
       // Skip only the /tmp mount root itself — it is provided as a fresh tmpfs and
       // re-binding host /tmp would defeat it. A workspace that lives *under* /tmp
