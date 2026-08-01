@@ -1,6 +1,7 @@
 # Compute — design
 
-Status: **Mode detection shipped. Managed leases to build.**
+Status: **Mode detection shipped. Lease prerequisites and the budget cap shipped. Selection and the
+agent-facing tools to build.**
 Date: 2026-07-31 · single current compute spec · revised after adversarial review
 Roadmap: **5**, **51/2**, **55**, **103**; unblocks **56**
 
@@ -121,7 +122,7 @@ unavailable. No criterion covered this before.
 
 ---
 
-# Part B — Managed leases (to build)
+# Part B — Managed leases (changes 0, 1, 2, 8, 9 shipped; the rest to build)
 
 ## The gap Part A exposed
 
@@ -350,7 +351,32 @@ than leaving one value covering a 6× spread.
 
 **Ships first, with its own test, before any budget work.**
 
-### Change 1 — make `hard_cap_cents` a real running cap
+### Change 1 — make `hard_cap_cents` a real running cap — **SHIPPED**
+
+> **Shipped** as `0a9da07` + `a4a79ca`. **The mechanism this section originally prescribed was wrong** and
+> is corrected below — read the correction before touching this code.
+>
+> **The premise was confirmed in production before the fix.** A live 34¢/hr lease had
+> `hard_cap_cents = 816` (= 34 × 24) with `spent_cents` **frozen at 34** while `lease.total_spent_cents`
+> climbed 0 → 2 → 3 → 5 → 6. The ceiling was decorative and the wallet was the only real bound. This
+> section previously carried a "read from source only — confirm against a test" caveat; that is now
+> discharged, against both a test and a running deployment.
+>
+> **The correction: the grant update is a _set-to-total_, not a re-debit.** `debit_grant` increments, and
+> an increment cannot mirror a tick that charges cumulatively
+> (`wall_clock_cents(rate, now - started_at) - total_spent_cents`). Incrementing double-counts the hour
+> `acquire_lease` debits up front — measured by mutation: a $10 budget at $6.99/h died at **26.0 minutes**
+> instead of ~1.4 hours, and `grant.spent_cents` read 300 where wall-clock was 180. `set_grant_spend`
+> writes the wall-clock total instead, so replay safety is inherited from the tick and the acquire debit
+> is superseded rather than added to.
+>
+> **Measured after the fix:** a $10 budget at $6.99/h releases at 5160s against a theoretical 5150s — a
+> 9.8s overshoot that is pure tick quantisation.
+>
+> A wrong implementation still passes every "a release happened" assertion. Under the mutation above,
+> `released == 1`, the status was `released`, and the wallet moved. **Only an assertion on elapsed
+> billable duration catches it** — which is why the spec insisted on that property and why both earlier
+> attempts, which omitted it, shipped the bug.
 
 The column exists (`migrations.py:522`, `pg_migrations.py:775`) and an atomic ceiling exists
 (`compute_repo.py:196` — `AND (spent_cents + ?) <= hard_cap_cents`). But `debit_grant` is called in
@@ -359,7 +385,8 @@ rollback (`:545`), pre-provisioning failure undo (`:77`), and a settle true-up (
 **`compute_billing_service.tick_once` never calls it** — only `usage_service.charge` and `mark_billed`.
 So `spent_cents` freezes at hour one and the ceiling is never re-evaluated.
 
-**The billing tick must re-debit the grant**, releasing the lease when the debit would exceed the cap —
+**The billing tick must update the grant** (see the correction above — a set, not a re-debit), releasing
+the lease when the new total would exceed the cap —
 reusing the path that already fires on wallet exhaustion.
 
 **This is not a double charge.** The wallet is money; the grant is an authorisation envelope drawn against
@@ -395,7 +422,22 @@ _Latent, not live:_ `debit_grant`'s predicate includes `status = 'active'` (`com
 `expire_grants_by_session` (`:204`) is defined and never called, so no grant expires today — but under
 this change, any future grant expiry silently becomes "release the lease".
 
-### Change 2 — accept a budget on lease creation
+### Change 2 — accept a budget on lease creation — **SHIPPED**
+
+> **Shipped** as `31fc598`, together with change 1 as this section requires. `budget_cents` is optional
+> on `POST /api/compute/leases`, clamped to the effective balance, and the response reports the effective
+> cap. Absent, the grant is still sized to `rate × ttl_hours` — pinned by a test that fails if that
+> number moves, because it is now a live ceiling on the dashboard and `compute:up`, which both call this
+> endpoint without a budget.
+>
+> Two decisions taken during implementation, neither in this section's original text:
+>
+> - The `402` keeps one body shape but carries **two `error` values** — `insufficient_cli_credit` when the
+>   wallet is short, and a new `budget_below_hourly_rate` when the wallet is fine and only the budget is.
+>   Reusing the credit code would make a client tell a user with a full wallet to top up.
+> - The budget is deliberately **not** clamped to `rate × ttl_hours`. The TTL is already a time bound, so
+>   a larger grant is unreachable spend, and clamping to it would shrink a stated budget for a reason that
+>   has nothing to do with affordability.
 
 ```
 POST /api/compute/leases
@@ -953,9 +995,17 @@ creation stays in the workspace UI rather than becoming a fourth tool.
   No file transfer, no exec, no compute tests.
 - **Six of the ten `RESELL_PROVIDERS` are `ScaffoldProvider` stubs** — registered, `operator: false`, zero
   options, no network call. Scaffolding, not integrations.
-- **`budget_cents` already exists** on the agent-spawn path defaulting to `500` (`agent_tools.py:1386`,
-  `models/agent.py:101`, `spawn_queue_service.py:69` → `create_grant` at `:1501`), display-only. Change 1
-  makes caps real, silently giving every shipped spawn a hard $5 kill. **Not a no-op.**
+- ~~**`budget_cents` already exists** on the agent-spawn path defaulting to `500`, display-only. Change 1
+  makes caps real, silently giving every shipped spawn a hard $5 kill.~~ **FIXED** (`71dccba`), and it was
+  worse than this entry claimed. Every spawn grant was `hard_cap_cents = 500` flat for **every SKU** — no
+  caller in either repo ever sent anything else. A spawn requests 4 hours; that is $14.60 on an
+  A100-40GB, $18.36 on an A100-80GB, $27.96 on an H100, so only T4 and A10G fitted under $5. Measured on
+  the real spawn path against the real tick: **a 4-hour A100 spawn was killed at 1.38h**, 35% of its
+  requested life. An H100 was **refused outright at acquire** ("need 699 cents, have 500") — that half
+  was pre-existing, dating to `1e49dc9`, which is itself evidence the 500 was never sized against any
+  GPU. `budget_cents` is now `int | None`; `None` sizes the ceiling to the spawn's own lifetime at the
+  SKU rate, with a one-hour floor, and an explicitly chosen budget still binds. Only CPU spawns were ever
+  safe, because they come out `funding=byok` at rate 0 and the tick skips them.
 - **Stale skill names in agent prompts.** `research.txt:353` and `ml.txt:192` name skills by directory
   rather than frontmatter `name` (`vllm` → `serving-llms-vllm`), so the agent is told it has skills it
   cannot load. `skills/scholar-evaluation/SKILL.md` has no frontmatter at all.
@@ -1118,6 +1168,12 @@ Labels in this document:
 
 A source-read claim is not a deployed-behaviour claim. Confirm the money path against `pytest` before
 relying on it.
+
+**The money path is now confirmed**, in both directions. Against a running deployment: the billing tick
+charges the wallet correctly (34¢/hr decrementing in lockstep with `total_spent_cents`) while
+`grant.spent_cents` sat frozen at the acquire debit — the defect. Against tests, after the fix: a $10
+budget at $6.99/h lasts 5160s versus a theoretical 5150s. The caveat that stood over change 1 is
+discharged; the ones over the resolver, volumes and the rolling cap are not.
 
 ### What review caught in this document
 
