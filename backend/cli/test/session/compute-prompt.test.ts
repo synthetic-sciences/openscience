@@ -16,7 +16,68 @@ async function sources() {
   return Promise.all(files.map(async (file) => [file, await Bun.file(file).text()] as const))
 }
 
+/** Every primary agent that can send a user down a compute path. `sources()`
+ *  globs the whole prompt tree but the assertions below used to hardcode
+ *  research.txt, which made them structurally unable to catch the same defect
+ *  in a sibling prompt. */
+const COMPUTE_AGENTS = ["research", "biology", "physics", "ml"]
+
+async function agents() {
+  return Promise.all(
+    COMPUTE_AGENTS.map(async (name) => {
+      const file = path.join(root, "agent", "prompt", `${name}.txt`)
+      return [file, await Bun.file(file).text()] as const
+    }),
+  )
+}
+
+/** Markdown bullets with continuation lines folded in, so a rule about what an
+ *  instruction says sees the whole instruction rather than its first line. */
+function bullets(text: string) {
+  const out: string[] = []
+  let open = false
+  for (const line of text.split("\n")) {
+    if (/^\s*[-*] /.test(line)) {
+      out.push(line.trim())
+      open = true
+      continue
+    }
+    if (open && /^\s+\S/.test(line)) {
+      out[out.length - 1] += " " + line.trim()
+      continue
+    }
+    open = false
+  }
+  return out
+}
+
 describe("compute prompt text", () => {
+  test("every COMPUTE_AGENTS prompt exists and is non-empty", async () => {
+    // The bans below are only worth as much as the file set they run over — a
+    // renamed prompt must fail loudly, not silently drop out of coverage.
+    const loaded = await agents()
+    expect(loaded.map(([file]) => path.relative(root, file))).toEqual(
+      COMPUTE_AGENTS.map((name) => path.join("agent", "prompt", `${name}.txt`)),
+    )
+    for (const [file, text] of loaded) expect(text.length, file).toBeGreaterThan(100)
+  })
+
+  test("no agent prompt tells the agent to load a mode-gated compute skill unconditionally", async () => {
+    // ComputeMode.SKILLS names are hidden from the catalog unless the provider
+    // is credentialed. An unconditional "Load: `modal-research-gpu`" both
+    // overrides whatever compute_status just returned and points at a skill the
+    // filter may have removed, so any bullet naming one has to be gated on byok.
+    const gated = [...ComputeMode.SKILLS]
+    const hits = (await agents()).flatMap(([file, text]) =>
+      bullets(text)
+        .filter((bullet) => /\bload\b/i.test(bullet))
+        .filter((bullet) => gated.some((skill) => bullet.includes(skill)))
+        .filter((bullet) => !bullet.includes("byok"))
+        .map((bullet) => `${path.relative(root, file)}: ${bullet}`),
+    )
+    expect(hits).toEqual([])
+  })
+
   test("no prompt or session source references atlas compute:up", async () => {
     const hits = (await sources()).filter(([, text]) => text.includes("compute:up"))
     expect(hits.map(([file]) => path.relative(root, file))).toEqual([])

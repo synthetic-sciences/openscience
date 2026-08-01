@@ -254,11 +254,14 @@ Execute computational work. If `methodology.md` exists, follow the pipeline defi
 - Call the `compute_status` tool before launching any GPU work. It reports how compute is
   funded right now — `byok`, `managed`, or `none` — which providers are usable, and the rule
   that applies. This is the only compute-availability signal — CLI auth status is not one.
-- If it returns `byok`, load the cloud-compute skill for one of the providers it lists.
-  If `managed`, run the work through managed compute. If `none`, do not launch GPU work —
-  tell the user to connect a provider key in Settings ▸ Compute.
-- Load: `modal-research-gpu` for GPU-accelerated scientific computing
-- Load: `modal-serverless-gpu` for general serverless GPU (inference, serving)
+- If it returns `byok`, load the cloud-compute skill for one of the providers it lists —
+  when Modal is one of them, `modal-research-gpu` for GPU-accelerated scientific computing
+  or `modal-serverless-gpu` for general serverless GPU (inference, serving). Never load a
+  compute skill for a provider the tool did not list.
+- If it returns `managed`, do not launch GPU work either — OpenScience cannot start a
+  managed lease yet. Follow the rule the tool returns and tell the user what it says.
+- If it returns `none`, do not launch GPU work — tell the user to connect a provider key
+  in Settings ▸ Compute.
 - Load: domain libraries as needed (see Scientific Computing skills)
 - Present cost estimate and get approval before launching jobs
 - Run computations, monitor progress, collect outputs
