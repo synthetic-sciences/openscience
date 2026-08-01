@@ -62,6 +62,31 @@ describe("compute prompt text", () => {
     for (const [file, text] of loaded) expect(text.length, file).toBeGreaterThan(100)
   })
 
+  /**
+   * Instructions no compute-capable prompt may carry.
+   *
+   * The restart pattern is phrase-shaped, not word-shaped, on purpose: "Do not
+   * restart on a missing tool" is a legitimate instruction and so is stating
+   * that a newly connected key needs NO restart. What is banned is telling the
+   * user to restart to pick a credential up — which contradicts a tested design
+   * claim (compute-status.test.ts, "a credential connected between two calls
+   * changes the answer, no restart"): the Compute and Credentials panels call
+   * applyComputeEnv/applyCredentialEnv on save, and a key added in the hosted
+   * dashboard lands via refreshIfStale's background sync on the next message.
+   */
+  const BANNED: Array<[string, RegExp]> = [
+    ["atlas compute:up", /compute:up/],
+    ["telling the user to restart", /(?:then|and)\s+restart|restart\s+openscience|restart\s+the\s+(?:cli|session)/i],
+  ]
+
+  test("every compute-capable agent prompt is free of the banned instructions", async () => {
+    const loaded = await agents()
+    const hits = BANNED.flatMap(([label, pattern]) =>
+      loaded.filter(([, text]) => pattern.test(text)).map(([file]) => `${path.relative(root, file)}: ${label}`),
+    )
+    expect(hits).toEqual([])
+  })
+
   test("no agent prompt tells the agent to load a mode-gated compute skill unconditionally", async () => {
     // ComputeMode.SKILLS names are hidden from the catalog unless the provider
     // is credentialed. An unconditional "Load: `modal-research-gpu`" both
