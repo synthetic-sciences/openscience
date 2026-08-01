@@ -18,11 +18,42 @@ import { ComputeMode } from "@/compute/mode"
  * expensive; adding them here is free.
  */
 
-const GUIDANCE: Record<ComputeMode.Source, string> = {
+const GUIDANCE: Record<Exclude<ComputeMode.Source, "managed">, string> = {
   byok: "Run GPU work on the user's connected providers via the cloud-compute skills. Do not launch managed leases — they bill Credits and are not the funded path here.",
-  managed:
-    "Run GPU work through managed compute, billed to Credits. Do not use the user's own provider keys — they are not funded here.",
   none: "No compute is available. Do not attempt GPU work. Tell the user to connect a provider key in Settings ▸ Compute, or to top up for managed compute.",
+}
+
+/**
+ * `managed` guidance is a function of balance, not a fixed string, because
+ * `GET /api/compute/options` reports a provider as managed whenever reselling
+ * is on and an operator key exists — availability and affordability are
+ * independent there. Live testing against a deployed backend with a zero
+ * wallet found the old fixed string sent the agent down a path that cannot
+ * work (every lease acquire returns HTTP 402 insufficient_cli_credit) while
+ * simultaneously forbidding the only fallback that would (the user's own
+ * provider keys). That is the same "claims a capability with nothing behind
+ * it" defect Part A removed from mode resolution itself (see ComputeMode's
+ * doc comment) — just one layer up: the mode really is `managed`, the
+ * capability exists, but the guidance text assumed `managed` meant funded.
+ *
+ * This does NOT change `state.mode`. Managed is genuinely configured; an
+ * empty wallet is missing funds, not a missing capability, and the two need
+ * different advice — top up vs. connect a key. Collapsing them would destroy
+ * that distinction, which is exactly the mistake the override rule in
+ * `ComputeMode.resolve` (narrow, never manufacture) exists to prevent.
+ *
+ * Only `balance === 0` counts as unaffordable. Acquiring a lease requires one
+ * hour of the chosen SKU's rate up front, and rates span cents to dollars an
+ * hour depending on the catalog Atlas holds and this tool never sees — any
+ * non-zero cutoff here would be a guess. `balance === undefined` (the probe
+ * succeeded but the response carried no balance field) is left alone too:
+ * that is missing information, not a zero balance, and treating it as empty
+ * would be its own honesty bug.
+ */
+function managedGuidance(balance: number | undefined): string {
+  if (balance === 0)
+    return "Managed compute is configured, but the wallet is empty — every lease attempt will be refused (HTTP 402). Tell the user to top up in Settings ▸ Compute, or to connect their own provider key to run BYOK instead."
+  return "Run GPU work through managed compute, billed to Credits. Do not use the user's own provider keys — they are not funded here."
 }
 
 export const ComputeStatusTool = Tool.define("compute_status", {
@@ -40,7 +71,7 @@ export const ComputeStatusTool = Tool.define("compute_status", {
       `**managed available**: ${state.managed ? "yes" : "no"}`,
     ]
     if (state.balance !== undefined) lines.push(`**balance**: $${state.balance.toFixed(2)}`)
-    lines.push("", GUIDANCE[state.mode])
+    lines.push("", state.mode === "managed" ? managedGuidance(state.balance) : GUIDANCE[state.mode])
 
     return {
       title: `Compute: ${state.mode}`,

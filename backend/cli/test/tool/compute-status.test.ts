@@ -47,6 +47,11 @@ const MANAGED_ON = {
   cli_effective_balance_cents: 4200,
 }
 const MANAGED_OFF = { providers: [], resell_enabled: false, cli_effective_balance_cents: 0 }
+const MANAGED_ZERO = {
+  providers: [{ provider: "lambda", funding: "managed", has_byok: false, has_operator: true, count: 2 }],
+  resell_enabled: true,
+  cli_effective_balance_cents: 0,
+}
 
 async function run(skills: string[], fn?: () => Promise<void>) {
   await using tmp = await tmpdir({
@@ -105,6 +110,32 @@ describe("compute_status", () => {
     // balance_usd must come from the SAME /api/compute/options response that
     // decided managed availability, never a second round trip.
     expect(calls.filter((url) => url.includes("/api/compute/options")).length).toBe(1)
+  })
+
+  test("managed with a zero balance stops telling the agent to spend it", async () => {
+    // Live testing against a deployed Atlas backend with a zero wallet found
+    // /api/compute/options reports a "managed" provider regardless of
+    // balance — availability and affordability are independent. Every lease
+    // attempt in this state returns HTTP 402 insufficient_cli_credit, so the
+    // old guidance sent the agent down a path that cannot work while also
+    // forbidding the only fallback (the user's own keys).
+    stub(MANAGED_ZERO)
+    const result = await run([])
+    expect(result.output.toLowerCase()).not.toContain("run gpu work through managed compute")
+    expect(result.output.toLowerCase()).toContain("top up")
+  })
+
+  test("managed with a positive balance keeps today's guidance", async () => {
+    stub(MANAGED_ON)
+    const result = await run([])
+    expect(result.output.toLowerCase()).toContain("run gpu work through managed compute")
+  })
+
+  test("a zero balance narrows guidance only — mode stays managed, balance stays reported", async () => {
+    stub(MANAGED_ZERO)
+    const result = await run([])
+    expect(result.metadata.mode).toBe("managed")
+    expect(result.metadata.balance_usd).toBe(0)
   })
 
   test("none tells the agent not to attempt GPU work and how to enable it", async () => {
