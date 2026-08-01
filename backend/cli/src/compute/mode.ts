@@ -86,13 +86,36 @@ export namespace ComputeMode {
     return Object.keys(PROVIDERS).filter((id) => keyed(PROVIDERS[id].env))
   }
 
+  /**
+   * WHY `mode` is what it is — the one thing a caller cannot reconstruct from
+   * `mode` alone, and the thing that decides what advice is even actionable.
+   * "managed" reached from the environment means the user holds no provider
+   * credential, so connecting one flips the next call to byok. "managed"
+   * reached from `billing.compute` means the setting pins it: connecting a
+   * credential changes neither `resolve()` (`funded()` never consults
+   * `providers`) nor `offered()` (empty under a managed override), so telling
+   * the user to connect one is advice the setting itself defeats. The override
+   * value is carried, not just a forced/not-forced bit, because "none" is
+   * reachable from BOTH overrides and they need opposite advice.
+   */
+  export type Origin = "environment" | "config:byok" | "config:managed"
+
   export interface Resolution {
     mode: Source
     /** Credentialed BYOK providers, in PROVIDERS declaration order. */
     providers: string[]
-    managed: boolean
+    /**
+     * Whether managed compute is available — `undefined` when nothing measured
+     * it. The byok arms return before `available()` runs (that skip is the
+     * point: a byok user never pays for the round trip), so they have no
+     * verdict to report. Absence means "not checked", never "no": a hardcoded
+     * `false` there would be a fact the code never established, which is the
+     * exact defect this module exists to remove.
+     */
+    managed?: boolean
     /** Wallet balance in USD. Present only when mode === "managed". */
     balance?: number
+    origin: Origin
   }
 
   /** Hard ceiling on how long resolution may block an agent turn. Atlas's own
@@ -154,12 +177,13 @@ export namespace ComputeMode {
    *  `available()` completely and must never fall back to "byok" just because
    *  a credential happens to be present (that would silently defeat the
    *  managed override — see the "managed with a usable provider" test). */
-  function funded(providers: string[], state: { managed: boolean; balance?: number }): Resolution {
+  function funded(providers: string[], state: { managed: boolean; balance?: number }, origin: Origin): Resolution {
     return {
       mode: state.managed ? "managed" : "none",
       providers,
       managed: state.managed,
       balance: state.managed ? state.balance : undefined,
+      origin,
     }
   }
 
@@ -173,19 +197,20 @@ export namespace ComputeMode {
     const override = (await Config.get()).billing?.compute
 
     if (override === "byok") {
-      return { mode: providers.length ? "byok" : "none", providers, managed: false }
+      return { mode: providers.length ? "byok" : "none", providers, origin: "config:byok" }
     }
 
     if (override === "managed") {
-      return funded(providers, await available())
+      return funded(providers, await available(), "config:managed")
     }
 
     // BYOK wins when a credentialed provider is present: it is free to the user,
     // it works today, and it needs nothing from Atlas. This is also why a BYOK
-    // user never pays for the availability call.
-    if (providers.length) return { mode: "byok", providers, managed: false }
+    // user never pays for the availability call — and why `managed` is left
+    // unset here rather than false (see Resolution.managed).
+    if (providers.length) return { mode: "byok", providers, origin: "environment" }
 
-    return funded(providers, await available())
+    return funded(providers, await available(), "environment")
   }
 
   /**

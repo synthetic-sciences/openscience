@@ -277,6 +277,41 @@ describe("ComputeMode.resolve", () => {
     expect(calls.filter((url) => url.includes(OPTIONS_URL))).toEqual([])
   })
 
+  test("a byok resolution leaves managed availability UNMEASURED, not false", async () => {
+    // The byok arms deliberately skip the availability probe — that skip is the
+    // performance win. `managed: false` there would be an unmeasured claim, and
+    // the tool prints it as a fact ("managed available: no").
+    await signIn()
+    stubOptions(MANAGED_ON)
+    process.env["LAMBDA_API_KEY"] = "k"
+    const result = await withSkills(["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())
+    expect(result.mode).toBe("byok")
+    expect(result.managed).toBeUndefined()
+    expect(calls.filter((url) => url.includes(OPTIONS_URL))).toEqual([])
+  })
+
+  test("a probed resolution reports availability as a measured boolean", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    expect((await withSkills([], () => ComputeMode.resolve())).managed).toBe(true)
+    ComputeMode.invalidate()
+    stubOptions(MANAGED_OFF)
+    expect((await withSkills([], () => ComputeMode.resolve())).managed).toBe(false)
+  })
+
+  test("with no override, every arm records origin 'environment'", async () => {
+    await signIn()
+    stubOptions(MANAGED_ON)
+    process.env["LAMBDA_API_KEY"] = "k"
+    expect((await withSkills(["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())).origin).toBe("environment")
+    clearEnv()
+    ComputeMode.invalidate()
+    expect((await withSkills([], () => ComputeMode.resolve())).origin).toBe("environment")
+    ComputeMode.invalidate()
+    stubOptions(MANAGED_OFF)
+    expect((await withSkills([], () => ComputeMode.resolve())).origin).toBe("environment")
+  })
+
   test("the availability answer is cached within the TTL", async () => {
     await signIn()
     stubOptions(MANAGED_ON)
@@ -379,6 +414,29 @@ describe("ComputeMode.resolve override", () => {
     // The credential is real — it's just not the funded path under a forced
     // managed override, so it must still be reported, not hidden.
     expect(result.providers).toEqual(["lambda"])
+  })
+
+  test("an override stamps the origin with the setting that forced the mode", async () => {
+    // A caller cannot otherwise tell "managed because the environment says so"
+    // (where connecting a key flips to byok next call) from "managed because
+    // billing.compute pins it" (where connecting a key changes nothing) — and
+    // those two states need opposite advice.
+    await signIn()
+    stubOptions(MANAGED_ON)
+    process.env["LAMBDA_API_KEY"] = "k"
+    expect((await withOverride("byok", ["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())).origin).toBe(
+      "config:byok",
+    )
+    ComputeMode.invalidate()
+    expect((await withOverride("managed", ["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())).origin).toBe(
+      "config:managed",
+    )
+    // Narrowed to "none" the origin still has to name the setting that narrowed it.
+    ComputeMode.invalidate()
+    stubOptions(MANAGED_OFF)
+    const narrowed = await withOverride("managed", ["lambda-labs-gpu-cloud"], () => ComputeMode.resolve())
+    expect(narrowed.mode).toBe("none")
+    expect(narrowed.origin).toBe("config:managed")
   })
 
   test("override managed beats a usable provider when managed IS available", async () => {
