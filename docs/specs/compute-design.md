@@ -1,9 +1,16 @@
 # Compute — design
 
-Status: **Mode detection shipped. Lease prerequisites and the budget cap shipped. Selection and the
-agent-facing tools to build.**
-Date: 2026-07-31 · single current compute spec · revised after adversarial review
+Status: **Mode detection shipped. Lease prerequisites, the SSH key lifecycle and the budget cap shipped
+and verified against a live deployment — on an unmerged draft branch. Selection, the quote, the rolling
+cap and every agent-facing tool still to build.**
+Date: 2026-07-31 · sweep 2026-08-01 · single current compute spec · revised after adversarial review
 Roadmap: **5**, **51/2**, **55**, **103**; unblocks **56**
+
+> **What a user can do today: nothing.** Everything marked SHIPPED below lives on Atlas
+> `feat/compute-lease-prerequisites` and OpenScience `feat/compute-guardrails`, both deliberately draft
+> until compute is complete — and OpenScience has no launch tool in any case (`ComputeTools` is
+> `[ComputeStatusTool]`). "Shipped" in this document means _built, tested, and in several cases driven
+> against a real provider_. It does not mean reachable.
 
 How OpenScience gets a GPU: who provisions it, who pays, and what stops it. Spans two repos —
 `atlas` (Python/FastAPI) decides and enforces, `openscience` (Bun/TypeScript) relays and obeys. Each
@@ -115,14 +122,17 @@ and because `byok` wins whenever a credential exists, managed is suppressed at t
 They have a key, no skills, and no managed path.
 
 Part B makes this sharper rather than fixing it: `ComputeTools` is registered unconditionally
-(`src/tool/registry.ts:135`), so `compute_launch` stays callable while `compute_status` tells the agent
-not to launch managed leases (`src/tool/compute.ts:22`). **The three new tools must state their behaviour
-in `byok` and `none`** — refuse with the reason, rather than attempting a managed lease the mode says is
-unavailable. No criterion covered this before.
+(`src/tool/registry.ts:135`), so `compute_launch` **will be** callable in every mode once it exists,
+while `compute_status` tells the agent not to launch managed leases. **The three new tools must state
+their behaviour in `byok` and `none`** — refuse with the reason, rather than attempting a managed lease
+the mode says is unavailable. No criterion covered this before.
+
+_Today `ComputeTools` is `[ComputeStatusTool]` (`src/tool/compute.ts:138`), so the sentence above
+describes the state Part B creates, not the state that exists._
 
 ---
 
-# Part B — Managed leases (changes 0, 1, 2, 8, 9 shipped; the rest to build)
+# Part B — Managed leases (changes 0, 1, 2 and 9 shipped, 8 half; the rest to build)
 
 ## The gap Part A exposed
 
@@ -286,7 +296,35 @@ something that ships alongside the resolver.
 
 ## Atlas changes
 
-### Change 0 — make a lease reach `ready`, then scope the reaper _(prerequisite, two parts)_
+### Change 0 — make a lease reach `ready`, then scope the reaper _(prerequisite, two parts)_ — **SHIPPED**
+
+> **Shipped** across `feat/compute-lease-prerequisites` (promotion + coordinates + reaper scoping +
+> `lease_state.normalise_state`), and **verified against a real provider rather than an injected clock.**
+>
+> - **The headline property, on a wall clock:** a user lease with no runner token sat `ready` for
+>   578s → 687s → **788s** against the deployed reaper, un-reaped. Before this change it died at 600s.
+> - **Promotion and coordinates, live on both providers:** created `provisioning` with no address →
+>   the real background sweep promoted it within one interval → `ssh_host` / `ssh_port` persisted as
+>   the **NATed** values (`ssh3.vast.ai:15650`, `194.68.245.163:22189`), never the placeholder `22` →
+>   `ready_at` stamped → SSH into a real GPU worked.
+> - **0(c) live over HTTP:** `GET /connection` returned `state: "ready"`.
+>
+> **Three things the section below does not say, all of which execution forced:**
+>
+> - **Provider status alone is not readiness.** RunPod reports `desiredStatus=RUNNING` from pod
+>   creation with `publicIp=""` and `portMappings=None`; coordinates appeared at t+15s. Promotion
+>   therefore waits for coordinates as well — `if not ssh_host and lease.get("ssh_key_name")` — and
+>   the `ssh_key_name` half is load-bearing because **Modal has no SSH at all**: its `connection()`
+>   returns no `ssh_host`, so an address-only gate stopped Modal CPU sandboxes promoting and had them
+>   reaped at 600s. That regression was caught before merge.
+> - **A destroyed Vast instance read as `provisioning` forever**, so reaper branch 1 could never fire
+>   for Vast. Fixed by mapping an empty instance payload to terminated. Vast returns HTTP 200
+>   `{"instances": null}` for a destroyed id **and** for an id that never existed and **never 404s**;
+>   RunPod does 404. Both signals are needed, and the terminal verdict now requires two consecutive
+>   observations.
+> - **Deploying it found a migration race** the tests could not: `uvicorn --workers 2` ran
+>   `run_migrations` in both workers, both `ALTER`ed the same new column, one crashed startup with
+>   `duplicate column name`. A pre-existing shape at all 22 `ADD COLUMN` sites, exposed by this work.
 
 This is the prerequisite everything else waits on, and **the first draft of this spec got it wrong** —
 it named the heartbeat branch, which is the one branch that cannot be killing these leases. The
@@ -345,11 +383,24 @@ put RunPod's median near 59s but Vast's tail past **6 minutes** — so under che
 most launches to Vast, a slice of legitimate provisions runs close to the limit and some will exceed it.
 A box reaped mid-provision is a launch the user paid for and never received.
 
+> **Our own measurement does not reproduce that tail, and it changes what this section is for
+> (2026-08-01, n=7 real Vast launches, n=2 RunPod).** Every launch that booted at all booted fast —
+> **34s, 46s, 50s** on Vast, ~30s on RunPod. The third-party ">6 minute tail" was not observed. What
+> _was_ observed is a different failure entirely: **3 of 9 launches never booted at all** (Vast
+> `actual_status=offline` for 7 minutes while `cur_state=running`; RunPod returning no capacity).
+>
+> **So the failure mode is "never boots", not "boots slowly", and a longer timeout does not help it —
+> it only delays the refund.** The per-provider timeout is still worth deriving from real data, but it
+> drops in priority behind change 10's ranking work and behind falling through on capacity errors
+> (change 3), which is what actually addresses the observed loss. n is small; do not over-fit either
+> way.
+
 **Make the timeout per-provider and set it from the p99 of measured boot times** (change 10), not from a
 round number. Until that data exists, raise it for the providers whose observed tail demands it rather
 than leaving one value covering a 6× spread.
 
-**Ships first, with its own test, before any budget work.**
+~~**Ships first, with its own test, before any budget work.**~~ **It did** — change 0 shipped as its own
+work before changes 1 and 2, as required.
 
 ### Change 1 — make `hard_cap_cents` a real running cap — **SHIPPED**
 
@@ -506,6 +557,43 @@ catalog, bounded to N attempts, then fail with a structured error rather than lo
 five provider requests, so N retries is N full catalog rebuilds and change 4 adds another per launch.
 **Change 12 (catalog cache) ships before this**, or the retry path costs more than the lease.
 
+#### Measured 2026-08-01 — the race is worse than assumed, and `400` is overloaded
+
+Three findings from driving real launches against a deployed backend. All three are requirements on
+the resolver, not colour.
+
+- **The churn is ~50% per fetch, so client-side selection is roughly a coin flip.** Three back-to-back
+  `/api/compute/options` calls returned 65 / 67 / 67 Vast offers with only **25 stable across all
+  three**; 31 of the first 65 were gone by the second fetch. Observed **7 consecutive
+  `HTTP 400 Unknown SKU` failures across price ranks 0–25** — so this is not a cheapest-first
+  artifact, it is the whole catalog. A lease landed on attempt 3 of a random-pick loop, which is what
+  ~50% churn predicts. **This is the quantitative case for change 3 existing at all.**
+- **A stability heuristic was falsified — do not resurrect it.** "Offers present in consecutive
+  catalog fetches are launchable" had _perfect_ separation retrospectively (n=8: the one SKU that
+  launched was in the 3-fetch stable set, all 7 failures were not) and **failed its first prospective
+  test** — a SKU in the stable set of two fetches still returned `400`. The attractive corollary,
+  that change 12's cache would hand change 3 its correctness fix for free by intersecting fetches,
+  is **retracted**. Retry is unavoidable.
+- **`400` means two opposite things and the resolver must read the message.** RunPod advertises GPU
+  types with **zero capacity**; it returns `500` to Atlas and Atlas maps it to `400` — the _same
+  status_ as Vast's stale offer. The messages differ:
+  `"Unknown SKU '<id>' for provider 'vast'."` versus
+  `"create pod: There are no instances currently available"`. **They need opposite responses**: a
+  stale offer means re-resolve the same requirement against a fresh catalog; no capacity means pick a
+  **different** SKU. Retrying the same offer on a no-capacity error loops forever. A resolver that
+  branches on status alone is wrong on one of the two providers.
+
+**Why RunPod runs out of capacity is a query bug, not a stale catalog.** `list_options` asks for
+`gpuTypes{ id, displayName, memoryInGb, lowestPrice{ uninterruptablePrice } }` — a **price list, not an
+inventory**. `lowestPrice` is the cheapest anyone ever offered that model and says nothing about current
+availability. Contrast Vast, whose `/bundles/?q={"rentable":{"eq":true},…}` catalog **is**
+availability-filtered, which is why its options are at least launchable in principle. RunPod does publish
+availability and we never request it: `lowestPrice{ stockStatus }` works, and across the 37 priced types
+it reads Low 25 / Medium 3 / High 9 — with **all ten cheapest types "Low"**. Cheapest-first on RunPod
+therefore selects systematically into the failure region. Cheapest "High" is $0.34/hr against cheapest
+"Low" at $0.12, so **hard-filtering to High would roughly triple the price** — request the signal and use
+it to order the fallback, do not filter on it.
+
 ### Change 4 — quote a proposal without spending
 
 ```
@@ -605,7 +693,29 @@ closed:
 - **No warning event required.** An 80% notification is worth adding for humans, but it is advice; the cap
   must never depend on anyone reading it.
 
-### Change 8 — release must not report success it did not achieve
+### Change 8 — release must not report success it did not achieve — **HONESTY HALF SHIPPED; THE DECISION BELOW IS NOT**
+
+> **Shipped** as `0eb33c2` (Vast) and `be6a3d4` (Prime, RunPod, and `release_lease` itself).
+>
+> - All three providers now distinguish a confirmed teardown from an unconfirmed one instead of
+>   returning `{"status": "terminated"}` after a bare `try/except: pass`. **404 is deliberately
+>   excepted** — a pod that is not there is the outcome we wanted, and calling it unconfirmed would
+>   strand the lease retrying a `DELETE` that can never succeed.
+> - `release_confirmed` classifies through `lease_state.normalise_state`, so the reaper,
+>   `/connection` and release all read one table.
+> - `release_lease` now **acts** on the verdict: an unconfirmed teardown logs
+>   `metric=lease_release_unconfirmed` and **leaves the row unfinished** so the next sweep retries.
+>   Previously the row was marked released regardless, which is what made even an honest provider
+>   answer inert.
+>
+> **⚠️ The section's own decision is NOT implemented, and the gap is the one it predicted.** An
+> unconfirmed release leaves the row at its previous status, and both
+> `list_active_leases` (`status NOT IN ('released','failed') AND hourly_rate_cents > 0`) and
+> `count_active_managed_gpu_leases` (same predicate) still match it. **So the user who asked to
+> release keeps being charged and keeps burning one of their two managed slots** — verbatim the
+> failure this section says to decide against. `release_pending` as a distinct status, stopping
+> billing at the request, freeing the slot, and a retry set that is not `list_unfinished_leases` are
+> all still to build. **Acceptance criterion 16 is therefore only one-third met.**
 
 `LeaseManager.release_lease` swallows a provider teardown failure into
 `provider_result = {"warning": …}` (`lease_manager.py:801-802`) and then **unconditionally** marks the row
@@ -630,7 +740,32 @@ exposure is an operator problem, not theirs) and **free the concurrency slot**, 
 sweepable for teardown retry. That means the retry set cannot be `list_unfinished_leases` — it needs its
 own query.
 
-### Change 9 — SSH key lifecycle _(security prerequisite, ships before change 3)_
+### Change 9 — SSH key lifecycle _(security prerequisite, ships before change 3)_ — **SHIPPED**
+
+> **9(a) shipped** as `7aac22b` and is the one item in this document proven by a **direct adversarial
+> test rather than an inference.** The section below could only say "confirm the per-instance attach
+> is sufficient, then remove the account registration". Both halves were then measured:
+>
+> - **The per-instance attach alone works.** A real Vast GPU, reachable over SSH with the returned
+>   key, with the account key list at `GET /ssh/` returning `[]` before and after — verified as a
+>   genuine empty list, not an error masked as one.
+> - **The cross-tenant property itself, by cross-login.** Two instances on the **same** Vast operator
+>   account: key A → box A connected, key B → box B connected (the controls), and key A → box B
+>   **refused, `Permission denied (publickey)`**, as was B → A. Pre-`7aac22b` that would have
+>   connected. The exposure is closed, and closed for the stated reason.
+>
+> **9(b) shipped** as `f65dd47` (Prime) — a nullable `provider_key_id` column on `compute_leases`
+> (sqlite + Postgres, additive and guarded), the real key **id** returned from `acquire` instead of
+> the pod name, forwarded into `release`, and cleanup inside `acquire` when a launch fails after
+> registration. **Vast needs no key deletion any more**, because 9(a) removed the thing that was
+> leaking. The migration was later verified against a populated pre-existing database (36 lease rows,
+> 5 users), not only a fresh temp one.
+>
+> **Two caveats stay open.** Prime's `DELETE /ssh_keys/{id}` is **documentation-verified only, never
+> exercised against production**; it fails safe (swallowed, cannot block the pod delete), so a wrong
+> endpoint would leak silently. And the "acquired but the `create_lease` DB write failed" path calls
+> `provider.release(lease_id)` with no kwargs, so neither `provider_key_id` nor Lambda's
+> `ssh_key_name` reaches release there — pre-existing, not a regression.
 
 Two distinct problems. The first is a live cross-tenant exposure; the second is hygiene that becomes
 unbounded under cheapest-first.
@@ -729,6 +864,30 @@ Vendor-published signals are worth folding in where they exist and cost nothing 
 every offer it reads. `inet_down` matters more than it looks: pulling a 200 GB dataset at 50 Mbit instead
 of 5 Gbit is hours of GPU time billed for waiting. **But measured beats published** — vendor scores
 describe the host, our telemetry describes what actually happened to our leases.
+
+> **Measured 2026-08-01 (n=7 Vast launches, one session) — a threshold is not enough; rank on the
+> score.**
+>
+> | Selection                             | Launches | Never booted                 |
+> | ------------------------------------- | -------- | ---------------------------- |
+> | cheapest-first, no filter             | 4        | 1                            |
+> | `reliability >= 0.98`, then cheapest  | 2        | 1                            |
+> | **ranked by `reliability2` (0.9993)** | 1        | **0** — up in 50s, first try |
+>
+> A 0.98 **threshold did not help**: it admitted an offer that never booted. Ranking by the score
+> did. n is tiny — treat it as a direction, not a coefficient — but it argues for the score entering
+> the **ranking**, not just a floor, which is a stronger claim than this section currently makes.
+>
+> **This generalises past Vast: every provider publishes a quality signal and we discard all of
+> them.** Vast: `reliability2`, `inet_down`, `dlperf_per_dphtotal`. RunPod: `lowestPrice{ stockStatus }`
+> (see change 3 — all ten of its cheapest types are "Low"). The cheapest fix available today is to
+> **request the signals we already could and use them to order the fallback**, which needs none of
+> the boot-telemetry instrumentation below and would have prevented 3 of the 9 observed launch
+> failures. That is a smaller, earlier change than the rest of this section and should be split out.
+>
+> **One open risk, recorded not fixed:** Vast `actual_status=offline` maps to `stopped` → terminal in
+> our chain, so a healthy box reporting `offline` transiently would be reaped after two strikes. It
+> is unknown whether healthy boxes ever do; it needs a long observation of a running instance.
 
 ### Change 11 — pin the image, per provider
 
@@ -932,20 +1091,29 @@ are what actually bind.
 
 ## The bounds that remain
 
-Verified against the Atlas checkout at HEAD `7b0e9b6`, source-read (not a running deploy).
+**Updated 2026-08-01.** The July version of this table was source-read against Atlas HEAD `7b0e9b6`,
+not a running deploy. Five of its seven rows have since changed, and the ones marked _deployed_ were
+exercised against a live backend rather than inferred.
 
-| Bound                | Owner          | Fires when                        | Today                                       |
-| -------------------- | -------------- | --------------------------------- | ------------------------------------------- |
-| `hard_cap_cents`     | billing tick   | approved money is spent           | **column only, does not enforce** — ch. 1   |
-| Rolling window cap   | lease creation | cumulative spend hits the ceiling | **does not exist** — ch. 5                  |
-| Wallet exhaustion    | billing tick   | money actually runs out           | **works, but races** (`tick_once:152→:172`) |
-| Plan TTL (24h)       | billing sweep  | anything has run absurdly long    | **works** (`_release_stale_gpu_leases:303`) |
-| Explicit release     | agent/user     | asked                             | **works only if teardown succeeds** — ch. 8 |
-| Provisioning timeout | lease reaper   | a lease never boots               | **fires on every user lease** — ch. 0(a)    |
-| Heartbeat staleness  | lease reaper   | a booted lease stops reporting    | **will fire once 0(a) lands** — ch. 0(b)    |
+| Bound                | Owner          | Fires when                        | Today                                                                                                                             |
+| -------------------- | -------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `hard_cap_cents`     | billing tick   | approved money is spent           | **enforces** — ch. 1 shipped. $10 @ $6.99/h releases at 5160s vs 5150s theoretical                                                |
+| Per-lease budget     | lease creation | a caller states one               | **accepted** — ch. 2 shipped. `budget_cents`, clamped to the wallet, effective cap reported                                       |
+| Rolling window cap   | lease creation | cumulative spend hits the ceiling | **does not exist** — ch. 5. Release-and-reacquire is still unbounded                                                              |
+| Wallet exhaustion    | billing tick   | money actually runs out           | **works** _(deployed: wallet decremented in lockstep with `total_spent_cents`)_, **still races** — ch. 5                          |
+| Plan TTL (24h)       | billing sweep  | anything has run absurdly long    | **works** (`_release_stale_gpu_leases:303`)                                                                                       |
+| Explicit release     | agent/user     | asked                             | **honest now, but not acted on fully** — ch. 8 half shipped: an unconfirmed teardown keeps billing and keeps the concurrency slot |
+| Provisioning timeout | lease reaper   | a lease never boots               | **no longer fires on live user leases** — ch. 0(a) shipped _(deployed: `ready` at 788s)_                                          |
+| Heartbeat staleness  | lease reaper   | a booted lease stops reporting    | **scoped to leases holding a runner token** — ch. 0(b) shipped                                                                    |
+| Agent-spawn ceiling  | spawn path     | a spawn's budget is exhausted     | **was a flat $5 kill for every SKU; now sized to the spawn's own lifetime at the SKU rate** — `71dccba`                           |
 
 All server-side; none client-influenceable. Change 0 _removes_ two bounds from user leases, which is safe
 precisely because the others apply and necessary because they are bounds those leases cannot satisfy.
+
+**The gap that is now the sharpest.** Every bound above is per-lease. With the cap binding and budgets
+accepted, **change 5 is the only thing standing between "a run is bounded" and "a user is bounded"** — a
+$30 budget honoured twenty times is still $600, and the wallet clamp still double-authorises under
+concurrency. It was the least urgent item on this list in July and is the most urgent now.
 
 `COMPUTE_BILLING_TICK_SECONDS` defaults to 60 (`compute_billing_service.py:44`) and
 `FIRST_BILL_GRACE_SECONDS` is 30 (`:52`), so a budget can overrun by up to ~90s of rate (~$0.17 on an
@@ -1006,9 +1174,23 @@ creation stays in the workspace UI rather than becoming a fourth tool.
   GPU. `budget_cents` is now `int | None`; `None` sizes the ceiling to the spawn's own lifetime at the
   SKU rate, with a one-hour floor, and an explicitly chosen budget still binds. Only CPU spawns were ever
   safe, because they come out `funding=byok` at rate 0 and the tick skips them.
-- **Stale skill names in agent prompts.** `research.txt:353` and `ml.txt:192` name skills by directory
+- **Stale skill names in agent prompts.** `research.txt:357` and `ml.txt:193` name skills by directory
   rather than frontmatter `name` (`vllm` → `serving-llms-vllm`), so the agent is told it has skills it
-  cannot load. `skills/scholar-evaluation/SKILL.md` has no frontmatter at all.
+  cannot load. `skills/scholar-evaluation/SKILL.md` has no frontmatter at all. _(Still open at
+  2026-08-01; the line numbers moved from `:353`/`:192` when this branch edited the prompts —
+  re-verified, the defect itself is unchanged.)_
+- **`compute_status` no longer names capabilities the client lacks.** Recorded because it is the same
+  defect class one layer up, found by the same live testing. At a **zero wallet**,
+  `/api/compute/options` still reports managed providers — availability and affordability are
+  independent there — so the tool resolved `mode=managed`, told the agent to run GPU work through
+  managed compute, **and forbade the BYOK fallback**, while every acquire would return `402`. Fixed on
+  `feat/compute-guardrails` (`784633e`, then `05ef093f`): the guidance now says the client cannot
+  launch a managed lease at all, and separately that an empty wallet would be refused. `state.mode` is
+  deliberately unchanged — managed is genuinely configured; missing funds and a missing tool are not a
+  missing capability. **Known boundary:** a $0.01 wallet still gets the funded wording and would also
+  `402`. Only `balance === 0` is gated, because acquire needs one hour of the chosen SKU's rate and
+  rates span cents to dollars in a catalog the tool never sees, so any non-zero cutoff is a guess.
+  Fixing it properly means threading the cheapest rate through `/api/compute/options` — spec work.
 
 ## Out of scope
 
@@ -1085,6 +1267,14 @@ review, including an assertion that compared whole tool outputs and so passed ev
 collapsed to one string.
 
 ## Acceptance criteria
+
+> **Met as of 2026-08-01:** **0, 1, 2, 3, 4, 5, 9(a), 9(b), 15**, and criterion 25's ordering clause
+> (change 0 was its own work; changes 1 and 2 landed together). **Partly met: 16** — a release whose
+> teardown fails is no longer reported as clean and the row stays sweepable, but it does **not** stop
+> billing and does **not** free the concurrency slot. **Not met:** 6, 7, 8, 10, 11, 12, 13, 14, 17–24
+> — every one of which needs either the resolver, the quote endpoint, or a tool this client does not
+> have. Criteria are annotated here rather than deleted; a criterion that has passed is still the
+> thing that would catch a regression.
 
 0. A user lease survives past both `PROVISION_TIMEOUT_SECONDS` and `HEARTBEAT_STALE_SECONDS`; a
    runner-token lease is still reaped for heartbeat staleness; the reconcile pass persists
@@ -1165,9 +1355,27 @@ Labels in this document:
   build on.
 - **Not verified:** `compute:up`'s internal fetch→pick→estimate sequence. The Atlas CLI source is in
   neither repo; the commit chronology corroborates the shape but the sequence itself is inferred.
+- **Verified on a deployed build of `feat/compute-lease-prerequisites` (2026-08-01):** the whole
+  managed path, end to end, on **both** Vast and RunPod — `POST /leases` → the real background reaper
+  promoting within one sweep with NATed SSH coordinates → SSH into a real GPU → release, with the
+  instance confirmed gone at the provider. Plus: `GET /connection` returning the normalised
+  `state: "ready"`; a user lease `ready` and un-reaped at 788s on a wall clock; a double release
+  returning `409`; a zero wallet returning the structured `402`; the billing tick decrementing the
+  wallet in lockstep with `total_spent_cents`; and the change-1 premise (`grant.spent_cents` frozen
+  at the acquire debit while the lease accrued) observed in production **before** the fix. The
+  additive migration was applied to a populated pre-existing database, not a fresh one.
+  **Not covered by this label:** the concurrency cap (`429`) was never reached — the Vast SKU churn
+  meant a second simultaneous lease always `400`d first — and the two-strike terminal timing could
+  not be separated from sweep jitter. Detection was confirmed; the strike count was not.
 
 A source-read claim is not a deployed-behaviour claim. Confirm the money path against `pytest` before
 relying on it.
+
+**And a deploy is not a test either — it catches a third class.** The migration race, the `uvicorn`
+`PATH` fault, RunPod's `desiredStatus=RUNNING`-with-no-address, and Vast's never-404 were all invisible
+to both source-reading and `pytest`, and all four were found by running the thing. Two of the four were
+**pre-existing patterns this work merely exposed**, which is the argument for deploying before merging
+rather than after.
 
 **The money path is now confirmed**, in both directions. Against a running deployment: the billing tick
 charges the wallet correctly (34¢/hr decrementing in lockstep with `total_spent_cents`) while
