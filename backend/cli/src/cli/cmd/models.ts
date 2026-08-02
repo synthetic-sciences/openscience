@@ -1,4 +1,5 @@
 import type { Argv } from "yargs"
+import { Auth } from "../../auth"
 import { Instance } from "../../project/instance"
 import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
@@ -30,7 +31,7 @@ const PROVIDER_LABELS: Record<string, string> = {
  *
  *  Detection rules:
  *  - openai-codex routes via OAuth (Sign in with ChatGPT), neither.
- *  - key starts with "thk_" → managed (the proxy thumbprint Atlas hands
+ *  - Auth.isAtlasApiKey(key) → managed (the proxy thumbprint Atlas hands
  *    out on /api/cli/sync when the user has no BYOK key set).
  *  - options.baseURL points at Atlas (/api/llm/proxy/) → managed.
  *  - anything else with a key → BYOK.
@@ -45,7 +46,9 @@ function routingLabel(providerID: string, provider: Provider.Info): string {
   // demo sentinel is not a real credential.
   const effective = Provider.effectiveKey(provider)
   const baseURL = (provider.options?.baseURL as string | undefined) ?? ""
-  if ((effective ?? "").toLowerCase().startsWith("thk_")) return "managed"
+  if (Auth.isAtlasApiKey(effective)) return "managed"
+  // Kept as a separate signal: a stale synced ANTHROPIC_BASE_URL can point at
+  // the Atlas proxy while the key itself is not a thk_ token.
   if (baseURL.includes("/api/llm/proxy/")) return "managed"
   // A config-registered local endpoint stores its key under options.apiKey (not
   // provider.key), so it would otherwise read as "unconfigured".
