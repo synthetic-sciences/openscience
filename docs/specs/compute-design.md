@@ -516,11 +516,32 @@ commits, which is right for attribution — but shipping change 1 by itself _is_
 regression to every existing caller, because the default-grant fix lives here in change 2. **Changes 1
 and 2 land together**, in that order, with criterion 4 gating the pair. Change 0 remains its own commit.
 
-### Change 3 — resolve the cheapest SKU from requirements _(mandatory)_
+### Change 3 — resolve the cheapest SKU from requirements _(mandatory)_ — **SHIPPED**
 
 Accept `{gpu, count, max_hourly_cents?}` in place of an explicit `sku`; rank **every** operator provider's
 options by `price_cents_per_hour_display` — the funding-adjusted rate, not the raw one; lease the cheapest
 match in the same request. Explicit `provider`/`sku` continues to work for the dashboard and the CLI.
+
+> **Shipped 2026-08-02** on `feat/compute-lease-prerequisites`, built as
+> `docs/plans/2026-08-02-compute-resolver.md` (four tasks: cache, GPU map, resolver, retry). Suite
+> 1908 passed / 1 skipped, no network. Three things below turned out differently in the building, and
+> the code is right where it disagrees with the prose:
+>
+> - **The retry does not read the provider's message**, though the section below says it must. It
+>   excludes every `(provider, sku)` already refused and re-resolves against a fresh catalog. That
+>   gets both providers right with one rule: RunPod's stable type id is excluded, so a no-capacity
+>   type is never retried, and Vast's requirement is genuinely re-resolved against ids that did not
+>   exist a moment ago. It also cannot rot when a provider rewrites its error prose — which the
+>   message-matching design would have depended on. **Do not "restore" the message matching.**
+> - **Ranking on the display rate alone was wrong for BYOK.** Every BYOK row displays `0`, so the
+>   ranking collapsed past its first key to alphabetical order by provider — leasing a $9.00/h box
+>   over a $3.00/h one and reporting nothing, because on BYOK Atlas bills neither. The rank key is
+>   now `(display, raw, provider, sku)`. Ordering on the managed path is unchanged, since display
+>   tracks raw there. `max_hourly_cents` still bounds the display price, and therefore **still
+>   excludes nothing on BYOK** — the user's own provider bill is not a number Atlas can cap.
+> - **Ranking is cheapest outright, not cheapest above a reliability floor.** The floor belongs to
+>   change 10, which has not shipped. The signals are real and were deliberately left out: the one
+>   stability heuristic this project tried was falsified prospectively (below).
 
 **`count > 1` is thinner than the catalog size suggests.** RunPod hardcodes `"gpu": 1` in its options and
 `"gpuCount": 1` on acquire (`runpod_provider.py:124`, `:156`), Vast dedups to one row per
@@ -549,6 +570,26 @@ mis-mapped card is a wrong machine at the wrong price, silently.
 
 This taxonomy is the one a comparable aggregator settled on, which is a reasonable signal that it is the
 right granularity rather than over-specification.
+
+> **Shipped as `backend/app/compute/gpu_models.py`** — `canonical(name, *, gpu_ram_gb=None)`, a table of
+> literal strings, never a matcher. Every key was dumped from a live provider API on 2026-08-02, not
+> imagined. `RTX 6000 Ada`, `RTX A6000`, `RTX PRO 6000` and `RTX PRO 6000 WK` are four different cards
+> whose names contain each other and RunPod sells all four; `GH200 SXM` contains `H200`. Any substring or
+> prefix rule ranks a Grace Hopper superchip as an H200.
+>
+> **The taxonomy is narrower than what our providers actually sell — this is the open decision.** It
+> covers **37% of live Vast rows and 44% of RunPod's**. That is mostly the long tail of consumer cards
+> nobody would request, and unmapped rows are dropped rather than mis-ranked, so nothing is priced wrong.
+> But these are missing and priced today: **B300** (the top of RunPod's catalog), **MI300X**,
+> `RTX PRO 6000 MaxQ`, **GH200**, and the Ada/Ampere workstation line. A caller cannot reach any of them
+> through `{gpu, count}`; the explicit `provider`/`sku` path still can.
+>
+> **Prime Intellect is wholly unmappable, for a one-line reason.** Its `gpuType` carries memory but not
+> interconnect (`A100_40GB`), so its rows cannot be placed among the four A100 / three H100 ids. The offer
+> *does* carry a `socket` field (`PCIe` / `SXM4`) and `acquire` already forwards it — `list_options` just
+> never copies it onto the row. Surfacing it unlocks the whole provider.
+>
+> Widening is additive and needs no resolver change.
 
 **The retry is not optional here.** Vast supplies most of the catalog and its SKUs are ephemeral offer IDs,
 so the cheapest pick is usually the raciest one. On a provider `400`, re-resolve against a re-fetched
@@ -582,6 +623,10 @@ the resolver, not colour.
   stale offer means re-resolve the same requirement against a fresh catalog; no capacity means pick a
   **different** SKU. Retrying the same offer on a no-capacity error loops forever. A resolver that
   branches on status alone is wrong on one of the two providers.
+
+  _As shipped, the resolver reads neither message._ Excluding every already-refused `(provider, sku)`
+  and re-resolving against a fresh catalog satisfies both requirements at once, without depending on
+  provider prose. The measurement above stands; only the prescription changed.
 
 **Why RunPod runs out of capacity is a query bug, not a stale catalog.** `list_options` asks for
 `gpuTypes{ id, displayName, memoryInGb, lowestPrice{ uninterruptablePrice } }` — a **price list, not an

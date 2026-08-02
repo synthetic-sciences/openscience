@@ -1,5 +1,31 @@
 # Compute catalog cache and server-side resolver — implementation plan
 
+> **EXECUTED 2026-08-02** on `feat/compute-lease-prerequisites`. All four tasks shipped and reviewed;
+> full suite **1908 passed / 1 skipped**, no network. Commits: `8913be3` (cache), `f9c2da9` (GPU map),
+> `9e1664d` (resolver), `d888ba5` + `730ee82` (requirement path + retry), `cf9e7de` + `416c064` +
+> `bed63dc` + `fa429c6` (final-review fixes).
+>
+> **Two things this plan got wrong, both caught only by the whole-branch review:**
+>
+> 1. **Task 3's tie-break became a purchasing decision in Task 4.** Ranking on
+>    `price_cents_per_hour_display` alone is correct across funding paths but degenerate *within* BYOK,
+>    where every row displays `0` — the order collapsed to alphabetical by provider and leased a $9.00/h
+>    box over a $3.00/h one. Neither task was wrong alone. The key is now
+>    `(display, raw, provider, sku)`.
+> 2. **Task 4 charged a retry attempt for a candidate no provider ever saw.** A region-less Lambda offer
+>    is rejected locally, but it consumed one of three attempts plus a full catalog fan-out — and Lambda
+>    emits region-less rows precisely for the types it is out of capacity on, which are also its
+>    cheapest, so they sort first. Three of them ahead of a launchable offer returned 503 `no_capacity`
+>    while capacity sat in the list.
+>
+> **And one thing it prescribed that the implementation was right to refuse:** Task 4 Step 3 says to
+> discriminate the two `400`s on the provider's message. The implementation excludes already-refused
+> `(provider, sku)` pairs instead — one rule that satisfies both providers and cannot rot when a
+> provider rewrites its error prose. See `docs/specs/compute-design.md`, change 3.
+>
+> Deferred Minor findings, triaged by the final review, are in the ledger at
+> `.superpowers/sdd/2026-08-02-compute-resolver/progress.md` (gitignored).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement
 > this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
