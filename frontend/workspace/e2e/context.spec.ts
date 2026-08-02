@@ -1,5 +1,19 @@
 import { test, expect } from "./fixtures"
-import { promptSelector } from "./utils"
+import { openSettings } from "./utils"
+
+async function setTrace(page: Parameters<typeof openSettings>[0], enabled: boolean) {
+  const dialog = await openSettings(page)
+  await dialog.getByRole("button", { name: "General", exact: true }).click()
+
+  const trace = dialog.getByRole("switch", { name: "Show Trace", exact: true })
+  if ((await trace.isChecked()) !== enabled) {
+    await trace.locator("..").locator('[data-slot="switch-control"]').click()
+  }
+
+  if (enabled) await expect(trace).toBeChecked()
+  if (!enabled) await expect(trace).not.toBeChecked()
+  await dialog.getByRole("button", { name: "Close" }).click()
+}
 
 test("observable session context opens in the local trace", async ({ page, sdk, gotoSession }) => {
   const title = `e2e smoke context ${Date.now()}`
@@ -36,6 +50,8 @@ test("observable session context opens in the local trace", async ({ page, sdk, 
 
     await gotoSession(sessionID)
 
+    await expect(page.getByRole("button", { name: "Open session trace", exact: true })).toHaveCount(0)
+    await setTrace(page, true)
     await page.getByRole("button", { name: "Open session trace", exact: true }).click()
 
     const trace = page.getByRole("region", { name: "Session trace", exact: true })
@@ -44,6 +60,7 @@ test("observable session context opens in the local trace", async ({ page, sdk, 
     await expect(trace.getByText("first output", { exact: true })).toBeVisible()
     await expect(trace.getByText("Observable activity", { exact: true })).toBeVisible()
   } finally {
+    await setTrace(page, false).catch(() => undefined)
     await sdk.session.delete({ sessionID }).catch(() => undefined)
   }
 })
