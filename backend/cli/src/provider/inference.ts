@@ -35,6 +35,11 @@ export namespace Inference {
     if (input.providerID === "openrouter" && input.billing === "managed") return "managed"
     if (input.auth === "oauth") return "oauth"
     if (input.auth === "api" || input.auth === "wellknown") return "byok"
+    // Auto-detect (billing unset) never sets `billing === "managed"` above, but a
+    // synced thk_ token with no own key still genuinely routes through the Atlas
+    // proxy — provider.source already says "managed" (provider.ts's openrouter
+    // loader), so trust it here too instead of falling through to "unknown".
+    if (input.providerSource === "managed") return "managed"
     if (input.providerSource === "env" || input.providerSource === "config" || input.providerSource === "api") {
       return "byok"
     }

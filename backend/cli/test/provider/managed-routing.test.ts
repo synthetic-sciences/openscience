@@ -23,6 +23,7 @@ mock.module("@gitlab/openscience-gitlab-auth", () => ({ default: mockPlugin }))
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
+import { Inference } from "../../src/provider/inference"
 import { Env } from "../../src/env"
 import { Auth } from "../../src/auth"
 import { API_BASE } from "../../src/openscience"
@@ -397,7 +398,16 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
 
   test("byok: a stored own key routes to public OpenRouter and reports source \"api\" (regression guard for 1c)", async () => {
     await withOpenRouterOwnKey("sk-or-own-key", async () => {
-      await using tmp = await tmpdir({ config: { billing: { llm: "byok" } } })
+      // config.provider.openrouter must be genuinely present (here, via a
+      // synced whitelist) for this to actually exercise 1c — otherwise the
+      // "load config" loop never iterates openrouter at all and this test
+      // would pass even without the 1c fix.
+      await using tmp = await tmpdir({
+        config: {
+          billing: { llm: "byok" },
+          provider: { openrouter: { whitelist: ["anthropic/claude-sonnet-5"] } },
+        },
+      })
       await Instance.provide({
         directory: tmp.path,
         init: async () => {
@@ -432,6 +442,33 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
           expect(openrouter.source).toBe("api")
         },
       })
+    })
+  })
+
+  test("auto-detect (billing.llm unset) with a synced thk_ token and no own key genuinely IS managed — source \"managed\" and Inference.classify \"managed\", not \"unknown\"", async () => {
+    await using tmp = await tmpdir({ config: {} })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+        Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const openrouter = (await Provider.list())["openrouter"]
+        expect(openrouter).toBeDefined()
+        expect(openrouter.options.apiKey).toBe("thk_openrouter")
+        expect(openrouter.options.baseURL).toBe(`${PROXY}/openrouter/v1`)
+        expect(openrouter.source).toBe("managed")
+
+        // Feed the REAL provider.source this fixture produced straight into
+        // classify — not Inference.resolve(), whose baseURL fallback would
+        // resolve through this test harness's loopback OPENSCIENCE_API_BASE
+        // (test/preload.ts) and get short-circuited by the unrelated
+        // local()-heuristic before ever reaching the providerSource check.
+        expect(Inference.classify({ providerID: "openrouter", providerSource: openrouter.source })).toBe("managed")
+      },
     })
   })
 
@@ -483,6 +520,38 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
         expect(anthropic.key).toBe("sk-ant-env-key")
         // The config entry only supplies a whitelist — the credential is genuinely env's.
         expect(anthropic.source).toBe("env")
+      },
+    })
+  })
+
+  test("1c (narrowed): an autoloaded custom-loader provider that also appears in config.provider (for its whitelist) still reports source \"config\", not \"custom\"", async () => {
+    // google-vertex autoloads off GOOGLE_CLOUD_PROJECT alone (no auth.json
+    // entry, and its models.dev `env` array — GOOGLE_VERTEX_PROJECT etc. —
+    // never matches, so the "load env" stage never registers it either).
+    // CUSTOM_LOADERS is the first and only stage to register it, with
+    // source "custom" — exactly the loader-assigned (not credential-derived)
+    // case 1c must keep overwriting to "config" when a config.provider entry
+    // exists, per the narrowed protected set (env/api/managed only).
+    await using tmp = await tmpdir({
+      config: {
+        provider: { "google-vertex": { whitelist: ["gemini-3.5-flash"] } },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
+        Provider.invalidate()
+      },
+      fn: async () => {
+        try {
+          const vertex = (await Provider.list())["google-vertex"]
+          expect(vertex).toBeDefined()
+          expect(vertex.source).toBe("config")
+        } finally {
+          Env.remove("GOOGLE_CLOUD_PROJECT")
+        }
       },
     })
   })

@@ -1546,12 +1546,18 @@ export namespace Provider {
 
     // load config
     for (const [providerID, provider] of configProviders) {
-      // A provider already registered by an earlier stage (env/api/custom/
-      // managed) genuinely got its credential from there — a `config.provider`
-      // entry that only supplies a `whitelist`, `name`, etc. must not relabel
-      // it as "config". Only claim "config" as the source when no earlier
-      // stage has registered this provider yet.
-      const partial: Partial<Info> = providers[providerID] ? {} : { source: "config" }
+      // A provider already registered by an earlier stage under a genuinely
+      // credential-derived source (env/api/managed) must not be relabeled —
+      // a `config.provider` entry that only supplies a `whitelist`, `name`,
+      // etc. is not where the credential came from. "custom" is excluded from
+      // this protection: it's loader-assigned (not credential-derived) and an
+      // autoloaded provider (AWS-profile Bedrock, google-vertex, synsci,
+      // cloudflare-ai-gateway, gitlab, sap-ai-core, ...) that also appears in
+      // config.provider for its whitelist has always been, and must stay,
+      // "config" here.
+      const credentialSource = providers[providerID]?.source
+      const claimed = credentialSource === "env" || credentialSource === "api" || credentialSource === "managed"
+      const partial: Partial<Info> = claimed ? {} : { source: "config" }
       if (provider.env) partial.env = provider.env
       if (provider.name) partial.name = provider.name
       if (provider.options) partial.options = provider.options

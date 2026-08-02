@@ -34192,7 +34192,8 @@
               "env",
               "config",
               "custom",
-              "api"
+              "api",
+              "managed"
             ]
           },
           "env": {
