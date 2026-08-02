@@ -9,7 +9,17 @@ import { commitBilling } from "./ManagedInference"
 // the SDK call and refreshProviders(), asserted on call order rather than
 // timing, so no live backend or SDK/globalSync mocking is needed.
 
-test("refreshes the provider catalog only after the write resolves and its data is applied", async () => {
+// A macrotask hop (setTimeout, not a bare microtask) a refresh stand-in must
+// cross before it's "done". An `async () => order.push(...)` stand-in with no
+// internal await runs its body synchronously the instant it's *called* —
+// whether or not the caller awaits the returned promise — so it can't tell a
+// real `await refresh()` apart from a dropped one; both produce the same
+// order array. Forcing a real event-loop turn here means the "refresh"
+// entry only lands if commitBilling's returned promise genuinely waited for
+// it, which is the actual property under test.
+const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+test("refreshes the provider catalog only after the write resolves and its data is applied, and does not resolve until refresh completes", async () => {
   const order: string[] = []
   const applied: number[] = []
 
@@ -23,6 +33,7 @@ test("refreshes the provider catalog only after the write resolves and its data 
       applied.push(data.llm.length)
     },
     async () => {
+      await tick()
       order.push("refresh")
     },
   )
@@ -71,4 +82,21 @@ test("propagates a write rejection without applying data or refreshing", async (
   await expect(rejection).rejects.toThrow("network down")
   expect(applyCalls).toBe(0)
   expect(refreshCalls).toBe(0)
+})
+
+test("propagates a refresh rejection to the caller instead of swallowing it", async () => {
+  // If commitBilling ever called refresh() without awaiting it, this
+  // rejection would never reach the caller's .catch(fail) — it would surface
+  // as an unhandled promise rejection instead, and commitBilling would
+  // resolve `true` as if the refresh had succeeded.
+  const rejection = commitBilling<{ llm: string }>(
+    async () => ({ data: { llm: "managed" } }),
+    () => {},
+    async () => {
+      await tick()
+      throw new Error("refresh failed")
+    },
+  )
+
+  await expect(rejection).rejects.toThrow("refresh failed")
 })
