@@ -17,7 +17,7 @@ const row = "model-settings-row flex w-full min-w-0 items-center justify-between
 export type InferenceSource = "managed" | "byok" | "chatgpt"
 
 const SOURCE_LABELS: Record<InferenceSource, string> = {
-  managed: "managed",
+  managed: "Atlas credits",
   byok: "BYOK",
   chatgpt: "Codex subscription",
 }
@@ -40,6 +40,11 @@ export function modelSummary(input: { reasoning: boolean; context: number; provi
  *
  * - `synsci*` providers exist only behind the managed Atlas seam.
  * - `openai-codex` exists only through a ChatGPT sign-in.
+ * - credential "managed" is `provider.source` reported straight from the
+ *   backend, which only sets it once a route is genuinely wallet-billed
+ *   (the gateway's managed-proxy branch, or a synced token with no own key
+ *   under auto-detect) — trust it outright, ahead of the gateway's
+ *   billing-only guess below, which predates that guarantee.
  * - credential "api" is a key the user stored in the local auth store, and the
  *   backend resolves an own key ahead of any managed route.
  * - every provider except the aggregated gateway is BYOK-only for env/config
@@ -51,11 +56,12 @@ export function modelSummary(input: { reasoning: boolean; context: number; provi
  */
 export function inferenceSource(input: {
   providerID: string
-  credential: "env" | "config" | "custom" | "api"
+  credential: "env" | "config" | "custom" | "api" | "managed"
   billing?: "managed" | "byok" | null
 }): InferenceSource | undefined {
   if (input.providerID.startsWith("synsci")) return "managed"
   if (input.providerID === "openai-codex") return "chatgpt"
+  if (input.credential === "managed") return "managed"
   if (input.credential === "api") return "byok"
   if (input.providerID === "openrouter") return input.billing === "byok" ? "byok" : undefined
   if (input.credential === "env" || input.credential === "config") return "byok"

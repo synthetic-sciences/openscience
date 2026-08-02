@@ -39,6 +39,12 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
     note: "set in openscience.json",
     title: "Custom provider supplied by openscience.json; edit that file to remove it",
   },
+  managed: {
+    label: "Managed by Atlas",
+    removable: false,
+    note: "billed to OpenScience credits",
+    title: "Routed through the Atlas managed proxy and billed to OpenScience credits",
+  },
 }
 
 export function ProviderKeys(props: { onError?: (error: string | undefined) => void }) {

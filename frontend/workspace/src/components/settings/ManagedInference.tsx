@@ -3,6 +3,7 @@ import { Button } from "@synsci/ui/button"
 import { For, Show, createSignal, onCleanup, onMount } from "solid-js"
 import { URLS } from "@/config/urls"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
 
@@ -36,6 +37,7 @@ const money = (value: number) => `$${value.toFixed(value >= 100 ? 0 : 2)}`
 
 export function ManagedInference(props: { onError?: (error: string | undefined) => void }) {
   const sdk = useGlobalSDK()
+  const globalSync = useGlobalSync()
   const platform = usePlatform()
   const [wallet, setWallet] = createSignal<Wallet>()
   const [billing, setBilling] = createSignal<SettingsBillingGetResponse>()
@@ -66,9 +68,13 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     props.onError?.(undefined)
     void sdk.client.settings.billing
       .update({ llm: value })
-      .then((result) => {
-        if (result.data) return setBilling(result.data)
-        fail("Couldn't save managed inference settings.")
+      .then(async (result) => {
+        if (!result.data) return fail("Couldn't save managed inference settings.")
+        setBilling(result.data)
+        // The config write (above) must land before this, or refreshProviders()
+        // re-reads the pre-switch state and the row below keeps showing the old
+        // route until a reload — the bug this call exists to close.
+        await globalSync.refreshProviders()
       })
       .catch(fail)
       .finally(() => setBusy(false))

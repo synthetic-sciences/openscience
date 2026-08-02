@@ -62,6 +62,13 @@ describe("inference source classification", () => {
     expect(subject.inferenceSource({ providerID: "openrouter", credential: "env", billing: "byok" })).toBe("byok")
     // OAuth subscriptions outside ChatGPT and config-defined custom providers stay unlabeled.
     expect(subject.inferenceSource({ providerID: "github-copilot", credential: "custom" })).toBeUndefined()
+    // provider.source itself now says "managed" once a route is genuinely wallet-billed
+    // (the gateway's managed-proxy branch, or a synced token with no own key under
+    // auto-detect) — trust it outright, regardless of the billing toggle's value.
+    expect(subject.inferenceSource({ providerID: "openrouter", credential: "managed" })).toBe("managed")
+    expect(subject.inferenceSource({ providerID: "openrouter", credential: "managed", billing: "managed" })).toBe(
+      "managed",
+    )
   })
 })
 
