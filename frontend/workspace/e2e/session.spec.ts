@@ -69,7 +69,11 @@ test("session lifecycle works through the sidebar UI", async ({ page, slug, sdk,
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${sessionID}(?:\\?|#|$)`))
 
     await renamedRow.hover()
-    const deleteButton = renamedRow.getByRole("button", { name: "delete session" })
+    const actions = renamedRow.getByRole("button", { name: "Session actions", exact: true })
+    await expect(actions).toBeVisible()
+    await actions.click()
+    await renamedRow.getByRole("menuitem", { name: "Delete", exact: true }).click()
+    const deleteButton = page.getByRole("button", { name: "delete session", exact: true })
     await expect(deleteButton).toBeVisible()
     const deleteResponsePromise = page.waitForResponse((response) => isSessionResponse(response, "DELETE", sessionID))
     await deleteButton.click()
@@ -88,6 +92,34 @@ test("session lifecycle works through the sidebar UI", async ({ page, slug, sdk,
     await expect
       .poll(async () => (await sdk.session.list()).data?.some((session) => session.id === sessionID) ?? false)
       .toBe(false)
+  } finally {
+    if (sessionID) await sdk.session.delete({ sessionID }).catch(() => undefined)
+  }
+})
+
+test("opening Compute from a new route creates a durable session and keeps the surface open", async ({
+  page,
+  slug,
+  sdk,
+  openSession,
+}) => {
+  let sessionID: string | undefined
+
+  try {
+    await openSession()
+    await page.getByRole("button", { name: "New research", exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`/${slug}/session/new(?:\\?|#|$)`))
+
+    const created = page.waitForResponse((response) => isSessionResponse(response, "POST"))
+    await page.getByRole("button", { name: "Open session compute", exact: true }).click()
+    const response = await created
+    const session = (await response.json()) as { id?: string }
+    if (!session.id) throw new Error("Compute session creation returned no id")
+    sessionID = session.id
+
+    await expect(page).toHaveURL(new RegExp(`/${slug}/session/${sessionID}(?:\\?|#|$)`))
+    await expect(page.getByRole("region", { name: "Compute", exact: true })).toBeVisible()
+    await expect(page.getByRole("tab", { name: "Kernels", exact: true })).toHaveAttribute("aria-selected", "true")
   } finally {
     if (sessionID) await sdk.session.delete({ sessionID }).catch(() => undefined)
   }

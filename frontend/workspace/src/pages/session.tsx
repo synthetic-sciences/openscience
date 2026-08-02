@@ -112,7 +112,7 @@ export default function Page(): JSX.Element {
   const dialog = useDialog()
   const trust = projectTrustApi(sdk.client)
   const [creating, setCreating] = createSignal(false)
-  const pending: { value?: Promise<string | undefined> } = {}
+  const pending: { value?: Promise<string | undefined>; context?: SessionContext } = {}
   const [mobileSessionsOpen, setMobileSessionsOpen] = createSignal(false)
   const [sessionsCollapsed, setSessionsCollapsed] = createSignal(readSessionSidebar())
   const [atlasConnected, setAtlasConnected] = createSignal(false)
@@ -141,6 +141,10 @@ export default function Page(): JSX.Element {
 
   async function ensureSession() {
     if (params.id && params.id !== "new") return params.id
+    const context = uiStore.context()
+    if ((["terminal", "files", "kernels"] as SessionContext[]).includes(context as SessionContext)) {
+      pending.context = context as SessionContext
+    }
     if (pending.value) return pending.value
     setCreating(true)
     const task = sdk.client.session
@@ -149,12 +153,18 @@ export default function Page(): JSX.Element {
         const data = res.data
         const id = data?.id
         if (!id) return
+        const context = pending.context
+        if (context) {
+          uiStore.activateScope(sdk.scope, id)
+          uiStore.openContext(context)
+        }
         navigate(`/${params.dir}/session/${id}`)
         return id
       })
       .catch(() => undefined)
       .finally(() => {
         pending.value = undefined
+        pending.context = undefined
         setCreating(false)
       })
     pending.value = task
@@ -1497,6 +1507,7 @@ function SessionRow(props: {
       class="session-sidebar__session"
       role="button"
       tabindex="0"
+      aria-label={props.session.title || "session"}
       data-active={props.active ? "true" : undefined}
       data-pinned={props.session.time?.pinned ? "true" : undefined}
       data-actions={hover() && !editing() ? "true" : undefined}

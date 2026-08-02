@@ -192,8 +192,10 @@ describe("focused workspace shell", () => {
 
     expect(session).toContain("openscience-session-sidebar-v1")
     expect(session).toContain("sync.session.pin(sessionID, pinned)")
+    expect(session).toContain('aria-label={props.session.title || "session"}')
     expect(session).toContain('data-pinned={props.session.time?.pinned ? "true" : undefined}')
     expect(session).toContain('title: "Delete this session?"')
+    expect(session).toContain("uiStore.activateScope(sdk.scope, id)")
     expect(styles).toContain('.session-sidebar[data-collapsed="true"]')
   })
 
