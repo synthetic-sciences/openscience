@@ -628,6 +628,36 @@ the resolver, not colour.
   and re-resolving against a fresh catalog satisfies both requirements at once, without depending on
   provider prose. The measurement above stands; only the prescription changed.
 
+#### Verified live 2026-08-02 — the resolver against real Vast and RunPod
+
+Three real leases through the real route, real provider keys, nothing faked below the HTTP boundary.
+
+- **The whole path works.** `{gpu: "RTX-3090", count: 1}` → resolved → leased in **5.1s** → `provisioning`
+  → `ready` with `ssh4.vast.ai` at **t+30s** via the reaper's promotion → `/connection` 200 with real
+  coordinates → released, `status: terminated` confirmed. Exactly one grant, no orphans, and zero
+  instances left under the operator key afterwards.
+- **The ranking is right on live data.** Across the 24 canonical models present in a live catalog, every
+  `resolve()` result was correctly ordered, with winners split across both providers.
+  `max_hourly_cents` is inclusive at the boundary and excludes one cent below it.
+- **Live coverage: 37% of Vast rows, 52% of RunPod's** — and the unmapped remainder is exactly the tail
+  the map is right to drop: `GTX 1060`, `Tesla P4`, `Titan Xp`, `Quadro P4000`, `RTX 3060 laptop`.
+- **`limit: 512` is a no-op — Vast caps every query at 64 offers.** Verified at limits 64 through 2000 and
+  with the key absent: always 64. So the catalog is 64 cheapest + 64 premium-name offers, deduped to ~65
+  rows. **"Cheapest" therefore means cheapest of a narrow window, not of Vast**; for a mid-tier card
+  there may be cheaper instances outside both windows. Pagination is the fix, and it is not built.
+- **Churn re-measured on raw offers: 36% survive 40 seconds** (128 → 128 offers, 47 stable), with deduped
+  rows tracking it at 35%. **Real offer death dominates.** A theory that the ~50% figure was mostly an
+  artifact of Atlas's cheapest-per-`(gpu_name, count)` dedup was tested and **refuted**: of 42 rows that
+  left the catalog, 35 were gone from Vast's raw response too. At most ~16% are dedup drops where the
+  offer is alive and merely out-ranked — an upper bound, since the two fetches were not simultaneous.
+  **The retry's premise stands.**
+- **The retry did not fire in any of the three launches.** First pick succeeded every time, including
+  against a deliberately staled cache. Not a disproof — it means first-pick success is common — but the
+  retry path is still unexercised against a real provider refusal.
+- **The 201 response never names the GPU.** It carries `provider` and `requested_sku` (an opaque Vast
+  offer id like `42093969`), but no model. A caller that asked for an `RTX-3090` cannot confirm from the
+  response that it got one. This blocks the OpenScience `compute_launch` tool from reporting honestly.
+
 **Why RunPod runs out of capacity is a query bug, not a stale catalog.** `list_options` asks for
 `gpuTypes{ id, displayName, memoryInGb, lowestPrice{ uninterruptablePrice } }` — a **price list, not an
 inventory**. `lowestPrice` is the cheapest anyone ever offered that model and says nothing about current
