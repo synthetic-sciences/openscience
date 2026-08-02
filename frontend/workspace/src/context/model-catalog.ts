@@ -130,10 +130,15 @@ export function isChatModel(model: CatalogModel): boolean {
 
 export function isUserProviderConnection(input: {
   providerID: string
-  source?: "env" | "config" | "custom" | "api"
+  source?: "env" | "config" | "custom" | "api" | "managed"
   billing?: "managed" | "byok" | null
 }): boolean {
   if (input.providerID !== "openrouter") return true
+  // A route the Atlas proxy is actually carrying now says so itself, and the
+  // panel labels it "Managed by Atlas". This filter exists to keep a row that
+  // would misdescribe who pays out of the list; a row that describes the
+  // managed route correctly is exactly what the reader came for.
+  if (input.source === "managed") return true
   if (input.source === "api") return true
   return input.billing === "byok"
 }

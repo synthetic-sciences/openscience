@@ -126,6 +126,14 @@ describe("frontier model canonicalization", () => {
     expect(isUserProviderConnection({ providerID: "anthropic", source: "env", billing: "managed" })).toBe(true)
   })
 
+  // The backend now reports the Atlas-proxied route as source "managed" rather
+  // than leaving it looking like a key the user brought, so the row describes
+  // itself honestly and belongs in the list.
+  test("a route the Atlas proxy carries is shown, because it now labels itself", () => {
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: "managed" })).toBe(true)
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: null })).toBe(true)
+  })
+
   test("stable Anthropic aliases win over dated duplicates", () => {
     const provider = { id: "anthropic" }
     const dated = { id: "claude-opus-4-5-20251101", provider }
