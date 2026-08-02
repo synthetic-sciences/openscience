@@ -117,14 +117,6 @@ export namespace Provider {
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
 
-  /** A managed Atlas wallet credential (`thk_*`), as opposed to a user-owned
-   *  (BYOK) key. Exported so callers outside this module (e.g. the auth.set
-   *  route deciding whether an added OpenRouter key should flip billing.llm
-   *  to "byok") can classify a key the same way provider routing does. */
-  export function isAtlasApiKey(key: unknown): key is string {
-    return typeof key === "string" && key.startsWith("thk_")
-  }
-
   const REMOVED_MODEL_IDS = new Set(["mistralai/mistral-small-3.2-24b-instruct"])
 
   function isRemovedModel(modelID: string) {
@@ -215,7 +207,7 @@ export namespace Provider {
     // proxy routing for it hard-failed every call with advice (`connect
     // sync`) that re-delivers the same env and can never fix it.
     const effective = effectiveKey(provider, options)
-    if (!isAtlasApiKey(effective)) return
+    if (!Auth.isAtlasApiKey(effective)) return
     if (isAtlasProxyBaseURL(options["baseURL"])) return
     throw new Error(
       `${provider.id} is using a managed Atlas key without an Atlas proxy URL. ` +
@@ -226,7 +218,7 @@ export namespace Provider {
   /** A user-owned (BYOK) key: a real, non-managed credential. Excludes the
    *  "public" sentinel used for the zero-cost openscience demo models. */
   function isByokKey(key: unknown): key is string {
-    return typeof key === "string" && key.length > 0 && key !== "public" && !isAtlasApiKey(key)
+    return typeof key === "string" && key.length > 0 && key !== "public" && !Auth.isAtlasApiKey(key)
   }
 
   /** The credential that actually authenticates a provider: an explicit apiKey
@@ -314,7 +306,7 @@ export namespace Provider {
   function pinByokToPublicEndpoint(provider: Info, options: Record<string, any>, publicURL?: string) {
     const effective = effectiveKey(provider, options)
     // Managed (thk_*) keys must keep their Atlas proxy routing.
-    if (isAtlasApiKey(effective)) return
+    if (Auth.isAtlasApiKey(effective)) return
     if (!isByokKey(effective)) return
     if (hasManagedProxyPath(options["baseURL"])) {
       log.warn("refusing to route BYOK key through Atlas proxy — pinning to public endpoint", {
@@ -639,7 +631,7 @@ export namespace Provider {
       // the session file is momentarily unreadable.
       const proxyBase = Env.get("OPENROUTER_BASE_URL")
       const session = await OpenScience.getSession().catch(() => null)
-      const managedKey = session?.api_key ?? (isAtlasApiKey(envKey) ? envKey : undefined)
+      const managedKey = session?.api_key ?? (Auth.isAtlasApiKey(envKey) ? envKey : undefined)
       if (managedKey) {
         const baseURL = isAtlasProxyBaseURL(proxyBase) ? proxyBase : managedOpenRouterBaseURL()
         return { autoload: false, options: { apiKey: managedKey, baseURL, headers }, source: "managed" }
@@ -1582,7 +1574,7 @@ export namespace Provider {
       // credential the user never brought. BYOK must use the user's OWN keys
       // only; auto-detect (billing unset) is left alone so a thk_ key can still
       // resolve to managed there.
-      if (config.billing?.llm === "byok" && isAtlasApiKey(effectiveKey(provider))) {
+      if (config.billing?.llm === "byok" && Auth.isAtlasApiKey(effectiveKey(provider))) {
         delete providers[providerID]
         continue
       }

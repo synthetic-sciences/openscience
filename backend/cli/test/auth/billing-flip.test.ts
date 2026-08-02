@@ -110,3 +110,19 @@ test("an OpenRouter key added while billing.llm is byok does not write the confi
 
   expect(await fs.readFile(file, "utf8")).toBe(seed)
 })
+
+test("an OpenRouter key added while the global config is malformed still persists the key and does not throw", async () => {
+  // A doubled trailing comma - jsonc-parser tolerates a single trailing
+  // comma (config.ts passes allowTrailingComma: true) but not two in a row -
+  // stands in for a hand-edited openscience.jsonc gone wrong. That makes
+  // Config.getGlobal() throw; the flip in Auth.set is wrapped in try/catch
+  // specifically so this doesn't take the key write down with it.
+  const file = path.join(Global.Path.config, "openscience.jsonc")
+  await fs.mkdir(Global.Path.config, { recursive: true })
+  await fs.writeFile(file, `{ "billing": { "llm": "managed" },, }`)
+  Config.global.reset()
+
+  await Auth.set("openrouter", { type: "api", key: "sk-or-user-owned-key" })
+
+  expect(await Auth.get("openrouter")).toEqual({ type: "api", key: "sk-or-user-owned-key" })
+})
