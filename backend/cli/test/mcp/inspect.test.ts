@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
+import { spawn } from "../fixture/spawn"
 
 test("inspect reports capabilities from a real local MCP server", async () => {
   await using tmp = await tmpdir()
@@ -38,7 +39,7 @@ process.exit(0)
 `,
   )
 
-  const proc = Bun.spawn([process.execPath, runner, tmp.path], {
+  const proc = spawn([process.execPath, runner, tmp.path], {
     cwd: tmp.path,
     stdout: "pipe",
     stderr: "pipe",
