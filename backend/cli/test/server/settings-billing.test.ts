@@ -2,12 +2,21 @@ import { test, expect, afterEach } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "../../src/global"
+import { Config } from "../../src/config/config"
 import { BillingSettingsRoutes } from "../../src/server/routes/settings/billing"
 
 const file = path.join(Global.Path.config, "openscience.json")
 
 afterEach(async () => {
   await fs.rm(file, { force: true }).catch(() => {})
+  // globalConfigFile() (config.ts) also considers .jsonc and config.json -
+  // remove those too so a stray one left behind by another test/file in the
+  // same `bun test` run never shadows the openscience.json this file always
+  // writes and reads directly, and reset the in-memory Config.global cache
+  // (a deleted file alone does not un-memoize it).
+  await fs.rm(path.join(Global.Path.config, "openscience.jsonc"), { force: true }).catch(() => {})
+  await fs.rm(path.join(Global.Path.config, "config.json"), { force: true }).catch(() => {})
+  Config.global.reset()
 })
 
 test("PUT persists the toggle without baking resolved secrets into the config file", async () => {

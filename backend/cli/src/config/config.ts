@@ -1611,6 +1611,28 @@ export namespace Config {
     }, input)
   }
 
+  /**
+   * Dispose every open project instance after a GLOBAL config write and
+   * announce it. Awaited (not fire-and-forget): the per-directory
+   * Config.state cache (config.ts's `state`, backed by Instance.state) is
+   * only invalidated by Instance.dispose()/disposeAll() — resetting the
+   * `global` lazy singleton above is not enough on its own for an
+   * already-instantiated project directory. Callers of setMcp/setProvider/
+   * setSandbox/unsetGlobal/updateGlobal/replaceGlobal rely on the write
+   * being visible to the very next Config.get(), not eventually-after-a-
+   * fire-and-forget-settles visible.
+   */
+  async function disposeGlobalInstances() {
+    await Instance.disposeAll().catch(() => undefined)
+    GlobalBus.emit("event", {
+      directory: "global",
+      payload: {
+        type: Event.Disposed.type,
+        properties: {},
+      },
+    })
+  }
+
   async function patchConfigPath(scope: Scope, target: string[], value: unknown) {
     const filepath = scope === "global" ? globalConfigFile() : projectConfigFile()
     const before = await Bun.file(filepath)
@@ -1631,17 +1653,7 @@ export namespace Config {
     const parsed = parseConfig(updated, filepath)
     global.reset()
     if (scope === "global") {
-      void Instance.disposeAll()
-        .catch(() => undefined)
-        .finally(() => {
-          GlobalBus.emit("event", {
-            directory: "global",
-            payload: {
-              type: Event.Disposed.type,
-              properties: {},
-            },
-          })
-        })
+      await disposeGlobalInstances()
     } else {
       await Instance.dispose()
     }
@@ -1728,17 +1740,7 @@ export namespace Config {
     await fs.mkdir(path.dirname(filepath), { recursive: true })
     await Bun.write(filepath, content)
     global.reset()
-    void Instance.disposeAll()
-      .catch(() => undefined)
-      .finally(() => {
-        GlobalBus.emit("event", {
-          directory: "global",
-          payload: {
-            type: Event.Disposed.type,
-            properties: {},
-          },
-        })
-      })
+    await disposeGlobalInstances()
     return parsed
   }
 
@@ -1800,18 +1802,7 @@ export namespace Config {
     })()
 
     global.reset()
-
-    void Instance.disposeAll()
-      .catch(() => undefined)
-      .finally(() => {
-        GlobalBus.emit("event", {
-          directory: "global",
-          payload: {
-            type: Event.Disposed.type,
-            properties: {},
-          },
-        })
-      })
+    await disposeGlobalInstances()
 
     return next
   }

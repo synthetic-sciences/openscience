@@ -25,6 +25,12 @@ process.env["XDG_DATA_HOME"] = path.join(dir, "share")
 process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
+// global/index.ts prefers OPENSCIENCE_CONFIG_DIR over XDG_CONFIG_HOME
+// (Global.Path.config). A developer with that override set in their own
+// shell (e.g. `export OPENSCIENCE_CONFIG_DIR=~/.config/openscience`) would
+// otherwise have tests read AND write their real config directory instead
+// of the isolated one above - delete it so XDG_CONFIG_HOME always wins here.
+delete process.env["OPENSCIENCE_CONFIG_DIR"]
 // The Atlas CLI does not use XDG_CONFIG_HOME for this override; OpenScience's
 // session writer otherwise falls back to the real ~/.config/atlas-cli path.
 // Keep the companion CLI credential inside the same throwaway test sandbox.

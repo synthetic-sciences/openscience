@@ -4,7 +4,6 @@ import z from "zod"
 import { Config } from "../../../config/config"
 import { OpenScience } from "../../../openscience"
 import { Provider } from "../../../provider/provider"
-import { Instance } from "../../../project/instance"
 import { lazy } from "../../../util/lazy"
 import { Log } from "../../../util/log"
 
@@ -76,16 +75,14 @@ export const BillingSettingsRoutes = lazy(() =>
         // Persist only the delta. updateGlobal deep-merges into the raw file;
         // writing back Config.getGlobal() would bake resolved {env:}/{file:}
         // secrets into openscience.json in plaintext.
+        // Config.updateGlobal awaits its own per-directory config-cache
+        // invalidation (Instance.disposeAll()) before returning, so the new
+        // billing.llm is already visible to the next Config.get() by the
+        // time this line completes — no separate disposeAll() call needed
+        // here (see config.ts's disposeGlobalInstances).
         await Config.updateGlobal({ billing: patch })
         log.info("update", { keys: Object.keys(patch) })
 
-        // Config.updateGlobal() busts its own per-directory config cache via
-        // Instance.disposeAll(), but fires it without awaiting — an
-        // already-instantiated project directory (any open session) can
-        // still read the pre-write Config.state cache for a request that
-        // lands before that disposal settles. Await it here so the toggle
-        // is guaranteed visible to the very next request, not just usually.
-        await Instance.disposeAll()
         // Provider.state() separately memoizes the resolved provider/SDK map
         // and never re-reads Config on its own; drop it so the next
         // Provider.list()/getModel() call rebuilds under the new mode.
@@ -103,6 +100,18 @@ export const BillingSettingsRoutes = lazy(() =>
           await OpenScience.syncServices().catch((e) =>
             log.warn("resync after billing change failed", { error: e instanceof Error ? e.message : String(e) }),
           )
+          // syncServices() (openscience/index.ts) writes fresh credentials
+          // into process.env (e.g. OPENROUTER_API_KEY / OPENROUTER_BASE_URL)
+          // - invalidate() exists specifically to pick up env a background
+          // sync just wrote, so it must run again AFTER this, not just
+          // before. Without this second call, a Provider.list() that lands
+          // between the two calls above and this point (e.g. the frontend's
+          // global.disposed listener re-fetching providers while this
+          // request is still awaiting the Atlas round-trip) rebuilds and
+          // re-memoizes the cache from the PRE-sync env, and the synced
+          // credential is invisible until another auth.set, another billing
+          // PUT, or a restart.
+          Provider.invalidate()
         }
         return c.json(await readState())
       },

@@ -14,7 +14,6 @@ import { AtlasBridgeRoutes } from "./routes/atlas-bridge"
 import { RepoRoutes } from "./routes/repo"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { Config } from "../config/config"
 import { NamedError } from "@synsci/util/error"
 import { LSP } from "../lsp"
 import { Format } from "../format"
@@ -226,30 +225,12 @@ export namespace Server {
             const providerID = c.req.valid("param").providerID
             const info = c.req.valid("json")
             await Auth.set(providerID, info)
-
-            // Adding a real (non-Atlas) OpenRouter key while Managed spend is
-            // on means the user is bringing their own key - flip the toggle
-            // to Own keys so the added key actually wins routing immediately,
-            // instead of sitting unused behind the managed route until the
-            // user finds the Settings toggle. Server-side (not the Settings
-            // UI) so `openscience auth login` gets the same behaviour as the
-            // browser flow. A `thk_` Atlas token is never "own key" material
-            // and must not flip the mode.
-            if (providerID === "openrouter" && info.type === "api" && !Provider.isAtlasApiKey(info.key)) {
-              const cfg = await Config.getGlobal()
-              if (cfg.billing?.llm === "managed") {
-                await Config.updateGlobal({ billing: { llm: "byok" } })
-                // Config.updateGlobal's own cache-bust runs Instance.disposeAll()
-                // without awaiting it (see settings/billing.ts) - await it here
-                // too so the flipped mode is guaranteed visible to the very next
-                // request, not just usually.
-                await Instance.disposeAll()
-              }
-            }
-
             // Don't depend on the client remembering to call global.sync —
-            // stale provider state would keep serving the old credential (or
-            // the old billing mode, if the flip above ran).
+            // stale provider state would keep serving the old credential.
+            // (Auth.set itself flips billing.llm managed -> byok when a real
+            // OpenRouter key is added, so that mode change is covered too -
+            // see auth/index.ts. It's the one choke point this route and
+            // `openscience auth login` both go through.)
             Provider.invalidate()
             return c.json(true)
           },

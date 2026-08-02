@@ -1672,3 +1672,62 @@ describe("OPENSCIENCE_DISABLE_PROJECT_CONFIG", () => {
     }
   })
 })
+
+// A global config write must be visible to the very next Config.get(), even
+// for a project directory that was already instantiated before the write
+// (i.e. an open session, not a fresh process). Config.get() is backed by a
+// per-directory cache (config.ts's `state`, via Instance.state) that is only
+// invalidated by Instance.dispose()/disposeAll() - resetting the `global`
+// lazy singleton alone is not enough. The global-config writers used to fire
+// that disposal without awaiting it (`void Instance.disposeAll().catch(...)`),
+// so a caller who read Config.get() for a directory, then wrote global
+// config, then immediately read Config.get() again for the SAME directory,
+// could still observe the pre-write value. disposeGlobalInstances() now
+// awaits it.
+describe("global config writes are visible to the next Config.get()", () => {
+  async function cleanGlobalConfig() {
+    for (const name of ["openscience.jsonc", "openscience.json", "config.json"]) {
+      await fs.rm(path.join(Global.Path.config, name), { force: true }).catch(() => {})
+    }
+    Config.global.reset()
+  }
+
+  afterEach(cleanGlobalConfig)
+
+  test("Config.updateGlobal", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const before = await Config.get()
+        expect(before.billing?.llm).toBeUndefined()
+
+        // No sleep, no retry, no intervening await besides the write itself
+        // - this is the exact race: Instance.disposeAll() used to be fired
+        // without being awaited inside Config.updateGlobal, so the very
+        // next Config.get() for this SAME already-instantiated directory
+        // could still return the pre-write value.
+        await Config.updateGlobal({ billing: { llm: "managed" } })
+
+        const after = await Config.get()
+        expect(after.billing?.llm).toBe("managed")
+      },
+    })
+  })
+
+  test("Config.setSandbox (patchConfigPath's global branch, shared by setMcp/setProvider/unsetGlobal)", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const before = await Config.get()
+        expect(before.sandbox?.network).not.toBe("allow")
+
+        await Config.setSandbox({ network: "allow" })
+
+        const after = await Config.get()
+        expect(after.sandbox?.network).toBe("allow")
+      },
+    })
+  })
+})
