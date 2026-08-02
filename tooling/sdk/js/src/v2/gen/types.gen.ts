@@ -826,6 +826,7 @@ export type Session = {
     updated: number
     compacting?: number
     archived?: number
+    pinned?: number
   }
   permission?: PermissionRuleset
   revert?: {
@@ -2416,6 +2417,10 @@ export type GlobalHealthResponse = GlobalHealthResponses[keyof GlobalHealthRespo
 export type GlobalProjectCreateData = {
   body?: {
     name: string
+    sources?: Array<{
+      path: string
+      access?: "read" | "write"
+    }>
   }
   path?: never
   query?: never
@@ -5226,6 +5231,29 @@ export type SettingsWalletGetResponses = {
 
 export type SettingsWalletGetResponse = SettingsWalletGetResponses[keyof SettingsWalletGetResponses]
 
+export type SettingsUpdatesCheckData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/updates"
+}
+
+export type SettingsUpdatesCheckResponses = {
+  /**
+   * Current and latest package versions
+   */
+  200: {
+    current: string
+    latest: string
+    channel: string
+    method: string
+    updateAvailable: boolean
+    releaseNotes: string
+  }
+}
+
+export type SettingsUpdatesCheckResponse = SettingsUpdatesCheckResponses[keyof SettingsUpdatesCheckResponses]
+
 export type AuthRemoveData = {
   body?: never
   path: {
@@ -6144,6 +6172,7 @@ export type SessionUpdateData = {
     title?: string
     time?: {
       archived?: number
+      pinned?: number
     }
   }
   path: {

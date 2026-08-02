@@ -135,7 +135,7 @@ export const StorageRoutes = lazy(() =>
       "/location",
       describeRoute({
         summary: "Reset data location",
-        description: "Remove the data-location pointer so the default location is used on next launch.",
+        description: "Remove the data-location pointer so ~/.openscience is used on next launch.",
         operationId: "settings.storage.resetLocation",
         responses: {
           200: {

@@ -322,6 +322,29 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
         },
+        pin: async (sessionID: string, pinned: boolean) => {
+          const client = sdk.client
+          const [, setStore] = child()
+          const value = pinned ? Date.now() : 0
+          const previous: { value?: number } = {}
+          setStore(
+            produce((draft) => {
+              const match = Binary.search(draft.session, sessionID, (session) => session.id)
+              if (!match.found) return
+              previous.value = draft.session[match.index].time.pinned
+              draft.session[match.index].time.pinned = value || undefined
+            }),
+          )
+          await client.session.update({ sessionID, time: { pinned: value } }).catch((error) => {
+            setStore(
+              produce((draft) => {
+                const match = Binary.search(draft.session, sessionID, (session) => session.id)
+                if (match.found) draft.session[match.index].time.pinned = previous.value
+              }),
+            )
+            throw error
+          })
+        },
         rename: async (sessionID: string, title: string) => {
           const client = sdk.client
           const [, setStore] = child()

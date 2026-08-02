@@ -7,8 +7,9 @@ import "@/atlas/ComputeSurface.css"
 type Tab = "kernels" | "jobs"
 
 type ComputeSurfaceProps = {
-  kernels?: Component
-  jobs?: Component
+  kernels?: Component<{ onEnsureSession?: () => Promise<string | undefined> }>
+  jobs?: Component<{ onEnsureSession?: () => Promise<string | undefined> }>
+  onEnsureSession?: () => Promise<string | undefined>
 }
 
 const tabs = [
@@ -84,7 +85,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
             aria-labelledby={`${id}-kernels-tab`}
             tabindex={0}
           >
-            <Dynamic component={kernels} />
+            <Dynamic component={kernels} onEnsureSession={props.onEnsureSession} />
           </div>
         </Match>
         <Match when={tab() === "jobs"}>
@@ -95,7 +96,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
             aria-labelledby={`${id}-jobs-tab`}
             tabindex={0}
           >
-            <Dynamic component={jobs} />
+            <Dynamic component={jobs} onEnsureSession={props.onEnsureSession} />
           </div>
         </Match>
       </Switch>

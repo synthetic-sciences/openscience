@@ -100,4 +100,12 @@ describe("compute jobs surface", () => {
     expect(source).toContain('job().target.kind === "local"')
     expect(source).toContain("Remote dispatch is unavailable")
   })
+
+  test("materializes a new session before opening or dispatching a job and polls only while active", () => {
+    expect(source).toContain("props.onEnsureSession?.()")
+    expect(source).toContain("const sessionID = await ensureSession()")
+    expect(source).toContain("if (active() === 0) return")
+    expect(source).toContain("setInterval")
+    expect(source).not.toContain("Save the session before starting")
+  })
 })

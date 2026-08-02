@@ -3,6 +3,7 @@ import { readFileSync, existsSync, renameSync } from "fs"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
+import { resolveDataDirectory } from "./data-dir"
 
 const app = "openscience"
 
@@ -53,21 +54,24 @@ const config = override("OPENSCIENCE_CONFIG_DIR") ?? migrateDir(xdgConfig!)
 const state = migrateDir(xdgState!)
 
 // The data directory can be relocated from settings ▸ Storage. When a pointer
-// file exists (config/data-location) we honour it; otherwise the XDG default.
-// Read synchronously at boot so every Global.Path.data consumer sees one value.
-function resolveDataDir(): string {
-  const explicit = override("OPENSCIENCE_DATA_DIR")
-  if (explicit) return explicit
-  const fallback = migrateDir(xdgData!)
+// file exists (config/data-location) we honour it; otherwise ~/.openscience.
+// Resolve once at boot so every Global.Path.data consumer sees one value.
+const explicit = override("OPENSCIENCE_DATA_DIR")
+const pointer = (() => {
   try {
-    const pointer = readFileSync(path.join(config, "data-location"), "utf8").trim()
-    return pointer ? path.resolve(pointer) : fallback
+    return readFileSync(path.join(config, "data-location"), "utf8").trim() || undefined
   } catch {
-    return fallback
+    return
   }
-}
-
-const data = resolveDataDir()
+})()
+const resolved = await resolveDataDirectory({
+  home: process.env.OPENSCIENCE_TEST_HOME || os.homedir(),
+  legacy: migrateDir(xdgData!),
+  explicit,
+  pointer,
+})
+const data = resolved.path
+if (resolved.conflict) detectedLegacyConflicts.push(resolved.conflict)
 
 // Legacy file names inside the migrated dirs (pre-rename releases).
 migrateFile(data, "synsci-session.json", "openscience-session.json")
@@ -77,6 +81,7 @@ migrateFile(config, "synsc.json", "openscience.json")
 
 export namespace Global {
   export const LegacyConflicts = detectedLegacyConflicts as readonly { legacy: string; current: string }[]
+  export const DataMigration = resolved
   export const Path = {
     // Allow override via OPENSCIENCE_TEST_HOME for test isolation
     get home() {

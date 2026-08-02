@@ -34,6 +34,7 @@ interface Skill {
 type Action = "allow" | "deny"
 type View = "list" | "scratch" | "github"
 type Source = "bundled" | "learned" | "installed"
+type SourceView = "all" | Source
 
 // The catalog draws from three origins; the badge is a real taxonomy, not
 // decoration. Derived from the skill's on-disk location (learned skills live in
@@ -51,6 +52,12 @@ const SOURCE_DOT: Record<Source, string> = {
   installed: "var(--color-text-interactive-base, var(--color-text))",
 }
 
+const SOURCE_LABEL: Record<Source, string> = {
+  bundled: "Bundled",
+  learned: "Personal",
+  installed: "Imported",
+}
+
 export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
   const sdk = useGlobalSDK()
   const platform = usePlatform()
@@ -63,6 +70,7 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
 
   const [search, setSearch] = createSignal("")
   const [category, setCategory] = createSignal("all")
+  const [source, setSource] = createSignal<SourceView>("all")
   const [view, setView] = createSignal<View>("list")
   const [busy, setBusy] = createSignal(false)
   let fileInput: HTMLInputElement | undefined
@@ -108,10 +116,22 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
     ]
   })
 
+  const sources = createMemo(() => {
+    const count = (value: Source) => all().filter((skill) => sourceOf(skill.location) === value).length
+    return [
+      { id: "all", label: "All sources", count: all().length },
+      { id: "bundled", label: "Bundled", count: count("bundled") },
+      { id: "installed", label: "Imported", count: count("installed") },
+      { id: "learned", label: "Personal", count: count("learned") },
+    ]
+  })
+
   const filtered = createMemo(() => {
     const q = search().trim().toLowerCase()
     const cat = category()
+    const origin = source()
     return all()
+      .filter((skill) => origin === "all" || sourceOf(skill.location) === origin)
       .filter((s) => cat === "all" || (s.category ?? "uncategorized") === cat)
       .filter((s) => !q || s.name.toLowerCase().includes(q) || (s.description ?? "").toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -153,6 +173,7 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
         <Show when={view() === "list"}>
           <div class="skills-workspace__toolbar">
             <Toolbar>
+              <FilterMenu options={sources()} value={source()} onSelect={(value) => setSource(value as SourceView)} />
               <FilterMenu options={categories()} value={category()} onSelect={setCategory} />
               <SearchInput value={search()} onInput={setSearch} placeholder="Search skills" />
               <AddMenu
@@ -252,7 +273,9 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
                   <div style={{ "padding-top": "36px" }}>
                     <EmptyState
                       icon="brain"
-                      title={search() || category() !== "all" ? "No matching skills" : "No skills yet"}
+                      title={
+                        search() || category() !== "all" || source() !== "all" ? "No matching skills" : "No skills yet"
+                      }
                       hint="Write one from scratch, upload a SKILL.md, or import from a public GitHub repo."
                     />
                   </div>
@@ -316,7 +339,7 @@ function SkillRow(props: { skill: Skill; on: boolean; onToggle: (v: boolean) => 
         <strong title={props.skill.name}>{props.skill.name}</strong>
         <span>
           <i style={{ background: SOURCE_DOT[source()] }} />
-          {source()}
+          {SOURCE_LABEL[source()]}
         </span>
       </div>
 

@@ -59,6 +59,8 @@ import {
   IconMoon,
   IconMessageSquare,
   IconMoreH,
+  IconPin,
+  IconPinFilled,
   IconX,
 } from "@/atlas/shared/Icon"
 import { StatusDot } from "@/atlas/shared/StatusDot"
@@ -79,6 +81,23 @@ type SyncSession = ReturnType<typeof useSync>["data"]["session"][number]
  * the unchanged openscience backend chat (SessionTurn rendering, PromptInput,
  * real SSE streaming, sub-task delegation, tool calls, TODOs, diff cards).
  */
+const sessionSidebarKey = "openscience-session-sidebar-v1"
+
+function readSessionSidebar() {
+  if (typeof localStorage === "undefined") return false
+  try {
+    return localStorage.getItem(sessionSidebarKey) === "collapsed"
+  } catch {
+    return false
+  }
+}
+
+function writeSessionSidebar(collapsed: boolean) {
+  try {
+    localStorage.setItem(sessionSidebarKey, collapsed ? "collapsed" : "expanded")
+  } catch {}
+}
+
 export default function Page(): JSX.Element {
   const params = useParams()
   const navigate = useNavigate()
@@ -93,7 +112,9 @@ export default function Page(): JSX.Element {
   const dialog = useDialog()
   const trust = projectTrustApi(sdk.client)
   const [creating, setCreating] = createSignal(false)
+  const pending: { value?: Promise<string | undefined> } = {}
   const [mobileSessionsOpen, setMobileSessionsOpen] = createSignal(false)
+  const [sessionsCollapsed, setSessionsCollapsed] = createSignal(readSessionSidebar())
   const [atlasConnected, setAtlasConnected] = createSignal(false)
   const sessionTabs = createSessionTabs()
 
@@ -119,32 +140,41 @@ export default function Page(): JSX.Element {
   }
 
   async function ensureSession() {
-    if (creating()) return
+    if (params.id && params.id !== "new") return params.id
+    if (pending.value) return pending.value
     setCreating(true)
-    try {
-      const res: any = await sdk.client.session.create()
-      const data = res?.data ?? res
-      const id = data?.id ?? data?.sessionID
-      if (id) {
+    const task = sdk.client.session
+      .create()
+      .then((res) => {
+        const data = res.data
+        const id = data?.id
+        if (!id) return
         navigate(`/${params.dir}/session/${id}`)
-        return id as string
-      } else {
-        navigate(`/${params.dir}/session/new`)
-      }
-    } catch {
-      navigate(`/${params.dir}/session/new`)
-    } finally {
-      setCreating(false)
-    }
+        return id
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        pending.value = undefined
+        setCreating(false)
+      })
+    pending.value = task
+    return task
   }
 
   const openContext = (context: SessionContext) => {
     uiStore.openContext(context)
-    if ((context !== "terminal" && context !== "files") || (params.id && params.id !== "new")) return
+    if (!(["terminal", "files", "kernels"] as SessionContext[]).includes(context)) return
     void ensureSession()
   }
 
   async function deleteSession(sessionID: string) {
+    const ok = await confirmDialog(dialog, {
+      title: "Delete this session?",
+      message: "This removes the conversation and its session-owned workspace. Saved artifacts stay available.",
+      confirmLabel: "delete session",
+      danger: true,
+    })
+    if (!ok) return
     // Capture the next-active id BEFORE the optimistic splice so we
     // know where to navigate.
     const active = params.id === sessionID
@@ -170,6 +200,18 @@ export default function Page(): JSX.Element {
       console.error("session.rename failed", e)
       toast.error("could not rename", e?.message ?? String(e))
     }
+  }
+
+  async function pinSession(sessionID: string, pinned: boolean) {
+    await sync.session.pin(sessionID, pinned).catch((error: unknown) => {
+      toast.error("could not update pin", error instanceof Error ? error.message : String(error))
+    })
+  }
+
+  function toggleSessions() {
+    const next = !sessionsCollapsed()
+    setSessionsCollapsed(next)
+    writeSessionSidebar(next)
   }
 
   // Force-load the session list into the sync store every time we land
@@ -231,7 +273,14 @@ export default function Page(): JSX.Element {
   }
   const projectPath = () => sdk.directory
   const sessions = createMemo<SyncSession[]>(() =>
-    [...sync.data.session].filter((s) => !s.parentID).sort((a, b) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0)),
+    [...sync.data.session]
+      .filter((s) => !s.parentID)
+      .sort(
+        (a, b) =>
+          Number(Boolean(b.time?.pinned)) - Number(Boolean(a.time?.pinned)) ||
+          (b.time?.pinned ?? 0) - (a.time?.pinned ?? 0) ||
+          (b.time?.updated ?? 0) - (a.time?.updated ?? 0),
+      ),
   )
 
   createComputed(
@@ -308,7 +357,19 @@ export default function Page(): JSX.Element {
       uiStore.openFile(projectPath(), path)
     }
     document.addEventListener("openscience:open-file", onOpenFile)
-    onCleanup(() => document.removeEventListener("openscience:open-file", onOpenFile))
+    const onOpenContext = (event: Event) => {
+      const context = (event as CustomEvent).detail?.context
+      if (!(["files", "terminal", "canvas", "kernels", "trace"] as SessionContext[]).includes(context)) return
+      openContext(context)
+    }
+    const onReview = () => void runReview()
+    document.addEventListener("openscience:open-context", onOpenContext)
+    document.addEventListener("openscience:run-review", onReview)
+    onCleanup(() => {
+      document.removeEventListener("openscience:open-file", onOpenFile)
+      document.removeEventListener("openscience:open-context", onOpenContext)
+      document.removeEventListener("openscience:run-review", onReview)
+    })
   })
   const turnMessages = createMemo(() => {
     const revertID = revertInfo()?.messageID
@@ -619,12 +680,14 @@ export default function Page(): JSX.Element {
           activeId={params.id}
           dirParam={params.dir ?? ""}
           creating={creating()}
+          collapsed={sessionsCollapsed()}
           mobileOpen={mobileSessionsOpen()}
           onNew={() => {
             setMobileSessionsOpen(false)
             newSession()
           }}
           onBack={() => navigate("/")}
+          onCollapse={toggleSessions}
           onSearch={() => {
             setMobileSessionsOpen(false)
             uiStore.setPaletteOpen(true)
@@ -648,6 +711,7 @@ export default function Page(): JSX.Element {
           }}
           onDelete={(id) => void deleteSession(id)}
           onRename={(id, title) => void renameSession(id, title)}
+          onPin={(id, pinned) => void pinSession(id, pinned)}
         />
 
         <div
@@ -954,7 +1018,7 @@ export default function Page(): JSX.Element {
           </div>
         </div>
 
-        <RightPane project={sdk.scope} session={params.id ?? "new"} />
+        <RightPane project={sdk.scope} session={params.id ?? "new"} onEnsureSession={ensureSession} />
       </div>
     </div>
   )
@@ -1294,9 +1358,11 @@ function SessionsSidebar(props: {
   activeId: string | undefined
   dirParam: string
   creating: boolean
+  collapsed: boolean
   mobileOpen: boolean
   onNew: () => void
   onBack: () => void
+  onCollapse: () => void
   onSearch: () => void
   onCustomize: () => void
   onContext: (context: SessionContext) => void
@@ -1307,17 +1373,28 @@ function SessionsSidebar(props: {
   onSelect: (id: string) => void
   onDelete: (id: string) => void
   onRename: (id: string, title: string) => void
+  onPin: (id: string, pinned: boolean) => void
 }): JSX.Element {
   return (
     <aside
       class="atlas-scroll session-sidebar"
       data-mobile-open={props.mobileOpen ? "true" : "false"}
+      data-collapsed={props.collapsed ? "true" : "false"}
       aria-label="Research sessions"
     >
       <div class="session-sidebar__top">
         <button type="button" class="session-sidebar__project" aria-label="Back to projects" onClick={props.onBack}>
           <IconChevronLeft size={13} strokeWidth={1.6} />
           <strong>{props.projectName}</strong>
+        </button>
+        <button
+          type="button"
+          class="session-sidebar__collapse"
+          aria-label={props.collapsed ? "Expand sessions sidebar" : "Collapse sessions sidebar"}
+          title={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={props.onCollapse}
+        >
+          <IconChevronLeft size={13} strokeWidth={1.6} />
         </button>
       </div>
 
@@ -1377,6 +1454,7 @@ function SessionsSidebar(props: {
               onSelect={() => props.onSelect(s.id)}
               onDelete={() => props.onDelete(s.id)}
               onRename={(title) => props.onRename(s.id, title)}
+              onPin={(pinned) => props.onPin(s.id, pinned)}
             />
           )}
         </For>
@@ -1394,8 +1472,10 @@ function SessionRow(props: {
   onSelect: () => void
   onDelete: () => void
   onRename: (title: string) => void
+  onPin: (pinned: boolean) => void
 }): JSX.Element {
   const [hover, setHover] = createSignal(false)
+  const [menu, setMenu] = createSignal(false)
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal("")
   const startEdit = () => {
@@ -1418,6 +1498,7 @@ function SessionRow(props: {
       role="button"
       tabindex="0"
       data-active={props.active ? "true" : undefined}
+      data-pinned={props.session.time?.pinned ? "true" : undefined}
       data-actions={hover() && !editing() ? "true" : undefined}
       onClick={() => {
         if (editing()) return
@@ -1438,11 +1519,18 @@ function SessionRow(props: {
       onMouseLeave={() => setHover(false)}
       onFocusIn={() => setHover(true)}
       onFocusOut={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHover(false)
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+        setHover(false)
+        setMenu(false)
       }}
       style={{ cursor: editing() ? "text" : "pointer" }}
     >
-      <StatusDot status={props.active ? "active" : "muted"} size={7} />
+      <Show
+        when={props.session.time?.pinned}
+        fallback={<StatusDot status={props.active ? "active" : "muted"} size={7} />}
+      >
+        <IconPinFilled size={10} strokeWidth={1.4} />
+      </Show>
       <Show
         when={editing()}
         fallback={
@@ -1478,12 +1566,14 @@ function SessionRow(props: {
           autocomplete="off"
         />
       </Show>
-      <Show when={hover() && !editing()}>
+      <Show when={(hover() || menu()) && !editing()}>
         <button
           type="button"
-          class="session-sidebar__session-delete"
-          title="delete session"
-          aria-label="delete session"
+          class="session-sidebar__session-menu-button"
+          title="Session actions"
+          aria-label="Session actions"
+          aria-haspopup="menu"
+          aria-expanded={menu()}
           onPointerDown={(e) => {
             // Stop pointerdown on the parent row before its own click
             // can fire — Solid runs the row's onClick first otherwise.
@@ -1492,11 +1582,50 @@ function SessionRow(props: {
           onClick={(e) => {
             e.stopPropagation()
             e.preventDefault()
-            props.onDelete()
+            setMenu((open) => !open)
           }}
         >
-          <IconTrash size={11} strokeWidth={1.5} />
+          <IconMoreH size={12} strokeWidth={1.5} />
         </button>
+      </Show>
+      <Show when={menu()}>
+        <div class="session-sidebar__session-menu" role="menu" onClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              props.onPin(!props.session.time?.pinned)
+              setMenu(false)
+            }}
+          >
+            <Show when={props.session.time?.pinned} fallback={<IconPin size={12} strokeWidth={1.5} />}>
+              <IconPinFilled size={12} strokeWidth={1.5} />
+            </Show>
+            {props.session.time?.pinned ? "Unpin" : "Pin"}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenu(false)
+              startEdit()
+            }}
+          >
+            Rename
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-danger="true"
+            onClick={() => {
+              setMenu(false)
+              props.onDelete()
+            }}
+          >
+            <IconTrash size={12} strokeWidth={1.5} />
+            Delete
+          </button>
+        </div>
       </Show>
     </div>
   )

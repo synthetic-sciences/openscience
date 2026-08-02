@@ -88,4 +88,13 @@ describe("kernel control room", () => {
     expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*box-shadow: none/s)
     expect(css).toMatch(/\.compute-surface \.kernel-card__metric\s*\{[^}]*min-height: 40px/s)
   })
+
+  test("materializes a new session and refreshes only while kernels are active", () => {
+    const panel = source()
+
+    expect(panel).toContain("props.onEnsureSession?.()")
+    expect(panel).toContain("const sessionID = await ensureSession()")
+    expect(panel).toContain("summary().running === 0 && summary().queued === 0")
+    expect(panel).not.toContain('disabled={!params.id || params.id === "new"')
+  })
 })

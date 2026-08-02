@@ -48,7 +48,7 @@
       "post": {
         "operationId": "global.project.create",
         "summary": "Create project",
-        "description": "Create an app-managed project with an opaque identity. The server owns its local root; clients provide a display name, never a host path.",
+        "description": "Create an app-managed project with an opaque identity and optional project-scoped access to source locations explicitly selected by the user. Source paths never become the project identity.",
         "responses": {
           "201": {
             "description": "Created project information",
@@ -79,6 +79,31 @@
                 "properties": {
                   "name": {
                     "type": "string"
+                  },
+                  "sources": {
+                    "default": [],
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "access": {
+                          "default": "write",
+                          "type": "string",
+                          "enum": [
+                            "read",
+                            "write"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -8774,6 +8799,59 @@
         ]
       }
     },
+    "/settings/updates": {
+      "get": {
+        "operationId": "settings.updates.check",
+        "summary": "Check for an OpenScience update",
+        "responses": {
+          "200": {
+            "description": "Current and latest package versions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "string"
+                    },
+                    "latest": {
+                      "type": "string"
+                    },
+                    "channel": {
+                      "type": "string"
+                    },
+                    "method": {
+                      "type": "string"
+                    },
+                    "updateAvailable": {
+                      "type": "boolean"
+                    },
+                    "releaseNotes": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "latest",
+                    "channel",
+                    "method",
+                    "updateAvailable",
+                    "releaseNotes"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.check({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/auth/{providerID}": {
       "put": {
         "operationId": "auth.set",
@@ -10827,6 +10905,9 @@
                     "type": "object",
                     "properties": {
                       "archived": {
+                        "type": "number"
+                      },
+                      "pinned": {
                         "type": "number"
                       }
                     }
@@ -30986,6 +31067,9 @@
                 "type": "number"
               },
               "archived": {
+                "type": "number"
+              },
+              "pinned": {
                 "type": "number"
               }
             },

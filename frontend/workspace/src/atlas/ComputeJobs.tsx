@@ -23,7 +23,7 @@ import {
 
 const terminal = new Set<Status>(["succeeded", "failed", "cancelled", "interrupted"])
 
-export function ComputeJobs(): JSX.Element {
+export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | undefined> } = {}): JSX.Element {
   const sdk = useSDK()
   const params = useParams()
   const api = createComputeJobsAPI(sdk.request)
@@ -60,11 +60,32 @@ export function ComputeJobs(): JSX.Element {
     if (!selected() || !list.some((job) => job.id === selected())) setSelected(list[0].id)
   })
 
-  const timer = setInterval(() => {
-    void jobsApi.refetch()
-    if (selected()) void outputApi.refetch()
-  }, 1_500)
-  onCleanup(() => clearInterval(timer))
+  createEffect(() => {
+    if (active() === 0) return
+    const timer = setInterval(() => {
+      void jobsApi.refetch()
+      if (selected() && current() && !terminal.has(current()!.status)) void outputApi.refetch()
+    }, 2_500)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  const ensureSession = async () => {
+    if (params.id && params.id !== "new") return params.id
+    return props.onEnsureSession?.()
+  }
+
+  const begin = async () => {
+    if (creating()) {
+      setCreating(false)
+      return
+    }
+    const id = await ensureSession()
+    if (!id) {
+      toast.error("job setup unavailable", "OpenScience could not create a session for this job.")
+      return
+    }
+    setCreating(true)
+  }
 
   const reset = () => {
     setName("")
@@ -109,9 +130,9 @@ export function ComputeJobs(): JSX.Element {
 
   const start = async () => {
     if (!ready()) return
-    const sessionID = params.id
-    if (!sessionID || sessionID === "new") {
-      toast.error("job did not start", "Save the session before starting a research job.")
+    const sessionID = await ensureSession()
+    if (!sessionID) {
+      toast.error("job did not start", "OpenScience could not create a session for this job.")
       return
     }
     if (!authority.allowed()) {
@@ -220,14 +241,10 @@ export function ComputeJobs(): JSX.Element {
             <IconRefresh size={15} />
           </Action>
           <Action
-            title={
-              params.id && params.id !== "new"
-                ? (authority.message() ?? "New job")
-                : "Save the session before starting a job"
-            }
+            title={creating() ? "Close job setup" : "New job"}
             active={creating()}
-            disabled={!params.id || params.id === "new" || !authority.allowed()}
-            onClick={() => setCreating((value) => !value)}
+            disabled={busy()}
+            onClick={() => void begin()}
           >
             <IconPlus size={16} />
           </Action>
@@ -453,9 +470,9 @@ export function ComputeJobs(): JSX.Element {
                 <button
                   type="button"
                   style={primaryButton}
-                  title={authority.message()}
-                  disabled={!authority.allowed()}
-                  onClick={() => setCreating(true)}
+                  title="Create a research job"
+                  disabled={busy()}
+                  onClick={() => void begin()}
                 >
                   Create first job
                 </button>

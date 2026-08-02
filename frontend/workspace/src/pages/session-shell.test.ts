@@ -186,6 +186,17 @@ describe("focused workspace shell", () => {
     expect(styles).toContain("font-size: 12px")
   })
 
+  test("persists sidebar collapse and session pin actions", () => {
+    const session = read("session.tsx")
+    const styles = read("../styles/atlas.css")
+
+    expect(session).toContain("openscience-session-sidebar-v1")
+    expect(session).toContain("sync.session.pin(sessionID, pinned)")
+    expect(session).toContain('data-pinned={props.session.time?.pinned ? "true" : undefined}')
+    expect(session).toContain('title: "Delete this session?"')
+    expect(styles).toContain('.session-sidebar[data-collapsed="true"]')
+  })
+
   test("keeps research tools in a route-owned contextual surface", () => {
     const pane = read("../atlas/RightPane.tsx")
 
@@ -200,9 +211,10 @@ describe("focused workspace shell", () => {
     expect(pane).toContain("<WorkTabStrip")
     expect(pane).not.toContain('class="research-inspector__tabs"')
     expect(pane).not.toContain('class="research-tool-rail"')
-    expect(pane).toContain("modal={narrow()}")
+    expect(pane).toContain("modal={narrow() || expanded()}")
     expect(pane).toContain("mobile={narrow()}")
     expect(pane).toContain("stacked={false}")
+    expect(pane).toContain('aria-label={expanded() ? "Restore inspector" : "Open inspector full screen"}')
     expect(pane).toContain("window.innerWidth < INLINE_PANE_BREAKPOINT")
     expect(pane).toContain("paneWidthForViewport(width(), viewport())")
   })

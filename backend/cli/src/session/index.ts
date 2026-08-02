@@ -34,10 +34,12 @@ export namespace Session {
   const childTitlePrefix = "Child session - "
 
   function createDefaultTitle(isChild = false) {
-    return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
+    if (!isChild) return "New session"
+    return childTitlePrefix + new Date().toISOString()
   }
 
   export function isDefaultTitle(title: string) {
+    if (title === "New session") return true
     return new RegExp(
       `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
     ).test(title)
@@ -80,6 +82,7 @@ export namespace Session {
         updated: z.number(),
         compacting: z.number().optional(),
         archived: z.number().optional(),
+        pinned: z.number().optional(),
       }),
       permission: PermissionNext.Ruleset.optional(),
       revert: z

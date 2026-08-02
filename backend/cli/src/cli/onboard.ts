@@ -230,6 +230,17 @@ export const DoctorCommand = cmd({
     prompts.log.info(`Cache root: ${Global.Path.cache}`)
     prompts.log.info(`State root: ${Global.Path.state}`)
 
+    if (Global.DataMigration.migrated) {
+      prompts.log.success(
+        `Data copied to ~/.openscience and verified (${Global.DataMigration.migrated.files} files). The previous XDG directory remains as a safety copy.`,
+      )
+    }
+    if (Global.DataMigration.error) {
+      prompts.log.warn(
+        `Data migration to ~/.openscience did not complete; OpenScience is still using the previous directory. ${Global.DataMigration.error}`,
+      )
+    }
+
     if (Global.LegacyConflicts.length) {
       prompts.log.warn(
         `Legacy data directories are ignored because current directories exist: ${Global.LegacyConflicts.map((item) => item.legacy).join(", ")}. Merge or remove them.`,

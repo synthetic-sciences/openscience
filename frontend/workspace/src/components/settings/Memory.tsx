@@ -182,10 +182,10 @@ export default function Memory() {
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
-          <h2 class="text-16-medium text-text-strong">Memory</h2>
+          <h2 class="text-16-medium text-text-strong">Research memory</h2>
           <p class="text-13-regular text-text-weak">
-            Notes and standing instructions the agent remembers across sessions. When memory is on, these are added to
-            the agent's context on every turn. Each scope has a character budget so memory stays small and curated.
+            Keep a small, private brain for your preferences and a separate brain for this project. When memory is on,
+            relevant notes are added to the agent's context on every turn.
           </p>
         </div>
       </div>
@@ -196,8 +196,8 @@ export default function Memory() {
           <For
             each={
               [
-                { id: "global", label: "Global" },
-                { id: "project", label: "This project" },
+                { id: "global", label: "Personal brain" },
+                { id: "project", label: "Project brain" },
               ] as const
             }
           >
@@ -227,7 +227,9 @@ export default function Memory() {
         <div class="flex flex-col gap-3 rounded-[4px] border border-border-weak-base bg-surface-base/40 px-4 py-3">
           <div class="flex items-center justify-between gap-3">
             <div class="flex flex-col gap-0.5 min-w-0">
-              <span class="text-13-medium text-text-strong">Memory enabled</span>
+              <span class="text-13-medium text-text-strong">
+                {scope() === "global" ? "Personal memory enabled" : "Project memory enabled"}
+              </span>
               <span class="text-12-regular text-text-weak">
                 {doc().enabled ? "Notes are recalled into agent context." : "Notes are saved but not recalled."}
               </span>

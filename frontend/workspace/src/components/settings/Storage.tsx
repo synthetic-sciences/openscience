@@ -123,7 +123,9 @@ export const Storage: Component = () => {
         <div class="flex flex-col gap-3">
           <div class="flex flex-col gap-1">
             <h3 class="text-13-medium text-text-weak tracking-wide">Data location</h3>
-            <p class="text-12-regular text-text-weak">The directory holding sessions, credentials, skills, and logs.</p>
+            <p class="text-12-regular text-text-weak">
+              The directory holding sessions, credentials, skills, and logs. The default is ~/.openscience.
+            </p>
           </div>
           <div style={{ border: "1px solid var(--color-border)", "border-radius": "4px", padding: "16px 18px" }}>
             <div class="flex flex-wrap items-center justify-between gap-3">

@@ -25,6 +25,7 @@ export type SettingsSection = "inference" | "capabilities" | "runtime" | "app"
 export type SettingsPanelId =
   | "models"
   | "skills"
+  | "memory"
   | "connectors"
   | "specialists"
   | "compute"
@@ -67,6 +68,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     component: lazy(() => import("./Skills")),
   },
   {
+    id: "memory",
+    title: "Memory",
+    icon: "brain",
+    section: "capabilities",
+    component: lazy(() => import("./Memory")),
+  },
+  {
     id: "connectors",
     title: "Connectors",
     icon: "mcp",
@@ -80,9 +88,8 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     section: "capabilities",
     component: lazy(() => import("./Specialists")),
   },
-  // Local models and Memory deliberately remain implemented but hidden from
-  // the launch UI. Local models need a real chat + tool-call + streaming
-  // smoke; Memory will be redesigned later from Hermes/company-brain work.
+  // Local models remain implemented but hidden until chat, tool-call, and
+  // streaming behavior pass a full runtime smoke.
   // ── Runtime ──
   {
     id: "compute",

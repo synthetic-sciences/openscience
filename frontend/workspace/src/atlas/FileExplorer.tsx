@@ -201,21 +201,22 @@ export function FilesSourceList(props: FilesSourceListProps): JSX.Element {
         flex: 1,
         "min-height": 0,
         overflow: "auto",
-        padding: "16px",
+        padding: "14px",
         display: "flex",
         "flex-direction": "column",
-        gap: "20px",
-        background: "var(--color-surface-solid)",
+        gap: "14px",
+        position: "relative",
+        background: "var(--color-bg)",
         "font-family": FONT_SANS,
       }}
     >
-      <p style={intro()}>
-        Files stay in their source. Access can last for one request, this session, this project, or every project;
-        nothing is silently moved or uploaded.
-      </p>
+      <header style={{ display: "flex", "flex-direction": "column", gap: "4px", padding: "2px 2px 4px" }}>
+        <strong style={{ color: "var(--color-text)", "font-size": "15px", "font-weight": 600 }}>Browse files</strong>
+        <p style={intro()}>Choose a workspace, a saved artifact, or a connected location.</p>
+      </header>
 
-      <section aria-labelledby="project-folder-heading" style={group()}>
-        <GroupHeading id="project-folder-heading" title="Project folder" detail="Already connected" />
+      <section aria-labelledby="workspace-locations-heading" style={group()}>
+        <GroupHeading id="workspace-locations-heading" title="Workspace" detail="Local and session files" />
         <button
           type="button"
           aria-label="Open project folder"
@@ -228,15 +229,10 @@ export function FilesSourceList(props: FilesSourceListProps): JSX.Element {
           </span>
           <span style={sourceCopy()}>
             <strong style={sourceTitle()}>{fileSourceName(props.projectRoot)}</strong>
-            <span style={sourceDetail()}>Original workspace · available to this project</span>
+            <span style={sourceDetail()}>Project files</span>
           </span>
           <IconChevronRight size={16} strokeWidth={1.5} />
         </button>
-        <p style={note()}>Your existing project root stays attached when you move to this version.</p>
-      </section>
-
-      <section aria-labelledby="session-files-heading" style={group()}>
-        <GroupHeading id="session-files-heading" title="Session files" detail="Writable workspace" />
         <button
           type="button"
           aria-label="Open session files"
@@ -248,9 +244,9 @@ export function FilesSourceList(props: FilesSourceListProps): JSX.Element {
             <IconFolder size={18} strokeWidth={1.5} />
           </span>
           <span style={sourceCopy()}>
-            <strong style={sourceTitle()}>Files available to this session</strong>
+            <strong style={sourceTitle()}>Session workspace</strong>
             <span style={sourceDetail()}>
-              Session-scoped · {props.sessionReady ? "read and write for this session" : "starts with the session"}
+              {props.sessionReady ? "Scratch files and generated outputs" : "Starts with the session"}
             </span>
           </span>
           <IconChevronRight size={16} strokeWidth={1.5} />
@@ -302,9 +298,6 @@ export function FilesSourceList(props: FilesSourceListProps): JSX.Element {
               )}
             </For>
           </div>
-          <p style={note()}>
-            Immutable versions are stored locally outside session scratch. Nothing is uploaded unless you export it.
-          </p>
         </Show>
         <Show when={props.trash.length}>
           <div aria-label="Artifact trash" style={trashBox()}>
@@ -400,7 +393,7 @@ export function FilesSourceList(props: FilesSourceListProps): JSX.Element {
             </button>
           }
         >
-          <form aria-label="Connect file or folder access" onSubmit={submit} style={formCard()}>
+          <form aria-label="Connect file or folder access" onSubmit={submit} style={formOverlay()}>
             <div style={formHead()}>
               <div>
                 <strong style={sourceTitle()}>Connect a file or folder</strong>
@@ -1201,6 +1194,18 @@ const formCard = (): JSX.CSSProperties => ({
   border: "1px solid var(--color-border)",
   "border-radius": "8px",
   background: "var(--color-bg-subtle)",
+})
+
+const formOverlay = (): JSX.CSSProperties => ({
+  ...formCard(),
+  position: "absolute",
+  inset: "12px",
+  "z-index": 8,
+  overflow: "auto",
+  "align-self": "stretch",
+  "justify-content": "flex-start",
+  background: "var(--color-bg-elevated)",
+  "box-shadow": "0 18px 42px color-mix(in srgb, var(--color-bg) 38%, transparent)",
 })
 
 const formHead = (): JSX.CSSProperties => ({

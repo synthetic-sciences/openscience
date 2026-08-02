@@ -23,7 +23,7 @@ import { artifactContext } from "@/artifacts/context"
 import { ArtifactInspector } from "@/artifacts/ArtifactInspector"
 import { StoredArtifactView } from "@/artifacts/StoredArtifactView"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
-import { IconChevronLeft, IconX } from "@/atlas/shared/Icon"
+import { IconChevronLeft, IconCollapse, IconExpand, IconX } from "@/atlas/shared/Icon"
 import {
   DEFAULT_PANE_WIDTH,
   MAX_PANE_WIDTH,
@@ -58,6 +58,7 @@ export function RightPaneFrame(props: {
   modal: boolean
   mobile: boolean
   stacked: boolean
+  expanded?: boolean
   width: number
   onClose: () => void
   children: JSX.Element
@@ -155,23 +156,28 @@ export function RightPaneFrame(props: {
         data-overlay={props.modal ? "true" : "false"}
         data-mobile={props.mobile ? "true" : "false"}
         data-stacked={props.stacked ? "true" : "false"}
+        data-expanded={props.expanded ? "true" : "false"}
         onKeyDown={onKeyDown}
         style={{
           flex: props.modal || props.stacked ? "none" : `0 0 ${props.width}px`,
-          width: props.mobile
+          width: props.expanded
             ? "100vw"
-            : props.stacked
-              ? "100%"
-              : props.modal
-                ? "min(520px, calc(100vw - 48px))"
-                : `${props.width}px`,
-          height: props.stacked ? "100%" : undefined,
-          "min-width": props.mobile || props.stacked ? "0" : props.modal ? "360px" : `${MIN_PANE_WIDTH}px`,
+            : props.mobile
+              ? "100vw"
+              : props.stacked
+                ? "100%"
+                : props.modal
+                  ? "min(520px, calc(100vw - 48px))"
+                  : `${props.width}px`,
+          height: props.expanded ? "100dvh" : props.stacked ? "100%" : undefined,
+          "min-width":
+            props.expanded || props.mobile || props.stacked ? "0" : props.modal ? "360px" : `${MIN_PANE_WIDTH}px`,
           position: props.modal ? "fixed" : "relative",
-          top: props.modal ? "0" : undefined,
-          right: props.modal ? "0" : undefined,
-          bottom: props.modal ? "0" : undefined,
-          "z-index": props.modal ? 70 : undefined,
+          inset: props.expanded ? "0" : undefined,
+          top: props.modal && !props.expanded ? "0" : undefined,
+          right: props.modal && !props.expanded ? "0" : undefined,
+          bottom: props.modal && !props.expanded ? "0" : undefined,
+          "z-index": props.expanded ? 90 : props.modal ? 70 : undefined,
         }}
       >
         {props.children}
@@ -180,7 +186,14 @@ export function RightPaneFrame(props: {
   )
 }
 
-export function RightPane(props: { project?: string; session?: string; route?: string } = {}): JSX.Element {
+export function RightPane(
+  props: {
+    project?: string
+    session?: string
+    route?: string
+    onEnsureSession?: () => Promise<string | undefined>
+  } = {},
+): JSX.Element {
   const context = uiStore.context
   const artifact = artifactContext.active
   const project = () => props.project ?? props.route ?? window.location.pathname
@@ -197,6 +210,7 @@ export function RightPane(props: { project?: string; session?: string; route?: s
     }
   }
   const [width, setWidth] = createSignal(initial())
+  const [expanded, setExpanded] = createSignal(false)
   const [viewport, setViewport] = createSignal(typeof window === "undefined" ? 1440 : window.innerWidth)
   const [narrow, setNarrow] = createSignal(typeof window !== "undefined" && window.innerWidth < INLINE_PANE_BREAKPOINT)
   const paneWidth = createMemo(() => paneWidthForViewport(width(), viewport()))
@@ -247,11 +261,12 @@ export function RightPane(props: { project?: string; session?: string; route?: s
   return (
     <RightPaneGate>
       <RightPaneFrame
-        modal={narrow()}
+        modal={narrow() || expanded()}
         mobile={narrow()}
         stacked={false}
+        expanded={expanded()}
         width={paneWidth()}
-        onClose={uiStore.closeContext}
+        onClose={() => (expanded() ? setExpanded(false) : uiStore.closeContext())}
       >
         <>
           <div
@@ -268,6 +283,7 @@ export function RightPane(props: { project?: string; session?: string; route?: s
             on:pointerup={onHandlePointerUp}
             on:pointercancel={onHandlePointerUp}
             aria-hidden={narrow() ? "true" : undefined}
+            hidden={expanded()}
             style={{
               position: "absolute",
               left: "-3px",
@@ -293,6 +309,19 @@ export function RightPane(props: { project?: string; session?: string; route?: s
               </strong>
             </div>
             <div class="research-inspector__controls">
+              <Show when={!narrow()}>
+                <button
+                  type="button"
+                  class="research-inspector__control"
+                  onClick={() => setExpanded((value) => !value)}
+                  title={expanded() ? "Restore inspector" : "Open inspector full screen"}
+                  aria-label={expanded() ? "Restore inspector" : "Open inspector full screen"}
+                >
+                  <Show when={expanded()} fallback={<IconExpand size={16} strokeWidth={1.55} />}>
+                    <IconCollapse size={16} strokeWidth={1.55} />
+                  </Show>
+                </button>
+              </Show>
               <button
                 type="button"
                 class="research-inspector__control"
@@ -367,7 +396,7 @@ export function RightPane(props: { project?: string; session?: string; route?: s
                 <AtlasCanvas />
               </Match>
               <Match when={context() === "kernels"}>
-                <ComputeSurface />
+                <ComputeSurface onEnsureSession={props.onEnsureSession} />
               </Match>
               <Match when={context() === "trace"}>
                 <SessionTraceSurface session={session()} />

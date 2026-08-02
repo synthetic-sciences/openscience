@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createResource, onCleanup, type JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, createResource, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
@@ -19,7 +19,7 @@ const time = (value: number | null) => {
   return `${Math.round(minutes / 60)}h ago`
 }
 
-export function KernelPanel(): JSX.Element {
+export function KernelPanel(props: { onEnsureSession?: () => Promise<string | undefined> } = {}): JSX.Element {
   const sdk = useSDK()
   const params = useParams()
   const authority = useExecutionAuthority("kernel")
@@ -64,14 +64,35 @@ export function KernelPanel(): JSX.Element {
   const [data, api] = createResource(load)
   const kernels = () => data()?.kernels ?? []
   const summary = createMemo(() => summarizeKernels(kernels()))
-  const create = () => {
-    if (!params.id || params.id === "new" || !view.name.trim() || view.action) return
+  const ensureSession = async () => {
+    if (params.id && params.id !== "new") return params.id
+    return props.onEnsureSession?.()
+  }
+  const begin = async () => {
+    if (view.creating) {
+      setView("creating", false)
+      return
+    }
+    const id = await ensureSession()
+    if (!id) {
+      setView("problem", "OpenScience could not create a session for this kernel.")
+      return
+    }
+    setView({ creating: true, problem: "" })
+  }
+  const create = async () => {
+    if (!view.name.trim() || view.action) return
+    const sessionID = await ensureSession()
+    if (!sessionID) {
+      setView("problem", "OpenScience could not create a session for this kernel.")
+      return
+    }
     setView({ action: "create", problem: "", notice: "" })
     return request<KernelStatus>("/notebook/kernels", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        sessionID: params.id,
+        sessionID,
         name: view.name.trim(),
         language: view.language,
       }),
@@ -128,8 +149,11 @@ export function KernelPanel(): JSX.Element {
       .catch((error) => setView("problem", error instanceof Error ? error.message : String(error)))
       .finally(() => setView("action", ""))
   }
-  const timer = setInterval(() => void api.refetch(), 1_000)
-  onCleanup(() => clearInterval(timer))
+  createEffect(() => {
+    if (summary().running === 0 && summary().queued === 0) return
+    const timer = setInterval(() => void api.refetch(), 2_500)
+    onCleanup(() => clearInterval(timer))
+  })
 
   return (
     <section aria-label="Session kernel control room" data-testid="kernel-panel" class="kernel-panel">
@@ -149,8 +173,8 @@ export function KernelPanel(): JSX.Element {
             type="button"
             aria-label="Create named kernel"
             title="Create an isolated named Python or R kernel"
-            onClick={() => setView("creating", !view.creating)}
-            disabled={!params.id || params.id === "new" || !!view.action}
+            onClick={() => void begin()}
+            disabled={!!view.action}
           >
             <IconPlus size={13} strokeWidth={1.6} />
           </button>

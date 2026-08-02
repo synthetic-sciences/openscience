@@ -200,12 +200,12 @@ const SETTINGS_STYLES = `
 }
 `
 
-export const DialogSettings: Component = () => {
+export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) => {
   const platform = usePlatform()
   const dialog = useDialog()
 
   // Browser-style history so back/forward chevrons are real navigation.
-  const [history, setHistory] = createSignal<SettingsPanelId[]>([DEFAULT_PANEL])
+  const [history, setHistory] = createSignal<SettingsPanelId[]>([props.initial ?? DEFAULT_PANEL])
   const [cursor, setCursor] = createSignal(0)
   const [expanded, setExpanded] = createSignal(false)
 

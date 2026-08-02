@@ -267,6 +267,72 @@
   font-size: 11px;
 }
 
+.workspace-composer__capability-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px 5px;
+  border-top: 1px solid var(--border-weak-base);
+}
+
+.workspace-composer__capability-heading:first-child {
+  border-top: 0;
+}
+
+.workspace-composer__capability-heading span {
+  color: var(--text-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.workspace-composer__capability-heading small {
+  color: var(--text-weaker);
+  font-size: 10px;
+}
+
+.workspace-composer__capability-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px 5px 6px;
+}
+
+.workspace-composer__capability-list button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  padding: 7px;
+  text-align: left;
+}
+
+.workspace-composer__capability-list button > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.workspace-composer__capability-list strong {
+  color: var(--text-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.workspace-composer__capability-list small {
+  color: var(--text-weak);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+@media (max-width: 560px) {
+  .workspace-composer__capability-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 .workspace-composer__overflow button:hover:not(:disabled),
 .workspace-composer__overflow button:focus-visible {
   background: var(--surface-raised-base-hover);

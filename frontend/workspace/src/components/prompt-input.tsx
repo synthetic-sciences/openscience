@@ -170,6 +170,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     queueMicrotask(() => fileInputRef.click())
   }
 
+  const openSettings = (initial: "skills" | "memory" | "specialists") => {
+    setModeOpen(false)
+    dialog.show(() => <DialogSettings initial={initial} />)
+  }
+
+  const openCapability = (name: "review" | "compute") => {
+    setModeOpen(false)
+    document.dispatchEvent(
+      new CustomEvent(name === "review" ? "openscience:run-review" : "openscience:open-context", {
+        detail: name === "compute" ? { context: "kernels" } : undefined,
+      }),
+    )
+  }
+
   onMount(() => {
     const dismiss = (event: PointerEvent) => {
       if (!modeOpen()) return
@@ -2034,18 +2048,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 >
                   <summary
                     role="button"
-                    aria-label={`Mode: ${local.agent.current()?.name ?? "Agent"}`}
+                    aria-label="Research capabilities"
                     aria-haspopup="menu"
                     aria-expanded={modeOpen()}
-                    title="Working mode"
+                    title="Research capabilities"
                   >
                     <Icon name="sliders" />
-                    <span>{local.agent.current()?.name ?? "Agent"}</span>
+                    <span>Capabilities</span>
                     <span aria-hidden="true" class="workspace-composer__overflow-caret">
                       ⌄
                     </span>
                   </summary>
-                  <div role="menu" aria-label="Working mode">
+                  <div role="menu" aria-label="Research capabilities">
+                    <div class="workspace-composer__capability-heading">
+                      <span>Research agent</span>
+                      <small>General-purpose by default</small>
+                    </div>
                     <div class="workspace-composer__agent-list">
                       <For each={local.agent.list()}>
                         {(agent) => (
@@ -2076,6 +2094,47 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </button>
                         )}
                       </For>
+                    </div>
+                    <div class="workspace-composer__capability-heading">
+                      <span>Tools</span>
+                      <small>Open a working research surface</small>
+                    </div>
+                    <div class="workspace-composer__capability-list">
+                      <button type="button" role="menuitem" onClick={() => openCapability("review")}>
+                        <Icon name="check" />
+                        <span>
+                          <strong>Review now</strong>
+                          <small>Run the configured research review</small>
+                        </span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => openSettings("memory")}>
+                        <Icon name="brain" />
+                        <span>
+                          <strong>Memory</strong>
+                          <small>Personal and project brain</small>
+                        </span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => openSettings("specialists")}>
+                        <Icon name="models" />
+                        <span>
+                          <strong>Specialists</strong>
+                          <small>Delegation and auto-review</small>
+                        </span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => openSettings("skills")}>
+                        <Icon name="mcp" />
+                        <span>
+                          <strong>Skills</strong>
+                          <small>Reusable research playbooks</small>
+                        </span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={() => openCapability("compute")}>
+                        <Icon name="server" />
+                        <span>
+                          <strong>Compute</strong>
+                          <small>Kernels and reproducible jobs</small>
+                        </span>
+                      </button>
                     </div>
                   </div>
                 </details>

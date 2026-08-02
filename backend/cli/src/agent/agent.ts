@@ -105,7 +105,7 @@ export namespace Agent {
           }),
           user,
         ),
-        mode: "all",
+        mode: "subagent",
         native: true,
       },
       // --- Physics ---
@@ -122,7 +122,7 @@ export namespace Agent {
           }),
           user,
         ),
-        mode: "all",
+        mode: "subagent",
         native: true,
       },
       // --- Machine learning ---
@@ -139,7 +139,7 @@ export namespace Agent {
           }),
           user,
         ),
-        mode: "all",
+        mode: "subagent",
         native: true,
       },
       // --- Utilities ---
@@ -450,7 +450,9 @@ export namespace Agent {
       return agent.name
     }
 
-    const primaryVisible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
+    const primaryVisible = Object.values(agents).find(
+      (agent) => agent.mode !== "subagent" && agent.hidden !== true && agent.name !== "plan",
+    )
     if (!primaryVisible) throw new Error("no primary visible agent found")
     return primaryVisible.name
   }

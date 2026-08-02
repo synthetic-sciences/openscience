@@ -199,9 +199,22 @@ function hasDeprecatedCli() {
 function isConnected() {
   const explicit = process.env.OPENSCIENCE_DATA_DIR?.trim()
   const xdgData = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share")
-  const data = explicit ? resolve(explicit) : join(xdgData, "openscience")
-  const sessionPath = join(data, "openscience-session.json")
-  if (!existsSync(sessionPath)) return false
+  const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), ".config")
+  const pointerPath = join(xdgConfig, "openscience", "data-location")
+  const pointer = (() => {
+    try {
+      return readFileSync(pointerPath, "utf-8").trim()
+    } catch {
+      return ""
+    }
+  })()
+  const roots = explicit
+    ? [resolve(explicit)]
+    : pointer
+      ? [resolve(pointer)]
+      : [join(homedir(), ".openscience"), join(xdgData, "openscience")]
+  const sessionPath = roots.map((root) => join(root, "openscience-session.json")).find(existsSync)
+  if (!sessionPath) return false
   try {
     const data = JSON.parse(readFileSync(sessionPath, "utf-8"))
     if (!data.access_token || !data.expires_at) return false

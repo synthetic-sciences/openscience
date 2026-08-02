@@ -30,7 +30,7 @@ export interface InstallResult {
 }
 
 function installedDir(): string {
-  // Same path the loader scans (Global.Path.data resolves XDG_DATA_HOME first).
+  // Same path the loader scans (Global.Path.data defaults to ~/.openscience).
   // Allow tests to override via OPENSCIENCE_DATA_DIR without monkey-patching globals.
   const base = process.env.OPENSCIENCE_DATA_DIR ?? Global.Path.data
   return path.join(base, "installed-skills")

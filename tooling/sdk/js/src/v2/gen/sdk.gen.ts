@@ -276,6 +276,7 @@ import type {
   SettingsStorageRelocateResponses,
   SettingsStorageResetLocationResponses,
   SettingsStorageUsageResponses,
+  SettingsUpdatesCheckResponses,
   SettingsUsageGetResponses,
   SettingsWalletGetResponses,
   SubtaskPartInput,
@@ -344,15 +345,29 @@ export class Project extends HeyApiClient {
   /**
    * Create project
    *
-   * Create an app-managed project with an opaque identity. The server owns its local root; clients provide a display name, never a host path.
+   * Create an app-managed project with an opaque identity and optional project-scoped access to source locations explicitly selected by the user. Source paths never become the project identity.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
       name?: string
+      sources?: Array<{
+        path: string
+        access?: "read" | "write"
+      }>
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "name" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "name" },
+            { in: "body", key: "sources" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).post<GlobalProjectCreateResponses, GlobalProjectCreateErrors, ThrowOnError>(
       {
         url: "/global/project",
@@ -1263,6 +1278,18 @@ export class Wallet extends HeyApiClient {
   }
 }
 
+export class Updates extends HeyApiClient {
+  /**
+   * Check for an OpenScience update
+   */
+  public check<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsUpdatesCheckResponses, unknown, ThrowOnError>({
+      url: "/settings/updates",
+      ...options,
+    })
+  }
+}
+
 export class Skills extends HeyApiClient {
   /**
    * Install skill from git
@@ -1534,6 +1561,11 @@ export class Settings extends HeyApiClient {
   private _wallet?: Wallet
   get wallet(): Wallet {
     return (this._wallet ??= new Wallet({ client: this.client }))
+  }
+
+  private _updates?: Updates
+  get updates(): Updates {
+    return (this._updates ??= new Updates({ client: this.client }))
   }
 
   private _skills?: Skills
@@ -2588,6 +2620,7 @@ export class Session extends HeyApiClient {
       title?: string
       time?: {
         archived?: number
+        pinned?: number
       }
     },
     options?: Options<never, ThrowOnError>,
