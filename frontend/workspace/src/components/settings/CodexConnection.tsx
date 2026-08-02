@@ -2,6 +2,7 @@ import { Show, createMemo, createSignal, type Component } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { StatusDot } from "@/atlas/shared/StatusDot"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { useProviders } from "@/hooks/use-providers"
 
@@ -10,6 +11,7 @@ export const CodexConnection: Component<{
   onConnected?: () => void
 }> = (props) => {
   const sdk = useGlobalSDK()
+  const globalSync = useGlobalSync()
   const platform = usePlatform()
   const providers = useProviders()
   const [busy, setBusy] = createSignal(false)
@@ -24,6 +26,9 @@ export const CodexConnection: Component<{
       if (result.data?.url) platform.openLink(result.data.url)
       await sdk.client.provider.oauth.callback({ providerID: "openai-codex", method: 0 })
       await sdk.client.global.sync()
+      // The sign-in only shows up once the catalog is re-read; waiting on the
+      // event stream to say so is how a completed sign-in looked like a failed one.
+      await globalSync.refreshProviders()
       props.onConnected?.()
     } catch (error) {
       props.onError?.(error instanceof Error ? error.message : String(error))
@@ -39,6 +44,7 @@ export const CodexConnection: Component<{
     try {
       await sdk.client.auth.remove({ providerID: "openai-codex" })
       await sdk.client.global.dispose()
+      await globalSync.refreshProviders()
     } catch (error) {
       props.onError?.(error instanceof Error ? error.message : String(error))
     } finally {

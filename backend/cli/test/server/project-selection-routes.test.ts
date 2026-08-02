@@ -1,6 +1,7 @@
 import { $ } from "bun"
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
+import os from "os"
 import path from "path"
 import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
@@ -218,6 +219,46 @@ describe("pre-instance project selection routes", () => {
     expect(await response.json()).toMatchObject({
       directory: tmp.path,
       isGit: true,
+    })
+  })
+
+  // A stale deep link decodes into junk that is neither absolute nor a real
+  // folder. Registering a project for it put a phantom entry on the home list.
+  test("refuses to register a project for a directory that does not exist", async () => {
+    const missing = path.join(os.tmpdir(), `openscience-missing-${crypto.randomUUID()}`)
+    const before = await Project.list()
+
+    const response = await fetch("http://openscience.internal/project/current", {
+      headers: {
+        "x-openscience-directory": missing,
+      },
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      name: "ProjectDirectoryError",
+      data: {
+        directory: missing,
+      },
+    })
+    expect(await Project.list()).toHaveLength(before.length)
+  })
+
+  // Resolving one against the server's cwd silently opened whatever folder
+  // happened to sit next to it, so a relative selector is never honoured.
+  test("refuses a directory selector that is not absolute", async () => {
+    const response = await fetch("http://openscience.internal/project/current", {
+      headers: {
+        "x-openscience-directory": "codes",
+      },
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      name: "ProjectDirectoryError",
+      data: {
+        directory: "codes",
+      },
     })
   })
 

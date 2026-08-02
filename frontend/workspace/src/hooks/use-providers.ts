@@ -26,6 +26,13 @@ export function useProviders() {
     const directory = currentDirectory()
     if (!directory) return globalSync.data.provider
     const [projectStore] = globalSync.child(directory, { projectID: currentProjectID() })
+    // The catalog belongs to the install; a project only ever narrows it. When
+    // this project's own load did not land — its bootstrap failed, or the
+    // server rejected the scope because two checkouts share one project
+    // identity — fall back to the install catalog rather than reporting that
+    // the user has no credentials at all. Showing "no keys" to someone who has
+    // keys is the worse failure.
+    if (!projectStore.provider.all.length) return globalSync.data.provider
     return projectStore.provider
   })
   const connected = createMemo(() => providers().all.filter((p) => providers().connected.includes(p.id)))

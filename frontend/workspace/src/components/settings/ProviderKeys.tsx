@@ -8,7 +8,14 @@ import { useProviders } from "@/hooks/use-providers"
 import { isUserProviderConnection } from "@/context/model-catalog"
 import { MODEL_PROVIDERS, MODEL_PROVIDER_LABELS, modelProvider } from "./model-providers"
 
-const SOURCES: Record<Provider["source"], { label: string; removable: boolean; title: string }> = {
+/**
+ * `note` says where a key that this panel cannot delete actually lives, so the
+ * reader knows where to go and change it. Every non-removable source used to
+ * render one blanket "managed externally", which is wrong for a key the user
+ * set themselves in a .env or a config file — nobody else manages it, and the
+ * phrase suggests an administrator does.
+ */
+const SOURCES: Record<Provider["source"], { label: string; removable: boolean; title: string; note?: string }> = {
   api: {
     label: "local file",
     removable: true,
@@ -17,16 +24,19 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
   env: {
     label: "environment",
     removable: false,
+    note: "set in your .env or shell",
     title: "API key supplied by an environment variable; remove it where it is defined",
   },
   config: {
     label: "config",
     removable: false,
+    note: "set in openscience.json",
     title: "API key supplied by openscience.json; edit that file to remove it",
   },
   custom: {
     label: "custom",
     removable: false,
+    note: "set in openscience.json",
     title: "Custom provider supplied by openscience.json; edit that file to remove it",
   },
 }
@@ -61,6 +71,10 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
       await sdk.client.auth.set({ providerID: provider(), auth: { type: "api", key: value } })
       setKey("")
       await sdk.client.global.dispose()
+      // Don't wait on the disposed event to come back round the event stream —
+      // if it is missed the key is saved but never appears, which reads as a
+      // failed save.
+      await sync.refreshProviders()
     } catch (error) {
       props.onError?.(error instanceof Error ? error.message : String(error))
     } finally {
@@ -74,6 +88,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
     try {
       await sdk.client.auth.remove({ providerID })
       await sdk.client.global.dispose()
+      await sync.refreshProviders()
     } catch (error) {
       props.onError?.(error instanceof Error ? error.message : String(error))
     }
@@ -136,7 +151,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
                   when={source(item).removable}
                   fallback={
                     <span class="text-11-regular text-text-weak" title={source(item).title}>
-                      managed externally
+                      {source(item).note ?? "managed externally"}
                     </span>
                   }
                 >

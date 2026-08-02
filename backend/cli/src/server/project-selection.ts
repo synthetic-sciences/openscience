@@ -38,10 +38,14 @@ export async function projectSelection(
     text(input.directory) ?? text(context.req.query("directory")) ?? text(context.req.header("x-openscience-directory"))
   const directory = decode(raw)
 
-  if (projectID) return Project.resolve(projectID, directory)
+  if (projectID) return { ...(await Project.resolve(projectID, directory)), selector: directory }
   return {
     project: undefined,
     directory: directory ? Project.canonicalize(directory) : undefined,
     alias: undefined,
+    // The caller-supplied root before canonicalization, so routes that mint an
+    // instance can reject it while the folder picker keeps reporting its own
+    // friendlier "path not found".
+    selector: directory,
   }
 }

@@ -53,6 +53,13 @@ export namespace Project {
     }),
   )
 
+  export const DirectoryError = NamedError.create(
+    "ProjectDirectoryError",
+    z.object({
+      directory: z.string(),
+    }),
+  )
+
   export const Info = z
     .object({
       id: z.string(),
@@ -169,12 +176,24 @@ export namespace Project {
    * A caller may include a legacy directory while migrating, but it must remain
    * inside the selected project's recorded roots.
    */
+  /**
+   * Only a genuinely absent record means the project is gone. Any other read
+   * failure — a torn file from a concurrent writer, a transient fs error — must
+   * propagate, because reporting it as 410 tells the caller to stop asking
+   * about a project that is in fact fine, and the client empties the surfaces
+   * that depend on it.
+   */
+  function absent(error: unknown) {
+    if (Storage.NotFoundError.isInstance(error)) return undefined
+    throw error
+  }
+
   export async function resolve(projectID: string, directory?: string) {
-    const direct = await Storage.read<Info>(["project", projectID]).catch(() => undefined)
-    const link = await Storage.read<z.infer<typeof Alias>>(["project_alias", projectID]).catch(() => undefined)
+    const direct = await Storage.read<Info>(["project", projectID]).catch(absent)
+    const link = await Storage.read<z.infer<typeof Alias>>(["project_alias", projectID]).catch(absent)
     if (!direct && !link) throw new UnknownError({ projectID })
 
-    const linked = link ? await Storage.read<Info>(["project", link.projectID]).catch(() => undefined) : undefined
+    const linked = link ? await Storage.read<Info>(["project", link.projectID]).catch(absent) : undefined
     const redirected = !!linked && (!direct || !projectID.startsWith("prj_"))
     const project = redirected ? linked : (direct ?? linked)
     if (!project) {
@@ -208,6 +227,18 @@ export namespace Project {
       directory: target,
       alias: redirected ? link?.id : undefined,
     }
+  }
+
+  /**
+   * Guard a caller-supplied root before it can mint a project. Anything that is
+   * not an absolute path gets resolved against the server's cwd, which turned
+   * junk from a stale deep link into a real-looking folder under the user's
+   * home and left a phantom project on their home list.
+   */
+  export async function assertDirectory(input: string) {
+    if (!path.isAbsolute(input)) throw new DirectoryError({ directory: input })
+    const stat = await fs.stat(input).catch(() => undefined)
+    if (!stat?.isDirectory()) throw new DirectoryError({ directory: input })
   }
 
   export async function fromDirectory(input: string) {
