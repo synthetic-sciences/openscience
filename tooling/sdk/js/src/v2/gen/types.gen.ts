@@ -191,6 +191,7 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
+  delegation?: boolean
   variant?: string
   tier?: string
   inference?: {
@@ -5007,6 +5008,10 @@ export type SettingsReviewGetResponses = {
    */
   200: {
     auto: boolean
+    model?: {
+      providerID: string
+      modelID: string
+    } | null
   }
 }
 
@@ -5015,6 +5020,10 @@ export type SettingsReviewGetResponse = SettingsReviewGetResponses[keyof Setting
 export type SettingsReviewSetData = {
   body?: {
     auto: boolean
+    model?: {
+      providerID: string
+      modelID: string
+    } | null
   }
   path?: never
   query?: never
@@ -5027,6 +5036,10 @@ export type SettingsReviewSetResponses = {
    */
   200: {
     auto: boolean
+    model?: {
+      providerID: string
+      modelID: string
+    } | null
   }
 }
 
@@ -5048,6 +5061,8 @@ export type SettingsPreferencesGetResponses = {
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
     show_trace?: boolean
+    delegation_enabled?: boolean
+    delegation_specialist?: string | null
   }
 }
 
@@ -5059,6 +5074,8 @@ export type SettingsPreferencesUpdateData = {
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
     show_trace?: boolean
+    delegation_enabled?: boolean
+    delegation_specialist?: string | null
   }
   path?: never
   query?: never
@@ -5074,6 +5091,8 @@ export type SettingsPreferencesUpdateResponses = {
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
     show_trace?: boolean
+    delegation_enabled?: boolean
+    delegation_specialist?: string | null
   }
 }
 
@@ -7006,6 +7025,7 @@ export type SessionPromptData = {
     tools?: {
       [key: string]: boolean
     }
+    delegation?: boolean
     system?: string
     variant?: string
     tier?: string
@@ -7194,6 +7214,7 @@ export type SessionPromptAsyncData = {
     tools?: {
       [key: string]: boolean
     }
+    delegation?: boolean
     system?: string
     variant?: string
     tier?: string

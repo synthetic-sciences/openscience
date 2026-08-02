@@ -1157,10 +1157,24 @@ export class Review extends HeyApiClient {
   public set<ThrowOnError extends boolean = false>(
     parameters?: {
       auto?: boolean
+      model?: {
+        providerID: string
+        modelID: string
+      } | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "auto" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "auto" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).put<SettingsReviewSetResponses, unknown, ThrowOnError>({
       url: "/settings/review",
       ...options,
@@ -1194,6 +1208,8 @@ export class Preferences extends HeyApiClient {
       intent?: "commercial" | "non-commercial"
       extra_budget_usd?: number
       show_trace?: boolean
+      delegation_enabled?: boolean
+      delegation_specialist?: string | null
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1206,6 +1222,8 @@ export class Preferences extends HeyApiClient {
             { in: "body", key: "intent" },
             { in: "body", key: "extra_budget_usd" },
             { in: "body", key: "show_trace" },
+            { in: "body", key: "delegation_enabled" },
+            { in: "body", key: "delegation_specialist" },
           ],
         },
       ],
@@ -3047,6 +3065,7 @@ export class Session extends HeyApiClient {
       tools?: {
         [key: string]: boolean
       }
+      delegation?: boolean
       system?: string
       variant?: string
       tier?: string
@@ -3066,6 +3085,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
             { in: "body", key: "tools" },
+            { in: "body", key: "delegation" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
@@ -3137,6 +3157,7 @@ export class Session extends HeyApiClient {
       tools?: {
         [key: string]: boolean
       }
+      delegation?: boolean
       system?: string
       variant?: string
       tier?: string
@@ -3156,6 +3177,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
             { in: "body", key: "tools" },
+            { in: "body", key: "delegation" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },

@@ -8180,6 +8180,29 @@
                   "properties": {
                     "auto": {
                       "type": "boolean"
+                    },
+                    "model": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "providerID": {
+                              "type": "string"
+                            },
+                            "modelID": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "providerID",
+                            "modelID"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -8210,6 +8233,29 @@
                   "properties": {
                     "auto": {
                       "type": "boolean"
+                    },
+                    "model": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "providerID": {
+                              "type": "string"
+                            },
+                            "modelID": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "providerID",
+                            "modelID"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -8228,6 +8274,29 @@
                 "properties": {
                   "auto": {
                     "type": "boolean"
+                  },
+                  "model": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "providerID",
+                          "modelID"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -8283,6 +8352,21 @@
                     "show_trace": {
                       "default": false,
                       "type": "boolean"
+                    },
+                    "delegation_enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "delegation_specialist": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   }
                 }
@@ -8334,6 +8418,21 @@
                     "show_trace": {
                       "default": false,
                       "type": "boolean"
+                    },
+                    "delegation_enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "delegation_specialist": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   }
                 }
@@ -8373,6 +8472,21 @@
                   "show_trace": {
                     "default": false,
                     "type": "boolean"
+                  },
+                  "delegation_enabled": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "delegation_specialist": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               }
@@ -13454,6 +13568,9 @@
                       "type": "boolean"
                     }
                   },
+                  "delegation": {
+                    "type": "boolean"
+                  },
                   "system": {
                     "type": "string"
                   },
@@ -13840,6 +13957,9 @@
                     "additionalProperties": {
                       "type": "boolean"
                     }
+                  },
+                  "delegation": {
+                    "type": "boolean"
                   },
                   "system": {
                     "type": "string"
@@ -28914,6 +29034,9 @@
             "additionalProperties": {
               "type": "boolean"
             }
+          },
+          "delegation": {
+            "type": "boolean"
           },
           "variant": {
             "type": "string"

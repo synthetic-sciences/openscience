@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { togglePinned } from "./models"
+import { DEFAULT_PINNED_MODELS, togglePinned } from "./models"
 
 const model = (modelID: string, providerID = "anthropic") => ({ modelID, providerID })
 
 describe("pinned models", () => {
+  test("starts with the requested flagship trio", () => {
+    expect(DEFAULT_PINNED_MODELS).toEqual([
+      model("gpt-5.6-sol", "openai"),
+      model("claude-opus-5"),
+      model("kimi-k3", "moonshotai"),
+    ])
+  })
+
   test("pins and unpins a model without duplicating it", () => {
     const pinned = togglePinned([], model("claude-opus-4-8"))
     expect(pinned).toEqual({

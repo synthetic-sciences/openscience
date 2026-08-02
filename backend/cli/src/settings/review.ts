@@ -7,15 +7,20 @@ import { Global } from "../global"
 // kicking off a reviewer pass automatically after a significant result (a
 // durable artifact save). Persisted like the other settings stores.
 export namespace ReviewSettings {
+  export const Model = z.object({
+    providerID: z.string(),
+    modelID: z.string(),
+  })
   export const State = z.object({
     auto: z.boolean(),
+    model: Model.nullable().default(null),
   })
   export type State = z.infer<typeof State>
 
   const file = path.join(Global.Path.data, "settings", "review.json")
 
   function fallback(): State {
-    return { auto: false }
+    return { auto: false, model: null }
   }
 
   export async function get(): Promise<State> {

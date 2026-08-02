@@ -137,6 +137,7 @@ export namespace SessionPrompt {
       .describe(
         "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
       ),
+    delegation: z.boolean().optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
     tier: z.string().optional(),
@@ -805,6 +806,7 @@ export namespace SessionPrompt {
         session,
         model,
         tools: lastUser.tools,
+        delegation: lastUser.delegation,
         processor,
         bypassAgentCheck,
         messages: msgs,
@@ -959,6 +961,7 @@ export namespace SessionPrompt {
     model: Provider.Model
     session: Session.Info
     tools?: Record<string, boolean>
+    delegation?: boolean
     processor: SessionProcessor.Info
     bypassAgentCheck: boolean
     messages: MessageV2.WithParts[]
@@ -1140,7 +1143,12 @@ export namespace SessionPrompt {
       tools[key] = item
     }
 
+    if (!allowsDelegation(input.delegation, input.bypassAgentCheck)) delete tools.task
     return tools
+  }
+
+  export function allowsDelegation(enabled: boolean | undefined, explicit: boolean) {
+    return enabled !== false || explicit
   }
 
   async function createUserMessage(input: PromptInput) {
@@ -1167,6 +1175,7 @@ export namespace SessionPrompt {
         created: Date.now(),
       },
       tools: input.tools,
+      delegation: input.delegation,
       agent: agent.name,
       model,
       system: input.system,

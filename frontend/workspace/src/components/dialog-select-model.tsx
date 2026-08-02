@@ -24,6 +24,7 @@ import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { displayProviderForModel } from "@/context/model-catalog"
+import type { ModelKey } from "@/context/local"
 import "./dialog-select-model.css"
 
 type ModelGroup = "all" | "anthropic" | "openai" | "codex" | "other"
@@ -54,6 +55,8 @@ const ModelList: Component<{
   action?: JSX.Element
   group?: ModelGroup
   onPinLimit?: () => void
+  current?: ModelKey | null
+  onPick?: (model: ModelKey) => void
 }> = (props) => {
   const local = useLocal()
   const language = useLanguage()
@@ -81,7 +84,13 @@ const ModelList: Component<{
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.provider.id}:${x.id}`}
       items={models}
-      current={local.model.current()}
+      current={
+        props.onPick
+          ? local.model
+              .list()
+              .find((model) => model.provider.id === props.current?.providerID && model.id === props.current?.modelID)
+          : local.model.current()
+      }
       filterKeys={["name"]}
       sortBy={(a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)}
       itemWrapper={(item, node) => (
@@ -102,9 +111,12 @@ const ModelList: Component<{
         </Tooltip>
       )}
       onSelect={(x) => {
-        local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
-          recent: true,
-        })
+        if (x && props.onPick) props.onPick({ modelID: x.id, providerID: x.provider.id })
+        if (!props.onPick) {
+          local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
+            recent: true,
+          })
+        }
         props.onSelect()
       }}
     >
@@ -312,7 +324,12 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
   )
 }
 
-export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
+export const DialogSelectModel: Component<{
+  provider?: string
+  current?: ModelKey | null
+  onSelect?: (model: ModelKey) => void
+  title?: string
+}> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const [filter, setFilter] = createSignal<ModelGroup>("all")
@@ -320,7 +337,7 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
   const manage = () => dialog.show(() => <DialogManageModels />)
 
   return (
-    <Dialog title={language.t("dialog.model.select.title")} class="model-picker-sheet" transition>
+    <Dialog title={props.title ?? language.t("dialog.model.select.title")} class="model-picker-sheet" transition>
       <div class="model-picker-sheet__discovery">
         <div class="model-picker-sheet__groups" role="group" aria-label="Model providers">
           <For each={groups}>
@@ -344,6 +361,8 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
       <ModelList
         provider={props.provider}
         group={filter()}
+        current={props.current}
+        onPick={props.onSelect}
         onSelect={() => dialog.close()}
         onPinLimit={() => setNotice("Three models are already pinned. Unpin one before adding another.")}
         class="model-picker-sheet__list"

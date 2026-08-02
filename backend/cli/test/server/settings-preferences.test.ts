@@ -2,20 +2,36 @@ import { expect, test } from "bun:test"
 import { Preferences, SettingsPreferencesRoutes } from "../../src/server/routes/settings/preferences"
 
 test("trace navigation is opt-in by default", () => {
-  expect(Preferences.parse({}).show_trace).toBe(false)
+  expect(Preferences.parse({})).toMatchObject({
+    show_trace: false,
+    delegation_enabled: true,
+    delegation_specialist: null,
+  })
 })
 
-test("trace navigation preference persists through the settings route", async () => {
+test("composer preferences persist through the settings route", async () => {
   const app = SettingsPreferencesRoutes()
   const update = await app.request("/", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ show_trace: true }),
+    body: JSON.stringify({
+      show_trace: true,
+      delegation_enabled: false,
+      delegation_specialist: "biology",
+    }),
   })
   expect(update.status).toBe(200)
-  expect(((await update.json()) as Preferences).show_trace).toBe(true)
+  expect((await update.json()) as Preferences).toMatchObject({
+    show_trace: true,
+    delegation_enabled: false,
+    delegation_specialist: "biology",
+  })
 
   const read = await app.request("/")
   expect(read.status).toBe(200)
-  expect(((await read.json()) as Preferences).show_trace).toBe(true)
+  expect((await read.json()) as Preferences).toMatchObject({
+    show_trace: true,
+    delegation_enabled: false,
+    delegation_specialist: "biology",
+  })
 })

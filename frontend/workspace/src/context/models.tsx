@@ -8,6 +8,12 @@ import { isChatModel, isFrontier, preferredModel, preferredModels, type ModelKey
 
 export { canonicalKey, FRONTIER_MODELS, type ModelKey } from "./model-catalog"
 
+export const DEFAULT_PINNED_MODELS: ModelKey[] = [
+  { providerID: "openai", modelID: "gpt-5.6-sol" },
+  { providerID: "anthropic", modelID: "claude-opus-5" },
+  { providerID: "moonshotai", modelID: "kimi-k3" },
+]
+
 type Visibility = "show" | "hide"
 type User = ModelKey & { visibility: Visibility; favorite?: boolean }
 type Store = {
@@ -42,7 +48,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       createStore<Store>({
         user: [],
         recent: [],
-        pinned: undefined,
+        pinned: DEFAULT_PINNED_MODELS,
         variant: {},
         tier: {},
       }),
@@ -136,11 +142,9 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       setStore("recent", uniq)
     }
 
-    // Existing users already have a useful recent-model history. Treat its
-    // first three entries as the initial pin set, then persist the first
-    // explicit pin/unpin action. The composer stays intentionally capped at
-    // three models while the full picker remains unrestricted.
-    const pinned = createMemo(() => (store.pinned ?? store.recent.slice(0, 3)).slice(0, 3))
+    // The quick picker starts with one flagship from each of three major model
+    // families. Explicit user pinning remains authoritative after first load.
+    const pinned = createMemo(() => (store.pinned ?? DEFAULT_PINNED_MODELS).slice(0, 3))
     const isPinned = (model: ModelKey) =>
       pinned().some((item) => item.providerID === model.providerID && item.modelID === model.modelID)
     const togglePin = (model: ModelKey) => {

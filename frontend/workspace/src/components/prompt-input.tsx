@@ -14,7 +14,7 @@ import {
 } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
-import { useLocal } from "@/context/local"
+import { useLocal, type ModelKey } from "@/context/local"
 import { useFile, type FileSelection } from "@/context/file"
 import {
   ContentPart,
@@ -46,16 +46,26 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { useLanguage } from "@/context/language"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
-import { createOpenScienceClient, type Message, type Part } from "@synsci/sdk/v2/client"
+import { createOpenScienceClient, type Agent, type Message, type Part } from "@synsci/sdk/v2/client"
 import { Binary } from "@synsci/util/binary"
 import { showToast } from "@synsci/ui/toast"
 import { uiStore } from "@/atlas/store/ui"
 import { projectHref, projectPathname } from "@/utils/project-route"
-import { ModelSettingsPopover } from "./model-settings-popover"
+import { displayProviderForModel } from "@/context/model-catalog"
+import { DialogSelectModel } from "./dialog-select-model"
+import { ModelSettingsPopover, modelSummary } from "./model-settings-popover"
 import { DialogSettings } from "./dialog-settings"
 import "./prompt-input.css"
 import { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_BYTES, attachmentMime, attachmentSize } from "./prompt-attachment"
 import { settingsApi } from "./settings/api"
+import {
+  delegatedSpecialist,
+  isCoreSpecialist,
+  specialistLabel,
+  type CapabilityPreferences,
+  type ReviewPreferences,
+  type SpecialistOption,
+} from "./prompt-capabilities"
 
 type PendingPrompt = {
   abort: AbortController
@@ -138,8 +148,42 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let modeRef: HTMLDetailsElement | undefined
   const [modeOpen, setModeOpen] = createSignal(false)
   const [reviewAuto, setReviewAuto] = createSignal(false)
+  const [reviewModel, setReviewModel] = createSignal<ReviewPreferences["model"]>(null)
   const [memory, setMemory] = createSignal<MemoryPreference>({ enabled: true, categories: [] })
+  const [delegation, setDelegation] = createSignal(true)
+  const [specialist, setSpecialist] = createSignal<string | null>(null)
+  const [specialists, setSpecialists] = createSignal<SpecialistOption[]>([])
+  const [capabilityView, setCapabilityView] = createSignal<"main" | "specialists" | "reviewer">("main")
   const [capabilityBusy, setCapabilityBusy] = createSignal(false)
+
+  const reviewModels = createMemo(() => {
+    const options = [
+      ...local.model.pinned(),
+      local.model.current(),
+      ...local.model.recent(),
+      ...local.model
+        .list()
+        .filter((model) => local.model.visible({ providerID: model.provider.id, modelID: model.id })),
+    ].filter((model): model is NonNullable<typeof model> => Boolean(model))
+    const seen = new Set<string>()
+    return options
+      .filter((model) => {
+        const key = `${model.provider.id}/${model.id}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      .slice(0, 3)
+  })
+
+  const reviewerLabel = createMemo(() => {
+    const selected = reviewModel()
+    if (!selected) return "Same as session"
+    return (
+      local.model.list().find((model) => model.provider.id === selected.providerID && model.id === selected.modelID)
+        ?.name ?? selected.modelID
+    )
+  })
 
   const mirror = { input: false }
 
@@ -180,11 +224,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     queueMicrotask(() => fileInputRef.click())
   }
 
-  const openSettings = (initial: "memory" | "specialists") => {
-    setModeOpen(false)
-    dialog.show(() => <DialogSettings initial={initial} />)
-  }
-
   const openCompute = () => {
     setModeOpen(false)
     document.dispatchEvent(new CustomEvent("openscience:open-context", { detail: { context: "kernels" } }))
@@ -193,14 +232,64 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const loadCapabilities = () => {
     setCapabilityBusy(true)
     void Promise.all([
-      settingsApi<{ auto: boolean }>(sdk.url, platform.fetch ?? fetch, "/settings/review"),
+      settingsApi<ReviewPreferences>(sdk.url, platform.fetch ?? fetch, "/settings/review"),
       settingsApi<MemoryPreference>(sdk.url, platform.fetch ?? fetch, "/settings/memory?scope=global"),
+      settingsApi<CapabilityPreferences>(sdk.url, platform.fetch ?? fetch, "/settings/preferences"),
+      sdk.client.app.agents(),
     ])
-      .then(([review, next]) => {
+      .then(([review, next, preferences, response]) => {
         setReviewAuto(review.auto)
+        setReviewModel(review.model)
         setMemory(next)
+        setDelegation(preferences.delegation_enabled)
+        setSpecialist(preferences.delegation_specialist)
+        setSpecialists(
+          ((response.data ?? []) as Agent[])
+            .filter((agent) => agent.mode === "subagent" && isCoreSpecialist(agent.name))
+            .map((agent) => ({ name: agent.name, description: agent.description })),
+        )
       })
       .catch(() => undefined)
+      .finally(() => setCapabilityBusy(false))
+  }
+
+  const saveDelegation = (patch: Partial<CapabilityPreferences>) =>
+    settingsApi<CapabilityPreferences>(sdk.url, platform.fetch ?? fetch, "/settings/preferences", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    })
+
+  const toggleDelegation = () => {
+    const previous = delegation()
+    const next = !previous
+    setDelegation(next)
+    setCapabilityBusy(true)
+    void saveDelegation({ delegation_enabled: next })
+      .then((preferences) => {
+        setDelegation(preferences.delegation_enabled)
+        setSpecialist(preferences.delegation_specialist)
+      })
+      .catch((error) => {
+        setDelegation(previous)
+        showToast({ variant: "error", title: "Could not update delegation", description: String(error) })
+      })
+      .finally(() => setCapabilityBusy(false))
+  }
+
+  const selectSpecialist = (name: string | null) => {
+    const previous = specialist()
+    setSpecialist(name)
+    setCapabilityBusy(true)
+    void saveDelegation({ delegation_specialist: name })
+      .then((preferences) => {
+        setDelegation(preferences.delegation_enabled)
+        setSpecialist(preferences.delegation_specialist)
+        setCapabilityView("main")
+      })
+      .catch((error) => {
+        setSpecialist(previous)
+        showToast({ variant: "error", title: "Could not select specialist", description: String(error) })
+      })
       .finally(() => setCapabilityBusy(false))
   }
 
@@ -209,16 +298,52 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const next = !previous
     setReviewAuto(next)
     setCapabilityBusy(true)
-    void settingsApi<{ auto: boolean }>(sdk.url, platform.fetch ?? fetch, "/settings/review", {
+    void settingsApi<ReviewPreferences>(sdk.url, platform.fetch ?? fetch, "/settings/review", {
       method: "PUT",
-      body: JSON.stringify({ auto: next }),
+      body: JSON.stringify({ auto: next, model: reviewModel() }),
     })
-      .then((state) => setReviewAuto(state.auto))
+      .then((state) => {
+        setReviewAuto(state.auto)
+        setReviewModel(state.model)
+      })
       .catch((error) => {
         setReviewAuto(previous)
         showToast({ variant: "error", title: "Could not update auto-review", description: String(error) })
       })
       .finally(() => setCapabilityBusy(false))
+  }
+
+  const selectReviewerModel = (model: ModelKey | null, returnToMenu = true) => {
+    const previous = reviewModel()
+    setReviewModel(model)
+    setCapabilityBusy(true)
+    void settingsApi<ReviewPreferences>(sdk.url, platform.fetch ?? fetch, "/settings/review", {
+      method: "PUT",
+      body: JSON.stringify({ auto: reviewAuto(), model }),
+    })
+      .then((state) => {
+        setReviewAuto(state.auto)
+        setReviewModel(state.model)
+        if (returnToMenu) setCapabilityView("main")
+      })
+      .catch((error) => {
+        setReviewModel(previous)
+        showToast({ variant: "error", title: "Could not select reviewer model", description: String(error) })
+      })
+      .finally(() => setCapabilityBusy(false))
+  }
+
+  const openReviewerModels = () => {
+    setModeOpen(false)
+    queueMicrotask(() =>
+      dialog.show(() => (
+        <DialogSelectModel
+          title="Reviewer model"
+          current={reviewModel()}
+          onSelect={(model) => selectReviewerModel(model, false)}
+        />
+      )),
+    )
   }
 
   const toggleMemory = () => {
@@ -1282,6 +1407,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const agent = currentAgent.name
     const variant = local.model.variant.prompt()
     const tier = local.model.tier.prompt()
+    const capabilityDelegation = delegation()
+    const capabilitySpecialist = specialist()
 
     const errorMessage = (err: unknown) => {
       if (err && typeof err === "object" && "data" in err) {
@@ -1479,6 +1606,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
     }))
 
+    const selectedSpecialist = delegatedSpecialist(
+      capabilityDelegation,
+      capabilitySpecialist,
+      agentAttachments.map((attachment) => attachment.name),
+    )
+    const specialistParts = selectedSpecialist
+      ? [
+          {
+            id: Identifier.ascending("part"),
+            type: "agent" as const,
+            name: selectedSpecialist,
+          },
+        ]
+      : []
+
     const usedUrls = new Set(fileAttachmentParts.map((part) => part.url))
 
     const context = prompt.context.items().slice()
@@ -1564,6 +1706,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       textPart,
       ...fileAttachmentParts,
       ...contextParts,
+      ...specialistParts,
       ...agentAttachmentParts,
       ...imageAttachmentParts,
     ]
@@ -1726,6 +1869,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         model,
         messageID,
         parts: requestParts,
+        delegation: capabilityDelegation,
         variant,
         tier,
       })
@@ -2101,7 +2245,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   onToggle={(event) => {
                     const open = event.currentTarget.open
                     setModeOpen(open)
-                    if (open) loadCapabilities()
+                    if (open) {
+                      setCapabilityView("main")
+                      loadCapabilities()
+                    }
                   }}
                 >
                   <summary
@@ -2114,65 +2261,207 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Icon name="sliders" />
                   </summary>
                   <div role="menu" aria-label="Research capabilities">
-                    <div class="workspace-composer__capability-list">
-                      <button type="button" role="menuitem" onClick={() => openSettings("specialists")}>
-                        <span>Delegation</span>
-                        <span class="workspace-composer__capability-value">
-                          On <span class="workspace-composer__capability-chevron">›</span>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitemcheckbox"
-                        aria-checked={reviewAuto()}
-                        disabled={capabilityBusy()}
-                        onClick={toggleReview}
-                      >
-                        <span>Auto-review</span>
-                        <span
-                          aria-hidden="true"
-                          class="workspace-composer__capability-switch"
-                          data-checked={reviewAuto() ? "true" : "false"}
-                        >
-                          <span />
-                        </span>
-                      </button>
-                      <button type="button" role="menuitem" onClick={() => openSettings("specialists")}>
-                        <span>Reviewer model</span>
-                        <span class="workspace-composer__capability-value">
-                          Default <span class="workspace-composer__capability-chevron">›</span>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitemcheckbox"
-                        aria-checked={memory().enabled}
-                        disabled={capabilityBusy()}
-                        onClick={toggleMemory}
-                      >
-                        <span>Memory</span>
-                        <span
-                          aria-hidden="true"
-                          class="workspace-composer__capability-switch"
-                          data-checked={memory().enabled ? "true" : "false"}
-                        >
-                          <span />
-                        </span>
-                      </button>
-                      <div role="separator" class="workspace-composer__capability-divider" />
-                      <button type="button" role="menuitem" onClick={() => openSettings("specialists")}>
-                        <span>Specialist</span>
-                        <span class="workspace-composer__capability-value">
-                          None <span class="workspace-composer__capability-chevron">›</span>
-                        </span>
-                      </button>
-                      <button type="button" role="menuitem" onClick={openCompute}>
-                        <span>Compute</span>
-                        <span class="workspace-composer__capability-value">
-                          Local <span class="workspace-composer__capability-chevron">›</span>
-                        </span>
-                      </button>
-                    </div>
+                    <Switch>
+                      <Match when={capabilityView() === "main"}>
+                        <div class="workspace-composer__capability-list">
+                          <button
+                            type="button"
+                            role="menuitemcheckbox"
+                            aria-checked={delegation()}
+                            disabled={capabilityBusy()}
+                            onClick={toggleDelegation}
+                          >
+                            <span>Delegation</span>
+                            <span
+                              aria-hidden="true"
+                              class="workspace-composer__capability-switch"
+                              data-checked={delegation() ? "true" : "false"}
+                            >
+                              <span />
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitemcheckbox"
+                            aria-checked={reviewAuto()}
+                            disabled={capabilityBusy()}
+                            onClick={toggleReview}
+                          >
+                            <span>Auto-review</span>
+                            <span
+                              aria-hidden="true"
+                              class="workspace-composer__capability-switch"
+                              data-checked={reviewAuto() ? "true" : "false"}
+                            >
+                              <span />
+                            </span>
+                          </button>
+                          <button type="button" role="menuitem" onClick={() => setCapabilityView("reviewer")}>
+                            <span>Reviewer model</span>
+                            <span class="workspace-composer__capability-value">
+                              {reviewerLabel()} <span class="workspace-composer__capability-chevron">›</span>
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitemcheckbox"
+                            aria-checked={memory().enabled}
+                            disabled={capabilityBusy()}
+                            onClick={toggleMemory}
+                          >
+                            <span>Memory</span>
+                            <span
+                              aria-hidden="true"
+                              class="workspace-composer__capability-switch"
+                              data-checked={memory().enabled ? "true" : "false"}
+                            >
+                              <span />
+                            </span>
+                          </button>
+                          <div role="separator" class="workspace-composer__capability-divider" />
+                          <button type="button" role="menuitem" onClick={() => setCapabilityView("specialists")}>
+                            <span>Specialist</span>
+                            <span class="workspace-composer__capability-value">
+                              {specialist() ? specialistLabel(specialist()!) : "Research"}
+                              <span class="workspace-composer__capability-chevron">›</span>
+                            </span>
+                          </button>
+                          <button type="button" role="menuitem" onClick={openCompute}>
+                            <span>Compute</span>
+                            <span class="workspace-composer__capability-value">
+                              Local <span class="workspace-composer__capability-chevron">›</span>
+                            </span>
+                          </button>
+                        </div>
+                      </Match>
+                      <Match when={capabilityView() === "specialists"}>
+                        <div class="workspace-composer__specialist-list">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            class="workspace-composer__specialist-back"
+                            onClick={() => setCapabilityView("main")}
+                          >
+                            <span aria-hidden="true">‹</span>
+                            <strong>Specialist</strong>
+                          </button>
+                          <div role="separator" class="workspace-composer__capability-divider" />
+                          <button
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={!specialist()}
+                            disabled={capabilityBusy()}
+                            class="workspace-composer__specialist-option"
+                            onClick={() => selectSpecialist(null)}
+                          >
+                            <span>
+                              <strong>Research</strong>
+                              <small>General research with adaptive delegation.</small>
+                            </span>
+                            <Show when={!specialist()}>
+                              <Icon name="check" size="small" />
+                            </Show>
+                          </button>
+                          <For each={specialists()}>
+                            {(option) => (
+                              <button
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={specialist() === option.name}
+                                disabled={capabilityBusy()}
+                                class="workspace-composer__specialist-option"
+                                onClick={() => selectSpecialist(option.name)}
+                              >
+                                <span>
+                                  <strong>{specialistLabel(option.name)}</strong>
+                                  <Show when={option.description}>
+                                    {(description) => <small>{description()}</small>}
+                                  </Show>
+                                </span>
+                                <Show when={specialist() === option.name}>
+                                  <Icon name="check" size="small" />
+                                </Show>
+                              </button>
+                            )}
+                          </For>
+                        </div>
+                      </Match>
+                      <Match when={capabilityView() === "reviewer"}>
+                        <div class="workspace-composer__specialist-list">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            class="workspace-composer__specialist-back"
+                            onClick={() => setCapabilityView("main")}
+                          >
+                            <span aria-hidden="true">‹</span>
+                            <strong>Reviewer model</strong>
+                          </button>
+                          <div role="separator" class="workspace-composer__capability-divider" />
+                          <button
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={!reviewModel()}
+                            disabled={capabilityBusy()}
+                            class="workspace-composer__specialist-option"
+                            onClick={() => selectReviewerModel(null)}
+                          >
+                            <span>
+                              <strong>Same as session</strong>
+                              <small>Follow the model selected in the composer.</small>
+                            </span>
+                            <Show when={!reviewModel()}>
+                              <Icon name="check" size="small" />
+                            </Show>
+                          </button>
+                          <For each={reviewModels()}>
+                            {(model) => {
+                              const selected = () =>
+                                reviewModel()?.providerID === model.provider.id && reviewModel()?.modelID === model.id
+                              return (
+                                <button
+                                  type="button"
+                                  role="menuitemradio"
+                                  aria-checked={selected()}
+                                  disabled={capabilityBusy()}
+                                  class="workspace-composer__specialist-option"
+                                  onClick={() =>
+                                    selectReviewerModel({ providerID: model.provider.id, modelID: model.id })
+                                  }
+                                >
+                                  <span>
+                                    <strong>{model.name}</strong>
+                                    <small>
+                                      {modelSummary({
+                                        reasoning: model.capabilities.reasoning,
+                                        context: model.limit.context,
+                                        provider: displayProviderForModel(model.provider, model.id).name,
+                                      })}
+                                    </small>
+                                  </span>
+                                  <Show when={selected()}>
+                                    <Icon name="check" size="small" />
+                                  </Show>
+                                </button>
+                              )
+                            }}
+                          </For>
+                          <div role="separator" class="workspace-composer__capability-divider" />
+                          <button
+                            type="button"
+                            role="menuitem"
+                            class="workspace-composer__specialist-option workspace-composer__reviewer-more"
+                            onClick={openReviewerModels}
+                          >
+                            <span>
+                              <strong>More models</strong>
+                              <small>Browse the full model catalog.</small>
+                            </span>
+                            <span class="workspace-composer__capability-chevron">›</span>
+                          </button>
+                        </div>
+                      </Match>
+                    </Switch>
                   </div>
                 </details>
               </Match>

@@ -166,9 +166,11 @@ export namespace SessionReview {
   export async function start(sessionID: string, target?: Target): Promise<Bound | undefined> {
     if (!target) await grant(sessionID)
     const review = await packet(sessionID, target)
+    const settings = await ReviewSettings.get().catch(() => undefined)
     void SessionPrompt.prompt({
       sessionID,
       agent: review.agent,
+      model: settings?.model ?? undefined,
       parts: [{ type: "text", text: review.text }],
     }).catch((error) => log.error("review pass failed", { sessionID, error }))
     return "target" in review ? review.target : undefined

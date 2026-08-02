@@ -41,6 +41,10 @@ const LABELS: Record<string, string> = {
   reviewer: "Research reviewer",
 }
 type Mode = "primary" | "subagent" | "all"
+type ReviewPreferences = {
+  auto: boolean
+  model: { providerID: string; modelID: string } | null
+}
 
 export default function Specialists() {
   const sdk = useGlobalSDK()
@@ -52,13 +56,18 @@ export default function Specialists() {
   // review.ts). Manual review stays always available from the session header;
   // this only opts into an automatic pass after a durable artifact save.
   const fetchFn = platform.fetch ?? fetch
-  const reviewApi = (init?: RequestInit) => settingsApi<{ auto: boolean }>(sdk.url, fetchFn, "/settings/review", init)
+  const reviewApi = (init?: RequestInit) => settingsApi<ReviewPreferences>(sdk.url, fetchFn, "/settings/review", init)
   const [reviewPrefs, reviewCtl] = createResource(() => reviewApi())
   const [reviewSaving, setReviewSaving] = createSignal(false)
   async function toggleAutoReview(auto: boolean) {
     setReviewSaving(true)
     try {
-      reviewCtl.mutate(await reviewApi({ method: "PUT", body: JSON.stringify({ auto }) }))
+      reviewCtl.mutate(
+        await reviewApi({
+          method: "PUT",
+          body: JSON.stringify({ auto, model: reviewPrefs()?.model ?? null }),
+        }),
+      )
     } catch (err) {
       showToast({ variant: "error", title: "Could not update reviewer preference", description: message(err) })
     } finally {
