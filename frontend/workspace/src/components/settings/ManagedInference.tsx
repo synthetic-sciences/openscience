@@ -99,11 +99,22 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
       .finally(() => setBusy(false))
   }
 
+  // The mode can change without this panel touching it: saving an own provider
+  // key in Provider keys below makes the server flip billing.llm managed →
+  // byok (Auth.set). That happens in the same window, so no `focus` event ever
+  // fires and the toggle would keep showing Managed — highlighted, and
+  // contradicting the row underneath — until a reload. Every credential change
+  // already funnels through refreshProviders, so re-read the mode there.
+  const unsubscribe = globalSync.onProvidersRefreshed(() => void loadBilling())
+
   onMount(() => {
     refresh()
     window.addEventListener("focus", refresh)
   })
-  onCleanup(() => window.removeEventListener("focus", refresh))
+  onCleanup(() => {
+    window.removeEventListener("focus", refresh)
+    unsubscribe()
+  })
 
   const unsupported = (value: Mode) =>
     value === "managed" && wallet() !== undefined && (!wallet()!.signedIn || !wallet()!.managedSupported)

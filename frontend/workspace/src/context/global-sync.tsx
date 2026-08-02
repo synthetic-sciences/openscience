@@ -24,6 +24,7 @@ import { Binary } from "@synsci/util/binary"
 import { retry } from "@synsci/util/retry"
 import { useGlobalSDK } from "./global-sdk"
 import { createInflightCache } from "./inflight-cache"
+import { createListeners } from "./listeners"
 // InitError used to live in pages/error.tsx (now deleted with the legacy
 // openscience shell). Inline the shape so the openscience context layer keeps
 // compiling — it's dead code under the new AtlasApp entry but is still
@@ -346,6 +347,19 @@ function createGlobalSync() {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
 
   /**
+   * Fired after every `refreshProviders`. That call is the shared choke point
+   * for "a credential just changed" — a key added or removed, an OAuth sign-in
+   * finished, the spend toggle switched — and some of those change server state
+   * that is NOT in the provider catalog. Adding an own OpenRouter key makes
+   * Auth.set flip `billing.llm` from managed to byok, which the Settings mode
+   * toggle has no other way to learn about while the page stays open: it reads
+   * billing into its own signal and only re-read on mount and on `window
+   * focus`, and no focus event fires when the key was pasted into the same
+   * window. Subscribers re-read what they own.
+   */
+  const providerRefresh = createListeners()
+
+  /**
    * Re-read the provider catalog into every store that shows it. Bootstrap
    * alone is not enough: adding a key or finishing an OAuth sign-in changes the
    * catalog while the page is already running, and the settings panel, the
@@ -360,20 +374,18 @@ function createGlobalSync() {
       apply: (value: ProviderListResponse) => void,
     ) => {
       if (!directory) return
-      try {
-        apply(await loadProvider(directory, projectID))
-      } catch (error) {
-        console.error("Failed to refresh providers", { directory, projectID, error })
-      }
+      apply(await loadProvider(directory, projectID))
     }
-    await Promise.all([
-      reload(globalStore.path.worktree || globalStore.path.directory, undefined, (value) =>
-        setGlobalStore("provider", reconcile(value)),
-      ),
-      ...Object.entries(children).map(([directory, [store, setStore]]) =>
-        reload(directory, store.project || undefined, (value) => setStore("provider", reconcile(value))),
-      ),
-    ])
+    await providerRefresh.notifyAfter(async () => {
+      await Promise.all([
+        reload(globalStore.path.worktree || globalStore.path.directory, undefined, (value) =>
+          setGlobalStore("provider", reconcile(value)),
+        ),
+        ...Object.entries(children).map(([directory, [store, setStore]]) =>
+          reload(directory, store.project || undefined, (value) => setStore("provider", reconcile(value))),
+        ),
+      ])
+    })
   }
 
   const booting = new Map<string, Promise<void>>()
@@ -718,7 +730,10 @@ function createGlobalSync() {
     if (directory === "global") {
       switch (event?.type) {
         case "global.disposed": {
-          void refreshProviders()
+          // Nobody is waiting on this one, so it has no error UI to surface
+          // into — unlike the settings panels, which await their own call and
+          // report the failure there.
+          void refreshProviders().catch((error) => console.error("Failed to refresh providers", { error }))
           return
         }
         case "project.updated": {
@@ -1186,6 +1201,7 @@ function createGlobalSync() {
       })
     },
     refreshProviders,
+    onProvidersRefreshed: providerRefresh.add,
     project: {
       loadSessions,
       resolve: resolveProject,
