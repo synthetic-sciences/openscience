@@ -2,8 +2,12 @@ import { expect, test } from "bun:test"
 
 const source = await Bun.file(new URL("./CommandPalette.tsx", import.meta.url)).text()
 
-test("uses the measured Claude Science command-palette scale", () => {
-  expect(source).toContain("Math.min(640, Math.max(320, frame().width - 32))")
+test("uses a centered project command palette", async () => {
+  const styles = await Bun.file(new URL("../styles/atlas.css", import.meta.url)).text()
+  expect(source).toContain('class="atlas-modal atlas-fade-in command-palette"')
+  expect(source).not.toContain("conversation-center")
+  expect(styles).toContain(".command-palette")
+  expect(styles).toContain("transform: translate(-50%, -50%)")
   expect(source).toContain('"min-height": "40px"')
   expect(source).toContain('"font-size": "13px"')
   expect(source).toContain('"font-size": "12px"')
@@ -33,12 +37,22 @@ test("renders the three search groups and routes selection correctly", () => {
   expect(source).toContain("uiStore.openFile(scope.directory, a.path)")
 })
 
+test("keeps project search local and shows recent sessions before commands", () => {
+  const scoped = source.indexOf("if (scope) {")
+  const projects = source.indexOf("sync.data.project.forEach")
+  expect(scoped).toBeGreaterThan(0)
+  expect(projects).toBeGreaterThan(scoped)
+  expect(source.slice(scoped, projects)).toContain("return list")
+  expect(source).toContain('category: "recent sessions"')
+  expect(source).toContain('category: "commands"')
+})
+
 test("keeps the flat selection model across search groups", () => {
   expect(source).toContain("return [...base, ...results()]")
 })
 
 test("labels the palette as local search without overpromising", () => {
-  expect(source).toContain("search projects, sessions, messages, artifacts…")
+  expect(source).toContain("Search this project…")
   expect(source).toContain("local search")
   expect(source).not.toContain("semantic")
 })

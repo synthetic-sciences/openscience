@@ -8353,6 +8353,10 @@
                       "default": false,
                       "type": "boolean"
                     },
+                    "atlas_enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "delegation_enabled": {
                       "default": true,
                       "type": "boolean"
@@ -8419,6 +8423,10 @@
                       "default": false,
                       "type": "boolean"
                     },
+                    "atlas_enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "delegation_enabled": {
                       "default": true,
                       "type": "boolean"
@@ -8471,6 +8479,10 @@
                   },
                   "show_trace": {
                     "default": false,
+                    "type": "boolean"
+                  },
+                  "atlas_enabled": {
+                    "default": true,
                     "type": "boolean"
                   },
                   "delegation_enabled": {

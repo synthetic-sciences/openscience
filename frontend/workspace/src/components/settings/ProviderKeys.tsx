@@ -3,7 +3,9 @@ import { Button } from "@synsci/ui/button"
 import type { Provider } from "@synsci/sdk/v2/client"
 import { StatusDot } from "@/atlas/shared/StatusDot"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { useProviders } from "@/hooks/use-providers"
+import { isUserProviderConnection } from "@/context/model-catalog"
 import { MODEL_PROVIDERS, MODEL_PROVIDER_LABELS, modelProvider } from "./model-providers"
 
 const SOURCES: Record<Provider["source"], { label: string; removable: boolean; title: string }> = {
@@ -31,12 +33,22 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
 
 export function ProviderKeys(props: { onError?: (error: string | undefined) => void }) {
   const sdk = useGlobalSDK()
+  const sync = useGlobalSync()
   const providers = useProviders()
   const [provider, setProvider] = createSignal<string>(MODEL_PROVIDERS[0].id)
   const [key, setKey] = createSignal("")
   const [saving, setSaving] = createSignal(false)
   const connected = createMemo(() =>
-    providers.connected().filter((item) => MODEL_PROVIDERS.some((provider) => provider.id === item.id)),
+    providers
+      .connected()
+      .filter((item) => MODEL_PROVIDERS.some((provider) => provider.id === item.id))
+      .filter((item) =>
+        isUserProviderConnection({
+          providerID: item.id,
+          source: item.source,
+          billing: sync.data.config.billing?.llm,
+        }),
+      ),
   )
   const source = (item: { id: string }) => SOURCES[(item as { source?: Provider["source"] }).source ?? "api"]
 

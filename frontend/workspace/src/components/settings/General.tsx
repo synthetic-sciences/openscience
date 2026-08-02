@@ -27,6 +27,7 @@ type Preferences = {
   intent: "commercial" | "non-commercial"
   extra_budget_usd: number
   show_trace: boolean
+  atlas_enabled: boolean
 }
 
 export default function General() {
@@ -182,6 +183,19 @@ export default function General() {
 
         <Section title="Workspace" description="Choose which advanced surfaces appear in every project.">
           <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+            <Row
+              title="Atlas"
+              description="Show the research map in project navigation. Your map data is never changed."
+            >
+              <Switch
+                hideLabel
+                checked={prefs()?.atlas_enabled ?? true}
+                disabled={!prefs()}
+                onChange={(atlas_enabled) => void savePref({ atlas_enabled })}
+              >
+                Show Atlas
+              </Switch>
+            </Row>
             <Row title="Trace" description="Show the local time, cost, and activity trace in session navigation.">
               <Switch
                 hideLabel

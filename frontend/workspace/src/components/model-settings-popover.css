@@ -42,16 +42,16 @@ html[data-color-scheme="dark"]
 }
 
 [data-model-settings-trigger-style="label"] {
-  min-height: 36px !important;
-  max-width: min(230px, 40vw);
+  min-height: 32px !important;
+  max-width: min(210px, 40vw);
   gap: 6px !important;
-  padding: 0 11px !important;
+  padding: 0 9px !important;
   border: 1px solid var(--model-control-border) !important;
-  border-radius: 10px !important;
+  border-radius: 8px !important;
   background: var(--model-control-raised) !important;
   box-shadow: none !important;
   color: var(--model-control-text) !important;
-  font-size: 13.5px !important;
+  font-size: 13px !important;
   font-weight: 500 !important;
   letter-spacing: -0.005em;
 }
@@ -97,20 +97,20 @@ html[data-color-scheme="dark"]
 }
 
 [data-model-settings-popover] {
-  width: min(320px, calc(100vw - 24px)) !important;
-  padding: 8px !important;
+  width: min(286px, calc(100vw - 24px)) !important;
+  padding: 6px !important;
   border: 1px solid var(--model-control-border-strong) !important;
-  border-radius: 14px !important;
+  border-radius: 12px !important;
   background: var(--model-control-surface) !important;
   box-shadow: var(--model-control-shadow) !important;
   color: var(--model-control-text);
 }
 
 [data-model-settings-popover] .model-settings-row {
-  min-height: 40px;
-  gap: 12px;
-  padding: 0 12px;
-  border-radius: 9px;
+  min-height: 36px;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: 8px;
   color: var(--model-control-text);
   font-size: 12px;
   line-height: 1.2;
@@ -130,7 +130,7 @@ html[data-color-scheme="dark"]
 [data-model-menu-label] {
   min-width: 0;
   color: var(--model-control-text);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   letter-spacing: -0.006em;
 }
@@ -141,7 +141,7 @@ html[data-color-scheme="dark"]
 }
 
 [data-model-settings-popover] [data-model-quick] {
-  min-height: 58px;
+  min-height: 50px;
 }
 
 .model-settings-model {
@@ -162,19 +162,19 @@ html[data-color-scheme="dark"]
 
 .model-settings-model strong {
   color: var(--model-control-text);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 520;
   letter-spacing: -0.005em;
 }
 
 .model-settings-model small {
   color: var(--model-control-faint);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
 }
 
 .model-settings-more {
-  min-height: 46px !important;
+  min-height: 40px !important;
   color: var(--model-control-text) !important;
 }
 
@@ -188,7 +188,7 @@ html[data-color-scheme="dark"]
 
 .model-settings-divider {
   height: 1px;
-  margin: 6px 10px;
+  margin: 4px 8px;
   background: var(--model-control-border);
 }
 

@@ -12,7 +12,6 @@ export function useGlobalKeys(input: { onNew?: () => void }) {
   const dialog = useDialog()
   const onKeyDown = (event: KeyboardEvent) => {
     if (dialog.active) return
-    if (isTypingTarget(event.target)) return
     const mod = event.metaKey || event.ctrlKey
     const key = event.key.toLowerCase()
     if (mod && key === "k") {
@@ -20,6 +19,7 @@ export function useGlobalKeys(input: { onNew?: () => void }) {
       uiStore.setPaletteOpen(true)
       return
     }
+    if (isTypingTarget(event.target)) return
     if (event.key === "?") {
       event.preventDefault()
       uiStore.setHelpOpen(true)

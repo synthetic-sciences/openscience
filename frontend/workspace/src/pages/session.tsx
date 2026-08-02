@@ -22,7 +22,6 @@ import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useServer } from "@/context/server"
 import { usePlatform } from "@/context/platform"
-import { useTheme } from "@synsci/ui/theme"
 import { useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
 import { NewSessionView } from "@/components/session/session-new-view"
@@ -37,12 +36,7 @@ import { useCommand, type CommandOption } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { confirmDialog } from "@/atlas/dialogs"
 import { DialogSettings } from "@/components/dialog-settings"
-import {
-  CompactContextActions,
-  SessionSidebarActions,
-  SidebarAction,
-  type SessionContext,
-} from "@/pages/session-sidebar-action"
+import { SessionSidebarActions, SidebarAction, type SessionContext } from "@/pages/session-sidebar-action"
 import { DisconnectedPanel } from "@/atlas/DisconnectedPanel"
 import { CommandPalette } from "@/atlas/CommandPalette"
 import { HelpOverlay } from "@/atlas/HelpOverlay"
@@ -52,11 +46,8 @@ import {
   IconChevronLeft,
   IconPlus,
   IconSearch,
-  IconBookOpen,
   IconCheckCircle,
   IconSettings,
-  IconSun,
-  IconMoon,
   IconMessageSquare,
   IconMoreH,
   IconPin,
@@ -109,7 +100,6 @@ export default function Page(): JSX.Element {
   const terminal = useTerminal()
   const server = useServer()
   const platform = usePlatform()
-  const theme = useTheme()
   const dialog = useDialog()
   const trust = projectTrustApi(sdk.client)
   const [creating, setCreating] = createSignal(false)
@@ -136,13 +126,13 @@ export default function Page(): JSX.Element {
     on(
       () => server.url,
       (url) => {
-        productPreferences.sync({ show_trace: false })
+        productPreferences.sync({ show_trace: false, atlas_enabled: true })
         if (!url) return
         const endpoint = `${url.replace(/\/$/, "")}/settings/preferences`
         void (platform.fetch ?? fetch)(endpoint)
           .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Preferences unavailable"))))
           .then((preferences) => productPreferences.sync(preferences as ProductPreferences))
-          .catch(() => productPreferences.sync({ show_trace: false }))
+          .catch(() => productPreferences.sync({ show_trace: false, atlas_enabled: true }))
       },
     ),
   )
@@ -187,7 +177,16 @@ export default function Page(): JSX.Element {
     return task
   }
 
+  const atlasAvailable = () => atlasConnected() && productPreferences.atlas()
+
+  createEffect(() => {
+    if (productPreferences.atlas()) return
+    if (uiStore.context() !== "canvas" || !uiStore.open()) return
+    uiStore.closeContext()
+  })
+
   const openContext = (context: SessionContext) => {
+    if (context === "canvas" && !atlasAvailable()) return
     uiStore.openContext(context)
     if (!(["terminal", "files", "kernels"] as SessionContext[]).includes(context)) return
     void ensureSession()
@@ -555,7 +554,6 @@ export default function Page(): JSX.Element {
   const [stepsExpanded, setStepsExpanded] = createSignal<Record<string, boolean>>({})
   const toggleSteps = (id: string) => setStepsExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
 
-  const isDark = () => theme.mode() === "dark"
   useGlobalKeys({ onNew: newSession })
 
   // The center belongs to the conversation for the lifetime of the route.
@@ -729,7 +727,7 @@ export default function Page(): JSX.Element {
           context={uiStore.context()}
           contextOpen={uiStore.open()}
           artifact={Boolean(artifactContext.active())}
-          atlas={atlasConnected()}
+          atlas={atlasAvailable()}
           trace={productPreferences.trace()}
           onSelect={(id) => {
             setMobileSessionsOpen(false)
@@ -759,20 +757,10 @@ export default function Page(): JSX.Element {
             projectName={projectName()}
             directory={projectPath()}
             trust={trust}
-            isDark={isDark()}
             onBack={() => navigate("/")}
-            onOpenPalette={() => uiStore.setPaletteOpen(true)}
-            onOpenHelp={() => uiStore.setHelpOpen(true)}
-            onOpenSettings={() => dialog.show(() => <DialogSettings />)}
             onRunReview={() => void runReview()}
             reviewDisabled={reviewDisabled()}
-            onToggleTheme={() => theme.setColorScheme(isDark() ? "light" : "dark")}
             onToggleSessions={() => setMobileSessionsOpen((open) => !open)}
-            onContext={openContext}
-            context={uiStore.context()}
-            contextOpen={uiStore.open()}
-            atlas={atlasConnected()}
-            trace={productPreferences.trace()}
           />
           <SessionTabStrip
             tabs={openSessions()}
@@ -1188,22 +1176,11 @@ function Header(props: {
   projectName: string
   directory: string
   trust: ProjectTrustApi
-  isDark: boolean
   onBack: () => void
-  onOpenPalette: () => void
-  onOpenHelp: () => void
-  onOpenSettings: () => void
   onRunReview: () => void
   reviewDisabled: boolean
-  onToggleTheme: () => void
   onToggleSessions: () => void
-  onContext: (context: SessionContext) => void
-  context: SessionContext
-  contextOpen: boolean
-  atlas: boolean
-  trace: boolean
 }): JSX.Element {
-  const [menu, setMenu] = createSignal(false)
   return (
     <AppHeader class="workspace-header">
       <HeaderIconButton class="session-sidebar-toggle" onClick={props.onToggleSessions} title="Show sessions">
@@ -1229,85 +1206,14 @@ function Header(props: {
         api={props.trust}
       />
       <span class="workspace-header__spacer" />
-      <HeaderIconButton class="workspace-header__search" onClick={props.onOpenPalette} title="Search and commands">
-        <IconSearch size={13} strokeWidth={1.5} />
+      <HeaderIconButton
+        class="workspace-header__review"
+        disabled={props.reviewDisabled}
+        onClick={props.onRunReview}
+        title={props.reviewDisabled ? "Open an idle session to run review" : "Run review"}
+      >
+        <IconCheckCircle size={14} strokeWidth={1.5} />
       </HeaderIconButton>
-      <div class="workspace-header__menu-wrap" onMouseLeave={() => setMenu(false)}>
-        <HeaderIconButton
-          class="workspace-header__menu"
-          onClick={() => setMenu((open) => !open)}
-          title="Workspace controls"
-        >
-          <IconSettings size={14} strokeWidth={1.7} />
-        </HeaderIconButton>
-        <Show when={menu()}>
-          <div class="workspace-header__popover" role="menu">
-            <CompactContextActions
-              context={props.context}
-              contextOpen={props.contextOpen}
-              atlas={props.atlas}
-              trace={props.trace}
-              onContext={(context) => {
-                setMenu(false)
-                props.onContext(context)
-              }}
-            />
-            <button
-              type="button"
-              role="menuitem"
-              disabled={props.reviewDisabled}
-              title={
-                props.reviewDisabled
-                  ? "Open an idle session to run the reviewer"
-                  : "Launch an independent reviewer pass on this session"
-              }
-              style={{ opacity: props.reviewDisabled ? 0.45 : 1 }}
-              onClick={() => {
-                setMenu(false)
-                props.onRunReview()
-              }}
-            >
-              <IconCheckCircle size={13} strokeWidth={1.5} />
-              Run review
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenu(false)
-                props.onOpenHelp()
-              }}
-            >
-              <IconBookOpen size={13} strokeWidth={1.5} />
-              Help and shortcuts
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenu(false)
-                props.onOpenSettings()
-              }}
-            >
-              <IconSettings size={13} strokeWidth={1.5} />
-              Settings
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenu(false)
-                props.onToggleTheme()
-              }}
-            >
-              <Show when={props.isDark} fallback={<IconMoon size={13} strokeWidth={1.5} />}>
-                <IconSun size={13} strokeWidth={1.5} />
-              </Show>
-              {props.isDark ? "Use light theme" : "Use dark theme"}
-            </button>
-          </div>
-        </Show>
-      </div>
     </AppHeader>
   )
 }

@@ -1208,6 +1208,7 @@ export class Preferences extends HeyApiClient {
       intent?: "commercial" | "non-commercial"
       extra_budget_usd?: number
       show_trace?: boolean
+      atlas_enabled?: boolean
       delegation_enabled?: boolean
       delegation_specialist?: string | null
     },
@@ -1222,6 +1223,7 @@ export class Preferences extends HeyApiClient {
             { in: "body", key: "intent" },
             { in: "body", key: "extra_budget_usd" },
             { in: "body", key: "show_trace" },
+            { in: "body", key: "atlas_enabled" },
             { in: "body", key: "delegation_enabled" },
             { in: "body", key: "delegation_specialist" },
           ],

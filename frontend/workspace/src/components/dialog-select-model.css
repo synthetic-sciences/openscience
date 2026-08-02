@@ -130,8 +130,8 @@
 
 @media (min-width: 720px) {
   [data-component="dialog"]:has(.model-picker-sheet) [data-slot="dialog-container"] {
-    width: min(calc(100vw - 32px), 540px);
-    height: min(calc(100dvh - 48px), 486px);
+    width: min(calc(100vw - 32px), 480px);
+    height: min(calc(100dvh - 48px), 440px);
   }
 
   [data-component="dialog"] [data-slot="dialog-content"].model-picker-sheet {
@@ -195,7 +195,7 @@
   }
 
   .model-picker-sheet .model-picker-sheet__list [data-slot="list-item"] {
-    min-height: 42px;
+    min-height: 38px;
     padding: 4px 8px !important;
     border-radius: 8px;
   }

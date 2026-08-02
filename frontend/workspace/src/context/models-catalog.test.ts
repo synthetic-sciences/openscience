@@ -6,6 +6,7 @@ import {
   FRONTIER_MODELS,
   isChatModel,
   isFrontier,
+  isUserProviderConnection,
   preferredModel,
   preferredModels,
   routableModelKey,
@@ -110,6 +111,19 @@ describe("frontier model canonicalization", () => {
         capabilities: { output: { text: true, image: false } },
       }),
     ).toBe(true)
+
+    for (const id of ["text-embedding-3-large", "text-embedding-3-small", "text-embedding-ada-002"]) {
+      expect(isChatModel({ id, provider: { id: "openai" } })).toBe(false)
+    }
+    expect(isChatModel({ id: "nomic-embed-text", provider: { id: "openrouter" } })).toBe(false)
+  })
+
+  test("managed OpenRouter credentials are not presented as user provider setup", () => {
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "config", billing: "managed" })).toBe(false)
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "env", billing: null })).toBe(false)
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "api", billing: "managed" })).toBe(true)
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "config", billing: "byok" })).toBe(true)
+    expect(isUserProviderConnection({ providerID: "anthropic", source: "env", billing: "managed" })).toBe(true)
   })
 
   test("stable Anthropic aliases win over dated duplicates", () => {

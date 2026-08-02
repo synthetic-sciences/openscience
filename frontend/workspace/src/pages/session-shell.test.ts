@@ -50,7 +50,8 @@ describe("focused workspace shell", () => {
     expect(session).not.toContain('role="tabpanel"')
     expect(session).not.toContain("centerPanelId")
     expect(session).not.toContain("centerTabId")
-    expect(session).toContain('class="workspace-header__menu"')
+    expect(session).not.toContain('class="workspace-header__menu"')
+    expect(session).not.toContain('class="workspace-header__search"')
     expect(session).not.toContain("<HeaderDivider")
     expect(session).not.toContain('<Wordmark size="sm"')
     expect(session).not.toContain('placeholder="Search sessions"')
@@ -83,7 +84,7 @@ describe("focused workspace shell", () => {
     expect(session).not.toContain('label="Skills"')
   })
 
-  test("keeps contextual navigation in the rail and compact More menu", () => {
+  test("keeps contextual navigation in the compact left rail", () => {
     const session = read("./session.tsx")
     const action = read("./session-sidebar-action.tsx")
 
@@ -105,7 +106,7 @@ describe("focused workspace shell", () => {
     expect(session).toContain("dialog.show(() => <DialogSettings />)")
     expect(action).toContain('onClick={(_event?: Event) => props.onContext("files")}')
     expect(action).toContain('onClick={(_event?: Event) => props.onContext("terminal")}')
-    expect(session).toContain("<CompactContextActions")
+    expect(session).not.toContain("<CompactContextActions")
     expect(action).toContain('props.onContext("files")')
     expect(action).toContain('props.onContext("terminal")')
     expect(action).toContain('props.onContext("kernels")')
@@ -181,7 +182,7 @@ describe("focused workspace shell", () => {
     expect(session).toContain('class="session-sidebar__session"')
     expect(session).toContain('class="session-sidebar__session-title"')
     expect(session).not.toContain("DateTime.fromMillis")
-    expect(styles).toContain("width: 210px")
+    expect(styles).toContain("width: 196px")
     expect(styles).toContain("min-height: 31px")
     expect(styles).toContain("font-size: 12px")
   })

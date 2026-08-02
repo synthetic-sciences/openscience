@@ -120,10 +120,22 @@ type CatalogModel = {
 }
 
 export function isChatModel(model: CatalogModel): boolean {
+  if (/(^|[/._-])(?:text-)?embeddings?([/._-]|$)/i.test(model.id)) return false
+  if (/(^|[/._-])embed([/._-]|$)/i.test(model.id)) return false
   const output = model.capabilities?.output
   if (!output) return true
   if (output.text === false) return false
   return !output.audio && !output.image && !output.video
+}
+
+export function isUserProviderConnection(input: {
+  providerID: string
+  source?: "env" | "config" | "custom" | "api"
+  billing?: "managed" | "byok" | null
+}): boolean {
+  if (input.providerID !== "openrouter") return true
+  if (input.source === "api") return true
+  return input.billing === "byok"
 }
 
 export function foldedRouteMode(model: ModelKey, target: CatalogModel): string | undefined {

@@ -10,6 +10,8 @@ import { DialogSettings } from "@/components/dialog-settings"
 import { FolderPicker } from "@/atlas/FolderPicker"
 import { uiStore } from "@/atlas/store/ui"
 import {
+  IconBookOpen,
+  IconCpu,
   IconFile,
   IconFolder,
   IconMessageSquare,
@@ -21,6 +23,7 @@ import {
 import { projectHref, resolveProjectRoute } from "@/utils/project-route"
 import { projectHint, projectName } from "@/pages/home-projects"
 import { createProjectRequest } from "@/utils/openscience-fetch"
+import { URLS } from "@/config/urls"
 
 interface CommandPaletteProps {
   open: boolean
@@ -48,6 +51,11 @@ const EMPTY: Hits = { sessions: [], messages: [], artifacts: [] }
 const DEBOUNCE = 250
 const REVEAL_TIMEOUT = 2000
 
+function routeName(project: { worktree: string }) {
+  const parts = project.worktree.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] ?? "Current project"
+}
+
 // The transcript renders data-message-id anchors; after navigating to the
 // session the target may not be mounted yet, so retry for up to ~2s.
 function reveal(messageID: string) {
@@ -66,12 +74,6 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
   const [highlighted, setHighlighted] = createSignal(0)
   const [hits, setHits] = createSignal<Hits>()
   const [searching, setSearching] = createSignal(false)
-  const [frame, setFrame] = createSignal({
-    left: 0,
-    top: 0,
-    width: typeof window === "undefined" ? 1280 : window.innerWidth,
-    height: typeof window === "undefined" ? 800 : window.innerHeight,
-  })
   const navigate = useNavigate()
   const params = useParams()
   const dialog = useDialog()
@@ -81,25 +83,6 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
   let inputRef: HTMLInputElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let inflight: AbortController | undefined
-
-  // Search belongs to the conversation, not the inspector. Re-measure while
-  // open so resizing either pane keeps the palette visually anchored to the
-  // main work area instead of making it appear to slide in from the right.
-  createEffect(() => {
-    if (!props.open) return
-    const update = () => {
-      const node = document.querySelector<HTMLElement>('[data-component="conversation-center"]')
-      const rect = node?.getBoundingClientRect()
-      if (!rect || rect.width < 320) {
-        setFrame({ left: 0, top: 0, width: window.innerWidth, height: window.innerHeight })
-        return
-      }
-      setFrame({ left: rect.left, top: rect.top, width: rect.width, height: rect.height })
-    }
-    requestAnimationFrame(update)
-    window.addEventListener("resize", update)
-    onCleanup(() => window.removeEventListener("resize", update))
-  })
 
   // The palette mounts on both the home page (no project) and project pages,
   // so the active project comes from the route rather than the SDK context.
@@ -177,6 +160,43 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
 
   const cmds = createMemo<Cmd[]>(() => {
     const list: Cmd[] = []
+    const scope = active()
+
+    if (scope) {
+      list.push({
+        id: "new-session",
+        label: "New session",
+        hint: "⌘N",
+        icon: IconPlus,
+        category: "commands",
+        run: () => navigate(projectHref(scope.project, scope.directory, "new")),
+      })
+      list.push({
+        id: "open-files",
+        label: "Open project files",
+        hint: "Current project",
+        icon: IconFile,
+        category: "commands",
+        run: () => uiStore.openContext("files"),
+      })
+      list.push({
+        id: "compute-monitor",
+        label: "Compute monitor",
+        hint: "Current project",
+        icon: IconCpu,
+        category: "commands",
+        run: () => uiStore.openContext("kernels"),
+      })
+      list.push({
+        id: "documentation",
+        label: "Open documentation",
+        hint: "syntheticsciences.ai",
+        icon: IconBookOpen,
+        category: "commands",
+        run: () => platform.openLink(URLS.site),
+      })
+      return list
+    }
 
     list.push({
       id: "new-project",
@@ -224,6 +244,24 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
     })
 
     return list
+  })
+
+  const recent = createMemo<Cmd[]>(() => {
+    const scope = active()
+    if (!scope) return []
+    const [store] = sync.child(scope.directory, { projectID: scope.projectID })
+    return [...store.session]
+      .filter((session) => !session.parentID && !session.time?.archived)
+      .sort((a, b) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0))
+      .slice(0, 5)
+      .map((session) => ({
+        id: `recent-${session.id}`,
+        label: session.title || "New session",
+        hint: "Session",
+        icon: IconMessageSquare,
+        category: "recent sessions",
+        run: () => navigate(projectHref(scope.project, scope.directory, session.id)),
+      }))
   })
 
   // Search hits reuse the Cmd shape so the existing flat-list selection model
@@ -274,7 +312,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
     const q = query().toLowerCase().trim()
     const base = q
       ? cmds().filter((c) => c.label.toLowerCase().includes(q) || c.hint?.toLowerCase().includes(q))
-      : cmds()
+      : [...recent(), ...cmds()]
     return [...base, ...results()]
   })
 
@@ -322,18 +360,10 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
       <Portal>
         <div class="atlas-overlay" onClick={props.onClose} />
         <div
-          class="atlas-modal atlas-fade-in"
+          class="atlas-modal atlas-fade-in command-palette"
           role="dialog"
           aria-modal="true"
           aria-label="command palette"
-          style={{
-            top: `${Math.max(frame().top + 24, frame().top + frame().height * 0.1)}px`,
-            left: `${frame().left + frame().width / 2}px`,
-            transform: "translateX(-50%)",
-            width: `${Math.min(640, Math.max(320, frame().width - 32))}px`,
-            "max-width": "calc(100vw - 24px)",
-            "max-height": "70vh",
-          }}
           onClick={(e) => e.stopPropagation()}
           ref={(el) => {
             requestAnimationFrame(() => inputRef?.focus())
@@ -353,13 +383,13 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
             </span>
             <input
               ref={inputRef}
-              aria-label="search projects, sessions, messages, and artifacts"
+              aria-label={active() ? "Search this project" : "Search projects and actions"}
               value={query()}
               onInput={(e) => {
                 setQuery(e.currentTarget.value)
                 setHighlighted(0)
               }}
-              placeholder={active() ? "search projects, sessions, messages, artifacts…" : "search projects, actions…"}
+              placeholder={active() ? "Search this project…" : "Search projects and actions…"}
               autofocus
               style={{
                 all: "unset",
@@ -378,7 +408,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
                 "letter-spacing": "0.08em",
               }}
             >
-              {filtered().length} match{filtered().length === 1 ? "" : "es"}
+              {active() ? routeName(active()!.project) : `${filtered().length} matches`}
             </span>
           </div>
 

@@ -4,6 +4,7 @@ import { Preferences, SettingsPreferencesRoutes } from "../../src/server/routes/
 test("trace navigation is opt-in by default", () => {
   expect(Preferences.parse({})).toMatchObject({
     show_trace: false,
+    atlas_enabled: true,
     delegation_enabled: true,
     delegation_specialist: null,
   })
@@ -16,6 +17,7 @@ test("composer preferences persist through the settings route", async () => {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       show_trace: true,
+      atlas_enabled: false,
       delegation_enabled: false,
       delegation_specialist: "biology",
     }),
@@ -23,6 +25,7 @@ test("composer preferences persist through the settings route", async () => {
   expect(update.status).toBe(200)
   expect((await update.json()) as Preferences).toMatchObject({
     show_trace: true,
+    atlas_enabled: false,
     delegation_enabled: false,
     delegation_specialist: "biology",
   })
@@ -31,6 +34,7 @@ test("composer preferences persist through the settings route", async () => {
   expect(read.status).toBe(200)
   expect((await read.json()) as Preferences).toMatchObject({
     show_trace: true,
+    atlas_enabled: false,
     delegation_enabled: false,
     delegation_specialist: "biology",
   })

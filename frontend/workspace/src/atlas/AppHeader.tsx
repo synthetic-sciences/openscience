@@ -29,16 +29,18 @@ export function HeaderIconButton(props: {
   title: string
   children: JSX.Element
   class?: string
+  disabled?: boolean
 }): JSX.Element {
   return (
     <button
       class={props.class}
+      disabled={props.disabled}
       onClick={props.onClick}
       title={props.title}
       style={{
         all: "unset",
         "box-sizing": "border-box",
-        cursor: "pointer",
+        cursor: props.disabled ? "default" : "pointer",
         width: "28px",
         height: "28px",
         display: "inline-flex",
@@ -49,12 +51,15 @@ export function HeaderIconButton(props: {
         color: "var(--color-text-muted)",
         background: "var(--color-surface-solid)",
         transition: "background 120ms ease, color 120ms ease",
+        opacity: props.disabled ? 0.45 : 1,
       }}
       onMouseEnter={(e) => {
+        if (props.disabled) return
         e.currentTarget.style.background = "var(--color-bg-elevated)"
         e.currentTarget.style.color = "var(--color-text)"
       }}
       onMouseLeave={(e) => {
+        if (props.disabled) return
         e.currentTarget.style.background = "var(--color-surface-solid)"
         e.currentTarget.style.color = "var(--color-text-muted)"
       }}

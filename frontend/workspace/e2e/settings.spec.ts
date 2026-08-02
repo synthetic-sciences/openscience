@@ -11,6 +11,16 @@ test("settings dialog navigates between sections and closes", async ({ page, got
   await dialog.getByRole("button", { name: "General", exact: true }).click()
   await expect(dialog.getByRole("heading", { name: "General" })).toBeVisible()
 
+  const atlas = dialog.getByRole("switch", { name: "Show Atlas", exact: true })
+  const trace = dialog.getByRole("switch", { name: "Show Trace", exact: true })
+  const atlasControl = atlas.locator("..").locator('[data-slot="switch-control"]')
+  await expect(atlas).toBeChecked()
+  await expect(trace).not.toBeChecked()
+  await atlasControl.click()
+  await expect(atlas).not.toBeChecked()
+  await atlasControl.click()
+  await expect(atlas).toBeChecked()
+
   const back = dialog.getByRole("button", { name: "Back" })
   const forward = dialog.getByRole("button", { name: "Forward" })
   await expect(back).toBeEnabled()

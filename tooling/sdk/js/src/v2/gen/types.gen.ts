@@ -5061,6 +5061,7 @@ export type SettingsPreferencesGetResponses = {
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
     show_trace?: boolean
+    atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
   }
@@ -5074,6 +5075,7 @@ export type SettingsPreferencesUpdateData = {
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
     show_trace?: boolean
+    atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
   }
@@ -5091,6 +5093,7 @@ export type SettingsPreferencesUpdateResponses = {
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
     show_trace?: boolean
+    atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
   }

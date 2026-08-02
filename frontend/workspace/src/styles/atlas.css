@@ -6099,6 +6099,103 @@ button.research-launchpad__status-item:hover {
   }
 }
 
+/* Compact project chrome -------------------------------------------------- */
+
+@keyframes command-palette-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 8px)) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.command-palette {
+  top: 50%;
+  left: 50%;
+  width: min(620px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(720px, 76vh);
+  transform: translate(-50%, -50%);
+  animation: command-palette-in 160ms var(--agent-ease);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-surface-solid) 96%, var(--color-bg));
+  box-shadow: 0 24px 80px color-mix(in srgb, #000 30%, transparent);
+}
+
+.session-sidebar__actions {
+  gap: 4px;
+  padding: 2px 5px 7px;
+}
+
+.session-sidebar__group-label {
+  padding: 5px 7px 1px;
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+}
+
+.session-sidebar__action,
+.session-sidebar__new {
+  min-height: 36px;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.session-sidebar__action-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.session-sidebar__action-copy {
+  gap: 0;
+}
+
+.session-sidebar__action-copy strong {
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 500;
+}
+
+.session-sidebar__action-copy > span {
+  font-size: 9.5px;
+  line-height: 1.2;
+}
+
+.session-sidebar__action kbd {
+  min-width: 25px;
+  padding: 1px 4px;
+  font-size: 8.5px;
+  border-radius: 5px;
+}
+
+.session-sidebar__label {
+  padding: 7px 8px 3px;
+  font-size: 10px;
+}
+
+.session-scroller [data-component="user-message"] [data-slot="user-message-text"] {
+  max-width: min(72%, 560px);
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 11px 11px 3px 11px;
+  background: color-mix(in srgb, var(--color-text) 7%, var(--color-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text) 8%, transparent);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (min-width: 720px) {
+  .session-sidebar {
+    width: 196px;
+    min-width: 196px;
+    margin-right: 8px;
+  }
+}
+
 .research-inspector__header {
   min-height: 40px;
   background: var(--color-bg);
