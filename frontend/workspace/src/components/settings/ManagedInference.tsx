@@ -35,6 +35,27 @@ const MODES: { value: Mode; title: string; body: string }[] = [
 
 const money = (value: number) => `$${value.toFixed(value >= 100 ? 0 : 2)}`
 
+/**
+ * The write-then-refresh ordering a mode switch depends on: the billing write
+ * must resolve and its data must be applied before the provider catalog is
+ * refreshed, and the refresh must not run at all when the write comes back
+ * without data (a failed save). Pulled out of `update()` and parameterized
+ * over `write`/`apply`/`refresh` so the ordering is unit-testable with plain
+ * async functions standing in for the SDK call and `refreshProviders()` —
+ * no live backend, no mocking `sdk`/`globalSync`.
+ */
+export async function commitBilling<T>(
+  write: () => Promise<{ data?: T }>,
+  apply: (data: T) => void,
+  refresh: () => Promise<void>,
+): Promise<boolean> {
+  const result = await write()
+  if (!result.data) return false
+  apply(result.data)
+  await refresh()
+  return true
+}
+
 export function ManagedInference(props: { onError?: (error: string | undefined) => void }) {
   const sdk = useGlobalSDK()
   const globalSync = useGlobalSync()
@@ -66,15 +87,13 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     if (busy()) return
     setBusy(true)
     props.onError?.(undefined)
-    void sdk.client.settings.billing
-      .update({ llm: value })
-      .then(async (result) => {
-        if (!result.data) return fail("Couldn't save managed inference settings.")
-        setBilling(result.data)
-        // The config write (above) must land before this, or refreshProviders()
-        // re-reads the pre-switch state and the row below keeps showing the old
-        // route until a reload — the bug this call exists to close.
-        await globalSync.refreshProviders()
+    void commitBilling(
+      () => sdk.client.settings.billing.update({ llm: value }),
+      setBilling,
+      () => globalSync.refreshProviders(),
+    )
+      .then((ok) => {
+        if (!ok) fail("Couldn't save managed inference settings.")
       })
       .catch(fail)
       .finally(() => setBusy(false))
