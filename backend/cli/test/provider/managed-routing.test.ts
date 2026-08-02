@@ -24,6 +24,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
+import { Auth } from "../../src/auth"
 import { API_BASE } from "../../src/openscience"
 
 function clearManagedLLMEnv() {
@@ -343,6 +344,145 @@ describe("managed session availability", () => {
         expect(providers["anthropic"]).toBeDefined()
         expect(providers["anthropic"].options.baseURL).toBe(`${PROXY}/anthropic/v1`)
         expect(providers["openrouter"]).toBeDefined()
+      },
+    })
+  })
+})
+
+// ── billing.llm gates the own-key vs managed-proxy route (1a/1b/1c) ─────────
+
+/** Auth.json lives outside the per-test tmp project (it's keyed by XDG dirs
+ *  isolated for the whole test *run*, not per test) — set and restore it like
+ *  provider.test.ts's Codex OAuth cases so a stored own key never leaks
+ *  across tests. */
+async function withOpenRouterOwnKey<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = await Auth.get("openrouter")
+  await Auth.set("openrouter", { type: "api", key })
+  try {
+    return await fn()
+  } finally {
+    if (previous) await Auth.set("openrouter", previous)
+    else await Auth.remove("openrouter")
+  }
+}
+
+describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1c)", () => {
+  test("managed: a stored own key is overridden — routes to the Atlas proxy with the thk_ token, and reports source \"managed\"; the own key is untouched in auth", async () => {
+    await withOpenRouterOwnKey("sk-or-own-key", async () => {
+      await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          clearManagedLLMEnv()
+          Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+          Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+          Provider.invalidate()
+        },
+        fn: async () => {
+          const openrouter = (await Provider.list())["openrouter"]
+          expect(openrouter).toBeDefined()
+          // 1a: managed spend wins over the stored own key — Atlas proxy, thk_ token.
+          expect(openrouter.options.baseURL).toBe(`${PROXY}/openrouter/v1`)
+          expect(openrouter.options.baseURL).not.toBe("https://openrouter.ai/api/v1")
+          expect(openrouter.options.apiKey).toBe("thk_openrouter")
+          expect(openrouter.options.apiKey).not.toBe("sk-or-own-key")
+          // 1b: the managed route reports its true source.
+          expect(openrouter.source).toBe("managed")
+        },
+      })
+      // 1a: the own key is retained (never deleted/rewritten), just unused.
+      expect(await Auth.get("openrouter")).toEqual({ type: "api", key: "sk-or-own-key" })
+    })
+  })
+
+  test("byok: a stored own key routes to public OpenRouter and reports source \"api\" (regression guard for 1c)", async () => {
+    await withOpenRouterOwnKey("sk-or-own-key", async () => {
+      await using tmp = await tmpdir({ config: { billing: { llm: "byok" } } })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          clearManagedLLMEnv()
+          Provider.invalidate()
+        },
+        fn: async () => {
+          const openrouter = (await Provider.list())["openrouter"]
+          expect(openrouter).toBeDefined()
+          expect(openrouter.options.apiKey).toBe("sk-or-own-key")
+          expect(openrouter.options.baseURL).toBe("https://openrouter.ai/api/v1")
+          expect(openrouter.source).toBe("api")
+        },
+      })
+    })
+  })
+
+  test("auto-detect (billing.llm unset): a stored own key still wins — unchanged from today's behaviour", async () => {
+    await withOpenRouterOwnKey("sk-or-own-key", async () => {
+      await using tmp = await tmpdir({ config: {} })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          clearManagedLLMEnv()
+          Provider.invalidate()
+        },
+        fn: async () => {
+          const openrouter = (await Provider.list())["openrouter"]
+          expect(openrouter).toBeDefined()
+          expect(openrouter.options.apiKey).toBe("sk-or-own-key")
+          expect(openrouter.options.baseURL).toBe("https://openrouter.ai/api/v1")
+          expect(openrouter.source).toBe("api")
+        },
+      })
+    })
+  })
+
+  test("1c must not overshoot: a provider whose key genuinely comes from config.provider still reports source \"config\"", async () => {
+    // No env var, no stored auth key, no billing toggle — OpenRouter's own
+    // custom loader declines to register the provider (nothing to route
+    // with), so the config loop below is the FIRST and only stage to claim
+    // it. That's the "genuinely config" case the asymmetry note describes.
+    await using tmp = await tmpdir({
+      config: {
+        provider: {
+          openrouter: {
+            options: { apiKey: "config-owned-key" },
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const openrouter = (await Provider.list())["openrouter"]
+        expect(openrouter).toBeDefined()
+        expect(openrouter.options.apiKey).toBe("config-owned-key")
+        expect(openrouter.source).toBe("config")
+      },
+    })
+  })
+
+  test("1c must not overshoot the other way: an env-registered provider that also appears in config.provider (for its whitelist) keeps source \"env\"", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        provider: { anthropic: { whitelist: ["claude-sonnet-4-6"] } },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("ANTHROPIC_API_KEY", "sk-ant-env-key")
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const anthropic = (await Provider.list())["anthropic"]
+        expect(anthropic).toBeDefined()
+        expect(anthropic.key).toBe("sk-ant-env-key")
+        // The config entry only supplies a whitelist — the credential is genuinely env's.
+        expect(anthropic.source).toBe("env")
       },
     })
   })

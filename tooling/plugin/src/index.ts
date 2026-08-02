@@ -17,7 +17,7 @@ import { type ToolDefinition } from "./tool"
 export * from "./tool"
 
 export type ProviderContext = {
-  source: "env" | "config" | "custom" | "api"
+  source: "env" | "config" | "custom" | "api" | "managed"
   info: Provider
   options: Record<string, any>
 }

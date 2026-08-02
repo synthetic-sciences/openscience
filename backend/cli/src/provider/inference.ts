@@ -25,7 +25,7 @@ export namespace Inference {
   export function classify(input: {
     providerID: string
     billing?: "managed" | "byok" | null
-    providerSource?: "env" | "config" | "custom" | "api"
+    providerSource?: "env" | "config" | "custom" | "api" | "managed"
     baseURL?: string
     auth?: Auth.Info["type"]
   }): Source {

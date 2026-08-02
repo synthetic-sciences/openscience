@@ -336,6 +336,11 @@ export namespace Provider {
     autoload: boolean
     getModel?: CustomModelLoader
     options?: Record<string, any>
+    // Overrides the reported `source` regardless of whether the provider was
+    // already registered by an earlier stage (env/api/plugin). Only the
+    // openrouter loader's managed-proxy branch sets this today — every other
+    // loader leaves it undefined and keeps the call site's default behavior.
+    source?: Info["source"]
   }>
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
@@ -597,16 +602,23 @@ export namespace Provider {
         "HTTP-Referer": "https://syntheticsciences.ai/",
         "X-Title": "synsci",
       }
-      // OpenRouter is the ONE provider with both a managed and a BYOK route, and
-      // resolution is deterministic by key presence (mirrors the Atlas server's
-      // BYOK-first rule): the user's OWN OpenRouter key wins and hits public
-      // OpenRouter directly; with no own key, a logged-in session falls back to
-      // the Atlas managed proxy (thk_* token → wallet-billed). Deleting the own
-      // key restores the managed route automatically — nothing is latched.
+      // OpenRouter is the ONE provider with both a managed and a BYOK route.
+      // Resolution is gated on the explicit `billing.llm` spend toggle: an
+      // explicit "managed" opt-in always wins and routes through the Atlas
+      // managed proxy (thk_* token → wallet-billed), even when a stored own
+      // key exists — the key is retained (never deleted/rewritten) but goes
+      // unused while managed spend is on. `byok` and auto-detect (unset /
+      // null) are unchanged from the old key-presence rule: the user's OWN
+      // OpenRouter key wins and hits public OpenRouter directly; with no own
+      // key, a logged-in session falls back to the Atlas managed proxy.
+      // Switching billing.llm back to byok/auto-detect (or deleting the own
+      // key under those modes) restores the previous resolution automatically
+      // — nothing is latched.
       const auth = await Auth.get("openrouter").catch(() => undefined)
       const authKey = auth?.type === "api" ? auth.key : undefined
       const envKey = Env.get("OPENROUTER_API_KEY")
-      const ownKey = isByokKey(authKey) ? authKey : isByokKey(envKey) ? envKey : undefined
+      const managed = (await Config.get().catch(() => undefined))?.billing?.llm === "managed"
+      const ownKey = managed ? undefined : isByokKey(authKey) ? authKey : isByokKey(envKey) ? envKey : undefined
       if (ownKey) {
         // Honour a user's own OpenRouter-compatible gateway (custom
         // OPENROUTER_BASE_URL); only the Atlas proxy is swapped for the public
@@ -626,7 +638,7 @@ export namespace Provider {
       const managedKey = session?.api_key ?? (isAtlasApiKey(envKey) ? envKey : undefined)
       if (managedKey) {
         const baseURL = isAtlasProxyBaseURL(proxyBase) ? proxyBase : managedOpenRouterBaseURL()
-        return { autoload: false, options: { apiKey: managedKey, baseURL, headers } }
+        return { autoload: false, options: { apiKey: managedKey, baseURL, headers }, source: "managed" }
       }
 
       // Neither an own key nor a managed route — nothing to route with.
@@ -949,7 +961,7 @@ export namespace Provider {
     .object({
       id: z.string(),
       name: z.string(),
-      source: z.enum(["env", "config", "custom", "api"]),
+      source: z.enum(["env", "config", "custom", "api", "managed"]),
       env: z.string().array(),
       key: z.string().optional(),
       options: z.record(z.string(), z.any()),
@@ -1519,14 +1531,27 @@ export namespace Provider {
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
         const opts = result.options ?? {}
-        const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+        // A loader-reported source (e.g. openrouter's managed-proxy branch)
+        // always wins, even when an earlier stage (env/api) already
+        // registered the provider under a different source — that earlier
+        // credential is exactly what the managed route is overriding.
+        // Absent an explicit source, keep the existing rule: "custom" only
+        // when this is the provider's first registration.
+        const patch: Partial<Info> = providers[providerID]
+          ? { options: opts, ...(result.source ? { source: result.source } : {}) }
+          : { source: result.source ?? "custom", options: opts }
         mergeProvider(providerID, patch)
       }
     }
 
     // load config
     for (const [providerID, provider] of configProviders) {
-      const partial: Partial<Info> = { source: "config" }
+      // A provider already registered by an earlier stage (env/api/custom/
+      // managed) genuinely got its credential from there — a `config.provider`
+      // entry that only supplies a `whitelist`, `name`, etc. must not relabel
+      // it as "config". Only claim "config" as the source when no earlier
+      // stage has registered this provider yet.
+      const partial: Partial<Info> = providers[providerID] ? {} : { source: "config" }
       if (provider.env) partial.env = provider.env
       if (provider.name) partial.name = provider.name
       if (provider.options) partial.options = provider.options
