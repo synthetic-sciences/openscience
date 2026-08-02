@@ -600,16 +600,22 @@ export namespace Provider {
       }
       // OpenRouter is the ONE provider with both a managed and a BYOK route.
       // Resolution is gated on the explicit `billing.llm` spend toggle: an
-      // explicit "managed" opt-in always wins and routes through the Atlas
-      // managed proxy (thk_* token → wallet-billed), even when a stored own
-      // key exists — the key is retained (never deleted/rewritten) but goes
-      // unused while managed spend is on. `byok` and auto-detect (unset /
-      // null) are unchanged from the old key-presence rule: the user's OWN
-      // OpenRouter key wins and hits public OpenRouter directly; with no own
-      // key, a logged-in session falls back to the Atlas managed proxy.
-      // Switching billing.llm back to byok/auto-detect (or deleting the own
-      // key under those modes) restores the previous resolution automatically
-      // — nothing is latched.
+      // explicit "managed" opt-in refuses to route on a stored own key, so it
+      // resolves the Atlas managed proxy (thk_* token → wallet-billed) even
+      // when an own key exists. The key is retained in auth (never
+      // deleted/rewritten) and simply loses this branch. When managed spend is
+      // on but NO managed credential can be found — a lapsed Atlas session,
+      // say — this returns no credential at all, and the availability guard in
+      // init() then drops the provider outright; it must, because the earlier
+      // "load apikeys" stage has already stamped provider.key from auth.json
+      // and getSDK would otherwise fall back to it against public OpenRouter,
+      // billing the user's own key under a toggle that reads "Managed".
+      // `byok` and auto-detect (unset / null) are unchanged from the old
+      // key-presence rule: the user's OWN OpenRouter key wins and hits public
+      // OpenRouter directly; with no own key, a logged-in session falls back
+      // to the Atlas managed proxy. Switching billing.llm back to
+      // byok/auto-detect (or deleting the own key under those modes) restores
+      // the previous resolution automatically — nothing is latched.
       const auth = await Auth.get("openrouter").catch(() => undefined)
       const authKey = auth?.type === "api" ? auth.key : undefined
       const envKey = Env.get("OPENROUTER_API_KEY")
@@ -1575,6 +1581,29 @@ export namespace Provider {
       // only; auto-detect (billing unset) is left alone so a thk_ key can still
       // resolve to managed there.
       if (config.billing?.llm === "byok" && Auth.isAtlasApiKey(effectiveKey(provider))) {
+        delete providers[providerID]
+        continue
+      }
+
+      // The managed mirror of the guard above. Under an EXPLICIT managed
+      // toggle the OpenRouter loader declines to route on a stored own key,
+      // but declining is not enough on its own: "load apikeys" already stamped
+      // provider.key from auth.json, and getSDK picks that up with baseURL
+      // falling back to public OpenRouter. A user whose Atlas session lapsed
+      // would keep chatting on their OWN key while the toggle still reads
+      // "Managed" and the wallet is never touched. Drop the provider instead —
+      // seeing no OpenRouter models is honest, silently spending a BYOK key is
+      // not. Exempt the two provider classes this file already treats as
+      // BYOK-by-design, since neither can debit the wallet and both are
+      // deliberately kept in managed mode: the user's own ChatGPT subscription
+      // (see isProviderAllowed) and anything served from their own machine
+      // (see isLocalBaseURL). Auto-detect (billing unset / null) and byok never
+      // reach this branch.
+      const exempt =
+        providerID === "openai-codex" ||
+        localProviderIds.has(providerID) ||
+        isLocalBaseURL(provider.options?.["baseURL"])
+      if (managedCuratedProvidersOnly && !exempt && isByokKey(effectiveKey(provider))) {
         delete providers[providerID]
         continue
       }

@@ -373,7 +373,7 @@ async function withOpenRouterOwnKey<T>(key: string, fn: () => Promise<T>): Promi
 }
 
 describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1c)", () => {
-  test("managed: a stored own key is overridden — routes to the Atlas proxy with the thk_ token, and reports source \"managed\"; the own key is untouched in auth", async () => {
+  test('managed: a stored own key is overridden — routes to the Atlas proxy with the thk_ token, and reports source "managed"; the own key is untouched in auth', async () => {
     await withOpenRouterOwnKey("sk-or-own-key", async () => {
       await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
       await Instance.provide({
@@ -401,7 +401,92 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("byok: a stored own key routes to public OpenRouter and reports source \"api\" (regression guard for 1c)", async () => {
+  test("managed with NO managed credential: the provider is dropped rather than silently billing the stored own key", async () => {
+    // The lapsed-Atlas-session case. billing.llm is explicitly "managed" and
+    // an own key sits in auth.json, but there is no thk_ token anywhere (no
+    // env, and OpenScience.getSession() cannot reach the hermetic API base
+    // from test/preload.ts). The loader returns headers only — no credential —
+    // so without the guard the "load apikeys" stage's provider.key survives
+    // into getSDK and pays for managed-labelled traffic out of the user's own
+    // pocket. No OpenRouter models is the honest outcome.
+    await withOpenRouterOwnKey("sk-or-own-key", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          billing: { llm: "managed" },
+          provider: { openrouter: { whitelist: ["anthropic/claude-sonnet-5"] } },
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          clearManagedLLMEnv()
+          Provider.invalidate()
+        },
+        fn: async () => {
+          expect((await Provider.list())["openrouter"]).toBeUndefined()
+        },
+      })
+      // The key itself is untouched — dropping the provider is a routing
+      // decision, not a credential edit.
+      expect(await Auth.get("openrouter")).toEqual({ type: "api", key: "sk-or-own-key" })
+    })
+  })
+
+  test("managed leaves a local provider alone even though its key reads as BYOK", async () => {
+    // Ollama's config block carries `apiKey: "local"`, which is a non-managed,
+    // non-"public" credential and therefore BYOK by isByokKey. It runs on the
+    // user's own hardware and is free, so the managed guard must not reach it —
+    // the same exemption isProviderAllowed already makes.
+    await using tmp = await tmpdir({
+      config: {
+        billing: { llm: "managed" },
+        provider: {
+          ollama: {
+            name: "Ollama (local)",
+            npm: "@ai-sdk/openai-compatible",
+            options: { baseURL: "http://localhost:11434/v1", apiKey: "local" },
+            models: { "llama3.1": { name: "llama3.1", limit: { context: 8192, output: 2048 } } },
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Provider.invalidate()
+      },
+      fn: async () => {
+        expect((await Provider.list())["ollama"]).toBeDefined()
+      },
+    })
+  })
+
+  test("auto-detect (billing.llm unset) with a stored own key and no managed credential keeps the provider — the guard is opt-in only", async () => {
+    // The legacy path this fix must not touch: identical to the managed case
+    // above except billing.llm is unset. Nothing is dropped, and the own key
+    // still routes to public OpenRouter.
+    await withOpenRouterOwnKey("sk-or-own-key", async () => {
+      await using tmp = await tmpdir({
+        config: { provider: { openrouter: { whitelist: ["anthropic/claude-sonnet-5"] } } },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          clearManagedLLMEnv()
+          Provider.invalidate()
+        },
+        fn: async () => {
+          const openrouter = (await Provider.list())["openrouter"]
+          expect(openrouter).toBeDefined()
+          expect(openrouter.options.apiKey).toBe("sk-or-own-key")
+          expect(openrouter.options.baseURL).toBe("https://openrouter.ai/api/v1")
+        },
+      })
+    })
+  })
+
+  test('byok: a stored own key routes to public OpenRouter and reports source "api" (regression guard for 1c)', async () => {
     await withOpenRouterOwnKey("sk-or-own-key", async () => {
       // config.provider.openrouter must be genuinely present (here, via a
       // synced whitelist) for this to actually exercise 1c — otherwise the
@@ -450,7 +535,7 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("auto-detect (billing.llm unset) with a synced thk_ token and no own key genuinely IS managed — source \"managed\" and Inference.classify \"managed\", not \"unknown\"", async () => {
+  test('auto-detect (billing.llm unset) with a synced thk_ token and no own key genuinely IS managed — source "managed" and Inference.classify "managed", not "unknown"', async () => {
     await using tmp = await tmpdir({ config: {} })
     await Instance.provide({
       directory: tmp.path,
@@ -477,7 +562,7 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("1c must not overshoot: a provider whose key genuinely comes from config.provider still reports source \"config\"", async () => {
+  test('1c must not overshoot: a provider whose key genuinely comes from config.provider still reports source "config"', async () => {
     // No env var, no stored auth key, no billing toggle — OpenRouter's own
     // custom loader declines to register the provider (nothing to route
     // with), so the config loop below is the FIRST and only stage to claim
@@ -506,7 +591,7 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("1c must not overshoot the other way: an env-registered provider that also appears in config.provider (for its whitelist) keeps source \"env\"", async () => {
+  test('1c must not overshoot the other way: an env-registered provider that also appears in config.provider (for its whitelist) keeps source "env"', async () => {
     await using tmp = await tmpdir({
       config: {
         provider: { anthropic: { whitelist: ["claude-sonnet-4-6"] } },
@@ -529,7 +614,7 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("1c (narrowed): an autoloaded custom-loader provider that also appears in config.provider (for its whitelist) still reports source \"config\", not \"custom\"", async () => {
+  test('1c (narrowed): an autoloaded custom-loader provider that also appears in config.provider (for its whitelist) still reports source "config", not "custom"', async () => {
     // google-vertex autoloads off GOOGLE_CLOUD_PROJECT alone (no auth.json
     // entry, and its models.dev `env` array — GOOGLE_VERTEX_PROJECT etc. —
     // never matches, so the "load env" stage never registers it either).
