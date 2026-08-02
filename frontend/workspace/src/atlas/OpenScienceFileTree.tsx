@@ -134,6 +134,7 @@ export function OpenScienceFileTree(props: { onOpen?: (path: string) => void }):
             "font-family": FONT_MONO,
             "font-size": "11px",
             color: "var(--color-text)",
+            padding: "3px 10px",
           }}
         />
         <button

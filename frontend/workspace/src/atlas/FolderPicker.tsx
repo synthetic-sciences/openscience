@@ -359,6 +359,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 "font-family": FONT_MONO,
                 "font-size": "12px",
                 color: "var(--color-text)",
+                padding: "3px 10px",
               }}
             />
             <span
@@ -414,6 +415,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 "font-family": FONT_MONO,
                 "font-size": "11px",
                 color: "var(--color-text)",
+                padding: "3px 10px",
               }}
             />
             <button

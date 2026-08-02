@@ -746,7 +746,8 @@
         outline: none;
 
         &:focus {
-          border-color: var(--border-focus);
+          border-color: var(--focus-lit-ring);
+          box-shadow: var(--focus-lit);
         }
 
         &::placeholder {

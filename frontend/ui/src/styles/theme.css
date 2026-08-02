@@ -229,6 +229,25 @@
   --border-selected: #b85c3b;
   --border-disabled: var(--smoke-light-alpha-8);
   --border-focus: #b85c3b;
+  /* Focus lighting for text entry. A flat accent stroke around a field reads as
+     a validation error; light does not arrive as a hard edge. The four layers
+     stack into one falloff — a highlight where the light lands on the top edge,
+     a hairline, then two widening washes — so a focused field looks lit rather
+     than outlined. Light mode grounds the falloff in ink, because a white wash
+     is invisible on a white surface. */
+  --focus-lit-edge: rgba(255, 255, 255, 0.9);
+  --focus-lit-ring: rgba(30, 30, 27, 0.18);
+  --focus-lit-wash: rgba(30, 30, 27, 0.07);
+  --focus-lit-bloom: rgba(30, 30, 27, 0.05);
+  --focus-lit:
+    inset 0 1px 0 var(--focus-lit-edge), 0 0 0 1px var(--focus-lit-ring), 0 0 0 4px var(--focus-lit-wash),
+    0 0 16px 1px var(--focus-lit-bloom);
+  /* The halo behind an unframed field — one whose box is the glyphs themselves,
+     so nothing can be drawn on the box without landing on the text. Its crisp
+     edge is an outline instead, the only ring CSS lets you hold off the box
+     (outline-offset), which is what the accent stroke used before. This is just
+     the light spilling past it. */
+  --focus-lit-halo: 0 0 0 5px var(--focus-lit-wash), 0 0 16px 4px var(--focus-lit-bloom);
   --border-weak-base: #3e2e2112;
   --border-strong-base: #3e2e2147;
   --border-strong-hover: var(--smoke-light-alpha-8);
@@ -487,6 +506,11 @@
     --border-selected: #d48765;
     --border-disabled: #f2f1ec59;
     --border-focus: #d48765;
+    /* On a dark surface the falloff is the light itself, so every layer is white. */
+    --focus-lit-edge: rgba(255, 255, 255, 0.26);
+    --focus-lit-ring: rgba(255, 255, 255, 0.2);
+    --focus-lit-wash: rgba(255, 255, 255, 0.07);
+    --focus-lit-bloom: rgba(255, 255, 255, 0.06);
     --border-weak-base: #f2f1ec14;
     --border-strong-base: #f2f1ec4a;
     --border-strong-hover: #f2f1ec3f;
@@ -631,4 +655,22 @@
     --avatar-text-cyan: #369eff;
     --avatar-text-lime: #c4f042;
   }
+}
+
+/* The in-app theme toggle writes data-color-scheme onto <html>; the
+   prefers-color-scheme block above cannot see it. Restate the focus falloff for
+   both explicit choices, so a dark app on a light OS is lit with white rather
+   than ink — and the reverse. */
+html[data-color-scheme="dark"] {
+  --focus-lit-edge: rgba(255, 255, 255, 0.26);
+  --focus-lit-ring: rgba(255, 255, 255, 0.2);
+  --focus-lit-wash: rgba(255, 255, 255, 0.07);
+  --focus-lit-bloom: rgba(255, 255, 255, 0.06);
+}
+
+html[data-color-scheme="light"] {
+  --focus-lit-edge: rgba(255, 255, 255, 0.9);
+  --focus-lit-ring: rgba(30, 30, 27, 0.18);
+  --focus-lit-wash: rgba(30, 30, 27, 0.07);
+  --focus-lit-bloom: rgba(30, 30, 27, 0.05);
 }

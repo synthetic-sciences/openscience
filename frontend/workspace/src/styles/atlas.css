@@ -137,12 +137,30 @@
   outline-offset: 2px;
 }
 
-/* The composer shows its own soft focus-within ring, so the textarea inside it
-   doesn't need the hard keyboard outline stacked on top (textareas match
-   :focus-visible even on mouse focus, which is what read as a harsh border). */
-.g-composer textarea:focus,
-.g-composer textarea:focus-visible {
+/* Text entry takes the lighting instead of the accent stroke. A caret already
+   says "you are typing here", so the field only has to be found, not flagged.
+   These fields have no frame — the border box is the glyphs — so the edge stays
+   an outline purely for outline-offset, the one way CSS holds a ring off the
+   box; box-shadow has no equivalent and sits on the text. The shadow is the
+   spill past that edge. Checkboxes and radios keep the accent ring above; a
+   wash around a 14px box just smudges it. !important twice over: to beat the
+   rule above, and because these inputs carry an inline `all: unset`. */
+:where(input:not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable="true"]):focus-visible {
+  outline: 1px solid var(--focus-lit-ring) !important;
+  outline-offset: 2px;
+  box-shadow: var(--focus-lit-halo) !important;
+}
+
+/* Composers and the shared TextField light their own frame on :focus-within, so
+   the control inside must stay dark — otherwise the field draws a second, inner
+   ring on its own box, which follows neither the frame's radius nor its bounds
+   and gets clipped by the controls row beneath it. The lighting belongs to
+   whichever element the user reads as "the field". Textareas match
+   :focus-visible even on mouse focus, so both states have to be covered. */
+:is(.g-composer, .workspace-composer, [data-component="prompt-input"], [data-component="input"], [data-focus-frame])
+  :is(input, textarea):is(:focus, :focus-visible) {
   outline: none !important;
+  box-shadow: none !important;
 }
 
 /* The v1.1.116 chat + composer buttons carry their own subtle focus treatment
@@ -213,10 +231,8 @@
 }
 
 .workspace-composer:focus-within {
-  border-color: color-mix(in srgb, var(--color-focus) 45%, transparent);
-  box-shadow:
-    var(--shadow-float),
-    0 0 0 3px color-mix(in srgb, var(--color-focus) 12%, transparent);
+  border-color: var(--focus-lit-ring);
+  box-shadow: var(--shadow-float), var(--focus-lit);
 }
 
 .workspace-composer [data-component="prompt-input"] {
@@ -660,10 +676,8 @@ html[data-color-scheme="dark"] .g-strip {
   box-shadow: var(--shadow-xs);
 }
 .g-composer:focus-within {
-  border-color: var(--color-border-strong);
-  box-shadow:
-    0 0 0 4px color-mix(in srgb, var(--color-focus) 10%, transparent),
-    var(--shadow-xs);
+  border-color: var(--focus-lit-ring);
+  box-shadow: var(--focus-lit), var(--shadow-xs);
 }
 
 .g-divider {
@@ -5307,9 +5321,9 @@ button.research-launchpad__status-item:hover {
 }
 
 .workspace-composer:focus-within {
-  border-color: color-mix(in srgb, var(--color-text) 18%, transparent);
+  border-color: var(--focus-lit-ring);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--color-focus) 8%, transparent),
+    var(--focus-lit),
     0 14px 34px color-mix(in srgb, #000 12%, transparent);
 }
 

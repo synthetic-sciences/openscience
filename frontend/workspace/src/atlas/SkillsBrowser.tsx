@@ -130,7 +130,7 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
             "font-family": FONT_SANS,
             "font-size": "12px",
             color: "var(--color-text)",
-            padding: "2px 4px",
+            padding: "3px 10px",
           }}
         />
         <button
@@ -337,6 +337,7 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void }): J
               "font-family": FONT_SANS,
               "font-size": "14px",
               color: "var(--color-text)",
+              padding: "3px 10px",
             }}
           />
           <span

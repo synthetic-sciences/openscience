@@ -53,7 +53,10 @@ export function DialogCreateProject(props: {
         <div class="flex flex-col gap-5 px-6 pb-6">
           <label class="flex flex-col gap-2">
             <span class="text-13-medium text-text-strong">Project name</span>
-            <span class="flex h-11 items-center overflow-hidden rounded-[8px] border border-border-weak-base bg-surface-base transition-colors focus-within:border-border-focus focus-within:ring-1 focus-within:ring-border-focus">
+            <span
+              data-focus-frame
+              class="flex h-11 items-center overflow-hidden rounded-[8px] border border-border-weak-base bg-surface-base transition focus-within:border-[var(--focus-lit-ring)] focus-within:shadow-[var(--focus-lit)]"
+            >
               <span class="flex h-full w-11 flex-none items-center justify-center border-r border-border-weak-base text-text-weak">
                 <IconFolder size={16} strokeWidth={1.5} />
               </span>

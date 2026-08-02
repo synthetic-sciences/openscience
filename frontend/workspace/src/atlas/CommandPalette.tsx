@@ -397,6 +397,9 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
                 "font-family": FONT_MONO,
                 "font-size": "13px",
                 color: "var(--color-text)",
+                // `all: unset` leaves the box flush with the glyphs, so the
+                // caret starts on the edge and the focus ring lands on the text.
+                padding: "3px 10px",
               }}
             />
             <span
