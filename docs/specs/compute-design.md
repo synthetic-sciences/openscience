@@ -654,9 +654,19 @@ Three real leases through the real route, real provider keys, nothing faked belo
 - **The retry did not fire in any of the three launches.** First pick succeeded every time, including
   against a deliberately staled cache. Not a disproof — it means first-pick success is common — but the
   retry path is still unexercised against a real provider refusal.
-- **The 201 response never names the GPU.** It carries `provider` and `requested_sku` (an opaque Vast
-  offer id like `42093969`), but no model. A caller that asked for an `RTX-3090` cannot confirm from the
-  response that it got one. This blocks the OpenScience `compute_launch` tool from reporting honestly.
+- **The 201 response never named the GPU — since fixed.** It carried `provider` and `requested_sku` (an
+  opaque Vast offer id like `42093969`) but no model, so a caller that asked for an `RTX-3090` could not
+  confirm from the response that it got one, and `GET /api/compute/leases` had the same gap for every
+  lease. `compute_leases` now carries `gpu_model` (the canonical id, **NULL when `canonical()` cannot
+  place the row — never a guess**), `gpu_name` (the provider's own string, always present, which is what
+  keeps a NULL model row useful) and `gpu_count`. Populated on the named path, the requirement path and
+  the agent-spawn path. Verified live: `{gpu: "RTX-3090", count: 1}` returns
+  `gpu_model='RTX-3090' gpu_name='RTX 3090' gpu_count=1`.
+- **The retry fired live**, on a later run: `{gpu: "RTX-4090", count: 1}` drew RunPod's
+  `create pod: There are no instances currently available` — the verbatim string above. The loop excluded
+  that `(provider, sku)`, re-resolved against a fresh catalog, found no other `RTX-4090`, and returned a
+  structured `503` naming what it tried. No grant leaked. **Both halves of fact 4 are now observed in
+  production conditions, not just in tests.**
 
 **Why RunPod runs out of capacity is a query bug, not a stale catalog.** `list_options` asks for
 `gpuTypes{ id, displayName, memoryInGb, lowestPrice{ uninterruptablePrice } }` — a **price list, not an
