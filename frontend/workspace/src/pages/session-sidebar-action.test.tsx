@@ -67,6 +67,7 @@ describe("SessionSidebarActions", () => {
     expect(state.context()).toBe("kernels")
     expect(menu("Atlas")).toBeUndefined()
     expect(menu("Evidence")).toBeUndefined()
+    expect(menu("Trace")).toBeUndefined()
 
     const connected = mount(() => (
       <subject.CompactContextActions context="kernels" contextOpen={true} atlas={true} onContext={() => {}} />
@@ -77,6 +78,32 @@ describe("SessionSidebarActions", () => {
         ?.getAttribute("aria-pressed"),
     ).toBe("true")
     expect(connected.textContent).toContain("Atlas")
+  })
+
+  test("keeps Trace hidden until the General preference is enabled", async () => {
+    const subject = await import("./session-sidebar-action")
+    const hidden = mount(() => (
+      <subject.SessionSidebarActions
+        context="trace"
+        contextOpen={true}
+        artifact={false}
+        atlas={false}
+        onContext={() => {}}
+      />
+    ))
+    const visible = mount(() => (
+      <subject.SessionSidebarActions
+        context="trace"
+        contextOpen={true}
+        artifact={false}
+        atlas={false}
+        trace={true}
+        onContext={() => {}}
+      />
+    ))
+
+    expect(button(hidden, "Open session trace")).toBeNull()
+    expect(button(visible, "Open session trace")?.getAttribute("aria-pressed")).toBe("true")
   })
 
   test("keeps rail labels semantic while visual density stays in the shell CSS", async () => {

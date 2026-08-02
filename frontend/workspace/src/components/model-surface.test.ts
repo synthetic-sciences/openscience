@@ -63,9 +63,10 @@ describe("model control surface", () => {
     expect(settings).toContain("modelSummary")
     expect(settings).toContain("More models")
     expect(settings).toContain("data-model-menu-value")
-    expect(styles).toContain("width: min(274px, calc(100vw - 24px))")
-    expect(styles).toContain("min-height: 46px")
-    expect(styles).toContain("font-size: 12.5px")
+    expect(styles).toContain("width: min(320px, calc(100vw - 24px))")
+    expect(styles).toContain("min-height: 58px")
+    expect(styles).toContain("font-size: 14px")
+    expect(styles).toContain("color: #4f8cff")
     expect(styles).toContain("--model-control-surface: #30302d")
     expect(styles).toContain("font-family: var(")
 

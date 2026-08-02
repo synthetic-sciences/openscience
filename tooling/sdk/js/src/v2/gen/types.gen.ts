@@ -5047,6 +5047,7 @@ export type SettingsPreferencesGetResponses = {
     reasoning_effort?: "minimal" | "low" | "medium" | "high"
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
+    show_trace?: boolean
   }
 }
 
@@ -5057,6 +5058,7 @@ export type SettingsPreferencesUpdateData = {
     reasoning_effort?: "minimal" | "low" | "medium" | "high"
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
+    show_trace?: boolean
   }
   path?: never
   query?: never
@@ -5071,6 +5073,7 @@ export type SettingsPreferencesUpdateResponses = {
     reasoning_effort?: "minimal" | "low" | "medium" | "high"
     intent?: "commercial" | "non-commercial"
     extra_budget_usd?: number
+    show_trace?: boolean
   }
 }
 

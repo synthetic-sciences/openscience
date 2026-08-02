@@ -13,7 +13,7 @@
   --model-control-text: var(--text-strong);
   --model-control-muted: var(--text-weak);
   --model-control-faint: var(--text-weaker);
-  --model-control-shadow: 0 8px 24px color-mix(in srgb, #241f1a 12%, transparent);
+  --model-control-shadow: 0 16px 42px color-mix(in srgb, #241f1a 18%, transparent);
   font-family: var(
     --font-family-sans,
     "Inter Variable",
@@ -38,20 +38,20 @@ html[data-color-scheme="dark"]
   --model-control-text: #f2f1ec;
   --model-control-muted: #b6b5ae;
   --model-control-faint: #8f8e87;
-  --model-control-shadow: 0 10px 28px #00000038, 0 2px 6px #0000001f;
+  --model-control-shadow: 0 18px 46px #0000004a, 0 2px 8px #00000029;
 }
 
 [data-model-settings-trigger-style="label"] {
-  min-height: 30px !important;
-  max-width: min(210px, 40vw);
+  min-height: 36px !important;
+  max-width: min(230px, 40vw);
   gap: 6px !important;
-  padding: 0 7px !important;
-  border: 0 !important;
-  border-radius: 7px !important;
-  background: transparent !important;
+  padding: 0 11px !important;
+  border: 1px solid var(--model-control-border) !important;
+  border-radius: 10px !important;
+  background: var(--model-control-raised) !important;
   box-shadow: none !important;
   color: var(--model-control-text) !important;
-  font-size: 13px !important;
+  font-size: 13.5px !important;
   font-weight: 500 !important;
   letter-spacing: -0.005em;
 }
@@ -60,6 +60,11 @@ html[data-color-scheme="dark"]
 [data-model-settings-trigger-style="label"]:focus-visible,
 [data-model-settings-trigger-style="label"][data-expanded] {
   background: var(--model-control-hover) !important;
+}
+
+[data-model-settings-trigger-style="label"]:focus-visible {
+  outline: 2px solid #4f8cff !important;
+  outline-offset: 1px;
 }
 
 [data-model-source-label] {
@@ -92,20 +97,20 @@ html[data-color-scheme="dark"]
 }
 
 [data-model-settings-popover] {
-  width: min(274px, calc(100vw - 24px)) !important;
-  padding: 6px !important;
+  width: min(320px, calc(100vw - 24px)) !important;
+  padding: 8px !important;
   border: 1px solid var(--model-control-border-strong) !important;
-  border-radius: 12px !important;
+  border-radius: 14px !important;
   background: var(--model-control-surface) !important;
   box-shadow: var(--model-control-shadow) !important;
   color: var(--model-control-text);
 }
 
 [data-model-settings-popover] .model-settings-row {
-  min-height: 34px;
-  gap: 10px;
-  padding: 0 9px;
-  border-radius: 7px;
+  min-height: 40px;
+  gap: 12px;
+  padding: 0 12px;
+  border-radius: 9px;
   color: var(--model-control-text);
   font-size: 12px;
   line-height: 1.2;
@@ -116,14 +121,16 @@ html[data-color-scheme="dark"]
   background: var(--model-control-hover);
 }
 
-[data-model-settings-popover] .model-settings-row[aria-checked="true"] {
-  background: var(--model-control-selected);
+[data-model-settings-popover] .model-settings-row:focus-visible {
+  outline: 1px solid #4f8cff !important;
+  outline-offset: -1px;
+  box-shadow: none !important;
 }
 
 [data-model-menu-label] {
   min-width: 0;
   color: var(--model-control-text);
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 500;
   letter-spacing: -0.006em;
 }
@@ -134,7 +141,7 @@ html[data-color-scheme="dark"]
 }
 
 [data-model-settings-popover] [data-model-quick] {
-  min-height: 46px;
+  min-height: 58px;
 }
 
 .model-settings-model {
@@ -142,7 +149,7 @@ html[data-color-scheme="dark"]
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .model-settings-model strong,
@@ -155,38 +162,39 @@ html[data-color-scheme="dark"]
 
 .model-settings-model strong {
   color: var(--model-control-text);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 520;
   letter-spacing: -0.005em;
 }
 
 .model-settings-model small {
   color: var(--model-control-faint);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 400;
 }
 
 .model-settings-more {
-  color: var(--model-control-muted) !important;
+  min-height: 46px !important;
+  color: var(--model-control-text) !important;
 }
 
 [data-model-menu-value] {
   max-width: 158px;
   gap: 8px;
   color: var(--model-control-muted);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 400;
 }
 
 .model-settings-divider {
   height: 1px;
-  margin: 4px 8px;
+  margin: 6px 10px;
   background: var(--model-control-border);
 }
 
 .model-settings-check {
-  color: var(--model-control-text);
-  font-size: 12px;
+  flex: 0 0 auto;
+  color: #4f8cff;
 }
 
 @media (max-width: 719px) {

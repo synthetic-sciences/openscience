@@ -72,6 +72,7 @@ import { createSessionTabs } from "@/atlas/store/sessionTabs"
 import { ProjectTrustControl } from "@/atlas/ProjectTrust"
 import { projectTrustApi, type ProjectTrustApi } from "@/atlas/project-trust"
 import { terminalEndpointAvailable } from "@/atlas/terminal-endpoint"
+import { productPreferences, type ProductPreferences } from "@/context/product-preferences"
 
 type SyncSession = ReturnType<typeof useSync>["data"]["session"][number]
 
@@ -127,6 +128,21 @@ export default function Page(): JSX.Element {
         void fetchSetupSession(url, platform.fetch ?? fetch)
           .then(setAtlasConnected)
           .catch(() => setAtlasConnected(false))
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => server.url,
+      (url) => {
+        productPreferences.sync({ show_trace: false })
+        if (!url) return
+        const endpoint = `${url.replace(/\/$/, "")}/settings/preferences`
+        void (platform.fetch ?? fetch)(endpoint)
+          .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Preferences unavailable"))))
+          .then((preferences) => productPreferences.sync(preferences as ProductPreferences))
+          .catch(() => productPreferences.sync({ show_trace: false }))
       },
     ),
   )
@@ -714,6 +730,7 @@ export default function Page(): JSX.Element {
           contextOpen={uiStore.open()}
           artifact={Boolean(artifactContext.active())}
           atlas={atlasConnected()}
+          trace={productPreferences.trace()}
           onSelect={(id) => {
             setMobileSessionsOpen(false)
             sessionTabs.open(id)
@@ -755,6 +772,7 @@ export default function Page(): JSX.Element {
             context={uiStore.context()}
             contextOpen={uiStore.open()}
             atlas={atlasConnected()}
+            trace={productPreferences.trace()}
           />
           <SessionTabStrip
             tabs={openSessions()}
@@ -1183,6 +1201,7 @@ function Header(props: {
   context: SessionContext
   contextOpen: boolean
   atlas: boolean
+  trace: boolean
 }): JSX.Element {
   const [menu, setMenu] = createSignal(false)
   return (
@@ -1227,6 +1246,7 @@ function Header(props: {
               context={props.context}
               contextOpen={props.contextOpen}
               atlas={props.atlas}
+              trace={props.trace}
               onContext={(context) => {
                 setMenu(false)
                 props.onContext(context)
@@ -1380,6 +1400,7 @@ function SessionsSidebar(props: {
   contextOpen: boolean
   artifact: boolean
   atlas: boolean
+  trace: boolean
   onSelect: (id: string) => void
   onDelete: (id: string) => void
   onRename: (id: string, title: string) => void
@@ -1446,6 +1467,7 @@ function SessionsSidebar(props: {
           contextOpen={props.contextOpen}
           artifact={props.artifact}
           atlas={props.atlas}
+          trace={props.trace}
           onContext={props.onContext}
         />
       </nav>

@@ -133,9 +133,7 @@ export const ModelOptionList: Component<ModelOptionListProps> = (props) => {
             >
               <span data-model-menu-label>{option.label}</span>
               <Show when={selected() === option.id}>
-                <span aria-hidden="true" class="model-settings-check">
-                  ✓
-                </span>
+                <Icon name="check" size="small" class="model-settings-check" aria-hidden="true" />
               </Show>
             </button>
           )}
@@ -376,9 +374,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                               </small>
                             </span>
                             <Show when={selected()}>
-                              <span aria-hidden="true" class="model-settings-check">
-                                ✓
-                              </span>
+                              <Icon name="check" size="small" class="model-settings-check" aria-hidden="true" />
                             </Show>
                           </button>
                         )

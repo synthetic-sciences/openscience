@@ -5,6 +5,7 @@
 //   • Appearance → the extracted AppearanceSections (theme, sounds, updates, …).
 import { Component, Show, createSignal, onMount, type JSX } from "solid-js"
 import { Button } from "@synsci/ui/button"
+import { Switch } from "@synsci/ui/switch"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
@@ -13,6 +14,7 @@ import { URLS } from "@/config/urls"
 import { FONT_CODE, FONT_SANS } from "@/styles/tokens"
 import { AppearanceSections } from "../settings-general"
 import { settingsApi } from "./api"
+import { productPreferences } from "@/context/product-preferences"
 
 type Account = {
   session?: boolean
@@ -24,6 +26,7 @@ type Account = {
 type Preferences = {
   intent: "commercial" | "non-commercial"
   extra_budget_usd: number
+  show_trace: boolean
 }
 
 export default function General() {
@@ -49,7 +52,9 @@ export default function General() {
   }
   const loadPrefs = async () => {
     try {
-      setPrefs(await settingsApi<Preferences>(base(), fetchFn(), "/settings/preferences"))
+      const next = await settingsApi<Preferences>(base(), fetchFn(), "/settings/preferences")
+      setPrefs(next)
+      productPreferences.sync(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -65,6 +70,7 @@ export default function General() {
       body: JSON.stringify(patch),
     })
     setPrefs(next)
+    productPreferences.sync(next)
   }
 
   const signOut = async () => {
@@ -93,7 +99,7 @@ export default function General() {
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-8 pb-8 max-w-[760px]">
           <h2 class="text-16-medium text-text-strong">General</h2>
-          <p class="text-13-regular text-text-weak">Your account, licensing, and appearance.</p>
+          <p class="text-13-regular text-text-weak">Your account, workspace, licensing, and appearance.</p>
         </div>
       </div>
 
@@ -171,6 +177,21 @@ export default function General() {
               body="Use in a product or for-profit work."
               onClick={() => void savePref({ intent: "commercial" })}
             />
+          </div>
+        </Section>
+
+        <Section title="Workspace" description="Choose which advanced surfaces appear in every project.">
+          <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+            <Row title="Trace" description="Show the local time, cost, and activity trace in session navigation.">
+              <Switch
+                hideLabel
+                checked={prefs()?.show_trace ?? false}
+                disabled={!prefs()}
+                onChange={(show_trace) => void savePref({ show_trace })}
+              >
+                Show Trace
+              </Switch>
+            </Row>
           </div>
         </Section>
 

@@ -7,6 +7,7 @@ export function CompactContextActions(props: {
   context: SessionContext
   contextOpen: boolean
   atlas: boolean
+  trace?: boolean
   onContext: (context: SessionContext) => void
 }): JSX.Element {
   return (
@@ -38,15 +39,17 @@ export function CompactContextActions(props: {
         <IconCpu size={13} strokeWidth={1.5} />
         Compute
       </button>
-      <button
-        type="button"
-        role="menuitem"
-        aria-pressed={props.context === "trace" && props.contextOpen}
-        onClick={() => props.onContext("trace")}
-      >
-        <IconActivity size={13} strokeWidth={1.5} />
-        Trace
-      </button>
+      <Show when={props.trace}>
+        <button
+          type="button"
+          role="menuitem"
+          aria-pressed={props.context === "trace" && props.contextOpen}
+          onClick={() => props.onContext("trace")}
+        >
+          <IconActivity size={13} strokeWidth={1.5} />
+          Trace
+        </button>
+      </Show>
       <Show when={props.atlas}>
         <button
           type="button"
@@ -102,6 +105,7 @@ export function SessionSidebarActions(props: {
   contextOpen: boolean
   artifact: boolean
   atlas: boolean
+  trace?: boolean
   onContext: (context: SessionContext) => void
 }): JSX.Element {
   return (
@@ -147,15 +151,17 @@ export function SessionSidebarActions(props: {
         >
           <IconCpu size={13} strokeWidth={1.5} />
         </SidebarAction>
-        <SidebarAction
-          label="Trace"
-          detail="Time, cost, trust"
-          ariaLabel="Open session trace"
-          active={props.context === "trace" && props.contextOpen}
-          onClick={(_event?: Event) => props.onContext("trace")}
-        >
-          <IconActivity size={13} strokeWidth={1.5} />
-        </SidebarAction>
+        <Show when={props.trace}>
+          <SidebarAction
+            label="Trace"
+            detail="Time, cost, trust"
+            ariaLabel="Open session trace"
+            active={props.context === "trace" && props.contextOpen}
+            onClick={(_event?: Event) => props.onContext("trace")}
+          >
+            <IconActivity size={13} strokeWidth={1.5} />
+          </SidebarAction>
+        </Show>
         <Show when={props.artifact}>
           <SidebarAction
             label="Details"

@@ -55,6 +55,7 @@ import { ModelSettingsPopover } from "./model-settings-popover"
 import { DialogSettings } from "./dialog-settings"
 import "./prompt-input.css"
 import { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_BYTES, attachmentMime, attachmentSize } from "./prompt-attachment"
+import { settingsApi } from "./settings/api"
 
 type PendingPrompt = {
   abort: AbortController
@@ -69,6 +70,12 @@ interface PromptInputProps {
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
+}
+
+type MemoryPreference = {
+  enabled: boolean
+  categories: Array<unknown>
+  budget?: number
 }
 
 const EXAMPLES = [
@@ -130,6 +137,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let slashPopoverRef!: HTMLDivElement
   let modeRef: HTMLDetailsElement | undefined
   const [modeOpen, setModeOpen] = createSignal(false)
+  const [reviewAuto, setReviewAuto] = createSignal(false)
+  const [memory, setMemory] = createSignal<MemoryPreference>({ enabled: true, categories: [] })
+  const [capabilityBusy, setCapabilityBusy] = createSignal(false)
 
   const mirror = { input: false }
 
@@ -170,18 +180,62 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     queueMicrotask(() => fileInputRef.click())
   }
 
-  const openSettings = (initial: "skills" | "memory" | "specialists") => {
+  const openSettings = (initial: "memory" | "specialists") => {
     setModeOpen(false)
     dialog.show(() => <DialogSettings initial={initial} />)
   }
 
-  const openCapability = (name: "review" | "compute") => {
+  const openCompute = () => {
     setModeOpen(false)
-    document.dispatchEvent(
-      new CustomEvent(name === "review" ? "openscience:run-review" : "openscience:open-context", {
-        detail: name === "compute" ? { context: "kernels" } : undefined,
-      }),
-    )
+    document.dispatchEvent(new CustomEvent("openscience:open-context", { detail: { context: "kernels" } }))
+  }
+
+  const loadCapabilities = () => {
+    setCapabilityBusy(true)
+    void Promise.all([
+      settingsApi<{ auto: boolean }>(sdk.url, platform.fetch ?? fetch, "/settings/review"),
+      settingsApi<MemoryPreference>(sdk.url, platform.fetch ?? fetch, "/settings/memory?scope=global"),
+    ])
+      .then(([review, next]) => {
+        setReviewAuto(review.auto)
+        setMemory(next)
+      })
+      .catch(() => undefined)
+      .finally(() => setCapabilityBusy(false))
+  }
+
+  const toggleReview = () => {
+    const previous = reviewAuto()
+    const next = !previous
+    setReviewAuto(next)
+    setCapabilityBusy(true)
+    void settingsApi<{ auto: boolean }>(sdk.url, platform.fetch ?? fetch, "/settings/review", {
+      method: "PUT",
+      body: JSON.stringify({ auto: next }),
+    })
+      .then((state) => setReviewAuto(state.auto))
+      .catch((error) => {
+        setReviewAuto(previous)
+        showToast({ variant: "error", title: "Could not update auto-review", description: String(error) })
+      })
+      .finally(() => setCapabilityBusy(false))
+  }
+
+  const toggleMemory = () => {
+    const previous = memory()
+    const next = { ...previous, enabled: !previous.enabled }
+    setMemory(next)
+    setCapabilityBusy(true)
+    void settingsApi<MemoryPreference>(sdk.url, platform.fetch ?? fetch, "/settings/memory?scope=global", {
+      method: "PUT",
+      body: JSON.stringify(next),
+    })
+      .then(setMemory)
+      .catch((error) => {
+        setMemory(previous)
+        showToast({ variant: "error", title: "Could not update memory", description: String(error) })
+      })
+      .finally(() => setCapabilityBusy(false))
   }
 
   onMount(() => {
@@ -2044,7 +2098,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   ref={modeRef}
                   class="workspace-composer__overflow"
                   open={modeOpen()}
-                  onToggle={(event) => setModeOpen(event.currentTarget.open)}
+                  onToggle={(event) => {
+                    const open = event.currentTarget.open
+                    setModeOpen(open)
+                    if (open) loadCapabilities()
+                  }}
                 >
                   <summary
                     role="button"
@@ -2054,85 +2112,64 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     title="Research capabilities"
                   >
                     <Icon name="sliders" />
-                    <span>Capabilities</span>
-                    <span aria-hidden="true" class="workspace-composer__overflow-caret">
-                      ⌄
-                    </span>
                   </summary>
                   <div role="menu" aria-label="Research capabilities">
-                    <div class="workspace-composer__capability-heading">
-                      <span>Research agent</span>
-                      <small>General-purpose by default</small>
-                    </div>
-                    <div class="workspace-composer__agent-list">
-                      <For each={local.agent.list()}>
-                        {(agent) => (
-                          <button
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={local.agent.current()?.name === agent.name}
-                            onClick={() => {
-                              local.agent.set(agent.name)
-                              if (agent.model) {
-                                local.model.set({
-                                  providerID: agent.model.providerID,
-                                  modelID: agent.model.modelID,
-                                })
-                              }
-                              setModeOpen(false)
-                            }}
-                          >
-                            <span>
-                              <strong>{agent.name}</strong>
-                              <Show when={agent.description}>{(description) => <small>{description()}</small>}</Show>
-                            </span>
-                            <Show when={local.agent.current()?.name === agent.name}>
-                              <span aria-hidden="true" class="workspace-composer__agent-check">
-                                ✓
-                              </span>
-                            </Show>
-                          </button>
-                        )}
-                      </For>
-                    </div>
-                    <div class="workspace-composer__capability-heading">
-                      <span>Tools</span>
-                      <small>Open a working research surface</small>
-                    </div>
                     <div class="workspace-composer__capability-list">
-                      <button type="button" role="menuitem" onClick={() => openCapability("review")}>
-                        <Icon name="check" />
-                        <span>
-                          <strong>Review now</strong>
-                          <small>Run the configured research review</small>
+                      <button type="button" role="menuitem" onClick={() => openSettings("specialists")}>
+                        <span>Delegation</span>
+                        <span class="workspace-composer__capability-value">
+                          On <span class="workspace-composer__capability-chevron">›</span>
                         </span>
                       </button>
-                      <button type="button" role="menuitem" onClick={() => openSettings("memory")}>
-                        <Icon name="brain" />
-                        <span>
-                          <strong>Memory</strong>
-                          <small>Personal and project brain</small>
+                      <button
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={reviewAuto()}
+                        disabled={capabilityBusy()}
+                        onClick={toggleReview}
+                      >
+                        <span>Auto-review</span>
+                        <span
+                          aria-hidden="true"
+                          class="workspace-composer__capability-switch"
+                          data-checked={reviewAuto() ? "true" : "false"}
+                        >
+                          <span />
                         </span>
                       </button>
                       <button type="button" role="menuitem" onClick={() => openSettings("specialists")}>
-                        <Icon name="models" />
-                        <span>
-                          <strong>Specialists</strong>
-                          <small>Delegation and auto-review</small>
+                        <span>Reviewer model</span>
+                        <span class="workspace-composer__capability-value">
+                          Default <span class="workspace-composer__capability-chevron">›</span>
                         </span>
                       </button>
-                      <button type="button" role="menuitem" onClick={() => openSettings("skills")}>
-                        <Icon name="mcp" />
-                        <span>
-                          <strong>Skills</strong>
-                          <small>Reusable research playbooks</small>
+                      <button
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={memory().enabled}
+                        disabled={capabilityBusy()}
+                        onClick={toggleMemory}
+                      >
+                        <span>Memory</span>
+                        <span
+                          aria-hidden="true"
+                          class="workspace-composer__capability-switch"
+                          data-checked={memory().enabled ? "true" : "false"}
+                        >
+                          <span />
                         </span>
                       </button>
-                      <button type="button" role="menuitem" onClick={() => openCapability("compute")}>
-                        <Icon name="server" />
-                        <span>
-                          <strong>Compute</strong>
-                          <small>Kernels and reproducible jobs</small>
+                      <div role="separator" class="workspace-composer__capability-divider" />
+                      <button type="button" role="menuitem" onClick={() => openSettings("specialists")}>
+                        <span>Specialist</span>
+                        <span class="workspace-composer__capability-value">
+                          None <span class="workspace-composer__capability-chevron">›</span>
+                        </span>
+                      </button>
+                      <button type="button" role="menuitem" onClick={openCompute}>
+                        <span>Compute</span>
+                        <span class="workspace-composer__capability-value">
+                          Local <span class="workspace-composer__capability-chevron">›</span>
                         </span>
                       </button>
                     </div>

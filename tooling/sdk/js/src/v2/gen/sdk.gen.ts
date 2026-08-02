@@ -770,7 +770,7 @@ export class Storage extends HeyApiClient {
   /**
    * Reset data location
    *
-   * Remove the data-location pointer so the default location is used on next launch.
+   * Remove the data-location pointer so ~/.openscience is used on next launch.
    */
   public resetLocation<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).delete<SettingsStorageResetLocationResponses, unknown, ThrowOnError>({
@@ -1193,6 +1193,7 @@ export class Preferences extends HeyApiClient {
       reasoning_effort?: "minimal" | "low" | "medium" | "high"
       intent?: "commercial" | "non-commercial"
       extra_budget_usd?: number
+      show_trace?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1204,6 +1205,7 @@ export class Preferences extends HeyApiClient {
             { in: "body", key: "reasoning_effort" },
             { in: "body", key: "intent" },
             { in: "body", key: "extra_budget_usd" },
+            { in: "body", key: "show_trace" },
           ],
         },
       ],

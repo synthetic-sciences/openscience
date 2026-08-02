@@ -1403,7 +1403,7 @@
       "delete": {
         "operationId": "settings.storage.resetLocation",
         "summary": "Reset data location",
-        "description": "Remove the data-location pointer so the default location is used on next launch.",
+        "description": "Remove the data-location pointer so ~/.openscience is used on next launch.",
         "responses": {
           "200": {
             "description": "Reset",
@@ -8279,6 +8279,10 @@
                       "default": 0,
                       "type": "number",
                       "minimum": 0
+                    },
+                    "show_trace": {
+                      "default": false,
+                      "type": "boolean"
                     }
                   }
                 }
@@ -8326,6 +8330,10 @@
                       "default": 0,
                       "type": "number",
                       "minimum": 0
+                    },
+                    "show_trace": {
+                      "default": false,
+                      "type": "boolean"
                     }
                   }
                 }
@@ -8361,6 +8369,10 @@
                     "default": 0,
                     "type": "number",
                     "minimum": 0
+                  },
+                  "show_trace": {
+                    "default": false,
+                    "type": "boolean"
                   }
                 }
               }
