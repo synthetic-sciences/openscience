@@ -71,14 +71,16 @@ export function RightPaneFrame(props: {
 
   createEffect(() => {
     if (!props.modal) {
+      const prior = refs.modal ? refs.prior : undefined
       refs.modal = false
       refs.prior = undefined
+      if (prior?.isConnected) queueMicrotask(() => prior.focus())
       return
     }
     if (refs.modal) return
     refs.modal = true
     const active = document.activeElement
-    refs.prior = active instanceof HTMLElement && !refs.pane?.contains(active) ? active : undefined
+    refs.prior = active instanceof HTMLElement ? active : undefined
     queueMicrotask(() => {
       if (!refs.modal || !refs.pane) return
       const initial =

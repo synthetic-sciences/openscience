@@ -255,6 +255,9 @@
   color: var(--text-weak);
   font-size: 10.5px;
   font-weight: 400;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .workspace-composer__agent-list button[aria-checked="true"] {
@@ -331,6 +334,11 @@
 }
 
 @media (max-width: 560px) {
+  .workspace-composer__overflow > div {
+    left: -44px;
+    max-height: min(440px, calc(100dvh - 140px));
+  }
+
   .workspace-composer__capability-list {
     grid-template-columns: 1fr;
   }
