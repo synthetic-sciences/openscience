@@ -3,6 +3,8 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { Config } from "../../../config/config"
 import { OpenScience } from "../../../openscience"
+import { Provider } from "../../../provider/provider"
+import { Instance } from "../../../project/instance"
 import { lazy } from "../../../util/lazy"
 import { Log } from "../../../util/log"
 
@@ -76,6 +78,18 @@ export const BillingSettingsRoutes = lazy(() =>
         // secrets into openscience.json in plaintext.
         await Config.updateGlobal({ billing: patch })
         log.info("update", { keys: Object.keys(patch) })
+
+        // Config.updateGlobal() busts its own per-directory config cache via
+        // Instance.disposeAll(), but fires it without awaiting — an
+        // already-instantiated project directory (any open session) can
+        // still read the pre-write Config.state cache for a request that
+        // lands before that disposal settles. Await it here so the toggle
+        // is guaranteed visible to the very next request, not just usually.
+        await Instance.disposeAll()
+        // Provider.state() separately memoizes the resolved provider/SDK map
+        // and never re-reads Config on its own; drop it so the next
+        // Provider.list()/getModel() call rebuilds under the new mode.
+        Provider.invalidate()
 
         // Mirror the LLM toggle to the account-scoped server billing mode, then force
         // a fresh sync so the right provider credentials (managed proxy token vs the

@@ -27,6 +27,11 @@ import { Inference } from "../../src/provider/inference"
 import { Env } from "../../src/env"
 import { Auth } from "../../src/auth"
 import { API_BASE } from "../../src/openscience"
+import { Config } from "../../src/config/config"
+import { BillingSettingsRoutes } from "../../src/server/routes/settings/billing"
+import { Global } from "../../src/global"
+import path from "path"
+import fs from "fs/promises"
 
 function clearManagedLLMEnv() {
   for (const key of [
@@ -368,7 +373,7 @@ async function withOpenRouterOwnKey<T>(key: string, fn: () => Promise<T>): Promi
 }
 
 describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1c)", () => {
-  test("managed: a stored own key is overridden — routes to the Atlas proxy with the thk_ token, and reports source \"managed\"; the own key is untouched in auth", async () => {
+  test('managed: a stored own key is overridden — routes to the Atlas proxy with the thk_ token, and reports source "managed"; the own key is untouched in auth', async () => {
     await withOpenRouterOwnKey("sk-or-own-key", async () => {
       await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
       await Instance.provide({
@@ -396,7 +401,7 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("byok: a stored own key routes to public OpenRouter and reports source \"api\" (regression guard for 1c)", async () => {
+  test('byok: a stored own key routes to public OpenRouter and reports source "api" (regression guard for 1c)', async () => {
     await withOpenRouterOwnKey("sk-or-own-key", async () => {
       // config.provider.openrouter must be genuinely present (here, via a
       // synced whitelist) for this to actually exercise 1c — otherwise the
@@ -445,7 +450,7 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("auto-detect (billing.llm unset) with a synced thk_ token and no own key genuinely IS managed — source \"managed\" and Inference.classify \"managed\", not \"unknown\"", async () => {
+  test('auto-detect (billing.llm unset) with a synced thk_ token and no own key genuinely IS managed — source "managed" and Inference.classify "managed", not "unknown"', async () => {
     await using tmp = await tmpdir({ config: {} })
     await Instance.provide({
       directory: tmp.path,
@@ -472,7 +477,7 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("1c must not overshoot: a provider whose key genuinely comes from config.provider still reports source \"config\"", async () => {
+  test('1c must not overshoot: a provider whose key genuinely comes from config.provider still reports source "config"', async () => {
     // No env var, no stored auth key, no billing toggle — OpenRouter's own
     // custom loader declines to register the provider (nothing to route
     // with), so the config loop below is the FIRST and only stage to claim
@@ -501,7 +506,7 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("1c must not overshoot the other way: an env-registered provider that also appears in config.provider (for its whitelist) keeps source \"env\"", async () => {
+  test('1c must not overshoot the other way: an env-registered provider that also appears in config.provider (for its whitelist) keeps source "env"', async () => {
     await using tmp = await tmpdir({
       config: {
         provider: { anthropic: { whitelist: ["claude-sonnet-4-6"] } },
@@ -524,7 +529,7 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
     })
   })
 
-  test("1c (narrowed): an autoloaded custom-loader provider that also appears in config.provider (for its whitelist) still reports source \"config\", not \"custom\"", async () => {
+  test('1c (narrowed): an autoloaded custom-loader provider that also appears in config.provider (for its whitelist) still reports source "config", not "custom"', async () => {
     // google-vertex autoloads off GOOGLE_CLOUD_PROJECT alone (no auth.json
     // entry, and its models.dev `env` array — GOOGLE_VERTEX_PROJECT etc. —
     // never matches, so the "load env" stage never registers it either).
@@ -554,5 +559,79 @@ describe("billing.llm gates OpenRouter's own-key vs managed-proxy route (1a/1b/1
         }
       },
     })
+  })
+})
+
+// ── settings/billing.ts PUT invalidates the provider cache at runtime (2a) ──
+
+describe("billing PUT invalidates the provider cache — no restart needed", () => {
+  test("switching managed -> byok through the real route drops the thk_-keyed OpenRouter provider from the very next Provider.list()", async () => {
+    await using tmp = await tmpdir({ config: {} })
+    try {
+      // Seed env once so the instance exists and OPENROUTER_* is in place -
+      // mirrors a project a user already has open before touching Settings.
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          clearManagedLLMEnv()
+          Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+          Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+        },
+        fn: async () => {},
+      })
+
+      // settings/billing.ts is mounted OUTSIDE the Instance.provide wrapper
+      // (see server.ts) - it never runs with an ambient project directory in
+      // production, so drive it the same way here rather than nesting it
+      // inside an Instance.provide() call.
+      const toManaged = await BillingSettingsRoutes().request("/", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ llm: "managed" }),
+      })
+      expect(toManaged.status).toBe(200)
+
+      // The next request for this project (a fresh Instance.provide(), just
+      // like a real incoming chat/inference call) sees it immediately.
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const before = (await Provider.list())["openrouter"]
+          expect(before).toBeDefined()
+          expect(before.source).toBe("managed")
+        },
+      })
+
+      // Flip to byok through the same route. The guard at provider.ts:1581
+      // drops any provider whose effective credential is a managed thk_
+      // token once byok is explicit — so openrouter must be gone on the
+      // very next Provider.list() call, with no process restart and no
+      // manual Provider.invalidate() from the test itself (the route is
+      // responsible for that now).
+      const toByok = await BillingSettingsRoutes().request("/", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ llm: "byok" }),
+      })
+      expect(toByok.status).toBe(200)
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const after = await Provider.list()
+          expect(after["openrouter"]).toBeUndefined()
+        },
+      })
+    } finally {
+      // The route writes to the GLOBAL config (not the tmpdir project config
+      // every other test in this file relies on) - remove both candidate
+      // filenames Config.updateGlobal's globalConfigFile() can pick (see
+      // config.ts) and reset the in-memory Config.global cache, so a later
+      // test in this file (or a later file in the same `bun test` run) does
+      // not inherit a flipped mode or a stray .jsonc that shadows .json.
+      await fs.rm(path.join(Global.Path.config, "openscience.json"), { force: true }).catch(() => {})
+      await fs.rm(path.join(Global.Path.config, "openscience.jsonc"), { force: true }).catch(() => {})
+      Config.global.reset()
+    }
   })
 })

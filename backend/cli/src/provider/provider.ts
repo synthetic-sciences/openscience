@@ -117,7 +117,11 @@ export namespace Provider {
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
 
-  function isAtlasApiKey(key: unknown): key is string {
+  /** A managed Atlas wallet credential (`thk_*`), as opposed to a user-owned
+   *  (BYOK) key. Exported so callers outside this module (e.g. the auth.set
+   *  route deciding whether an added OpenRouter key should flip billing.llm
+   *  to "byok") can classify a key the same way provider routing does. */
+  export function isAtlasApiKey(key: unknown): key is string {
     return typeof key === "string" && key.startsWith("thk_")
   }
 
