@@ -231,7 +231,16 @@ export namespace Storage {
     })
   }
 
-  const glob = new Bun.Glob("**/*")
+  // Records are `.json` files and nothing else. `publish` stages every write as
+  // a sibling `<target>.<pid>.<uuid>.tmp` in the same directory — it has to,
+  // since rename is only atomic within one filesystem — so a bare `**/*` also
+  // matched the staging file during the write→rename window, and permanently
+  // when a writer died in between (nothing sweeps them). Every caller here
+  // strips a fixed 5 characters assuming ".json", so those entries became
+  // phantom keys whose `read` throws NotFoundError. Matching on the suffix
+  // makes that assumption true by construction, and unlike relocating temp
+  // files it also hides debris already left on disk by earlier runs.
+  const glob = new Bun.Glob("**/*.json")
   export async function list(prefix: string[]) {
     const dir = await state().then((x) => x.dir)
     try {
