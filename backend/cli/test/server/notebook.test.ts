@@ -628,6 +628,62 @@ describe("/notebook routes", () => {
     })
   }, 30_000)
 
+  test("reports each queued cell its own execution count", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const app = NotebookRoutes()
+        const session = await Session.create({})
+        const execute = (code: string) =>
+          app.request("/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionID: session.id,
+              id: "analysis.ipynb",
+              language: "python",
+              code,
+            }),
+          })
+
+        // Every cell reports the position it actually ran at, straight out of the
+        // kernel namespace, so the assertion never assumes which HTTP request
+        // reached the queue first. A slow lead cell makes the rest pile up behind
+        // it and drain back to back, which is when the counts got crossed: the
+        // entry keeps a running total that each completion advances, and reading
+        // that shared total back after a persist handed a cell whichever count
+        // had landed last rather than its own.
+        const position = "globals().setdefault('order', []).append(1), len(globals()['order'])"
+        const lead = execute(`(__import__('time').sleep(0.5), ${position})[-1]`)
+        const rest = Array.from({ length: 12 }, () => execute(`(${position})[-1]`))
+        const counts = await Promise.all(
+          [lead, ...rest].map(async (pending) => {
+            const body = (await (await pending).json()) as {
+              execution_count: number
+              outputs: Array<{ data?: Record<string, string> }>
+            }
+            const ran = body.outputs.find((value) => value.data?.["text/plain"])?.data?.["text/plain"]
+            return { ran: Number(ran), reported: body.execution_count }
+          }),
+        )
+        // Each response carries the count of the cell it answers, and the kernel
+        // ran all thirteen exactly once.
+        for (const count of counts) expect(count.reported).toBe(count.ran)
+        expect(counts.map((count) => count.ran).sort((a, b) => a - b)).toEqual(
+          Array.from({ length: 13 }, (_, index) => index + 1),
+        )
+
+        await app.request("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: session.id, id: "analysis.ipynb", language: "python" }),
+        })
+      },
+    })
+  }, 30_000)
+
   test("boots one incarnation when a second cell arrives during startup", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

@@ -470,11 +470,16 @@ export namespace KernelRuntime {
     value.lastActivityAt = startedAt
     return kernel.execute(code, options).then(
       async (result) => {
-        value.executionCount = result.executionCount ?? value.executionCount + 1
+        // The count belongs to this cell, so capture it before the awaits below.
+        // `value.executionCount` is the kernel's running total and every cell
+        // queued behind this one advances it — reading it back after the persist
+        // reported the count of whichever cell had most recently finished.
+        const count = result.executionCount ?? value.executionCount + 1
+        value.executionCount = count
         const completedAt = Date.now()
         value.lastActivityAt = completedAt
         await persist(value)
-        const complete = { ...result, executionCount: value.executionCount }
+        const complete = { ...result, executionCount: count }
         const node = await provenance(
           identity,
           value,
