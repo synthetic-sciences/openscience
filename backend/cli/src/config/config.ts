@@ -1641,7 +1641,9 @@ export namespace Config {
     // failing) must not turn a landed write into a rejected one.
     await import("../provider/provider")
       .then((m) => m.Provider.invalidate())
-      .catch((e) => log.warn("failed to invalidate provider cache", { error: e instanceof Error ? e.message : String(e) }))
+      .catch((e) =>
+        log.warn("failed to invalidate provider cache", { error: e instanceof Error ? e.message : String(e) }),
+      )
     GlobalBus.emit("event", {
       directory: "global",
       payload: {
