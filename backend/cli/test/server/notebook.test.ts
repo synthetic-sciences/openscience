@@ -603,12 +603,14 @@ describe("/notebook routes", () => {
         // Sample the value `/status` serves on every macrotask turn. Polling the
         // route instead would do enough I/O per attempt to step straight over the
         // window this pins, which is what let the defect stay invisible.
-        const ready = async (attempt = 0): Promise<ReturnType<typeof KernelRuntime.status>> => {
-          const status = KernelRuntime.status(id)
-          if (status.active) return status
-          if (attempt >= 500_000) throw new Error("kernel did not start")
-          await Bun.sleep(0)
-          return ready(attempt + 1)
+        const deadline = Date.now() + 20_000
+        const ready = async () => {
+          while (Date.now() < deadline) {
+            const status = KernelRuntime.status(id)
+            if (status.active) return status
+            await Bun.sleep(0)
+          }
+          throw new Error("kernel did not start")
         }
         // A client that waits for the kernel and then sends its next cell must not
         // be able to overtake the cell that booted it, so the kernel may not turn
