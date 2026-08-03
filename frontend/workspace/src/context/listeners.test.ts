@@ -71,3 +71,34 @@ test("a subscriber that unsubscribes itself during notify does not disturb the o
 
   expect(seen).toEqual(["self-removing", "other", "other"])
 })
+
+test("a subscriber that throws does not fail the batch or the caller", async () => {
+  const listeners = createListeners()
+  const seen: string[] = []
+  listeners.add(() => {
+    seen.push("first")
+    throw new Error("subscriber blew up")
+  })
+  listeners.add(() => seen.push("second"))
+
+  // A throw out of the finally would replace the body's outcome with its own,
+  // handing the settings panels a rejection for a credential that did save.
+  await expect(listeners.notifyAfter(async () => {})).resolves.toBeUndefined()
+  expect(seen).toEqual(["first", "second"])
+})
+
+test("a throwing subscriber does not mask the body's own rejection", async () => {
+  const listeners = createListeners()
+  let notified = 0
+  listeners.add(() => {
+    throw new Error("subscriber blew up")
+  })
+  listeners.add(() => notified++)
+
+  const rejection = listeners.notifyAfter(async () => {
+    throw new Error("catalog unreachable")
+  })
+
+  await expect(rejection).rejects.toThrow("catalog unreachable")
+  expect(notified).toBe(1)
+})

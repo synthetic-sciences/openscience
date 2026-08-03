@@ -7,6 +7,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useProviders } from "@/hooks/use-providers"
 import { isUserProviderConnection } from "@/context/model-catalog"
 import { MODEL_PROVIDERS, MODEL_PROVIDER_LABELS, modelProvider } from "./model-providers"
+import { credentialChange } from "./credential-change"
 
 /**
  * `note` says where a key that this panel cannot delete actually lives, so the
@@ -73,31 +74,36 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
     if (!value || saving()) return
     setSaving(true)
     props.onError?.(undefined)
-    try {
-      await sdk.client.auth.set({ providerID: provider(), auth: { type: "api", key: value } })
-      setKey("")
-      await sdk.client.global.dispose()
-      // Don't wait on the disposed event to come back round the event stream —
-      // if it is missed the key is saved but never appears, which reads as a
-      // failed save.
-      await sync.refreshProviders()
-    } catch (error) {
-      props.onError?.(error instanceof Error ? error.message : String(error))
-    } finally {
-      setSaving(false)
-    }
+    // Don't wait on the disposed event to come back round the event stream —
+    // if it is missed the key is saved but never appears, which reads as a
+    // failed save. A refresh that fails outright is not a failed save either:
+    // the input has already been cleared by then, so reporting it as one puts
+    // an error banner over an empty field for a key that is on disk.
+    const outcome = await credentialChange({
+      write: async () => {
+        await sdk.client.auth.set({ providerID: provider(), auth: { type: "api", key: value } })
+        setKey("")
+        await sdk.client.global.dispose()
+      },
+      refresh: () => sync.refreshProviders(),
+      done: "Key saved",
+    })
+    setSaving(false)
+    props.onError?.(outcome.notice)
   }
 
   const remove = async (providerID: string) => {
     if (!window.confirm(`Remove the ${MODEL_PROVIDER_LABELS[providerID] ?? providerID} key from this machine?`)) return
     props.onError?.(undefined)
-    try {
-      await sdk.client.auth.remove({ providerID })
-      await sdk.client.global.dispose()
-      await sync.refreshProviders()
-    } catch (error) {
-      props.onError?.(error instanceof Error ? error.message : String(error))
-    }
+    const outcome = await credentialChange({
+      write: async () => {
+        await sdk.client.auth.remove({ providerID })
+        await sdk.client.global.dispose()
+      },
+      refresh: () => sync.refreshProviders(),
+      done: "Key removed",
+    })
+    props.onError?.(outcome.notice)
   }
 
   return (

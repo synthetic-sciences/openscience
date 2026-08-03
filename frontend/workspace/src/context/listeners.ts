@@ -9,7 +9,8 @@
  * not left stale by an unrelated failure elsewhere in the same batch.
  *
  * Listeners are copied before iteration so one that unsubscribes itself — or
- * subscribes another — cannot mutate the set mid-notify.
+ * subscribes another — cannot mutate the set mid-notify, and each is called in
+ * isolation: a subscriber that throws is its own failure, never the batch's.
  */
 export function createListeners() {
   const listeners = new Set<() => void>()
@@ -26,7 +27,17 @@ export function createListeners() {
       try {
         await body()
       } finally {
-        for (const listener of [...listeners]) listener()
+        for (const listener of [...listeners]) {
+          // A throw here would escape the finally and become the outcome of
+          // the whole call — turning a successful refresh into a rejection the
+          // caller reports as a failed save — and would skip every subscriber
+          // after it. Neither is this subscriber's to decide.
+          try {
+            listener()
+          } catch (error) {
+            console.error("Listener failed during notify", { error })
+          }
+        }
       }
     },
   }
