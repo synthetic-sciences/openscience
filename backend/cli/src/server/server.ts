@@ -227,10 +227,12 @@ export namespace Server {
             await Auth.set(providerID, info)
             // Don't depend on the client remembering to call global.sync —
             // stale provider state would keep serving the old credential.
-            // (Auth.set itself flips billing.llm managed -> byok when a real
-            // OpenRouter key is added, so that mode change is covered too -
-            // see auth/index.ts. It's the one choke point this route and
-            // `openscience auth login` both go through.)
+            // Auth.set writes the auth FILE, which no config write covers, so
+            // this call is still the one that makes the new key visible. (When
+            // it also flips billing.llm managed -> byok, Config's global write
+            // has already invalidated before announcing the disposal — see
+            // disposeGlobalInstances — so the SPA refetch that event triggers
+            // cannot beat us to a stale re-memoisation.)
             Provider.invalidate()
             return c.json(true)
           },

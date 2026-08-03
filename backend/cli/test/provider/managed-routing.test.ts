@@ -30,6 +30,7 @@ import { API_BASE } from "../../src/openscience"
 import { Config } from "../../src/config/config"
 import { BillingSettingsRoutes } from "../../src/server/routes/settings/billing"
 import { Global } from "../../src/global"
+import { GlobalBus } from "../../src/bus/global"
 import path from "path"
 import fs from "fs/promises"
 
@@ -719,6 +720,103 @@ describe("billing PUT invalidates the provider cache — no restart needed", () 
         await fs.rm(path.join(Global.Path.config, name), { force: true }).catch(() => {})
       }
       Config.global.reset()
+    }
+  })
+})
+
+// ── the invalidation must precede the announcement, not follow it ────────────
+
+describe("global config writes invalidate the provider cache before announcing", () => {
+  test("a listener that refetches on global.disposed sees the map rebuilt under the new config", async () => {
+    await using tmp = await tmpdir({ config: {} })
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          clearManagedLLMEnv()
+          Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+          Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+          Env.set("ANTHROPIC_API_KEY", "sk-ant-byok-key")
+          Provider.invalidate()
+        },
+        fn: async () => {
+          // Prime the module-level memo the way a long-running server has it
+          // primed before the user ever opens Settings.
+          expect((await Provider.list())["anthropic"]).toBeDefined()
+
+          // Stand in for the SPA's `global.disposed` handler, which fires
+          // GET /provider the moment the event arrives. GlobalBus.emit
+          // dispatches synchronously, so this listener runs at exactly the
+          // point inside disposeGlobalInstances() where the announcement
+          // happens — the narrowest possible version of the real window.
+          let observed: ReturnType<typeof Provider.list> | undefined
+          const listener = (e: { payload?: { type?: string } }) => {
+            if (e.payload?.type !== "global.disposed") return
+            observed = Provider.list()
+          }
+          GlobalBus.on("event", listener)
+          try {
+            await Config.updateGlobal({ billing: { llm: "managed" } })
+          } finally {
+            GlobalBus.off("event", listener)
+          }
+
+          expect(observed).toBeDefined()
+          // Managed routes curated providers only, so a map rebuilt under the
+          // config just written cannot contain the BYOK Anthropic key. Seeing
+          // it means the refetch was handed the pre-write memo — and nothing
+          // invalidates after the announcement, so it would stay that way.
+          const refetched = await observed!
+          expect(refetched["anthropic"]).toBeUndefined()
+          expect(refetched["openrouter"]).toBeDefined()
+        },
+      })
+    } finally {
+      for (const name of ["openscience.json", "openscience.jsonc", "config.json"]) {
+        await fs.rm(path.join(Global.Path.config, name), { force: true }).catch(() => {})
+      }
+      Config.global.reset()
+      Provider.invalidate()
+    }
+  })
+
+  test("a global write with no route behind it (replaceGlobal) invalidates on its own", async () => {
+    await using tmp = await tmpdir({ config: {} })
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          clearManagedLLMEnv()
+          Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+          Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+          Env.set("ANTHROPIC_API_KEY", "sk-ant-byok-key")
+          Provider.invalidate()
+        },
+        fn: async () => {
+          expect((await Provider.list())["anthropic"]).toBeDefined()
+
+          // replaceGlobal has no HTTP route and no caller anywhere that
+          // follows it with Provider.invalidate() — so this passes only if
+          // the write itself carries the invalidation. Per-call-site patching
+          // cannot make it pass; nothing here is racing anything.
+          await Config.replaceGlobal(
+            JSON.stringify({
+              $schema: "https://syntheticsciences.ai/config.json",
+              billing: { llm: "managed" },
+            }),
+          )
+
+          const after = await Provider.list()
+          expect(after["anthropic"]).toBeUndefined()
+          expect(after["openrouter"]).toBeDefined()
+        },
+      })
+    } finally {
+      for (const name of ["openscience.json", "openscience.jsonc", "config.json"]) {
+        await fs.rm(path.join(Global.Path.config, name), { force: true }).catch(() => {})
+      }
+      Config.global.reset()
+      Provider.invalidate()
     }
   })
 })

@@ -1621,9 +1621,22 @@ export namespace Config {
    * setSandbox/unsetGlobal/updateGlobal/replaceGlobal rely on the write
    * being visible to the very next Config.get(), not eventually-after-a-
    * fire-and-forget-settles visible.
+   *
+   * The provider cache is dropped here too, and specifically BEFORE the
+   * announcement. Provider memoises the resolved provider/SDK map at module
+   * scope keyed only by directory + trust, which Instance.disposeAll() does
+   * not touch and this write does not change — so it outlives the write. The
+   * SPA refetches GET /provider the instant it sees `global.disposed`, and a
+   * refetch that lands in the gap re-memoises the PRE-write map (the key just
+   * added still missing, billing still reading managed) with nothing left to
+   * invalidate it afterwards. Announcing a disposal that the provider map has
+   * not honoured yet is the bug; the two belong together.
    */
   async function disposeGlobalInstances() {
     await Instance.disposeAll().catch(() => undefined)
+    // Lazy because provider.ts imports Config — the same cycle-break
+    // provider/models.ts and openscience/index.ts already use to reach it.
+    await import("../provider/provider").then((m) => m.Provider.invalidate())
     GlobalBus.emit("event", {
       directory: "global",
       payload: {

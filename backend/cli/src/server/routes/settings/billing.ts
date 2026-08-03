@@ -76,17 +76,13 @@ export const BillingSettingsRoutes = lazy(() =>
         // writing back Config.getGlobal() would bake resolved {env:}/{file:}
         // secrets into openscience.json in plaintext.
         // Config.updateGlobal awaits its own per-directory config-cache
-        // invalidation (Instance.disposeAll()) before returning, so the new
-        // billing.llm is already visible to the next Config.get() by the
-        // time this line completes — no separate disposeAll() call needed
-        // here (see config.ts's disposeGlobalInstances).
+        // invalidation (Instance.disposeAll()) AND drops the memoized provider
+        // map before announcing the disposal, so both the new billing.llm and
+        // a provider map rebuilt under it are visible to the next reader by
+        // the time this line completes — no separate disposeAll() or
+        // Provider.invalidate() needed here (see disposeGlobalInstances).
         await Config.updateGlobal({ billing: patch })
         log.info("update", { keys: Object.keys(patch) })
-
-        // Provider.state() separately memoizes the resolved provider/SDK map
-        // and never re-reads Config on its own; drop it so the next
-        // Provider.list()/getModel() call rebuilds under the new mode.
-        Provider.invalidate()
 
         // Mirror the LLM toggle to the account-scoped server billing mode, then force
         // a fresh sync so the right provider credentials (managed proxy token vs the
