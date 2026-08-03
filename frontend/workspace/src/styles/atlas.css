@@ -155,10 +155,22 @@
    the control inside must stay dark — otherwise the field draws a second, inner
    ring on its own box, which follows neither the frame's radius nor its bounds
    and gets clipped by the controls row beneath it. The lighting belongs to
-   whichever element the user reads as "the field". Textareas match
-   :focus-visible even on mouse focus, so both states have to be covered. */
-:is(.g-composer, .workspace-composer, [data-component="prompt-input"], [data-component="input"], [data-focus-frame])
-  :is(input, textarea):is(:focus, :focus-visible) {
+   whichever element the user reads as "the field". Textareas and
+   contenteditables match :focus-visible even on mouse focus, so both states
+   have to be covered.
+
+   Left of the combinator: only elements that actually light a frame
+   (.workspace-composer / .g-composer :focus-within, the TextField wrapper
+   inside [data-component="input"], the create-project field's
+   [data-focus-frame]). [data-component="prompt-input"] used to sit in that
+   list, but it is the composer's contenteditable div itself
+   (prompt-input.tsx) — the control, not the frame — and an element is never
+   its own descendant, so it suppressed nothing and the editable painted the
+   halo underneath the lit form. It is matched on the right instead, as a
+   descendant of .workspace-composer, the form that does the lighting. A
+   contenteditable with no framing ancestor still gets the halo above. */
+:is(.g-composer, .workspace-composer, [data-component="input"], [data-focus-frame])
+  :is(input, textarea, [contenteditable="true"]):is(:focus, :focus-visible) {
   outline: none !important;
   box-shadow: none !important;
 }

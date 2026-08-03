@@ -745,9 +745,18 @@
         color: var(--text-base);
         outline: none;
 
+        /* This field frames itself — the border and radius above ARE the frame
+           — so it takes the lit frame, not the halo the app-wide rule hands
+           fields whose border box is just the glyphs (atlas.css). That rule is
+           !important, so out-specifying it is not enough; matching its weight
+           is the only way the treatment declared here reaches the screen at
+           all. Outline included: text inputs match :focus-visible on mouse
+           focus too, and without this the halo's offset ring survives on top
+           of the frame, at a different radius. */
         &:focus {
           border-color: var(--focus-lit-ring);
-          box-shadow: var(--focus-lit);
+          outline: none !important;
+          box-shadow: var(--focus-lit) !important;
         }
 
         &::placeholder {
