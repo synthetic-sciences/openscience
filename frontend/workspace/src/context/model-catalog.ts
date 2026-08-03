@@ -134,11 +134,11 @@ export function isUserProviderConnection(input: {
   billing?: "managed" | "byok" | null
 }): boolean {
   if (input.providerID !== "openrouter") return true
-  // A route the Atlas proxy is actually carrying now says so itself, and the
-  // panel labels it "Managed by Atlas". This filter exists to keep a row that
-  // would misdescribe who pays out of the list; a row that describes the
-  // managed route correctly is exactly what the reader came for.
-  if (input.source === "managed") return true
+  // "managed" means the Atlas proxy is carrying this route. That is not a
+  // connection the reader set up, so it has no place in a panel about their own
+  // keys — it falls through to the billing check and is filtered out. Which
+  // credential is paying is shown where it is actually useful: on the model
+  // itself, as the routing chip in the model picker.
   if (input.source === "api") return true
   return input.billing === "byok"
 }

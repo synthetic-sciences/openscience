@@ -126,12 +126,15 @@ describe("frontier model canonicalization", () => {
     expect(isUserProviderConnection({ providerID: "anthropic", source: "env", billing: "managed" })).toBe(true)
   })
 
-  // The backend now reports the Atlas-proxied route as source "managed" rather
-  // than leaving it looking like a key the user brought, so the row describes
-  // itself honestly and belongs in the list.
-  test("a route the Atlas proxy carries is shown, because it now labels itself", () => {
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: "managed" })).toBe(true)
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: null })).toBe(true)
+  // The backend now reports the Atlas-proxied route as source "managed", which
+  // the old four-value union could not express. It is still not the reader's own
+  // connection, so it stays out of the panel — including on auto-detect, where a
+  // wallet route resolves without the toggle ever being set to "managed".
+  test("a route the Atlas proxy carries is not the reader's own connection", () => {
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: "managed" })).toBe(false)
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: null })).toBe(false)
+    // ...unless they explicitly chose Own keys, where the panel is the point.
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: "byok" })).toBe(true)
   })
 
   test("stable Anthropic aliases win over dated duplicates", () => {

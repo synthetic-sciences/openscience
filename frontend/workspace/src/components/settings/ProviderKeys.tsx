@@ -40,11 +40,16 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
     note: "set in openscience.json",
     title: "Custom provider supplied by openscience.json; edit that file to remove it",
   },
+  // Unreachable while isUserProviderConnection filters an Atlas-carried route
+  // out of this list — it is not a connection the reader set up. Kept because
+  // Provider["source"] has to be covered exhaustively, and so the row would
+  // still describe itself honestly rather than fall through to "local file" if
+  // that filter is ever relaxed.
   managed: {
-    label: "Managed by Atlas",
+    label: "billed from wallet",
     removable: false,
-    note: "billed to OpenScience credits",
-    title: "Routed through the Atlas managed proxy and billed to OpenScience credits",
+    note: "routed through OpenScience credits",
+    title: "Routed through the Atlas managed proxy and billed to your OpenScience credits",
   },
 }
 
