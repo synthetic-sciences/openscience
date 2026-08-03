@@ -386,7 +386,7 @@ export function FilesSourceList(props: FilesSourceListProps): JSX.Element {
               type="button"
               aria-label="Connect another location"
               onClick={() => setForm("open", true)}
-              disabled={!props.sessionReady}
+              disabled={props.busy}
               style={connect()}
             >
               <IconPlus size={15} strokeWidth={1.6} />
@@ -485,14 +485,14 @@ export function FilesSourceList(props: FilesSourceListProps): JSX.Element {
           </form>
         </Show>
         <Show when={!props.sessionReady}>
-          <p style={note()}>Start a research session before connecting an outside file or folder.</p>
+          <p style={note()}>A research session will start automatically when you connect a location.</p>
         </Show>
       </section>
     </div>
   )
 }
 
-export function FileExplorer(): JSX.Element {
+export function FileExplorer(props: { onEnsureSession?: () => Promise<string | undefined> } = {}): JSX.Element {
   const sdk = useSDK()
   const server = useServer()
   const sync = useSync()
@@ -510,8 +510,7 @@ export function FileExplorer(): JSX.Element {
 
   const projectRoot = () => sdk.directory || sync.data.path.directory || sync.project?.worktree || ""
   const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)
-  const identity = (): FilesystemIdentity | undefined => {
-    const session = sessionID()
+  const identity = (session = sessionID()): FilesystemIdentity | undefined => {
     if (!session || !projectRoot()) return
     return { sessionID: session, projectID: sdk.projectID, directory: projectRoot() }
   }
@@ -630,11 +629,16 @@ export function FileExplorer(): JSX.Element {
     const path = view.source?.kind === "connected" ? node.absolute : node.path
     uiStore.openFile(projectRoot(), path)
   }
-  const connect = (input: ConnectInput) => {
-    const current = identity()
-    if (!current || view.busy) return
+  const connect = async (input: ConnectInput) => {
+    if (view.busy) return
     setView({ busy: true, error: undefined })
-    grantAccess(sdk.request, current, input)
+    const session = sessionID() ?? (await props.onEnsureSession?.())
+    const current = identity(session)
+    if (!current) {
+      setView({ busy: false, error: "OpenScience could not start a session for this connection." })
+      return
+    }
+    return grantAccess(sdk.request, current, input)
       .then(() => refetchSnapshot())
       .then(() => {
         setView({ busy: false, error: undefined })
@@ -835,7 +839,12 @@ export function FileExplorer(): JSX.Element {
   )
 }
 
-export function ExternalFileAccess(props: { file: ContextFile; active: boolean; onClose: () => void }): JSX.Element {
+export function ExternalFileAccess(props: {
+  file: ContextFile
+  active: boolean
+  onEnsureSession?: () => Promise<string | undefined>
+  onClose: () => void
+}): JSX.Element {
   const sdk = useSDK()
   const sync = useSync()
   const params = useParams()
@@ -847,18 +856,22 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
   })
   const projectRoot = () => sdk.directory || sync.data.path.directory || sync.project?.worktree || ""
   const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)
-  const identity = (): FilesystemIdentity | undefined => {
-    const session = sessionID()
+  const identity = (session = sessionID()): FilesystemIdentity | undefined => {
     if (!session || !projectRoot()) return
     return { sessionID: session, projectID: sdk.projectID, directory: projectRoot() }
   }
   const [snapshot, { refetch }] = createResource(identity, (current) => readAccess(sdk.request, current))
   const grant = createMemo(() => findFilesystemGrant(snapshot.latest, props.file.path, "read"))
-  const request = () => {
-    const current = identity()
-    if (!current || state.busy) return
+  const request = async () => {
+    if (state.busy) return
     setState({ busy: true, error: undefined })
-    grantAccess(sdk.request, current, {
+    const session = sessionID() ?? (await props.onEnsureSession?.())
+    const current = identity(session)
+    if (!current) {
+      setState({ busy: false, error: "OpenScience could not start a session for this connection." })
+      return
+    }
+    return grantAccess(sdk.request, current, {
       path: requestedFolder(props.file.path),
       access: state.access,
       scope: state.scope,
@@ -908,14 +921,7 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
               without an approved folder grant.
             </p>
           </div>
-          <Show
-            when={sessionID()}
-            fallback={
-              <p role="status" style={alert()}>
-                Start a research session to request access.
-              </p>
-            }
-          >
+          <div style={{ display: "grid", gap: "12px" }}>
             <div style={fieldGrid()}>
               <div style={field()}>
                 <span>Access</span>
@@ -954,7 +960,12 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
             <button type="button" onClick={request} disabled={state.busy} style={primary()}>
               {state.busy ? "Requesting…" : "Request access"}
             </button>
-          </Show>
+            <Show when={!sessionID()}>
+              <p role="status" style={note()}>
+                A research session will start automatically when access is requested.
+              </p>
+            </Show>
+          </div>
           <button type="button" onClick={props.onClose} style={secondary()}>
             Back to file sources
           </button>

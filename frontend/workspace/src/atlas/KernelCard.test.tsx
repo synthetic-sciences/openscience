@@ -128,7 +128,8 @@ describe("KernelCard lifecycle controls", () => {
       }),
     )
 
-    expect(host.textContent).toContain("R · Local")
+    expect(host.textContent).toContain("R · This session")
+    expect(host.querySelector(".kernel-card__metrics")?.textContent).toContain("TargetLocal")
     expect(button(host, "Start runtime analysis.ipynb")?.disabled).toBe(false)
     expect(button(host, "Stop analysis.ipynb")).toBeNull()
     expect(button(host, "Forget analysis.ipynb")?.disabled).toBe(false)

@@ -167,7 +167,6 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
     <section aria-label="Session kernel control room" data-testid="kernel-panel" class="kernel-panel">
       <header class="kernel-panel__header">
         <div class="kernel-panel__heading">
-          <strong>Kernels</strong>
           <span>{overview()}</span>
         </div>
         <div class="kernel-panel__refresh">
@@ -236,14 +235,6 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
             </div>
           </form>
         </Show>
-
-        <details class="kernel-panel__scope">
-          <summary>About kernels</summary>
-          <p>
-            Kernels belong to this session. Named records survive app restarts; live variables last only while the
-            runtime is active.
-          </p>
-        </details>
 
         <Show when={authority.message()}>
           {(message) => (

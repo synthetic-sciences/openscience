@@ -80,16 +80,15 @@ export function KernelCard(props: {
               : props.kernel.language.slice(0, 2)}
         </span>
         <div class="kernel-card__title">
-          <strong title={kernelLabel(props.kernel)}>{kernelLabel(props.kernel)}</strong>
+          <div class="kernel-card__name">
+            <strong title={kernelLabel(props.kernel)}>{kernelLabel(props.kernel)}</strong>
+            <span class="kernel-card__state" data-tone={kernelTone(props.kernel.state)}>
+              <span class="kernel-card__state-dot" aria-hidden="true" />
+              <strong>{kernelStateLabel(props.kernel.state)}</strong>
+            </span>
+          </div>
           <span>
-            {kernelLanguageLabel(props.kernel)} · {kernelTargetLabel(props.kernel)}
-          </span>
-        </div>
-        <div class="kernel-card__meta">
-          <span class="kernel-card__owner">{owner()}</span>
-          <span class="kernel-card__state" data-tone={kernelTone(props.kernel.state)}>
-            <span class="kernel-card__state-dot" aria-hidden="true" />
-            <strong>{kernelStateLabel(props.kernel.state)}</strong>
+            {kernelLanguageLabel(props.kernel)} · {owner()}
           </span>
         </div>
       </div>
@@ -103,7 +102,9 @@ export function KernelCard(props: {
         <For each={metrics()}>{(metric) => <Metric label={metric.label} value={metric.value} />}</For>
       </div>
 
-      <p class="kernel-card__recovery">{kernelRecoveryLabel(props.kernel)}</p>
+      <Show when={props.kernel.state !== "idle" || props.kernel.queue_depth > 0}>
+        <p class="kernel-card__recovery">{kernelRecoveryLabel(props.kernel)}</p>
+      </Show>
 
       <div class="kernel-card__controls">
         <Show when={kernelCanInterrupt(props.kernel)}>
@@ -159,7 +160,7 @@ export function KernelCard(props: {
       </div>
 
       <details class="kernel-card__identity">
-        <summary>Runtime details</summary>
+        <summary>Details</summary>
         <div>
           <Show when={props.kernel.environment}>
             <section class="kernel-card__environment" aria-label={`${kernelLanguageLabel(props.kernel)} environment`}>

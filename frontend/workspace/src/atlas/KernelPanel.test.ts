@@ -18,11 +18,11 @@ describe("kernel control room", () => {
     expect(panel).toContain("kernel.id")
   })
 
-  test("keeps ownership guidance collapsed by default", () => {
+  test("keeps ownership data available without a redundant help disclosure", () => {
     const panel = source()
 
-    expect(panel).toContain("<summary>About kernels</summary>")
-    expect(panel).toContain("Kernels belong to this session.")
+    expect(panel).not.toContain("<summary>About kernels</summary>")
+    expect(panel).not.toContain("Kernels belong to this session.")
     expect(panel).not.toContain("Project inventory")
   })
 
@@ -77,16 +77,17 @@ describe("kernel control room", () => {
     expect(runtime).toContain("process_identity_verified: boolean | null")
   })
 
-  test("keeps the invoked compute control room compact and softly grouped", () => {
+  test("keeps the invoked compute control room quiet and compact", () => {
     const css = styles()
 
-    expect(css).toMatch(/\.compute-surface \.kernel-panel__header\s*\{[^}]*min-height: 44px/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-panel__heading strong\s*\{[^}]*font-size: 14px/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-panel__scope\s*\{[^}]*background: none/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*padding: 11px/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*border-radius: 12px/s)
+    expect(css).toMatch(/\.compute-surface__tabs\s*\{[^}]*border-bottom: 1px solid/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-panel__header\s*\{[^}]*min-height: 42px/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-panel__create\s*\{[^}]*grid-template-columns/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*padding: 12px/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*border-radius: var\(--compute-radius\)/s)
     expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*box-shadow: none/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-card__metric\s*\{[^}]*min-height: 0/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-card__metrics\s*\{[^}]*border: 0/s)
+    expect(css).toContain(".compute-surface .kernel-card__name")
   })
 
   test("materializes a new session and refreshes only while kernels are active", () => {

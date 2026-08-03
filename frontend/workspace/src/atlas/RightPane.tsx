@@ -366,6 +366,7 @@ export function RightPane(
                       <ExternalFileAccess
                         file={file}
                         active={context() === "files" || context() === "artifact"}
+                        onEnsureSession={props.onEnsureSession}
                         onClose={() => uiStore.closeFile()}
                       />
                     }
@@ -389,7 +390,7 @@ export function RightPane(
                 {(current) => <StoredArtifactView artifact={current()} />}
               </Match>
               <Match when={context() === "files" && !uiStore.file() && !uiStore.saved()}>
-                <FileExplorer />
+                <FileExplorer onEnsureSession={props.onEnsureSession} />
               </Match>
               <Match when={context() === "terminal"}>
                 <TerminalSurface />

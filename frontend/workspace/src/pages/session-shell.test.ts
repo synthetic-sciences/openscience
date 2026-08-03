@@ -117,6 +117,14 @@ describe("focused workspace shell", () => {
     expect(session).not.toContain(">Inspector</span>")
   })
 
+  test("shows Atlas from the saved workspace preference without requiring an account session", () => {
+    const session = read("./session.tsx")
+
+    expect(session).toContain("const atlasAvailable = productPreferences.atlas")
+    expect(session).not.toContain("atlasConnected")
+    expect(session).not.toContain("fetchSetupSession")
+  })
+
   test("derives Files and contextual selection from the surfaces they open", () => {
     const session = read("./session.tsx")
     const action = read("./session-sidebar-action.tsx")
@@ -210,6 +218,8 @@ describe("focused workspace shell", () => {
     expect(pane).toContain('class="research-inspector__header"')
     expect(pane).toContain('class="research-inspector__context"')
     expect(pane).toContain("<TerminalSurface />")
+    expect(pane).toContain("<FileExplorer onEnsureSession={props.onEnsureSession} />")
+    expect(pane).toContain("onEnsureSession={props.onEnsureSession}")
     expect(pane).toContain("narrow() ? uiStore.closeContext() : uiStore.closeWorkTab()")
     expect(pane).toContain("<WorkTabStrip")
     expect(pane).not.toContain('class="research-inspector__tabs"')

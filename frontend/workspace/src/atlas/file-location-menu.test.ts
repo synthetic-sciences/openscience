@@ -1,4 +1,6 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import type { JSX } from "solid-js"
 import { createServer } from "vite"
 import solid from "vite-plugin-solid"
@@ -96,6 +98,7 @@ const setup = (
     trash?: StoredArtifact[]
     onRestoreArtifact?: (artifact: StoredArtifact) => void
     onChoose?: (kind: "folder" | "file") => Promise<string | undefined>
+    sessionReady?: boolean
   } = {},
 ) =>
   mount(() =>
@@ -104,7 +107,7 @@ const setup = (
       trash: options.trash ?? [],
       grants,
       projectRoot: "/Users/aayam/kras-speedrun",
-      sessionReady: true,
+      sessionReady: options.sessionReady ?? true,
       onOpenProject: () => {},
       onOpenSession: () => {},
       onOpenArtifact: () => {},
@@ -184,6 +187,23 @@ describe("Files sources", () => {
     form?.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }))
 
     expect(requests).toEqual([{ path: "/outside/lab", access: "read", scope: "session" }])
+  })
+
+  test("allows picking a connection before a session exists", () => {
+    const host = setup({ sessionReady: false })
+    const connect = host.querySelector<HTMLButtonElement>('[aria-label="Connect another location"]')
+
+    expect(connect?.disabled).toBe(false)
+    expect(host.textContent).toContain("A research session will start automatically")
+    connect?.click()
+    expect(host.querySelector('[aria-label="Connect file or folder access"]')).not.toBeNull()
+  })
+
+  test("creates the required session only when the connection is submitted", () => {
+    const source = readFileSync(fileURLToPath(new URL("./FileExplorer.tsx", import.meta.url)), "utf8")
+
+    expect(source).toContain("sessionID() ?? (await props.onEnsureSession?.())")
+    expect(source).toContain("const current = identity(session)")
   })
 
   test("shows trashed artifacts as recoverable for 30 days", () => {
