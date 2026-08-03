@@ -1,5 +1,38 @@
 # Compute pre-flight: what must be true before OpenScience gets compute tools
 
+> **EXECUTED 2026-08-03** on `feat/compute-lease-prerequisites`. All five tasks shipped and reviewed.
+> Suite **2004 passed / 1 skipped** (from 1913), no network. Live re-probe after the last task: resolve
+> → lease in 5.0s → `gpu_model='RTX-3090'` matching the request → `ready` → released, zero instances
+> left running.
+>
+> **Three things review caught that the plan did not anticipate:**
+>
+> 1. **Task 2's first age-ceiling fix bounded the wrong thing.** It capped how *long* a stale block
+>    could starve a launch, not whether it did: under the ceiling, three dead Vast rows still consumed
+>    every attempt while a live RunPod row went untried. Fixed by making freshness the first rank key.
+> 2. **Task 4's retry could never drain.** `lambda_provider.py` had a bare `raise_for_status()` with no
+>    404 exemption — RunPod and Prime both have one — so an already-gone box produced 1,440
+>    operator-authenticated terminate calls per day forever, from an uncapped serial pass running ahead
+>    of the promotion sweep. A billing fix was degrading the launch path.
+> 3. **Task 3's `RTX-A2000` mapped two different cards to one id.** 6GB and 12GB, and since the resolver
+>    ranks on price the caller always got the 6GB one. The class of bug matters more than the card:
+>    `canonical()` never consults VRAM on an exact hit, so no per-name test can fail on it — the old
+>    tests asserted both values for one id and passed. Only measured inventory catches it.
+>
+> **One measurement retracted.** The spec's "84% genuine offer death" figure compared two multi-name
+> query windows, which is only sound if a window is the deterministic cheapest-64 of its filter. It may
+> not be — but a narrow query proved perfectly stable, so the effect is query-shape dependent and
+> neither claim generalises. See `docs/specs/compute-design.md`.
+>
+> **One thing measured, earned, and deliberately not built:** the targeted per-card Vast query. 12 of 22
+> `(card, count)` pairs are absent or up to 50% dearer in the shared windows. It cannot live in
+> `vast_provider.py` — `list_options` never receives `{gpu, count}`, and `_provider_catalog`'s cache key
+> names no requirement, so a requirement-filtered fetch would poison the entry every caller shares. It
+> needs `routes/compute.py` and its own task.
+>
+> Deferred Minor findings are in the ledger at
+> `.superpowers/sdd/2026-08-03-compute-preflight/progress.md` (gitignored).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement
 > this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
