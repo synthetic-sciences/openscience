@@ -56,12 +56,27 @@ export namespace Lease {
     requested_sku: z.string(),
     status: z.string(),
     funding: z.string(),
-    gpu_model: z.string(),
+    // NULLABLE, and verified so against Atlas rather than inferred:
+    // `gpu_models.canonical()` returns None for a display name its taxonomy
+    // cannot place — deliberately, "honest-unknown, never a guessed model" —
+    // and the launch route passes that straight into the lease row. A running,
+    // billing box must not be discarded over a taxonomy miss.
+    gpu_model: z.string().nullable(),
     gpu_name: z.string(),
     gpu_count: z.number(),
     hourly_rate_cents: z.number(),
-    price_cents_per_hour_display: z.string(),
-    effective_budget_cents: z.number(),
+    // INTEGER cents, not a formatted string. `_redact_lease` assigns
+    // `credits_service.to_display_cents(rate)`, whose body is `int(raw_cents)`;
+    // docs/specs/compute-design.md:231 says the same ("0 when that provider
+    // resolves to BYOK"). A `z.string()` here rejected every genuine 201 as
+    // malformed — which is the worst failure this module has, because a
+    // malformed launch writes no key while the box it describes is already
+    // running and billing.
+    price_cents_per_hour_display: z.number(),
+    // NULL whenever the charge rate is 0 — i.e. every BYOK-funded lease, which
+    // the resolver can pick for any user holding their own provider key. There
+    // is nothing for Atlas to cap there, and "no cap" is not a bad response.
+    effective_budget_cents: z.number().nullable(),
     provisioning_timeout_seconds: z.number(),
     ssh_user: z.string(),
     ssh_port: z.number(),
@@ -98,12 +113,26 @@ export namespace Lease {
   export const Summary = z.object({
     lease_id: z.string(),
     provider: z.string(),
-    requested_sku: z.string(),
+    // Nullable columns on `compute_leases`, and genuinely null in practice:
+    // `GET /leases` is `SELECT *` over EVERY lease the user has, which
+    // includes CPU sandboxes and agent-spawn leases that never had an SSH
+    // address or a resolved SKU. Requiring them would make one such row
+    // reject the entire list.
+    requested_sku: z.string().nullable(),
     status: z.string(),
     ssh_host: z.string().nullable(),
-    ssh_port: z.number(),
+    ssh_port: z.number().nullable(),
     hourly_rate_cents: z.number(),
-    effective_budget_cents: z.number(),
+    /**
+     * NOT on the wire today, and that is the point of `.nullish()`.
+     * `effective_budget_cents` is computed by the LAUNCH route and attached to
+     * its own response; it is not a column on `compute_leases`, so `SELECT *`
+     * cannot return it and `_redact_lease` does not add it. Requiring it made
+     * every real list response `malformed`. Left declared, and optional, so
+     * the field flows through if Atlas ever starts sending it — but
+     * `compute_list` cannot report a per-lease cap from this endpoint today.
+     */
+    effective_budget_cents: z.number().nullish(),
   })
   export type Summary = z.infer<typeof Summary>
 

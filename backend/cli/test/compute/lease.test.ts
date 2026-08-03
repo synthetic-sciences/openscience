@@ -36,7 +36,13 @@ const GOOD_LAUNCH = {
   gpu_name: "NVIDIA H100 SXM",
   gpu_count: 1,
   hourly_rate_cents: 194,
-  price_cents_per_hour_display: "$1.94",
+  // An INTEGER, not a formatted string. `_redact_lease` assigns
+  // `credits_service.to_display_cents(rate)`, which is `int(raw_cents)`
+  // (atlas backend/app/billing/credits_service.py:14), and
+  // docs/specs/compute-design.md:231 says the same ("0 when that provider
+  // resolves to BYOK"). The original "$1.94" here was invented, and the
+  // z.string() it justified rejected every genuine 201 as malformed.
+  price_cents_per_hour_display: 194,
   effective_budget_cents: 3000,
   provisioning_timeout_seconds: 600,
   ssh_user: "root",
@@ -55,6 +61,38 @@ describe("Lease.launch", () => {
     expect(result.value.ssh_private_key).toBe(GOOD_LAUNCH.ssh_private_key)
     expect(result.value.ssh_host).toBeNull()
     expect(result.value.provisioning_timeout_seconds).toBe(600)
+    expect(result.value.price_cents_per_hour_display).toBe(194)
+  })
+
+  test("a gpu_model Atlas could not place is null, not a reason to lose the lease", async () => {
+    // `gpu_models.canonical()` returns None for a display name it cannot map,
+    // deliberately ("honest-unknown, never a guessed model"), and the launch
+    // route passes that straight through to `create_lease(gpu_model=...)`.
+    // A running, billing box must not be thrown away over a taxonomy miss.
+    using server = Bun.serve({
+      port: 0,
+      fetch: () => Response.json({ ...GOOD_LAUNCH, gpu_model: null }, { status: 201 }),
+    })
+    const result = await Lease.launch(SPEC, server.url.origin)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.value.gpu_model).toBeNull()
+    expect(result.value.ssh_private_key).toBe(GOOD_LAUNCH.ssh_private_key)
+  })
+
+  test("a byok lease's null effective_budget_cents is a lease, not a malformed response", async () => {
+    // `effective_budget_cents` is None whenever the charge rate is 0 — i.e.
+    // every BYOK-funded lease (atlas routes/compute.py:963-966), which the
+    // resolver can pick whenever the user has their own provider key. There
+    // is nothing for Atlas to cap there, and no budget is not a bad response.
+    using server = Bun.serve({
+      port: 0,
+      fetch: () => Response.json({ ...GOOD_LAUNCH, funding: "byok", effective_budget_cents: null }, { status: 201 }),
+    })
+    const result = await Lease.launch(SPEC, server.url.origin)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.value.effective_budget_cents).toBeNull()
   })
 
   test("sends an authenticated POST with the request body, never a query string of secrets", async () => {
@@ -301,6 +339,58 @@ describe("Lease.list", () => {
     if (!result.ok) throw new Error("expected ok")
     expect(result.value.length).toBe(1)
     expect(result.value[0]?.lease_id).toBe("a")
+  })
+
+  test("the rows Atlas actually sends parse — no cap field, and null columns", async () => {
+    // `GET /leases` is `SELECT *` over compute_leases plus a display price.
+    // There is no `effective_budget_cents` COLUMN — the launch route computes
+    // that one and attaches it to its own response — and `requested_sku` /
+    // `ssh_host` / `ssh_port` are nullable columns that are genuinely null on
+    // the CPU-sandbox and agent-spawn rows this same endpoint returns.
+    // Requiring any of them made every real list response malformed.
+    using server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        Response.json([
+          {
+            lease_id: "lease_gpu",
+            user_id: "u1",
+            provider: "vast",
+            status: "ready",
+            requested_sku: "offer-9981",
+            region: "us-east",
+            hourly_rate_cents: 194,
+            total_spent_cents: 388,
+            ssh_host: "1.2.3.4",
+            ssh_port: 22065,
+            ssh_user: "root",
+            category: "gpu",
+            funding: "managed",
+            price_cents_per_hour_display: 194,
+          },
+          {
+            lease_id: "lease_cpu",
+            user_id: "u1",
+            provider: "modal",
+            status: "provisioning",
+            requested_sku: null,
+            hourly_rate_cents: 0,
+            total_spent_cents: 0,
+            ssh_host: null,
+            ssh_port: null,
+            category: "cpu",
+            funding: "byok",
+            price_cents_per_hour_display: 0,
+          },
+        ]),
+    })
+    const result = await Lease.list(server.url.origin)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.value.length).toBe(2)
+    expect(result.value[1]?.ssh_port).toBeNull()
+    expect(result.value[1]?.requested_sku).toBeNull()
+    expect(result.value[0]?.hourly_rate_cents).toBe(194)
   })
 
   test("an empty list is a valid, empty answer", async () => {
