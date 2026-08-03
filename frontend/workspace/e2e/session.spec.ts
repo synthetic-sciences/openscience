@@ -164,7 +164,7 @@ test("opening Compute from a new route creates a durable session and keeps the s
     const panel = page.getByTestId("kernel-panel")
     await expect(panel.getByText("No kernels yet", { exact: true })).toBeVisible()
     await expect(panel).not.toContainText("Unavailable")
-    await expect(panel.locator("details.kernel-panel__scope")).not.toHaveAttribute("open", "")
+    await expect(panel.locator("details.kernel-panel__scope")).toHaveCount(0)
   } finally {
     if (sessionID) await sdk.session.delete({ sessionID }).catch(() => undefined)
   }
