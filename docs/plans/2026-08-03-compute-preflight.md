@@ -164,10 +164,15 @@ simply never copies it onto the row (`prime_intellect_provider.py:174`). Surface
 `canonical()` able to use it.
 
 **(b) The map is narrower than what is on sale.** Verified against live catalogs: **37% of Vast rows and
-52% of RunPod's** are mapped. Most of the remainder is consumer tail that is correctly dropped
-(`GTX 1060`, `Tesla P4`, `Titan Xp`, `Quadro P4000`, `RTX 3060 laptop`) — **leave those unmapped.** But
-these are priced today and unreachable through `{gpu, count}`: **B300**, **MI300X**, **GH200**,
-`RTX PRO 6000 MaxQ`, and the Ada/Ampere workstation line.
+52% of RunPod's** are mapped. These are priced today and unreachable through `{gpu, count}`: **B300**,
+**MI300X**, **GH200**, `RTX PRO 6000 MaxQ`, and the Ada/Ampere workstation line. Add those.
+
+**Leave the mid-tier consumer cards unmapped** — `RTX 3060/3070/3080`, `4060/4070/4080`, `5060/5070`,
+and the older `GTX 10xx` / `Tesla P4` / `Quadro` / `Titan Xp` stock. This was reconsidered and the
+decision stands: every one of them is ≤16GB, the map already holds the three cards that matter in that
+tier (`RTX-3090` and `RTX-4090` at 24GB, `RTX-5090` at 32GB), and for ML research VRAM is the binding
+constraint. They remain leasable by explicit `provider`/`sku`. Task 5 fixes the wasted query directly
+rather than by widening the taxonomy to absorb it.
 
 **The exact-match rule is not negotiable.** `RTX 6000 Ada`, `RTX A6000`, `RTX PRO 6000`,
 `RTX PRO 6000 WK` and `RTX PRO 6000 MaxQ` are five different cards whose names contain each other, and
@@ -248,39 +253,60 @@ Required behaviour:
 
 ---
 
-### Task 5: See more than the cheapest 64 offers
+### Task 5: Ask Vast for hardware we can actually name
 
 **Files:**
 - Modify: `backend/app/compute/vast_provider.py`
 - Test: `backend/tests/test_compute_vast_provider_http.py` (append)
 
 **Interfaces:**
-- Produces: a requirement for a specific GPU reaches offers outside the global cheapest-64 window.
+- Consumes: the spellings table in `app/compute/gpu_models.py` (after Task 3).
+- Produces: the catalog's Vast rows are overwhelmingly rows the resolver can rank.
 
-Atlas asks Vast for `limit: 512` and gets 64. **There is no pagination** — `offset` and `from` both
-`400` (fact 5). So "Atlas leases the cheapest box" currently means *cheapest of the 64 cheapest
-on-demand offers overall, plus 64 more matching the premium name list* — for a mid-tier card there may
-be cheaper instances in neither window.
+**Measured live 2026-08-03 — this is the defect:**
 
-The only lever is more filtered queries, and each costs one request against a ~1/s **deployment-wide**
-budget (fact 4). A per-model sweep of 22 canonical ids would take 22 seconds and is not viable in a
-request path.
+```
+cheap query   (64 cheapest overall)      ->  64 offers,  2 usable (  3%), 33 distinct cards
+premium query (gpu_name in _PREMIUM…)    ->  64 offers, 63 usable ( 98%), 13 distinct cards
+gpu_name == "RTX 4090"                   ->  56 offers, 56 usable (100%),  1 card
+gpu_name == "A100 SXM4"                  ->  64 offers, 64 usable (100%),  1 card
+gpu_name == "H100 SXM"                   ->  39 offers, 39 usable (100%),  1 card
+```
 
-**Start by measuring, then choose.** Before implementing, establish with read-only live queries:
-- how much a `gpu_name`-filtered query improves coverage for one card versus the global window
-- what the cheapest offer for a given card looks like in each
+Vast returns exactly 64 per query and has no pagination (fact 5), so each query is a scarce, fixed-size
+window against a ~1/s deployment-wide budget (fact 4). The premium query spends its window well because
+it **filters by name**. The cheap query filters on nothing and sorts by price ascending — and Vast's
+cheapest inventory is mid-tier consumer cards, of which the map contains exactly three
+(`RTX-3090`, `RTX-4090`, `RTX-5090`). So it reliably fills its window with rows `canonical()` returns
+`None` for, and `resolve()` drops them.
 
-Then implement the cheapest widening that fits the budget. A targeted query issued only when a caller
-names a requirement — one extra request, for exactly the card wanted — is the shape I expect to win,
-but **verify before building it**, and if the measurement says the current windows already contain the
-cheapest offers for the cards we canonicalise, **say so and build nothing.** That is a legitimate
-outcome and better than a speculative fetch on every launch.
+**The root cause is that the query and the taxonomy were never connected.** Two independently sensible
+decisions — "show the cheapest hardware" and "map only cards we can name unambiguously" — combine into a
+request that is 97% waste. Note `dph_total <= 0.50` and `reliability2 >= 0.98` were both measured at
+3–4% usable: they re-select the same tail, so a price or quality filter does not fix this. A
+`gpu_ram >= 40GB` floor reaches 65%, better but still not the point.
 
-Whatever ships must not increase the request count on the *cached* path, and must not turn one launch
-into more than one extra Vast request.
+**Derive the query from the taxonomy.** Ask Vast for the cheapest offers *among the card names we can
+canonicalise*, rather than the cheapest offers outright. The spellings already exist in
+`gpu_models.py`; the fix is to stop maintaining a second, divergent list beside them. `_PREMIUM_GPU_NAMES`
+should become a consequence of the map, not an independent constant — if it can be removed entirely in
+favour of one derived list, remove it.
 
-- [ ] **Step 1: Measure and report the coverage gap** (read-only, provision nothing)
-- [ ] **Step 2: Write the failing tests for the chosen design** (`respx`)
+Then, if and only if the measurement in Step 1 shows it earns its request: a **targeted query on the
+requirement path** — when a caller names `{gpu, count}`, one query filtered to that card's spellings,
+which the numbers above suggest returns 39–64 offers at 100% yield. That is what makes "the cheapest
+H100-SXM" true rather than "the cheapest H100-SXM that happened to land in a shared window."
+
+**Constraints:** do not increase the request count on the cached path; do not turn one launch into more
+than one extra Vast request; do not add a retry loop inside `list_options` (Task 2's reasoning applies).
+Vast's `gpu_name` values are provider spellings, not canonical ids — `RTX 6000Ada` has no space, RunPod's
+do. Filter on what Vast actually emits.
+
+- [ ] **Step 1: Measure** (read-only live queries, provision nothing, sleep ≥1.3s between them for
+      fact 4). Confirm the taxonomy-derived filter's yield, and measure whether a targeted per-card
+      query finds cheaper offers for a named card than the shared windows do. **If it does not, say so
+      and do not build it** — a speculative extra fetch on every launch is worse than none.
+- [ ] **Step 2: Write the failing tests for the chosen design** (`respx`, no live calls)
 - [ ] **Step 3: Run and confirm they fail**
 - [ ] **Step 4: Implement**
 - [ ] **Step 5: Run, then the full suite**
