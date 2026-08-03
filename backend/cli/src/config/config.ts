@@ -1636,7 +1636,12 @@ export namespace Config {
     await Instance.disposeAll().catch(() => undefined)
     // Lazy because provider.ts imports Config — the same cycle-break
     // provider/models.ts and openscience/index.ts already use to reach it.
-    await import("../provider/provider").then((m) => m.Provider.invalidate())
+    // Best-effort like the disposal above: the config file is already written
+    // by the time this runs, so a throw here (e.g. provider module init
+    // failing) must not turn a landed write into a rejected one.
+    await import("../provider/provider")
+      .then((m) => m.Provider.invalidate())
+      .catch((e) => log.warn("failed to invalidate provider cache", { error: e instanceof Error ? e.message : String(e) }))
     GlobalBus.emit("event", {
       directory: "global",
       payload: {

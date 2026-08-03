@@ -64,8 +64,9 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   const [billing, setBilling] = createSignal<SettingsBillingGetResponse>()
   const [busy, setBusy] = createSignal(false)
 
+  const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
   const fail = (error: unknown) => {
-    props.onError?.(error instanceof Error ? error.message : String(error))
+    props.onError?.(reason(error))
   }
   const loadWallet = () =>
     settingsApi<Wallet>(sdk.url, platform.fetch ?? fetch, "/settings/wallet")
@@ -87,15 +88,28 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     if (busy()) return
     setBusy(true)
     props.onError?.(undefined)
+    // apply() only runs once the write has data, so a rejection past that
+    // point is the catalog refresh failing, not the save — the same split
+    // credentialChange draws for the other credential panels. A rejection
+    // before apply() is a genuine save failure and keeps the plain wording.
+    let saved = false
     void commitBilling(
       () => sdk.client.settings.billing.update({ llm: value }),
-      setBilling,
+      (data) => {
+        saved = true
+        setBilling(data)
+      },
       () => globalSync.refreshProviders(),
     )
       .then((ok) => {
         if (!ok) fail("Couldn't save managed inference settings.")
       })
-      .catch(fail)
+      .catch((error) => {
+        if (!saved) return fail(error)
+        props.onError?.(
+          `Managed inference settings saved, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
+        )
+      })
       .finally(() => setBusy(false))
   }
 
