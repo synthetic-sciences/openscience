@@ -104,7 +104,11 @@ export namespace Pty {
     })
     const id = Identifier.create("pty", false)
     const command = Shell.preferred()
-    const args = command.endsWith("sh") ? ["-l"] : []
+    // A sandboxed zsh cannot safely lock history or run dotfiles that expect
+    // unrestricted home-directory access. Start it without user rc files so a
+    // fresh browser terminal opens cleanly instead of printing permission
+    // errors before the prompt. Other POSIX shells keep their login behavior.
+    const args = command.endsWith("zsh") ? ["-f"] : command.endsWith("sh") ? ["-l"] : []
     const cwd = authority.workspace
     const source = await OpenScience.subprocessEnv(process.env)
     const env = Object.fromEntries(
@@ -113,6 +117,7 @@ export namespace Pty {
     const runtime = {
       ...env,
       TERM: "xterm-256color",
+      ...(command.endsWith("zsh") ? { PROMPT: "%1~ %# ", PS1: "%1~ %# " } : {}),
       OPENSCIENCE_TERMINAL: "1",
       OPENSCIENCE_PROJECT_ID: Instance.project.id,
       OPENSCIENCE_SESSION_ID: input.sessionID,

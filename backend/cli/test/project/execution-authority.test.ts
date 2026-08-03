@@ -192,6 +192,7 @@ test("trusted terminal derives its process contract from the owning session", as
           status: "running",
         })
         expect(terminal.command).toBeTruthy()
+        if (terminal.command.endsWith("zsh")) expect(terminal.args).toEqual(["-f"])
         expect(terminal.pid).toBeGreaterThan(0)
         await Session.remove(session.id)
       } finally {
