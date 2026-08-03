@@ -166,7 +166,10 @@ describe("Lease.launch", () => {
     using server = Bun.serve({
       port: 0,
       fetch: () =>
-        Response.json({ detail: "Rate limit exceeded, try again shortly." }, { status: 429, headers: { "retry-after": "3" } }),
+        Response.json(
+          { detail: "Rate limit exceeded, try again shortly." },
+          { status: 429, headers: { "retry-after": "3" } },
+        ),
     })
     const result = await Lease.launch(SPEC, server.url.origin)
     expect(result.ok).toBe(false)
@@ -296,7 +299,8 @@ describe("Lease.connection", () => {
       port: 0,
       // Lambda passes its raw upstream string through unmapped on `status`;
       // `state` is what a poller must read.
-      fetch: () => Response.json({ state: "provisioning", status: "booting-lambda-specific", ssh_host: null, ssh_port: 22 }),
+      fetch: () =>
+        Response.json({ state: "provisioning", status: "booting-lambda-specific", ssh_host: null, ssh_port: 22 }),
     })
     const result = await Lease.connection("lease_abc123", server.url.origin)
     expect(result.ok).toBe(true)
@@ -427,18 +431,83 @@ describe("Lease.release", () => {
   })
 
   test("an unconfirmed teardown surfaces its warning rather than reporting a clean release", async () => {
+    // The real shape, verified against LeaseManager.release_lease (atlas
+    // backend/app/compute/lease_manager.py): there is no top-level `warning`
+    // — `release_state` names why, and prose (when Atlas has any) is nested
+    // under `provider_result.warning`.
     using server = Bun.serve({
       port: 0,
-      fetch: () => Response.json({ status: "released", warning: "provider teardown returned 403" }),
+      fetch: () =>
+        Response.json({
+          status: "released",
+          terminated: false,
+          unconfirmed: true,
+          release_state: "unconfirmed",
+          actual_cents: 120,
+          provider_result: { status: "unknown", warning: "provider teardown returned 403" },
+        }),
     })
     const result = await Lease.release("lease_abc123", server.url.origin)
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("expected ok")
     expect(result.value.warning).toBe("provider teardown returned 403")
+    expect(result.value.release_state).toBe("unconfirmed")
+  })
+
+  test("a release_state with no provider prose still surfaces as unconfirmed", async () => {
+    // `not_configured` and `provider_unavailable` never call the provider at
+    // all, so `provider_result` carries no `warning` — but the teardown is
+    // exactly as unconfirmed as the transport-failure case above, and a
+    // client that only checked for `warning` would miss it.
+    using server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        Response.json({
+          status: "released",
+          terminated: false,
+          unconfirmed: true,
+          release_state: "not_configured",
+          actual_cents: 0,
+          provider_result: { status: "not_configured" },
+        }),
+    })
+    const result = await Lease.release("lease_abc123", server.url.origin)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.value.release_state).toBe("not_configured")
+    expect(result.value.warning).toBeUndefined()
+  })
+
+  test("credential_unavailable leaves the lease at its prior status, not released", async () => {
+    // The one release_state where `status` on this same object is NOT
+    // "released" — the row was left exactly as it was, because the
+    // credential that owns the box could not be loaded and the provider was
+    // never asked at all.
+    using server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        Response.json({
+          lease_id: "lease_abc123",
+          status: "ready",
+          terminated: false,
+          error: "credential_unavailable",
+          release_state: "credential_unavailable",
+          actual_cents: null,
+          provider_result: {},
+        }),
+    })
+    const result = await Lease.release("lease_abc123", server.url.origin)
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.value.status).toBe("ready")
+    expect(result.value.release_state).toBe("credential_unavailable")
   })
 
   test("409 on an already-released lease surfaces as a conflict, not thrown", async () => {
-    using server = Bun.serve({ port: 0, fetch: () => Response.json({ detail: "Lease already released." }, { status: 409 }) })
+    using server = Bun.serve({
+      port: 0,
+      fetch: () => Response.json({ detail: "Lease already released." }, { status: 409 }),
+    })
     const result = await Lease.release("lease_zzz", server.url.origin)
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected failure")

@@ -101,7 +101,7 @@ function atlas(plan: Plan = {}) {
       }
       if (url.pathname.endsWith("/release")) {
         seen.releases++
-        return plan.release ? plan.release() : Response.json({ status: "released" })
+        return plan.release ? plan.release() : Response.json({ status: "released", terminated: true })
       }
       return new Response("unexpected request", { status: 599 })
     },
@@ -335,7 +335,9 @@ describe("compute_launch: the poll", () => {
     // `status` returns 9.9.9.9 and one poll.
     using fake = atlas({
       poll: (n) =>
-        Response.json(n === 1 ? { state: "provisioning", status: "running", ssh_host: "9.9.9.9", ssh_port: 22 } : READY),
+        Response.json(
+          n === 1 ? { state: "provisioning", status: "running", ssh_host: "9.9.9.9", ssh_port: 22 } : READY,
+        ),
     })
     const result = await ComputeLaunch.run(SPEC, context(), { base: fake.url, poll: FAST })
     expect(result.metadata.polls).toBe(2)
@@ -424,22 +426,58 @@ describe("compute_launch: timeout and death", () => {
   })
 
   test("an unconfirmed teardown is not reported as money stopped", async () => {
-    // Atlas answers 2xx with a `warning` when the provider did not confirm the
-    // teardown — the box may still be running, billing, and holding a
+    // Atlas answers 2xx with a `release_state` (and, when it reached the
+    // provider, nested `provider_result.warning` prose) when the teardown was
+    // not confirmed — the box may still be running, billing, and holding a
     // concurrency slot. Swallowing that reintroduces the bug the server side
-    // just fixed.
+    // just fixed. Shape verified against LeaseManager.release_lease (atlas
+    // backend/app/compute/lease_manager.py) — there is no top-level `warning`.
     using fake = atlas({
       timeout: 0.15,
       poll: () => Response.json(PROVISIONING),
-      release: () => Response.json({ status: "released", warning: "provider teardown returned 403" }),
+      release: () =>
+        Response.json({
+          status: "released",
+          terminated: false,
+          unconfirmed: true,
+          release_state: "unconfirmed",
+          provider_result: { status: "unknown", warning: "provider teardown returned 403" },
+        }),
     })
     const result = await ComputeLaunch.run(SPEC, context(), { base: fake.url, poll: FAST })
 
     expect(result.metadata.outcome).toBe("timed_out")
     expect(result.metadata.warning).toBe("provider teardown returned 403")
+    expect(result.metadata.release_state).toBe("unconfirmed")
     expect(result.output).toContain("provider teardown returned 403")
     expect(result.output).not.toContain("nothing is billing")
     // Possibly still alive, so the key it needs stays.
+    expect(await exists(keypath())).toBe(true)
+  })
+
+  test("a release_state with no provider prose is still surfaced as unconfirmed", async () => {
+    // `not_configured`/`provider_unavailable` never call the provider at all,
+    // so there is no `provider_result.warning` to quote — but the box is
+    // exactly as unconfirmed as the case above, and a client keyed off
+    // "is there a warning string" rather than `release_state` would silently
+    // discard a live key here.
+    using fake = atlas({
+      timeout: 0.15,
+      poll: () => Response.json(PROVISIONING),
+      release: () =>
+        Response.json({
+          status: "released",
+          terminated: false,
+          unconfirmed: true,
+          release_state: "not_configured",
+          provider_result: { status: "not_configured" },
+        }),
+    })
+    const result = await ComputeLaunch.run(SPEC, context(), { base: fake.url, poll: FAST })
+
+    expect(result.metadata.outcome).toBe("timed_out")
+    expect(result.metadata.release_state).toBe("not_configured")
+    expect(result.metadata.warning).toBeTruthy()
     expect(await exists(keypath())).toBe(true)
   })
 
@@ -481,7 +519,9 @@ describe("compute_launch: timeout and death", () => {
   })
 
   test("a launch that dies during provisioning is reported and not released again", async () => {
-    using fake = atlas({ poll: () => Response.json({ state: "terminated", status: "exited", ssh_host: null, ssh_port: 22 }) })
+    using fake = atlas({
+      poll: () => Response.json({ state: "terminated", status: "exited", ssh_host: null, ssh_port: 22 }),
+    })
     const result = await ComputeLaunch.run(SPEC, context(), { base: fake.url, poll: FAST })
 
     expect(result.metadata.outcome).toBe("terminated")
@@ -549,7 +589,10 @@ describe("compute_launch: the registered tool", () => {
     // and one that is not, cannot.
     const asked: unknown[] = []
     const tool = await ComputeLaunchTool.init({})
-    const result = await tool.execute({ ...SPEC, max_hourly_cents: 900 }, context(async (r) => void asked.push(r)))
+    const result = await tool.execute(
+      { ...SPEC, max_hourly_cents: 900 },
+      context(async (r) => void asked.push(r)),
+    )
     expect(result.metadata.outcome).toBe("refused")
     expect(result.metadata.error).toBe("network")
     expect(await exists(keypath())).toBe(false)
@@ -574,10 +617,14 @@ describe("compute_launch: interruption", () => {
       },
     })
     const ctx = context()
-    const result = await ComputeLaunch.run(SPEC, { ...ctx, abort: controller.signal }, {
-      base: fake.url,
-      poll: FAST,
-    })
+    const result = await ComputeLaunch.run(
+      SPEC,
+      { ...ctx, abort: controller.signal },
+      {
+        base: fake.url,
+        poll: FAST,
+      },
+    )
 
     expect(result.metadata.outcome).toBe("interrupted")
     expect(fake.seen.releases).toBe(0)

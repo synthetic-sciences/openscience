@@ -133,6 +133,23 @@ export namespace Lease {
      * `compute_list` cannot report a per-lease cap from this endpoint today.
      */
     effective_budget_cents: z.number().nullish(),
+    // Genuinely on `compute_leases` (migrations.py:534, pg_migrations.py:785)
+    // and genuinely nullable there: only the launch route's `_launch_candidate`
+    // ever supplies them, so a CPU sandbox or agent-spawn row — the same rows
+    // that leave `requested_sku`/`ssh_host` null above — leaves these null too.
+    // `.nullish()` rather than `.nullable()` for the same defensive reason as
+    // `effective_budget_cents`: a caller-side default is safer than rejecting
+    // an otherwise-good row over one absent key on an older/trimmed response.
+    gpu_model: z.string().nullish(),
+    gpu_name: z.string().nullish(),
+    gpu_count: z.number().nullish(),
+    // NOT NULL DEFAULT 0 on the table, so a real row always sends a number —
+    // `.nullish()` only tolerates a response that omits it outright.
+    total_spent_cents: z.number().nullish(),
+    // `_redact_lease` (routes/compute.py) runs over every row `list_leases`
+    // returns, the same helper the launch response uses, so this is on the
+    // wire for `GET /leases` too — not launch-only.
+    price_cents_per_hour_display: z.number().nullish(),
   })
   export type Summary = z.infer<typeof Summary>
 
@@ -140,14 +157,45 @@ export namespace Lease {
    * `POST /leases/{id}/release`'s success shape is deliberately NOT
    * validated as strictly as `Launched`: a release carries no secret that
    * vanishes if lost, so a 2xx with an empty or unparsable body still
-   * counts as success — worst case, an unconfirmed-teardown `warning` goes
+   * counts as success — worst case, an unconfirmed-teardown warning goes
    * unreported, which is degraded, not dangerous. `lease_id` is filled from
    * the input, not read back, because a release response is not guaranteed
    * to echo it.
+   *
+   * VERIFIED against `LeaseManager.release_lease` (atlas
+   * backend/app/compute/lease_manager.py) — a THIRD invented-fixture defect,
+   * distinct from the two already known about `Launched`. There is no
+   * top-level `warning` string on the wire, ever. The real body is
+   * `{lease_id, status, terminated: bool, actual_cents, provider_result,
+   * ...(owed ? {unconfirmed: true, release_state: owed} : {})}`, where
+   * `owed` is one of `release_verdict`'s four codes
+   * (`unconfirmed | not_configured | provider_unavailable |
+   * credential_unavailable`) and `provider_result.warning` — NESTED, not
+   * top-level — carries Atlas's own prose only for the two of those four
+   * reasons that actually reached the provider. An earlier version of this
+   * client read `fields.warning` directly, which is undefined on every real
+   * response, so it could never have surfaced a genuine unconfirmed
+   * teardown — precisely the dishonesty this whole feature exists to
+   * remove.
    */
   export interface Released {
     lease_id: string
     status: string
+    /** Present exactly when Atlas could NOT confirm the teardown: its own
+     *  code for why, copied verbatim from `release_state` on the wire.
+     *  Undefined means the provider confirmed the box is gone (or the
+     *  route's own idempotent-`already_released` shortcut, which carries no
+     *  `release_state` either — a lease already terminal was never running
+     *  to begin with). NOTE: `credential_unavailable` is the one value
+     *  where `status` on this same object will NOT be `"released"` — the
+     *  row was left exactly as it was, because the provider was never
+     *  asked. */
+    release_state?: string
+    /** Prose Atlas itself attached, when it actually reached the provider
+     *  (`unconfirmed`'s transport-failure and 4xx/5xx branches). Absent for
+     *  `not_configured`/`provider_unavailable`/`credential_unavailable`,
+     *  which never call the provider at all — there is nothing for Atlas to
+     *  quote in those cases, not a client bug. */
     warning?: string
   }
 
@@ -260,8 +308,10 @@ export namespace Lease {
     if (res.ok) {
       const fields = record(body)
       const status = typeof fields.status === "string" ? fields.status : "released"
-      const warning = typeof fields.warning === "string" ? fields.warning : undefined
-      return { ok: true, value: { lease_id: id, status, warning } }
+      const release_state = typeof fields.release_state === "string" ? fields.release_state : undefined
+      const provider_result = record(fields.provider_result)
+      const warning = typeof provider_result.warning === "string" ? provider_result.warning : undefined
+      return { ok: true, value: { lease_id: id, status, release_state, warning } }
     }
     return failure(classify(res, body))
   }

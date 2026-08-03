@@ -140,6 +140,28 @@ export const ComputeStatusTool = Tool.define("compute_status", {
 })
 
 /**
+ * Human text for an unconfirmed teardown, shared between `compute_launch`'s
+ * timeout-release path (`ComputeLaunch.expired`) and `compute_release`
+ * itself (`ComputeRelease`) — both call `Lease.release` and both have to
+ * explain the same four `release_state` codes (see the verified wire shape
+ * on `Lease.Released` in compute/lease.ts). Prefers Atlas's own prose
+ * (`warning`, only ever present for the two reasons that actually reached
+ * the provider) and names the reason in plain language for the two that
+ * never did, rather than printing an opaque code with nothing to say about
+ * it.
+ */
+function teardownNote(state: string, warning?: string): string {
+  if (warning) return warning
+  if (state === "credential_unavailable")
+    return "Atlas could not load the credentials that own this box, so it was never even asked to tear it down."
+  if (state === "not_configured")
+    return "Atlas has no working operator credential for this provider right now, so it could not ask it to tear the box down."
+  if (state === "provider_unavailable")
+    return "This provider is not registered on the server right now, so nothing could be asked to tear the box down."
+  return `Atlas asked the provider and it did not confirm (release_state: ${state}).`
+}
+
+/**
  * `compute_launch` — the one tool here that spends money and hands the agent a
  * machine. Everything else in this file exists to keep it from being called
  * when it should not be.
@@ -225,6 +247,7 @@ export namespace ComputeLaunch {
     affordable_budget_cents?: number
     released?: "released" | "already_released" | "failed"
     warning?: string
+    release_state?: string
     polls?: number
     status?: string
   }
@@ -236,9 +259,7 @@ export namespace ComputeLaunch {
   }
 
   export const Parameters = z.object({
-    gpu: z
-      .string()
-      .describe("Canonical GPU model id, e.g. H100-SXM, A100-80GB, L40S, RTX-4090. Not a provider SKU."),
+    gpu: z.string().describe("Canonical GPU model id, e.g. H100-SXM, A100-80GB, L40S, RTX-4090. Not a provider SKU."),
     count: z.number().int().min(1).describe("How many of that GPU on a single box."),
     budget_cents: z
       .number()
@@ -416,12 +437,18 @@ export namespace ComputeLaunch {
     const released = await Lease.release(lease.lease_id, base)
     const outcome = released.ok ? "released" : released.error.kind === "conflict" ? "already_released" : "failed"
     // An UNCONFIRMED teardown is not a teardown. Atlas reports one honestly
-    // (`warning` on a 2xx) precisely because the provider may not have taken
-    // the box down, in which case it is still running, still billing and
-    // still holding a concurrency slot — so the key it needs stays on disk
-    // and the report does not claim the money stopped.
-    const warning = released.ok ? released.value.warning : undefined
-    const settled = outcome !== "failed" && !warning
+    // (`release_state` on a 2xx) precisely because the provider may not have
+    // taken the box down, in which case it is still running, still billing
+    // and still holding a concurrency slot — so the key it needs stays on
+    // disk and the report does not claim the money stopped. Keyed off
+    // `release_state`, never off whether Atlas happened to attach prose:
+    // two of its four reasons (`not_configured`, `provider_unavailable`)
+    // never call the provider at all, so there is nothing for Atlas to
+    // quote even though the box is exactly as unconfirmed as the other two.
+    const value = released.ok ? released.value : undefined
+    const state = value?.release_state
+    const warning = state ? teardownNote(state, value?.warning) : undefined
+    const settled = outcome !== "failed" && !state
     if (settled) await discard(key)
     const seconds = lease.provisioning_timeout_seconds
     const note = {
@@ -447,6 +474,7 @@ export namespace ComputeLaunch {
         released: outcome,
         polls,
         ...(warning ? { warning } : {}),
+        ...(state ? { release_state: state } : {}),
         ...(settled ? {} : { key_path: key }),
       },
     }
@@ -589,4 +617,240 @@ export const ComputeLaunchTool = Tool.define("compute_launch", {
   },
 })
 
-export const ComputeTools = [ComputeStatusTool]
+/**
+ * `compute_list` — read-only, no approval gate, so an agent that lost track
+ * of a lease (a fresh context, a crash mid-session) can find its boxes
+ * again without spending anything to look. Filters to UNFINISHED leases —
+ * `status NOT IN ('released', 'failed')`, mirroring
+ * `compute_repo.list_unfinished_leases`'s own predicate exactly — because
+ * `GET /leases` itself returns a user's whole history, and a list an agent
+ * is meant to act on ("what is still billing?") should not make it re-derive
+ * that filter by hand.
+ *
+ * Deliberately does NOT report a per-lease cap: `effective_budget_cents` is
+ * computed by the LAUNCH route and attached only to that response, never a
+ * column `GET /leases` can return (see `Lease.Summary`'s comment). Rate
+ * (`hourly_rate_cents`) and spend (`total_spent_cents`) are on the row and
+ * are the honest substitutes.
+ */
+export namespace ComputeList {
+  export interface Row {
+    lease_id: string
+    provider: string
+    gpu_model: string | null
+    gpu_name: string | null
+    gpu_count: number | null
+    status: string
+    ssh_host: string | null
+    ssh_port: number | null
+    hourly_rate_cents: number
+    total_spent_cents: number
+  }
+
+  export interface Result {
+    title: string
+    output: string
+    metadata: {
+      leases: Row[]
+      error?: Lease.Failure["kind"]
+    }
+  }
+
+  const TERMINAL = new Set(["released", "failed"])
+
+  export async function run(base?: string): Promise<Result> {
+    const listed = await Lease.list(base)
+    if (!listed.ok) return refused(listed.error)
+    const unfinished = listed.value.filter((lease) => !TERMINAL.has(lease.status)).map(row)
+    return ready(unfinished)
+  }
+
+  function row(lease: Lease.Summary): Row {
+    return {
+      lease_id: lease.lease_id,
+      provider: lease.provider,
+      gpu_model: lease.gpu_model ?? null,
+      gpu_name: lease.gpu_name ?? null,
+      gpu_count: lease.gpu_count ?? null,
+      status: lease.status,
+      ssh_host: lease.ssh_host,
+      ssh_port: lease.ssh_port,
+      hourly_rate_cents: lease.hourly_rate_cents,
+      total_spent_cents: lease.total_spent_cents ?? 0,
+    }
+  }
+
+  function line(lease: Row): string {
+    const gpu = lease.gpu_name
+      ? `${lease.gpu_count ?? "?"}× ${lease.gpu_name}${lease.gpu_model ? ` (${lease.gpu_model})` : ""}`
+      : "GPU unknown"
+    const ssh = lease.ssh_host ? `${lease.ssh_host}:${lease.ssh_port}` : "not yet assigned"
+    return `- \`${lease.lease_id}\` — ${gpu} on ${lease.provider} — **${lease.status}** — ssh ${ssh} — ${lease.hourly_rate_cents}¢/hr — spent ${lease.total_spent_cents}¢ so far`
+  }
+
+  function ready(leases: Row[]): Result {
+    return {
+      title: leases.length
+        ? `${leases.length} unfinished compute lease${leases.length === 1 ? "" : "s"}`
+        : "No unfinished compute leases",
+      output: leases.length ? leases.map(line).join("\n") : "No unfinished leases — nothing is billing right now.",
+      metadata: { leases },
+    }
+  }
+
+  function refused(error: Lease.Failure): Result {
+    return {
+      title: `Could not list compute leases: ${error.kind}`,
+      output: [`**could not list leases**: ${error.kind}`, error.message].join("\n"),
+      metadata: { leases: [], error: error.kind },
+    }
+  }
+}
+
+export const ComputeListTool = Tool.define("compute_list", {
+  description: [
+    "List your unfinished GPU compute leases — provisioning or ready, not yet released.",
+    "Use this to find a box compute_launch reported earlier (in this session or a previous one) or to check what is still billing before you stop for the day.",
+    "Reports rate and spend so far per lease; it cannot report a per-lease budget cap (Atlas does not send one here).",
+    "Takes no parameters and spends nothing to call.",
+  ].join(" "),
+  parameters: z.object({}),
+  async execute() {
+    return ComputeList.run()
+  },
+})
+
+/**
+ * `compute_release` — gives a lease back. No approval gate: unlike
+ * `compute_launch`, this stops money from being spent rather than starting
+ * it, and gating the one call that ends billing is the wrong side to add
+ * friction to.
+ *
+ * The whole point of this tool, per the task-3 brief: Atlas now reports an
+ * UNCONFIRMED teardown honestly (`Lease.Released.release_state`) instead of
+ * a bare 2xx that looks like success either way. A tool that reads only
+ * `status` here and calls a 2xx "done" reintroduces exactly the dishonesty
+ * the server side was fixed to remove — so `run` reads `release_state`
+ * first, and `status` itself decides between two materially different
+ * outcomes: `"released"` means billing has stopped even though the box's
+ * fate is unconfirmed, and any other status (only ever
+ * `credential_unavailable` today) means the lease was not touched at all —
+ * the provider was never even asked.
+ */
+export namespace ComputeRelease {
+  export const Parameters = z.object({
+    lease_id: z.string().min(1).describe("The lease_id from compute_launch's report or compute_list."),
+  })
+
+  export type Outcome = "released" | "unconfirmed" | "not_released" | "already_released" | "refused"
+
+  export interface Result {
+    title: string
+    output: string
+    metadata: {
+      outcome: Outcome
+      lease_id: string
+      status?: string
+      release_state?: string
+      warning?: string
+      error?: Lease.Failure["kind"]
+    }
+  }
+
+  export async function run(params: { lease_id: string }, base?: string): Promise<Result> {
+    const released = await Lease.release(params.lease_id, base)
+    if (!released.ok) {
+      if (released.error.kind === "conflict") return alreadyReleased(params.lease_id)
+      return refused(params.lease_id, released.error)
+    }
+    return settle(released.value)
+  }
+
+  async function settle(value: Lease.Released): Promise<Result> {
+    const state = value.release_state
+    if (!state) return confirmed(value)
+    if (value.status !== "released") return notReleased(value, state)
+    return unconfirmed(value, state)
+  }
+
+  async function confirmed(value: Lease.Released): Promise<Result> {
+    await discard(value.lease_id)
+    return {
+      title: `Released ${value.lease_id}`,
+      output: `**released**: \`${value.lease_id}\` — the provider confirmed the box is gone. Billing has stopped.`,
+      metadata: { outcome: "released", lease_id: value.lease_id, status: value.status },
+    }
+  }
+
+  function unconfirmed(value: Lease.Released, state: string): Result {
+    const note = teardownNote(state, value.warning)
+    return {
+      title: `Released ${value.lease_id}, teardown unconfirmed`,
+      output: [
+        `**released, but not confirmed**: \`${value.lease_id}\` is marked released — billing has stopped — but the provider did NOT confirm the box is actually gone: ${note}`,
+        "",
+        "Atlas keeps chasing this on its own retry sweep. Check compute_list later, or call compute_release again, to see if it clears.",
+      ].join("\n"),
+      metadata: {
+        outcome: "unconfirmed",
+        lease_id: value.lease_id,
+        status: value.status,
+        release_state: state,
+        warning: note,
+      },
+    }
+  }
+
+  function notReleased(value: Lease.Released, state: string): Result {
+    const note = teardownNote(state, value.warning)
+    return {
+      title: `Could not release ${value.lease_id}`,
+      output: [
+        `**not released**: \`${value.lease_id}\` is still \`${value.status}\` — Atlas could not even ask the provider to tear it down: ${note}`,
+        "",
+        "This box is very likely still running. Try compute_release again shortly.",
+      ].join("\n"),
+      metadata: { outcome: "not_released", lease_id: value.lease_id, status: value.status, release_state: state },
+    }
+  }
+
+  async function alreadyReleased(lease_id: string): Promise<Result> {
+    await discard(lease_id)
+    return {
+      title: `${lease_id} was already released`,
+      output: `**already released**: \`${lease_id}\` was released earlier — there is nothing to do, and nothing is billing.`,
+      metadata: { outcome: "already_released", lease_id },
+    }
+  }
+
+  function refused(lease_id: string, error: Lease.Failure): Result {
+    return {
+      title: `Release refused: ${error.kind}`,
+      output: [`**release refused**: ${error.kind}`, error.message].join("\n"),
+      metadata: { outcome: "refused", lease_id, error: error.kind },
+    }
+  }
+
+  /** A key for a lease Atlas confirms is gone (or was already terminal) is
+   *  litter with a 0600 mode on it — the same reasoning `ComputeLaunch`
+   *  applies to its own timeout-release path, via the same path. Never
+   *  called for `unconfirmed`/`not_released`: the box may still be live and
+   *  reachable, and it is exactly the key the agent would need to check. */
+  async function discard(lease_id: string): Promise<void> {
+    await fs.rm(ComputeLaunch.keypath(lease_id), { force: true }).catch(() => {})
+  }
+}
+
+export const ComputeReleaseTool = Tool.define("compute_release", {
+  description: [
+    "Give back a GPU lease so it stops billing. Call this as soon as you are done with a box from compute_launch — leases bill every hour until released.",
+    "Surfaces an unconfirmed-teardown warning rather than hiding it: a successful call here does not always mean the provider actually confirmed the box is gone, and this tool never reports one as plain success.",
+    "Releasing an already-released lease is reported, not treated as an error.",
+  ].join(" "),
+  parameters: ComputeRelease.Parameters,
+  async execute(params) {
+    return ComputeRelease.run(params)
+  },
+})
+
+export const ComputeTools = [ComputeStatusTool, ComputeLaunchTool, ComputeListTool, ComputeReleaseTool]
