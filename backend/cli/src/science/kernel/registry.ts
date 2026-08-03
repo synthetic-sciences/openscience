@@ -362,37 +362,54 @@ const entry = async (identity: KernelIdentity, _options?: KernelStartOptions) =>
   value.startedAt = null
   value.lastActivityAt = Date.now()
   value.authority = authority
-  await persist(value)
-  const start = value.manager
-    .get(value.key, {
+  const drop = () => {
+    if (records().starts.get(value.key)?.ticket === ticket) records().starts.delete(value.key)
+  }
+  const stale = () => ticket.cancelled || records().entries.get(value.key) !== value
+  const abort = async () => {
+    drop()
+    await value.manager.release(value.key)
+    throw new KernelStartupCancelled()
+  }
+  // Booting runs inside a call so the pending-start record below is claimed in
+  // this same synchronous block. The boot awaits (persist, then the process
+  // spawn), and a cell that arrives during one of them has to find the in-flight
+  // start to queue behind — publishing the record after those awaits let it
+  // instead see an entry with no start and boot a second incarnation of its own.
+  const start = (async () => {
+    await persist(value)
+    return value.manager.get(value.key, {
       sessionID: identity.sessionID,
       cwd: authority.workspace,
     })
-    .then(
-      async (kernel) => {
-        if (records().starts.get(value.key)?.ticket === ticket) records().starts.delete(value.key)
-        if (ticket.cancelled || records().entries.get(value.key) !== value) {
-          await value.manager.release(value.key)
-          throw new KernelStartupCancelled()
-        }
-        value.kernel = kernel
-        value.environment = kernel.environment ?? null
-        value.authority = authority
-        value.startedAt = kernel.process?.startedAt ?? Date.now()
-        value.lastActivityAt = value.startedAt
-        await persist(value)
-        return value
-      },
-      async (error) => {
-        if (records().starts.get(value.key)?.ticket === ticket) records().starts.delete(value.key)
-        value.kernel = undefined
-        value.authority = authority
-        value.state = ticket.cancelled ? "stopped" : "crashed"
-        await persist(value)
-        if (ticket.cancelled) throw new KernelStartupCancelled()
-        throw error
-      },
-    )
+  })().then(
+    async (kernel) => {
+      if (stale()) return abort()
+      value.environment = kernel.environment ?? null
+      value.authority = authority
+      value.startedAt = kernel.process?.startedAt ?? Date.now()
+      value.lastActivityAt = value.startedAt
+      await persist(value)
+      if (stale()) return abort()
+      // Handing the kernel over is the last, synchronous step of the boot.
+      // `/status` and the ready fast path above both read `value.kernel`, so
+      // publishing it before the persist above advertised an idle, ready kernel
+      // while the cell whose request booted it had not reached the execution
+      // queue yet — a cell arriving in that window took the free slot first.
+      drop()
+      value.kernel = kernel
+      return value
+    },
+    async (error) => {
+      drop()
+      value.kernel = undefined
+      value.authority = authority
+      value.state = ticket.cancelled ? "stopped" : "crashed"
+      await persist(value)
+      if (ticket.cancelled) throw new KernelStartupCancelled()
+      throw error
+    },
+  )
   records().starts.set(value.key, {
     identity,
     key: value.key,
@@ -453,11 +470,16 @@ export namespace KernelRuntime {
     value.lastActivityAt = startedAt
     return kernel.execute(code, options).then(
       async (result) => {
-        value.executionCount = result.executionCount ?? value.executionCount + 1
+        // The count belongs to this cell, so capture it before the awaits below.
+        // `value.executionCount` is the kernel's running total and every cell
+        // queued behind this one advances it — reading it back after the persist
+        // reported the count of whichever cell had most recently finished.
+        const count = result.executionCount ?? value.executionCount + 1
+        value.executionCount = count
         const completedAt = Date.now()
         value.lastActivityAt = completedAt
         await persist(value)
-        const complete = { ...result, executionCount: value.executionCount }
+        const complete = { ...result, executionCount: count }
         const node = await provenance(
           identity,
           value,

@@ -6,6 +6,7 @@ import { Provenance } from "../../src/science/provenance/store"
 import { Session } from "../../src/session"
 import { Identifier } from "../../src/id/id"
 import { Server } from "../../src/server/server"
+import { KernelRuntime } from "../../src/science/kernel/registry"
 import { Sandbox } from "../../src/sandbox/sandbox"
 
 const alive = (pid: number) => {
@@ -570,6 +571,157 @@ describe("/notebook routes", () => {
             id: "analysis.ipynb",
             language: "python",
           }),
+        })
+      },
+    })
+  }, 30_000)
+
+  test("holds the queue slot of the booting cell before the kernel reports active", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const app = NotebookRoutes()
+        const session = await Session.create({})
+        const id = {
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          name: "notebook:analysis.ipynb",
+          language: "python" as const,
+        }
+        const cell = app.request("/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionID: session.id,
+            id: "analysis.ipynb",
+            language: "python",
+            code: "(__import__('time').sleep(0.5), 'first')[-1]",
+          }),
+        })
+        // Sample the value `/status` serves on every macrotask turn. Polling the
+        // route instead would do enough I/O per attempt to step straight over the
+        // window this pins, which is what let the defect stay invisible.
+        const deadline = Date.now() + 20_000
+        const ready = async () => {
+          while (Date.now() < deadline) {
+            const status = KernelRuntime.status(id)
+            if (status.active) return status
+            await Bun.sleep(0)
+          }
+          throw new Error("kernel did not start")
+        }
+        // A client that waits for the kernel and then sends its next cell must not
+        // be able to overtake the cell that booted it, so the kernel may not turn
+        // reachable until that cell already occupies the queue.
+        expect((await ready()).state).toBe("running")
+        const result = (await (await cell).json()) as { execution_count: number }
+        expect(result.execution_count).toBe(1)
+
+        await app.request("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: session.id, id: "analysis.ipynb", language: "python" }),
+        })
+      },
+    })
+  }, 30_000)
+
+  test("reports each queued cell its own execution count", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const app = NotebookRoutes()
+        const session = await Session.create({})
+        const execute = (code: string) =>
+          app.request("/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionID: session.id,
+              id: "analysis.ipynb",
+              language: "python",
+              code,
+            }),
+          })
+
+        // Every cell reports the position it actually ran at, straight out of the
+        // kernel namespace, so the assertion never assumes which HTTP request
+        // reached the queue first. A slow lead cell makes the rest pile up behind
+        // it and drain back to back, which is when the counts got crossed: the
+        // entry keeps a running total that each completion advances, and reading
+        // that shared total back after a persist handed a cell whichever count
+        // had landed last rather than its own.
+        const position = "globals().setdefault('order', []).append(1), len(globals()['order'])"
+        const lead = execute(`(__import__('time').sleep(0.5), ${position})[-1]`)
+        const rest = Array.from({ length: 12 }, () => execute(`(${position})[-1]`))
+        const counts = await Promise.all(
+          [lead, ...rest].map(async (pending) => {
+            const body = (await (await pending).json()) as {
+              execution_count: number
+              outputs: Array<{ data?: Record<string, string> }>
+            }
+            const ran = body.outputs.find((value) => value.data?.["text/plain"])?.data?.["text/plain"]
+            return { ran: Number(ran), reported: body.execution_count }
+          }),
+        )
+        // Each response carries the count of the cell it answers, and the kernel
+        // ran all thirteen exactly once.
+        for (const count of counts) expect(count.reported).toBe(count.ran)
+        expect(counts.map((count) => count.ran).sort((a, b) => a - b)).toEqual(
+          Array.from({ length: 13 }, (_, index) => index + 1),
+        )
+
+        await app.request("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: session.id, id: "analysis.ipynb", language: "python" }),
+        })
+      },
+    })
+  }, 30_000)
+
+  test("boots one incarnation when a second cell arrives during startup", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const app = NotebookRoutes()
+        const session = await Session.create({})
+        const execute = (code: string) =>
+          app.request("/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionID: session.id,
+              id: "analysis.ipynb",
+              language: "python",
+              code,
+            }),
+          })
+
+        // Both cells are in flight before the kernel process exists, so the second
+        // has to find the startup already in flight and wait on it. Without that
+        // record it opened a startup of its own and burned an extra incarnation.
+        await Promise.all([execute("boot = 1"), execute("boot = 2")])
+        const status = await app.request(
+          `/status?sessionID=${encodeURIComponent(session.id)}&id=analysis.ipynb&language=python`,
+        )
+        expect(await status.json()).toMatchObject({
+          active: true,
+          state: "idle",
+          incarnation: 1,
+          execution_count: 2,
+        })
+
+        await app.request("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: session.id, id: "analysis.ipynb", language: "python" }),
         })
       },
     })
