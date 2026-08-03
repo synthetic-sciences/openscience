@@ -106,6 +106,7 @@
   "patchedDependencies": {
     "ghostty-web@0.3.0": "tooling/patches/ghostty-web@0.3.0.patch",
     "@ai-sdk/anthropic@2.0.57": "tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch",
-    "@ai-sdk/openai@2.0.89": "tooling/patches/@ai-sdk%2Fopenai@2.0.89.patch"
+    "@ai-sdk/openai@2.0.89": "tooling/patches/@ai-sdk%2Fopenai@2.0.89.patch",
+    "@ai-sdk/xai@2.0.51": "tooling/patches/@ai-sdk%2Fxai@2.0.51.patch"
   }
 }

@@ -1,0 +1,41 @@
+Make `usage` nullish in xAI's Responses stream schema.
+
+xAI's first SSE event (`response.created`) carries `"usage": null`. Upstream
+2.0.51 wrote `xaiResponsesResponseSchema.partial({ usage: true })`, which makes
+the field *optional* (accepts absent) but not *nullable* — so every union branch
+of `xaiResponsesChunkSchema` fails with `["response","usage"]: expected object,
+received null` and the stream aborts before any content. Only Grok 4.5 is hit,
+because provider.ts routes just that family through `sdk.responses()`.
+
+@ai-sdk/xai@4.0.25 fixes this upstream with exactly this change
+(`usage: xaiResponsesUsageSchema.nullish()`). We cannot take 4.x yet: it needs
+@ai-sdk/provider@4.0.4 against our pinned 2.0.1, two majors of the shared spec.
+
+DELETE THIS PATCH when the @ai-sdk major migration lands.
+
+diff --git a/dist/index.js b/dist/index.js
+index 0cc2af9842b698c0a29ae2bbebf9c72f17bf3253..cfccbdebee98cafea6cb13e5a91fc46494cecb6c 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -964,7 +964,7 @@ var xaiResponsesResponseSchema = import_v44.z.object({
+   model: import_v44.z.string().nullish(),
+   object: import_v44.z.literal("response"),
+   output: import_v44.z.array(outputItemSchema),
+-  usage: xaiResponsesUsageSchema,
++  usage: xaiResponsesUsageSchema.nullish(),
+   status: import_v44.z.string()
+ });
+ var xaiResponsesChunkSchema = import_v44.z.union([
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 72ffc7ff8cb2c364e8967ae03d7c3d226cc8d2b0..66f90ce51b5c8eeb942806a59991d1eec2657be7 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -959,7 +959,7 @@ var xaiResponsesResponseSchema = z4.object({
+   model: z4.string().nullish(),
+   object: z4.literal("response"),
+   output: z4.array(outputItemSchema),
+-  usage: xaiResponsesUsageSchema,
++  usage: xaiResponsesUsageSchema.nullish(),
+   status: z4.string()
+ });
+ var xaiResponsesChunkSchema = z4.union([

@@ -398,6 +398,13 @@ export namespace Provider {
         // Responses API. The pinned chat adapter accepts only low/high and
         // rejects medium before sending a request, so route just this family
         // through responses while preserving chat behavior for older models.
+        //
+        // This responses path only works because of
+        // tooling/patches/@ai-sdk%2Fxai@2.0.51.patch. xAI opens every stream
+        // with `response.created` carrying `"usage": null`, which the pinned
+        // 2.0.51 schema rejects (it marks usage optional, not nullable), so
+        // Grok 4.5 died on its first SSE event. @ai-sdk/xai@4.0.25 ships the
+        // same fix upstream; drop the patch when the @ai-sdk major bump lands.
         async getModel(sdk: any, modelID: string) {
           return /grok-4[.-]5\b/i.test(modelID) ? sdk.responses(modelID) : sdk.languageModel(modelID)
         },
