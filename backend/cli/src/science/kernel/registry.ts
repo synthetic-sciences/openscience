@@ -453,11 +453,12 @@ export namespace KernelRuntime {
     value.lastActivityAt = startedAt
     return kernel.execute(code, options).then(
       async (result) => {
-        value.executionCount = result.executionCount ?? value.executionCount + 1
+        const executionCount = result.executionCount ?? value.executionCount + 1
+        value.executionCount = executionCount
         const completedAt = Date.now()
         value.lastActivityAt = completedAt
         await persist(value)
-        const complete = { ...result, executionCount: value.executionCount }
+        const complete = { ...result, executionCount }
         const node = await provenance(
           identity,
           value,
