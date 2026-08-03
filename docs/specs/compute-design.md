@@ -645,12 +645,28 @@ Three real leases through the real route, real provider keys, nothing faked belo
   with the key absent: always 64. So the catalog is 64 cheapest + 64 premium-name offers, deduped to ~65
   rows. **"Cheapest" therefore means cheapest of a narrow window, not of Vast**; for a mid-tier card
   there may be cheaper instances outside both windows. Pagination is the fix, and it is not built.
-- **Churn re-measured on raw offers: 36% survive 40 seconds** (128 → 128 offers, 47 stable), with deduped
-  rows tracking it at 35%. **Real offer death dominates.** A theory that the ~50% figure was mostly an
-  artifact of Atlas's cheapest-per-`(gpu_name, count)` dedup was tested and **refuted**: of 42 rows that
-  left the catalog, 35 were gone from Vast's raw response too. At most ~16% are dedup drops where the
-  offer is alive and merely out-ranked — an upper bound, since the two fetches were not simultaneous.
-  **The retry's premise stands.**
+- **Churn measured on raw offers: 36% survive 40 seconds** (128 → 128 offers, 47 stable), with deduped
+  rows tracking it at 35%. A theory that this was mostly an artifact of Atlas's
+  cheapest-per-`(gpu_name, count)` dedup was tested and refuted: of 42 rows that left the catalog, 35
+  were gone from Vast's next response too.
+
+  > **Correction, 2026-08-03 — do not cite the sentence above as "84% real offer death".** That test
+  > compared two multi-name query windows, which is only valid if a window is the deterministic
+  > cheapest-64 of its filter. It may not be. A `gpu_name == "A100 SXM4"` query returned **45 offers
+  > priced below the shared window's own ceiling that the shared window did not contain** — impossible
+  > under a deterministic cheapest-64 — and two multi-name queries matching an identical live name set,
+  > issued 1.6s apart over the identical price range, shared only 27 of 64 ids.
+  >
+  > **But the effect is query-shape dependent, so neither claim generalises.** A narrow
+  > `num_gpus in [1]` query run twice 1.5s apart returned **identical** results: 64/64 shared ids, same
+  > price range, zero drops. So "the window is a sample" is not true of every query, and "36% of offers
+  > die per 40s" is not established either — the earlier figure cannot distinguish a dead offer from one
+  > the window simply did not return.
+  >
+  > What is unaffected: the retry is still justified, because a SKU that fails to launch must be
+  > replaced whatever the cause. What is *not* established is **why** a SKU goes stale, and any future
+  > design that depends on the answer — a staleness heuristic, a stability filter, a cache-freshness
+  > rule — needs this measured properly first, per-query-shape.
 - **The retry did not fire in any of the three launches.** First pick succeeded every time, including
   against a deliberately staled cache. Not a disproof — it means first-pick success is common — but the
   retry path is still unexercised against a real provider refusal.
