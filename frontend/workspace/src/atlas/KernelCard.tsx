@@ -1,4 +1,4 @@
-import { Show, type JSX } from "solid-js"
+import { For, Show, type JSX } from "solid-js"
 import {
   kernelAtlasLabel,
   kernelCanForget,
@@ -47,6 +47,23 @@ export function KernelCard(props: {
 }): JSX.Element {
   const owner = () => kernelOwnershipLabel(props.kernel, props.routeID)
   const busy = (action: KernelAction) => props.action === `${props.kernel.id}:${action}`
+  const launch = () => (props.kernel.active ? "Restart" : "Start runtime")
+  const metrics = () =>
+    [
+      { label: "Target", value: kernelTargetLabel(props.kernel) },
+      { label: "Runs", value: String(props.kernel.execution_count) },
+      { label: "Queued", value: props.kernel.queue_depth > 0 ? String(props.kernel.queue_depth) : "Unavailable" },
+      {
+        label: "Runtime",
+        value:
+          props.kernel.active && props.kernel.incarnation !== null ? `r${props.kernel.incarnation}` : "Unavailable",
+      },
+      { label: "Uptime", value: kernelUptimeLabel(props.kernel) },
+      { label: "CPU", value: kernelCpuLabel(props.kernel.resources?.cpu_percent) },
+      { label: "Memory", value: kernelMemoryLabel(props.kernel.resources?.memory_bytes) },
+      { label: "GPU", value: kernelGpuLabel(props.kernel.resources?.gpu_percent) },
+      { label: "VRAM", value: kernelVramLabel(props.kernel.resources?.vram_bytes) },
+    ].filter((metric) => metric.value !== "Unavailable")
   return (
     <article
       class="kernel-card"
@@ -64,105 +81,70 @@ export function KernelCard(props: {
         </span>
         <div class="kernel-card__title">
           <strong title={kernelLabel(props.kernel)}>{kernelLabel(props.kernel)}</strong>
-          <span>{kernelLanguageLabel(props.kernel)} environment</span>
+          <span>
+            {kernelLanguageLabel(props.kernel)} · {kernelTargetLabel(props.kernel)}
+          </span>
         </div>
-        <span class="kernel-card__owner">{owner()}</span>
-      </div>
-
-      <div class="kernel-card__state" data-tone={kernelTone(props.kernel.state)}>
-        <span class="kernel-card__state-dot" aria-hidden="true" />
-        <strong>{kernelStateLabel(props.kernel.state)}</strong>
-        <span>{props.kernel.active ? "runtime active" : "runtime inactive"}</span>
-      </div>
-
-      <div class="kernel-card__metrics">
-        <Metric label="Lifecycle" value={kernelStateLabel(props.kernel.state)} />
-        <Metric label="Executions" value={String(props.kernel.execution_count)} />
-        <Metric label="Queued" value={String(props.kernel.queue_depth)} />
-        <Metric
-          label="Runtime"
-          value={props.kernel.incarnation === null ? "Unavailable" : `r${props.kernel.incarnation}`}
-        />
+        <div class="kernel-card__meta">
+          <span class="kernel-card__owner">{owner()}</span>
+          <span class="kernel-card__state" data-tone={kernelTone(props.kernel.state)}>
+            <span class="kernel-card__state-dot" aria-hidden="true" />
+            <strong>{kernelStateLabel(props.kernel.state)}</strong>
+          </span>
+        </div>
       </div>
 
       <div
-        class="kernel-card__metrics kernel-card__metrics--usage"
+        class="kernel-card__metrics"
         role="group"
-        aria-label="Target and live usage, sampled on each refresh"
-        title="CPU and memory are sampled by the server on each refresh. Unavailable means the platform did not report a value."
+        aria-label="Kernel summary and available live usage"
+        title="Live usage appears only when the host reports it."
       >
-        <Metric label="Target" value={kernelTargetLabel(props.kernel)} />
-        <Metric label="Uptime" value={kernelUptimeLabel(props.kernel)} />
-        <Metric label="CPU" value={kernelCpuLabel(props.kernel.resources?.cpu_percent)} />
-        <Metric label="Memory" value={kernelMemoryLabel(props.kernel.resources?.memory_bytes)} />
-        <Metric label="GPU" value={kernelGpuLabel(props.kernel.resources?.gpu_percent)} />
-        <Metric label="VRAM" value={kernelVramLabel(props.kernel.resources?.vram_bytes)} />
+        <For each={metrics()}>{(metric) => <Metric label={metric.label} value={metric.value} />}</For>
       </div>
-
-      <section class="kernel-card__environment" aria-label={`${kernelLanguageLabel(props.kernel)} environment`}>
-        <div class="kernel-card__environment-header">
-          <strong>{kernelLanguageLabel(props.kernel)} environment</strong>
-          <span data-tone={kernelEnvironmentTone(props.kernel)}>{kernelEnvironmentLabel(props.kernel)}</span>
-        </div>
-        <Show when={props.kernel.environment?.cwd}>
-          {(cwd) => (
-            <div class="kernel-card__environment-row">
-              <span>Working directory</span>
-              <code title={cwd()}>{cwd()}</code>
-            </div>
-          )}
-        </Show>
-        <Show when={props.kernel.environment?.atlas}>
-          <div class="kernel-card__environment-row">
-            <span>Atlas boundary</span>
-            <p>{kernelAtlasLabel(props.kernel)}</p>
-          </div>
-        </Show>
-      </section>
 
       <p class="kernel-card__recovery">{kernelRecoveryLabel(props.kernel)}</p>
 
       <div class="kernel-card__controls">
+        <Show when={kernelCanInterrupt(props.kernel)}>
+          <button
+            type="button"
+            aria-label={`Interrupt ${kernelLabel(props.kernel)}`}
+            title="Interrupt the executing cell. The runtime will preserve state when supported."
+            disabled={!!props.action}
+            onClick={() => props.onControl("interrupt")}
+          >
+            {busy("interrupt") ? "Interrupting…" : "Interrupt"}
+          </button>
+        </Show>
         <button
           type="button"
-          aria-label={`Interrupt ${kernelLabel(props.kernel)}`}
-          title={
-            kernelCanInterrupt(props.kernel)
-              ? "Interrupt the executing cell. The runtime will preserve state when supported."
-              : "Interrupt is available while this kernel is executing."
-          }
-          disabled={!!props.action || !kernelCanInterrupt(props.kernel)}
-          onClick={() => props.onControl("interrupt")}
-        >
-          {busy("interrupt") ? "Interrupting…" : "Interrupt"}
-        </button>
-        <button
-          type="button"
-          aria-label={`Restart ${kernelLabel(props.kernel)}`}
+          class="kernel-card__primary"
+          aria-label={`${launch()} ${kernelLabel(props.kernel)}`}
           title={
             props.restartDisabled
               ? props.restartTitle
-              : "Replace this runtime now. All in-memory variables and queued cells will be lost."
+              : props.kernel.active
+                ? "Replace this runtime now. All in-memory variables and queued cells will be lost."
+                : "Start this kernel in a fresh runtime."
           }
           disabled={!!props.action || props.restartDisabled}
           onClick={() => props.onControl("restart")}
         >
-          {busy("restart") ? "Restarting…" : "Restart"}
+          {busy("restart") ? (props.kernel.active ? "Restarting…" : "Starting…") : launch()}
         </button>
-        <button
-          type="button"
-          class="kernel-card__stop"
-          aria-label={`Stop ${kernelLabel(props.kernel)}`}
-          title={
-            kernelCanStop(props.kernel)
-              ? "Stop the runtime and clear its in-memory state."
-              : "This runtime is already stopped."
-          }
-          disabled={!!props.action || !kernelCanStop(props.kernel)}
-          onClick={() => props.onControl("stop")}
-        >
-          {busy("stop") ? "Stopping…" : "Stop"}
-        </button>
+        <Show when={kernelCanStop(props.kernel)}>
+          <button
+            type="button"
+            class="kernel-card__stop"
+            aria-label={`Stop ${kernelLabel(props.kernel)}`}
+            title="Stop the runtime and clear its in-memory state."
+            disabled={!!props.action}
+            onClick={() => props.onControl("stop")}
+          >
+            {busy("stop") ? "Stopping…" : "Stop"}
+          </button>
+        </Show>
         <Show when={kernelCanForget(props.kernel)}>
           <button
             type="button"
@@ -175,28 +157,50 @@ export function KernelCard(props: {
           </button>
         </Show>
       </div>
-      <p class="kernel-card__control-note">
-        Interrupt targets the active cell. Restart replaces the runtime immediately; every in-memory variable and queued
-        cell is lost. Stop clears state without starting a replacement.
-      </p>
 
       <details class="kernel-card__identity">
-        <summary>Runtime identity</summary>
+        <summary>Runtime details</summary>
         <div>
+          <Show when={props.kernel.environment}>
+            <section class="kernel-card__environment" aria-label={`${kernelLanguageLabel(props.kernel)} environment`}>
+              <div class="kernel-card__environment-header">
+                <strong>{kernelLanguageLabel(props.kernel)} environment</strong>
+                <span data-tone={kernelEnvironmentTone(props.kernel)}>{kernelEnvironmentLabel(props.kernel)}</span>
+              </div>
+              <Show when={props.kernel.environment?.cwd}>
+                {(cwd) => (
+                  <div class="kernel-card__environment-row">
+                    <span>Working directory</span>
+                    <code title={cwd()}>{cwd()}</code>
+                  </div>
+                )}
+              </Show>
+              <Show when={props.kernel.environment?.atlas}>
+                <div class="kernel-card__environment-row">
+                  <span>Atlas boundary</span>
+                  <p>{kernelAtlasLabel(props.kernel)}</p>
+                </div>
+              </Show>
+            </section>
+          </Show>
           <Identity label="Runtime ID" value={props.kernel.id} />
           <Identity label="Session ID" value={props.kernel.sessionID} />
           <Identity label="Project ID" value={props.kernel.projectID} />
-          <Identity
-            label="Process ID"
-            value={props.kernel.process_id === null ? "Unavailable" : String(props.kernel.process_id)}
-          />
-          <Identity
-            label="Process identity"
-            value={props.kernel.process_identity_verified ? "PID and process start verified" : "Unavailable"}
-          />
-          <Identity label="Process started" value={date(props.kernel.process_started_at)} />
-          <Identity label="Started" value={date(props.kernel.started_at)} />
-          <Identity label="Last activity" value={time(props.kernel.last_activity_at)} />
+          <Show when={props.kernel.process_id !== null}>
+            <Identity label="Process ID" value={String(props.kernel.process_id)} />
+          </Show>
+          <Show when={props.kernel.process_identity_verified}>
+            <Identity label="Process identity" value="PID and process start verified" />
+          </Show>
+          <Show when={props.kernel.process_started_at}>
+            <Identity label="Process started" value={date(props.kernel.process_started_at)} />
+          </Show>
+          <Show when={props.kernel.started_at}>
+            <Identity label="Started" value={date(props.kernel.started_at)} />
+          </Show>
+          <Show when={props.kernel.last_activity_at}>
+            <Identity label="Last activity" value={time(props.kernel.last_activity_at)} />
+          </Show>
         </div>
       </details>
     </article>

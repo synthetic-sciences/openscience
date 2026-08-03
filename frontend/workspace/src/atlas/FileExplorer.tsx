@@ -4,6 +4,7 @@ import { useParams } from "@solidjs/router"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { Select } from "@synsci/ui/select"
 import { useSDK } from "@/context/sdk"
+import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { usePlatform } from "@/context/platform"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
@@ -493,6 +494,7 @@ export function FilesSourceList(props: FilesSourceListProps): JSX.Element {
 
 export function FileExplorer(): JSX.Element {
   const sdk = useSDK()
+  const server = useServer()
   const sync = useSync()
   const params = useParams()
   const platform = usePlatform()
@@ -576,10 +578,15 @@ export function FileExplorer(): JSX.Element {
   }
   const choose = async (kind: "folder" | "file") => {
     const picker = kind === "folder" ? platform.openDirectoryPickerDialog : platform.openFilePickerDialog
-    if (picker) {
-      const result = await picker({ title: kind === "folder" ? "Connect a folder" : "Connect a file" })
-      if (Array.isArray(result)) return result[0]
-      return result ?? undefined
+    if (picker && server.isLocal()) {
+      const result = await picker({
+        title: kind === "folder" ? "Connect a folder" : "Connect a file",
+        server: sdk.url,
+      })
+      if (result !== undefined) {
+        if (Array.isArray(result)) return result[0]
+        return result ?? undefined
+      }
     }
 
     return new Promise<string | undefined>((resolve) => {

@@ -57,13 +57,7 @@ export const Storage: Component = () => {
     if (busy()) return
     setError(undefined)
     setStatus(undefined)
-    let target: string | undefined
-    if (platform.openDirectoryPickerDialog) {
-      const picked = await platform.openDirectoryPickerDialog({ title: "Choose a new data location" }).catch(() => null)
-      target = Array.isArray(picked) ? picked[0] : (picked ?? undefined)
-    } else {
-      target = window.prompt("New absolute path for the data directory:") ?? undefined
-    }
+    const target = window.prompt("New absolute path for the data directory:") ?? undefined
     if (!target?.trim()) return
     setBusy(true)
     try {

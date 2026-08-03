@@ -22,18 +22,22 @@ test("home project search filters the recent list and clears back to it", async 
   await expect(card).toBeVisible()
 })
 
-test("existing folder import remains available through the in-app picker", async ({ page, directory, slug }) => {
+test("existing folder import uses the host-native picker", async ({ page, directory, slug }) => {
+  const calls: Array<{ kind: string; title: string; multiple: boolean }> = []
+  await page.route("**/api/resolve-folder/dialog", async (route) => {
+    const body = route.request().postDataJSON() as { kind: string; title: string; multiple: boolean }
+    calls.push(body)
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ paths: [directory] }),
+    })
+  })
+
   await page.goto("/")
   await page.getByRole("button", { name: "Import existing folder", exact: true }).first().click()
 
-  // The picker renders in "lite" mode (plain divs, no role=dialog), so target
-  // its controls at the page level.
-  const location = page.getByPlaceholder(/paste any absolute path/)
-  await expect(location).toBeVisible()
-  await location.fill(directory)
-  await location.press("Enter")
-  await page.getByRole("button", { name: "use this folder", exact: true }).click()
-
   await expect(page).toHaveURL(new RegExp(`/${slug}/session`))
   await expect(page.locator(promptSelector)).toBeVisible()
+  expect(calls).toEqual([{ kind: "folder", title: "open project", multiple: true }])
 })

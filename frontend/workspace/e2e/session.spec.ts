@@ -161,6 +161,10 @@ test("opening Compute from a new route creates a durable session and keeps the s
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${sessionID}(?:\\?|#|$)`))
     await expect(page.getByRole("region", { name: "Compute", exact: true })).toBeVisible()
     await expect(page.getByRole("tab", { name: "Kernels", exact: true })).toHaveAttribute("aria-selected", "true")
+    const panel = page.getByTestId("kernel-panel")
+    await expect(panel.getByText("No kernels yet", { exact: true })).toBeVisible()
+    await expect(panel).not.toContainText("Unavailable")
+    await expect(panel.locator("details.kernel-panel__scope")).not.toHaveAttribute("open", "")
   } finally {
     if (sessionID) await sdk.session.delete({ sessionID }).catch(() => undefined)
   }

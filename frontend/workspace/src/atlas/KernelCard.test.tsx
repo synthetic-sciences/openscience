@@ -74,11 +74,11 @@ describe("KernelCard lifecycle controls", () => {
       }),
     )
 
-    expect(host.textContent).toContain("runtime active")
+    expect(host.querySelector(".kernel-card__state")?.textContent).toContain("ready")
     expect(host.textContent).toContain("r4")
     expect(host.textContent).toContain("8234")
     expect(host.textContent).toContain("PID and process start verified")
-    expect(button(host, "Interrupt analysis.ipynb")?.disabled).toBe(true)
+    expect(button(host, "Interrupt analysis.ipynb")).toBeNull()
     expect(button(host, "Restart analysis.ipynb")?.disabled).toBe(false)
     expect(button(host, "Stop analysis.ipynb")?.disabled).toBe(false)
 
@@ -102,9 +102,7 @@ describe("KernelCard lifecycle controls", () => {
     expect(button(host, "Restart analysis.ipynb")?.title).toContain(
       "All in-memory variables and queued cells will be lost",
     )
-    expect(host.querySelector(".kernel-card__control-note")?.textContent).toContain(
-      "every in-memory variable and queued cell is lost",
-    )
+    expect(host.querySelector(".kernel-card__control-note")).toBeNull()
     button(host, "Interrupt analysis.ipynb")?.click()
     expect(calls).toEqual(["interrupt"])
   })
@@ -130,15 +128,15 @@ describe("KernelCard lifecycle controls", () => {
       }),
     )
 
-    expect(host.textContent).toContain("R environment")
-    expect(button(host, "Restart analysis.ipynb")?.disabled).toBe(false)
-    expect(button(host, "Stop analysis.ipynb")?.disabled).toBe(true)
+    expect(host.textContent).toContain("R · Local")
+    expect(button(host, "Start runtime analysis.ipynb")?.disabled).toBe(false)
+    expect(button(host, "Stop analysis.ipynb")).toBeNull()
     expect(button(host, "Forget analysis.ipynb")?.disabled).toBe(false)
     button(host, "Forget analysis.ipynb")?.click()
     expect(calls).toEqual(["delete"])
   })
 
-  test("shows the local target with sampled usage and an unavailable fallback, never zero", () => {
+  test("shows only metrics the host actually reports", () => {
     const sampled = mount(() =>
       subject.KernelCard({
         kernel: kernel({ resources: { cpu_percent: 12.34, memory_bytes: 412_000_000 } }),
@@ -147,14 +145,15 @@ describe("KernelCard lifecycle controls", () => {
         onControl: () => {},
       }),
     )
-    const usage = sampled.querySelector(".kernel-card__metrics--usage")
+    const usage = sampled.querySelector(".kernel-card__metrics")
     expect(usage?.textContent).toContain("Target")
     expect(usage?.textContent).toContain("Local")
     expect(usage?.textContent).toContain("12.3%")
     expect(usage?.textContent).toContain("412 MB")
     expect(usage?.textContent).toContain("Uptime")
-    expect(usage?.textContent).toContain("GPU")
-    expect(usage?.textContent).toContain("VRAM")
+    expect(usage?.textContent).not.toContain("GPU")
+    expect(usage?.textContent).not.toContain("VRAM")
+    expect(usage?.textContent).not.toContain("Unavailable")
 
     const partial = mount(() =>
       subject.KernelCard({
@@ -164,9 +163,9 @@ describe("KernelCard lifecycle controls", () => {
         onControl: () => {},
       }),
     )
-    const half = partial.querySelector(".kernel-card__metrics--usage")
+    const half = partial.querySelector(".kernel-card__metrics")
     expect(half?.textContent).toContain("3.0%")
-    expect(half?.textContent?.match(/Unavailable/g)?.length).toBe(3)
+    expect(half?.textContent).not.toContain("Unavailable")
     expect(half?.textContent).not.toContain("0 B")
 
     const bare = mount(() =>
@@ -177,10 +176,10 @@ describe("KernelCard lifecycle controls", () => {
         onControl: () => {},
       }),
     )
-    const empty = bare.querySelector(".kernel-card__metrics--usage")
+    const empty = bare.querySelector(".kernel-card__metrics")
     expect(empty?.textContent).toContain("Local")
     expect(empty?.textContent).not.toContain("%")
-    expect(empty?.textContent?.match(/Unavailable/g)?.length).toBe(4)
+    expect(empty?.textContent).not.toContain("Unavailable")
   })
 
   test("keeps the lazy named session kernel restartable but not deletable", () => {
@@ -204,7 +203,7 @@ describe("KernelCard lifecycle controls", () => {
     )
 
     expect(host.textContent).toContain("No process is running")
-    expect(button(host, "Restart Python analysis")?.disabled).toBe(false)
+    expect(button(host, "Start runtime Python analysis")?.disabled).toBe(false)
     expect(button(host, "Forget Python analysis")).toBeNull()
   })
 

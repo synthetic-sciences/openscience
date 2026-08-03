@@ -26,11 +26,19 @@ export type Platform = {
   /** Send a system notification (optional deep link) */
   notify(title: string, description?: string, href?: string): Promise<void>
 
-  /** Open directory picker dialog (native on Tauri, server-backed on web) */
-  openDirectoryPickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
+  /** Open an OS-native directory picker. Undefined means the current platform cannot provide one. */
+  openDirectoryPickerDialog?(opts?: {
+    title?: string
+    multiple?: boolean
+    server?: string
+  }): Promise<string | string[] | null | undefined>
 
-  /** Open native file picker dialog (Tauri only) */
-  openFilePickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
+  /** Open an OS-native file picker. Undefined means the current platform cannot provide one. */
+  openFilePickerDialog?(opts?: {
+    title?: string
+    multiple?: boolean
+    server?: string
+  }): Promise<string | string[] | null | undefined>
 
   /** Save file picker dialog (Tauri only) */
   saveFilePickerDialog?(opts?: { title?: string; defaultPath?: string }): Promise<string | null>

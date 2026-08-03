@@ -10,12 +10,12 @@
  *
  * Routes (all under `/api/resolve-folder`):
  *   GET  /probe              — can we list ~/Desktop? (mac FDA check)
- *   GET  /dialog             — open OS-native folder dialog (mac only)
+ *   POST /dialog             — open the host OS-native file/folder dialog
  *   POST /validate           — { path } → resolved absolute path
  *   POST /                   — { name, hint?, children? } → best candidate
  */
 
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { spawn } from "child_process"
 import fs from "fs/promises"
 import os from "os"
@@ -159,6 +159,121 @@ function run(command: string, args: string[]): Promise<string> {
   })
 }
 
+type NativePickerInput = {
+  kind: "folder" | "file"
+  title: string
+  multiple: boolean
+}
+
+export type NativePickerPlan = {
+  command: string
+  args: string[]
+  format: "lines" | "json"
+}
+
+const powershellString = (value: string) => `'${value.replaceAll("'", "''")}'`
+
+export function nativePickerPlan(
+  input: NativePickerInput,
+  platform: NodeJS.Platform = process.platform,
+): NativePickerPlan | undefined {
+  if (platform === "darwin") {
+    const script = [
+      "on run argv",
+      "set dialogTitle to item 1 of argv",
+      "set selectionKind to item 2 of argv",
+      'set allowMany to item 3 of argv is "true"',
+      'if selectionKind is "file" then',
+      "if allowMany then",
+      "set pickedItems to choose file with prompt dialogTitle with multiple selections allowed",
+      "else",
+      "set pickedItems to {choose file with prompt dialogTitle}",
+      "end if",
+      "else",
+      "if allowMany then",
+      "set pickedItems to choose folder with prompt dialogTitle with multiple selections allowed",
+      "else",
+      "set pickedItems to {choose folder with prompt dialogTitle}",
+      "end if",
+      "end if",
+      "set selectedPaths to {}",
+      "repeat with pickedItem in pickedItems",
+      "set end of selectedPaths to POSIX path of pickedItem",
+      "end repeat",
+      "set AppleScript's text item delimiters to linefeed",
+      "return selectedPaths as text",
+      "end run",
+    ]
+    return {
+      command: "osascript",
+      args: [...script.flatMap((line) => ["-e", line]), "--", input.title, input.kind, String(input.multiple)],
+      format: "lines",
+    }
+  }
+
+  if (platform !== "win32") return
+
+  const setup = [
+    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+    "Add-Type -AssemblyName System.Windows.Forms",
+    "[System.Windows.Forms.Application]::EnableVisualStyles()",
+  ]
+  const dialog =
+    input.kind === "file"
+      ? [
+          "$picker = New-Object System.Windows.Forms.OpenFileDialog",
+          `$picker.Title = ${powershellString(input.title)}`,
+          `$picker.Multiselect = ${input.multiple ? "$true" : "$false"}`,
+          "$picker.CheckFileExists = $true",
+          "$picker.CheckPathExists = $true",
+          "$result = $picker.ShowDialog()",
+          "if ($result -ne [System.Windows.Forms.DialogResult]::OK) { [Console]::Write('[]'); exit 0 }",
+          "$paths = @($picker.FileNames)",
+        ]
+      : [
+          "$picker = New-Object System.Windows.Forms.FolderBrowserDialog",
+          `$picker.Description = ${powershellString(input.title)}`,
+          "$picker.ShowNewFolderButton = $true",
+          "$result = $picker.ShowDialog()",
+          "if ($result -ne [System.Windows.Forms.DialogResult]::OK) { [Console]::Write('[]'); exit 0 }",
+          "$paths = @($picker.SelectedPath)",
+        ]
+  const script = [...setup, ...dialog, "[Console]::Write((ConvertTo-Json -Compress -InputObject $paths))"].join("; ")
+  return {
+    command: "powershell.exe",
+    args: ["-NoProfile", "-STA", "-Command", script],
+    format: "json",
+  }
+}
+
+export async function openNativePicker(input: NativePickerInput, platform: NodeJS.Platform = process.platform) {
+  const plan = nativePickerPlan(input, platform)
+  if (!plan) return
+  const output = await run(plan.command, plan.args)
+  const values = (() => {
+    if (plan.format === "lines") return output.split(/\r?\n/)
+    const parsed = JSON.parse(output || "[]") as unknown
+    return Array.isArray(parsed) ? parsed : []
+  })()
+  return values
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map(path.normalize)
+}
+
+async function pickerResponse(c: Context, input: NativePickerInput) {
+  const plan = nativePickerPlan(input)
+  if (!plan) return c.json({ unsupported: true, message: `native dialog unsupported on ${process.platform}` }, 501)
+  return openNativePicker(input).then(
+    (paths) => c.json({ paths: paths ?? [] }),
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      const cancelled = /User canceled|cancelled/i.test(message)
+      if (cancelled) return c.json({ error: "cancelled" }, 400)
+      return c.json({ error: message }, 500)
+    },
+  )
+}
+
 export const FolderResolveRoutes = lazy(() =>
   new Hono()
     .get("/probe", async (c) => {
@@ -168,25 +283,15 @@ export const FolderResolveRoutes = lazy(() =>
         reason: result.reason,
       })
     })
-    .get("/dialog", async (c) => {
-      // Only macOS gets a reliable scriptable native dialog. Linux/Windows
-      // fall through to the in-app FolderPicker the SPA renders next.
-      if (process.platform !== "darwin") {
-        return c.json({ unsupported: true, message: `native dialog unsupported on ${process.platform}` }, 501)
-      }
-      try {
-        const script = ['set picked to choose folder with prompt "Open project folder"', "POSIX path of picked"]
-        const out = await run(
-          "osascript",
-          script.flatMap((s) => ["-e", s]),
-        )
-        const folder = out.trim().replace(/\/+$/, "")
-        return c.json({ paths: folder ? [folder] : [] })
-      } catch (e: any) {
-        const message = String(e?.message ?? e)
-        const cancelled = /User canceled|cancelled/i.test(message)
-        return c.json({ error: cancelled ? "cancelled" : message }, (cancelled ? 499 : 500) as any)
-      }
+    .get("/dialog", (c) => pickerResponse(c, { kind: "folder", title: "Open project folder", multiple: false }))
+    .post("/dialog", async (c) => {
+      const body = await c.req.json().catch(() => undefined)
+      if (!body || typeof body !== "object" || Array.isArray(body)) return c.json({ error: "invalid json" }, 400)
+      const kind = "kind" in body && body.kind === "file" ? "file" : "folder"
+      const title =
+        "title" in body && typeof body.title === "string" ? body.title.trim().slice(0, 160) : "Choose a location"
+      const multiple = "multiple" in body && body.multiple === true
+      return pickerResponse(c, { kind, title: title || "Choose a location", multiple })
     })
     .post("/validate", async (c) => {
       let body: { path?: string; project?: string; projectID?: string } = {}

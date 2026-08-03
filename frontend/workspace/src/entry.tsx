@@ -5,6 +5,7 @@ import { Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { openscienceFetch } from "@/utils/openscience-fetch"
+import { openNativePicker } from "@/utils/native-picker"
 import { URLS } from "@/config/urls"
 import pkg from "../package.json"
 
@@ -67,6 +68,8 @@ const platform: Platform = {
       })
       .catch(() => undefined)
   },
+  openDirectoryPickerDialog: (options) => openNativePicker("folder", options, openscienceFetch),
+  openFilePickerDialog: (options) => openNativePicker("file", options, openscienceFetch),
   checkUpdate: async () => {
     const response = await openscienceFetch("/settings/updates", { headers: { Accept: "application/json" } })
     if (!response.ok) throw new Error(`Update check failed (${response.status})`)

@@ -18,10 +18,11 @@ describe("kernel control room", () => {
     expect(panel).toContain("kernel.id")
   })
 
-  test("keeps ownership guidance compact and inline", () => {
+  test("keeps ownership guidance collapsed by default", () => {
     const panel = source()
 
-    expect(panel).toContain("<strong>Session-owned kernels.</strong>")
+    expect(panel).toContain("<summary>About kernels</summary>")
+    expect(panel).toContain("Kernels belong to this session.")
     expect(panel).not.toContain("Project inventory")
   })
 
@@ -34,7 +35,7 @@ describe("kernel control room", () => {
     expect(panel).toContain("kernelCanInterrupt")
     expect(panel).toContain("kernelCanStop")
     expect(panel).toContain("kernelCanForget")
-    expect(panel).toContain("aria-label={`Restart ${kernelLabel(props.kernel)}`}")
+    expect(panel).toContain("aria-label={`${launch()} ${kernelLabel(props.kernel)}`}")
     expect(panel).toContain("aria-label={`Stop ${kernelLabel(props.kernel)}`}")
     expect(panel).toContain("aria-label={`Forget ${kernelLabel(props.kernel)}`}")
     expect(panel).toContain('request<KernelStatus>("/notebook/kernels"')
@@ -50,8 +51,8 @@ describe("kernel control room", () => {
     expect(panel).toContain('action === "restart" && !authority.allowed()')
     expect(panel).toContain("restartDisabled={!authority.allowed()}")
     expect(panel).toContain("disabled={!!props.action || props.restartDisabled}")
-    expect(panel).toContain("disabled={!!props.action || !kernelCanStop(props.kernel)}")
-    expect(panel).toContain("disabled={!!props.action || !kernelCanInterrupt(props.kernel)}")
+    expect(panel).toContain("<Show when={kernelCanStop(props.kernel)}>")
+    expect(panel).toContain("<Show when={kernelCanInterrupt(props.kernel)}>")
   })
 
   test("explains state preservation and recovery after controls complete", () => {
@@ -59,8 +60,7 @@ describe("kernel control room", () => {
 
     expect(panel).toContain("Runtime state was preserved.")
     expect(panel).toContain("Previous in-memory variables and queued work were cleared.")
-    expect(panel).toContain("every in-memory variable and queued")
-    expect(panel).toContain("cell is lost")
+    expect(panel).toContain("All in-memory variables and queued cells will be lost.")
     expect(panel).toContain('class="kernel-card__recovery"')
     expect(panel).toContain('role="status"')
   })
@@ -80,13 +80,13 @@ describe("kernel control room", () => {
   test("keeps the invoked compute control room compact and softly grouped", () => {
     const css = styles()
 
-    expect(css).toMatch(/\.compute-surface \.kernel-panel__header\s*\{[^}]*min-height: 48px/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-panel__heading strong\s*\{[^}]*font-size: 15px/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-panel__scope\s*\{[^}]*background: transparent/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*padding: 12px/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-panel__header\s*\{[^}]*min-height: 44px/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-panel__heading strong\s*\{[^}]*font-size: 14px/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-panel__scope\s*\{[^}]*background: none/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*padding: 11px/s)
     expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*border-radius: 12px/s)
     expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*box-shadow: none/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-card__metric\s*\{[^}]*min-height: 40px/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-card__metric\s*\{[^}]*min-height: 0/s)
   })
 
   test("materializes a new session and refreshes only while kernels are active", () => {

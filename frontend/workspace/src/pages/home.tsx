@@ -114,9 +114,12 @@ export default function Home(): JSX.Element {
       const result = await platform.openDirectoryPickerDialog({
         title: language.t("command.project.open"),
         multiple: true,
+        server: sdk.url,
       })
-      resolve(result)
-      return
+      if (result !== undefined) {
+        resolve(result)
+        return
+      }
     }
 
     dialog.show(() => <FolderPicker onSelect={resolve} />, {
@@ -145,9 +148,15 @@ export default function Home(): JSX.Element {
 
   async function chooseProjectSources() {
     if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      const result = await platform.openDirectoryPickerDialog({ title: "Add source folders", multiple: true })
-      mergeSources(result)
-      return
+      const result = await platform.openDirectoryPickerDialog({
+        title: "Add source folders",
+        multiple: true,
+        server: sdk.url,
+      })
+      if (result !== undefined) {
+        mergeSources(result)
+        return
+      }
     }
 
     const selection = { result: null as string | string[] | null }

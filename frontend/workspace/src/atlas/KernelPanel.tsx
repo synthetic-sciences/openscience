@@ -64,6 +64,14 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
   const [data, api] = createResource(load)
   const kernels = () => data()?.kernels ?? []
   const summary = createMemo(() => summarizeKernels(kernels()))
+  const overview = createMemo(() => {
+    if (summary().running > 0) {
+      return `${summary().running} running${summary().queued > 0 ? ` · ${summary().queued} queued` : ""}`
+    }
+    if (summary().live > 0) return `${summary().live} ready`
+    const count = kernels().length
+    return `${count} saved ${count === 1 ? "kernel" : "kernels"} · none running`
+  })
   const ensureSession = async () => {
     if (params.id && params.id !== "new") return params.id
     return props.onEnsureSession?.()
@@ -159,11 +167,8 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
     <section aria-label="Session kernel control room" data-testid="kernel-panel" class="kernel-panel">
       <header class="kernel-panel__header">
         <div class="kernel-panel__heading">
-          <span class="kernel-panel__eyebrow">Compute</span>
-          <strong>Session kernels</strong>
-          <span>
-            {summary().live} live · {summary().running} running · {summary().queued} queued
-          </span>
+          <strong>Kernels</strong>
+          <span>{overview()}</span>
         </div>
         <div class="kernel-panel__refresh">
           <Show when={view.updated}>
@@ -232,15 +237,13 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
           </form>
         </Show>
 
-        <section class="kernel-panel__scope" aria-label="Kernel ownership model">
-          <span class="kernel-panel__scope-icon" aria-hidden="true">
-            <IconCpu size={13} strokeWidth={1.5} />
-          </span>
+        <details class="kernel-panel__scope">
+          <summary>About kernels</summary>
           <p>
-            <strong>Session-owned kernels.</strong> Named records survive app restarts; live variables persist only
-            while their backend process remains alive.
+            Kernels belong to this session. Named records survive app restarts; live variables last only while the
+            runtime is active.
           </p>
-        </section>
+        </details>
 
         <Show when={authority.message()}>
           {(message) => (
@@ -271,8 +274,8 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
               <span aria-hidden="true">
                 <IconCpu size={15} strokeWidth={1.4} />
               </span>
-              <strong>No active kernels</strong>
-              <p>A real session exposes its default Python record here before starting a process.</p>
+              <strong>No kernels yet</strong>
+              <p>Create a named Python or R runtime for work that needs its own in-memory state.</p>
             </div>
           }
         >

@@ -60,6 +60,13 @@ describe("launch settings truth pass", () => {
     expect(source("Storage.tsx")).not.toContain("manage cloud credentials")
   })
 
+  test("keeps storage relocation as an explicit absolute path", () => {
+    const storage = source("Storage.tsx")
+
+    expect(storage).toContain('window.prompt("New absolute path for the data directory:")')
+    expect(storage).not.toContain("openDirectoryPickerDialog")
+  })
+
   test("connectors persist enablement and inspect real server capabilities", () => {
     const connectors = source("Connectors.tsx")
 
