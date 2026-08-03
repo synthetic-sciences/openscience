@@ -204,6 +204,38 @@ export namespace Lease {
   // must take — this is the point of Task 1, not an afterthought.
   // -------------------------------------------------------------------------
 
+  /** One entry of `attempted[]` on a structured launch refusal: a candidate
+   *  offer that was actually asked to launch and refused. Verified against
+   *  `_launch_requirement`'s `tried.append({"provider": ..., "sku": ...,
+   *  "reason": ...})` (atlas app/routes/compute.py) — never invented. */
+  export interface Attempt {
+    provider: string
+    sku: string
+    reason: string
+  }
+
+  /** The one body shape `no_matching_offer` (400) and `no_capacity` (503)
+   *  share — verified against `_no_offer` (atlas app/routes/compute.py),
+   *  which builds both from the same function. `gpu`/`count` are the
+   *  request echoed back; `max_hourly_cents` is nullable on the wire itself
+   *  (no ceiling given), not merely absent when unknown, so it stays
+   *  `number | null` rather than optional. `rate_limited` names providers
+   *  whose CATALOG FETCH was throttled this attempt — distinct from
+   *  `attempted`, which only ever holds candidates actually asked to
+   *  launch — and `retry_after_seconds` is the wait one of them published,
+   *  a measured number from the provider. Both stay empty/undefined rather
+   *  than a client-invented guess when Atlas sent nothing. */
+  interface Refusal<K extends string> {
+    kind: K
+    gpu?: string
+    count?: number
+    max_hourly_cents: number | null
+    attempted: Attempt[]
+    rate_limited: string[]
+    retry_after_seconds?: number
+    message: string
+  }
+
   export type Failure =
     | { kind: "unauthenticated"; message: string }
     /** The wallet cannot fund an hour of the chosen SKU. */
@@ -218,10 +250,19 @@ export namespace Lease {
      *  the caller to stop, not the one that invites a retry loop against a
      *  wall. */
     | { kind: "concurrency_capped"; message: string }
-    /** Nothing matched the requirement — `400`. */
-    | { kind: "no_matching_offer"; attempted: unknown[]; message: string }
-    /** Candidates were tried and all refused — `503`. */
-    | { kind: "no_capacity"; attempted: unknown[]; message: string }
+    /** Nothing matched the requirement — `400`. `attempted` is always empty
+     *  here: nothing in the catalog matched, so nothing was ever asked to
+     *  launch. Retrying immediately is pointless — nothing about the
+     *  request changed. Name a different GPU, relax `max_hourly_cents`, or
+     *  check `compute_status`. */
+    | Refusal<"no_matching_offer">
+    /** Candidates were tried and every one refused — `503`. `attempted`
+     *  names each offer that was actually asked and why it refused.
+     *  Retrying SHORTLY is reasonable here — the opposite advice from
+     *  `no_matching_offer` above — because GPU capacity moves by the
+     *  second. Getting these two backwards is the one thing this pair of
+     *  kinds exists to prevent. */
+    | Refusal<"no_capacity">
     /** `409` — e.g. releasing an already-released lease. */
     | { kind: "conflict"; message: string }
     /** A 2xx whose body cannot be trusted as the thing it claims to be — a
@@ -360,22 +401,63 @@ export namespace Lease {
     return error instanceof Error ? error.message : String(error)
   }
 
+  /** Atlas answers every structured refusal through FastAPI's
+   *  `HTTPException`, which ALWAYS serialises as `{"detail": ...}` no
+   *  matter what `detail` is — confirmed against `_no_offer` and
+   *  `_payment_required` (atlas app/routes/compute.py), both of which pass
+   *  a whole dict as `detail`. This was the actual defect a live 503
+   *  caught: `classify` read `error`/`attempted` off the OUTER body, which
+   *  only ever has a `detail` key, so a real `no_capacity` response could
+   *  never be told apart from anything else. An OBJECT `detail` is
+   *  unwrapped one level; a STRING `detail` (the 429s, 409, 401) already
+   *  IS the payload and is left alone. Falls back to the top-level body so
+   *  a differently-shaped response still resolves to something rather than
+   *  an empty record. */
+  function scope(fields: Record<string, unknown>): Record<string, unknown> {
+    const detail = fields.detail
+    return detail !== null && typeof detail === "object" && !Array.isArray(detail) ? record(detail) : fields
+  }
+
   /** Prose the server may attach under any of these keys, favouring the
-   *  most human one first. `error` in a 402 body is a stable code
-   *  (`insufficient_cli_credit`); using it as a last-resort message is
-   *  still more useful than nothing. */
+   *  most human one first. `error` in a 402/400/503 body is a stable code
+   *  (`insufficient_cli_credit`, `no_capacity`, ...); using it as a
+   *  last-resort message is still more useful than nothing. */
   function text(fields: Record<string, unknown>): string | undefined {
     const detail = fields.detail
     if (typeof detail === "string" && detail) return detail
-    const message = fields.message
+    const inner = scope(fields)
+    const message = inner.message
     if (typeof message === "string" && message) return message
-    const error = fields.error
+    const error = inner.error
     if (typeof error === "string" && error) return error
     return undefined
   }
 
-  function attempted(fields: Record<string, unknown>): unknown[] {
-    return Array.isArray(fields.attempted) ? fields.attempted : []
+  function isAttempt(value: unknown): value is Attempt {
+    if (value === null || typeof value !== "object") return false
+    const row = value as Record<string, unknown>
+    return typeof row.provider === "string" && typeof row.sku === "string" && typeof row.reason === "string"
+  }
+
+  /** Only rows shaped like a real attempt survive — a differently-shaped
+   *  `attempted[]` entry is dropped rather than handed to the agent as
+   *  `[object Object]`. */
+  function attempts(inner: Record<string, unknown>): Attempt[] {
+    return Array.isArray(inner.attempted) ? inner.attempted.filter(isAttempt) : []
+  }
+
+  /** `rate_limited` on the wire is a plain list of provider names (`names =
+   *  list(limited)` in `_no_offer`), not objects — verified against source. */
+  function limitedProviders(inner: Record<string, unknown>): string[] {
+    return Array.isArray(inner.rate_limited) ? inner.rate_limited.filter((name) => typeof name === "string") : []
+  }
+
+  /** The measured wait Atlas published (`retry_after_s`), never a
+   *  client-invented backoff. `null` (nothing published) and any
+   *  non-finite value both become `undefined` — there is nothing to obey. */
+  function retrySeconds(inner: Record<string, unknown>): number | undefined {
+    const raw = inner.retry_after_s
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : undefined
   }
 
   function after(res: Response): number | undefined {
@@ -389,15 +471,32 @@ export namespace Lease {
    *  `affordable_budget_cents`, is a shape this vocabulary does not
    *  recognise — surfaced generically rather than guessed, unlike the 429
    *  split below where an unrecognised body still has a documented safe
-   *  default. */
-  function payment(fields: Record<string, unknown>, note: string): Failure {
-    const cents = fields.affordable_budget_cents
+   *  default. Takes the already-unwrapped `inner` scope, not the raw body. */
+  function payment(inner: Record<string, unknown>, note: string): Failure {
+    const cents = inner.affordable_budget_cents
     const budget = typeof cents === "number" ? cents : undefined
-    if (fields.error === "insufficient_cli_credit" && budget !== undefined)
+    if (inner.error === "insufficient_cli_credit" && budget !== undefined)
       return { kind: "insufficient_credit", affordable_budget_cents: budget, message: note }
-    if (fields.error === "budget_below_hourly_rate" && budget !== undefined)
+    if (inner.error === "budget_below_hourly_rate" && budget !== undefined)
       return { kind: "budget_too_low", affordable_budget_cents: budget, message: note }
     return { kind: "unexpected", status: 402, message: note }
+  }
+
+  /** Builds either structured refusal from the already-unwrapped `inner`
+   *  scope — `no_matching_offer` and `no_capacity` share one wire shape
+   *  (`_no_offer`), so they share one builder, distinguished only by
+   *  `kind`. */
+  function refusal(kind: "no_matching_offer" | "no_capacity", inner: Record<string, unknown>, note: string): Failure {
+    return {
+      kind,
+      gpu: typeof inner.gpu === "string" ? inner.gpu : undefined,
+      count: typeof inner.count === "number" ? inner.count : undefined,
+      max_hourly_cents: typeof inner.max_hourly_cents === "number" ? inner.max_hourly_cents : null,
+      attempted: attempts(inner),
+      rate_limited: limitedProviders(inner),
+      retry_after_seconds: retrySeconds(inner),
+      message: note,
+    }
   }
 
   /**
@@ -430,15 +529,14 @@ export namespace Lease {
    *  conflict. */
   function classify(res: Response, body: unknown): Failure {
     const fields = record(body)
+    const inner = scope(fields)
     const note = text(fields) ?? (res.statusText || `HTTP ${res.status}`)
     if (res.status === 401) return { kind: "unauthenticated", message: note }
-    if (res.status === 402) return payment(fields, note)
+    if (res.status === 402) return payment(inner, note)
     if (res.status === 409) return { kind: "conflict", message: note }
     if (res.status === 429) return limited(fields, res)
-    if (res.status === 400 && fields.error === "no_matching_offer")
-      return { kind: "no_matching_offer", attempted: attempted(fields), message: note }
-    if (res.status === 503 && fields.error === "no_capacity")
-      return { kind: "no_capacity", attempted: attempted(fields), message: note }
+    if (res.status === 400 && inner.error === "no_matching_offer") return refusal("no_matching_offer", inner, note)
+    if (res.status === 503 && inner.error === "no_capacity") return refusal("no_capacity", inner, note)
     return { kind: "unexpected", status: res.status, message: note }
   }
 }

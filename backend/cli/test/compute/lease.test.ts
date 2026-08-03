@@ -209,34 +209,38 @@ describe("Lease.launch", () => {
     expect(result.error.kind).toBe("concurrency_capped")
   })
 
-  test("400 no_matching_offer carries the attempted list", async () => {
-    using server = Bun.serve({
-      port: 0,
-      fetch: () => Response.json({ error: "no_matching_offer", attempted: [] }, { status: 400 }),
-    })
-    const result = await Lease.launch(SPEC, server.url.origin)
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error("expected failure")
-    expect(result.error.kind).toBe("no_matching_offer")
-    if (result.error.kind !== "no_matching_offer") throw new Error("expected no_matching_offer")
-    expect(result.error.attempted).toEqual([])
-  })
-
-  test("503 no_capacity carries the attempted list and is distinct from no_matching_offer", async () => {
+  test("VERIFIED (source): a 402 whose detail is nested — the real Atlas shape — still classifies correctly", async () => {
+    // Verified against `_payment_required` (~/codes/InkVell/atlas
+    // backend/app/routes/compute.py): every field lives under
+    // `HTTPException(status_code=402, detail={"error": ..., "message": ...})`,
+    // nested exactly like the 400/503 shapes below — not at the top level,
+    // which is what the two 402 tests above (predating this discovery) use.
+    // `classify` now unwraps `detail` generically rather than only for the
+    // two new kinds, so this nested shape has to work too.
     using server = Bun.serve({
       port: 0,
       fetch: () =>
         Response.json(
-          { error: "no_capacity", attempted: [{ provider: "vast" }, { provider: "runpod" }] },
-          { status: 503 },
+          {
+            detail: {
+              error: "insufficient_cli_credit",
+              needed_cents: 699,
+              available_cents: 120,
+              affordable_budget_cents: 120,
+              actions: ["byok", "topup"],
+              message: "Not enough wallet credit to provision this compute (6.99 USD/hr needed).",
+            },
+          },
+          { status: 402 },
         ),
     })
     const result = await Lease.launch(SPEC, server.url.origin)
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected failure")
-    expect(result.error.kind).toBe("no_capacity")
-    if (result.error.kind !== "no_capacity") throw new Error("expected no_capacity")
-    expect(result.error.attempted.length).toBe(2)
+    expect(result.error.kind).toBe("insufficient_credit")
+    if (result.error.kind !== "insufficient_credit") throw new Error("expected insufficient_credit")
+    expect(result.error.affordable_budget_cents).toBe(120)
+    expect(result.error.message).toBe("Not enough wallet credit to provision this compute (6.99 USD/hr needed).")
   })
 
   test("a non-JSON error body still surfaces a typed failure carrying the HTTP status", async () => {
@@ -274,6 +278,153 @@ describe("Lease.launch", () => {
     if (result.ok) throw new Error("expected failure")
     expect(result.error.kind).toBe("unauthenticated")
     expect(count).toBe(0)
+  })
+})
+
+describe("Lease.launch: no_matching_offer (400) and no_capacity (503)", () => {
+  // Atlas answers both with FastAPI's `HTTPException(detail={...})`, which
+  // ALWAYS serialises as `{"detail": {...}}` regardless of what `detail` is
+  // — confirmed by reading `_no_offer` in ~/codes/InkVell/atlas
+  // backend/app/routes/compute.py. The live 503 body below is captured
+  // verbatim from a real `compute_launch` against real Atlas + RunPod; the
+  // rest are constructed from the same function's source, not imagined —
+  // each comment below says which.
+
+  test("VERBATIM: the live 503 no_capacity body captured against real Atlas + RunPod", async () => {
+    const LIVE_503 = {
+      detail: {
+        error: "no_capacity",
+        gpu: "RTX-3090",
+        count: 1,
+        max_hourly_cents: null,
+        attempted: [
+          {
+            provider: "runpod",
+            sku: "NVIDIA GeForce RTX 3090",
+            reason:
+              "create pod: This machine does not have the resources to deploy your pod. Please try a different machine",
+          },
+        ],
+        rate_limited: [],
+        retry_after_s: null,
+        message:
+          "Tried 1 offer(s) for 1x RTX-3090 and every one refused to launch. GPU capacity moves by the second -- try again shortly, or name a different GPU.",
+      },
+    }
+    using server = Bun.serve({ port: 0, fetch: () => Response.json(LIVE_503, { status: 503 }) })
+    const result = await Lease.launch(SPEC, server.url.origin)
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected failure")
+    expect(result.error.kind).toBe("no_capacity")
+    if (result.error.kind !== "no_capacity") throw new Error("expected no_capacity")
+    expect(result.error.gpu).toBe("RTX-3090")
+    expect(result.error.count).toBe(1)
+    expect(result.error.max_hourly_cents).toBeNull()
+    expect(result.error.attempted).toEqual([
+      {
+        provider: "runpod",
+        sku: "NVIDIA GeForce RTX 3090",
+        reason:
+          "create pod: This machine does not have the resources to deploy your pod. Please try a different machine",
+      },
+    ])
+    expect(result.error.rate_limited).toEqual([])
+    expect(result.error.retry_after_seconds).toBeUndefined()
+    expect(result.error.message).toBe(LIVE_503.detail.message)
+  })
+
+  test("VERIFIED (source): a 400 no_matching_offer always has an empty attempted list", async () => {
+    // `_no_offer`'s `if not tried:` branch returns 400 with `attempted: []`
+    // unconditionally — nothing in the catalog matched, so nothing was ever
+    // asked to launch. This is what distinguishes it from no_capacity below.
+    const BODY = {
+      detail: {
+        error: "no_matching_offer",
+        gpu: "H100-SXM",
+        count: 8,
+        max_hourly_cents: 50,
+        attempted: [],
+        rate_limited: [],
+        retry_after_s: null,
+        message:
+          "No listed offer matches 8x H100-SXM under 50c/hr. See /api/compute/options for what is available right now.",
+      },
+    }
+    using server = Bun.serve({ port: 0, fetch: () => Response.json(BODY, { status: 400 }) })
+    const result = await Lease.launch(SPEC, server.url.origin)
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected failure")
+    expect(result.error.kind).toBe("no_matching_offer")
+    if (result.error.kind !== "no_matching_offer") throw new Error("expected no_matching_offer")
+    expect(result.error.attempted).toEqual([])
+    expect(result.error.max_hourly_cents).toBe(50)
+    expect(result.error.message).toContain("No listed offer matches")
+  })
+
+  test("VERIFIED (source): rate_limited providers and a measured retry_after_s survive onto a no_capacity refusal", async () => {
+    // Verified against `_no_offer`'s `rate_limited` parameter and
+    // `_launch_requirement`'s collection of it: a provider whose CATALOG
+    // FETCH was throttled is named separately from `attempted` (which only
+    // ever holds candidates actually asked to launch), and `retry_after_s`
+    // is `max()` over the waits it published — a measured number from the
+    // provider, never invented client-side.
+    const BODY = {
+      detail: {
+        error: "no_capacity",
+        gpu: "A100-80GB",
+        count: 2,
+        max_hourly_cents: null,
+        attempted: [{ provider: "runpod", sku: "NVIDIA A100 80GB", reason: "out of stock" }],
+        rate_limited: ["vast"],
+        retry_after_s: 12.5,
+        message:
+          "Tried 1 offer(s) for 2x A100-80GB and every one refused to launch. GPU capacity moves by the second -- try again shortly, or name a different GPU. vast did not answer in time (rate-limited, not out of offers) -- try again in about 12.5s.",
+      },
+    }
+    using server = Bun.serve({ port: 0, fetch: () => Response.json(BODY, { status: 503 }) })
+    const result = await Lease.launch(SPEC, server.url.origin)
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected failure")
+    expect(result.error.kind).toBe("no_capacity")
+    if (result.error.kind !== "no_capacity") throw new Error("expected no_capacity")
+    expect(result.error.rate_limited).toEqual(["vast"])
+    expect(result.error.retry_after_seconds).toBe(12.5)
+    expect(result.error.attempted.length).toBe(1)
+  })
+
+  test("an unrecognised 400 body (detail.error matches neither known code) is unexpected, not guessed at", async () => {
+    using server = Bun.serve({
+      port: 0,
+      fetch: () => Response.json({ detail: { error: "something_else_entirely" } }, { status: 400 }),
+    })
+    const result = await Lease.launch(SPEC, server.url.origin)
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected failure")
+    expect(result.error.kind).toBe("unexpected")
+  })
+
+  test("a 503 whose detail is a plain string (not the no_capacity shape) is unexpected, not thrown or guessed at", async () => {
+    // Defensive: server prose and shapes can change. A 503 that is not this
+    // documented shape must still produce a sensible message.
+    using server = Bun.serve({
+      port: 0,
+      fetch: () => Response.json({ detail: "Service temporarily overloaded." }, { status: 503 }),
+    })
+    const result = await Lease.launch(SPEC, server.url.origin)
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected failure")
+    expect(result.error.kind).toBe("unexpected")
+    if (result.error.kind !== "unexpected") throw new Error("expected unexpected")
+    expect(result.error.message).toBe("Service temporarily overloaded.")
+    expect(result.error.status).toBe(503)
+  })
+
+  test("a 503 with an unparseable body is unexpected, never throws", async () => {
+    using server = Bun.serve({ port: 0, fetch: () => new Response("gateway timeout", { status: 503 }) })
+    const result = await Lease.launch(SPEC, server.url.origin)
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("expected failure")
+    expect(result.error.kind).toBe("unexpected")
   })
 })
 

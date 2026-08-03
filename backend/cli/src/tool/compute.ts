@@ -245,6 +245,12 @@ export namespace ComputeLaunch {
     effective_cap_cents?: number | null
     error?: Lease.Failure["kind"]
     affordable_budget_cents?: number
+    // Only present on the two structured refusals (no_matching_offer 400,
+    // no_capacity 503) — what Atlas actually tried and why, and which
+    // providers' catalogs it could not even read this attempt.
+    attempted?: Lease.Attempt[]
+    rate_limited?: string[]
+    retry_after_seconds?: number
     released?: "released" | "already_released" | "failed"
     warning?: string
     release_state?: string
@@ -397,14 +403,40 @@ export namespace ComputeLaunch {
     }
   }
 
+  /** What Atlas actually tried, and why each candidate refused — only ever
+   *  present on the two structured refusals (`no_matching_offer` 400,
+   *  `no_capacity` 503). An agent reading "runpod / RTX 3090 / this machine
+   *  does not have the resources" can reason about what to do next; one
+   *  reading only the HTTP reason phrase cannot, which is the defect this
+   *  exists to fix. `rate_limited` is reported alongside its measured
+   *  `retry_after_seconds` when Atlas sent one — never a client guess. */
+  function tried(error: Lease.Failure): string[] {
+    if (error.kind !== "no_matching_offer" && error.kind !== "no_capacity") return []
+    const lines: string[] = []
+    if (error.attempted.length) {
+      lines.push("", "**tried**:")
+      for (const attempt of error.attempted) lines.push(`- ${attempt.provider} / ${attempt.sku} — ${attempt.reason}`)
+    }
+    if (error.rate_limited.length) {
+      const wait = error.retry_after_seconds !== undefined ? `, retry in ~${error.retry_after_seconds}s` : ""
+      lines.push("", `**could not even ask** (rate-limited this attempt${wait}): ${error.rate_limited.join(", ")}`)
+    }
+    return lines
+  }
+
   function refused(error: Lease.Failure): Result {
     return {
       title: `Compute launch refused: ${error.kind}`,
-      output: [`**launch refused**: ${error.kind}`, error.message, "", advice(error)].join("\n"),
+      output: [`**launch refused**: ${error.kind}`, error.message, ...tried(error), "", advice(error)].join("\n"),
       metadata: {
         outcome: "refused",
         error: error.kind,
         ...("affordable_budget_cents" in error ? { affordable_budget_cents: error.affordable_budget_cents } : {}),
+        ...("attempted" in error ? { attempted: error.attempted } : {}),
+        ...("rate_limited" in error ? { rate_limited: error.rate_limited } : {}),
+        ...("retry_after_seconds" in error && error.retry_after_seconds !== undefined
+          ? { retry_after_seconds: error.retry_after_seconds }
+          : {}),
       },
     }
   }

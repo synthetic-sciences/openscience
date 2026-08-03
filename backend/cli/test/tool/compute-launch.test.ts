@@ -277,6 +277,122 @@ describe("compute_launch: refusals are never retried", () => {
   })
 })
 
+describe("compute_launch: structured launch refusals (400/503) surface what Atlas tried", () => {
+  test("VERBATIM: a live no_capacity 503 renders the provider, sku and reason — not the bare HTTP reason phrase", async () => {
+    // Captured verbatim from a live compute_launch { gpu: "RTX-3090", count:
+    // 1, budget_cents: 200 } against real Atlas holding real provider keys,
+    // when RunPod genuinely had no capacity.
+    using fake = atlas({
+      launch: () =>
+        Response.json(
+          {
+            detail: {
+              error: "no_capacity",
+              gpu: "RTX-3090",
+              count: 1,
+              max_hourly_cents: null,
+              attempted: [
+                {
+                  provider: "runpod",
+                  sku: "NVIDIA GeForce RTX 3090",
+                  reason:
+                    "create pod: This machine does not have the resources to deploy your pod. Please try a different machine",
+                },
+              ],
+              rate_limited: [],
+              retry_after_s: null,
+              message:
+                "Tried 1 offer(s) for 1x RTX-3090 and every one refused to launch. GPU capacity moves by the second -- try again shortly, or name a different GPU.",
+            },
+          },
+          { status: 503 },
+        ),
+    })
+    const result = await ComputeLaunch.run(SPEC, context(), { base: fake.url, poll: FAST })
+
+    expect(result.metadata.outcome).toBe("refused")
+    expect(result.metadata.error).toBe("no_capacity")
+    expect(result.output).toContain("runpod")
+    expect(result.output).toContain("NVIDIA GeForce RTX 3090")
+    expect(result.output).toContain("does not have the resources")
+    // The defect: this used to render the bare HTTP reason phrase instead.
+    expect(result.output).not.toContain("Service Unavailable")
+    expect(result.title).not.toContain("unexpected")
+    expect(result.metadata.attempted?.length).toBe(1)
+    // The opposite-advice pairing this whole fix exists to get right: a
+    // no_capacity refusal says retrying shortly is reasonable...
+    expect(result.output).toContain("may work later")
+    // ...and must NOT say what no_matching_offer says instead.
+    expect(result.output).not.toContain("Ask for a different model")
+  })
+
+  test("no_matching_offer (400) never suggests retrying — nothing about the request changed", async () => {
+    using fake = atlas({
+      launch: () =>
+        Response.json(
+          {
+            detail: {
+              error: "no_matching_offer",
+              gpu: "H100-SXM",
+              count: 8,
+              max_hourly_cents: 50,
+              attempted: [],
+              rate_limited: [],
+              retry_after_s: null,
+              message: "No listed offer matches 8x H100-SXM under 50c/hr.",
+            },
+          },
+          { status: 400 },
+        ),
+    })
+    const result = await ComputeLaunch.run(SPEC, context(), { base: fake.url, poll: FAST })
+
+    expect(result.metadata.error).toBe("no_matching_offer")
+    expect(result.metadata.attempted).toEqual([])
+    // The kind-specific advice, not just "no crash" — this is the one that
+    // must NOT appear here (it belongs to no_capacity, the opposite case).
+    expect(result.output).not.toContain("may work later")
+    // And the one that must: getting these two backwards is the defect.
+    expect(result.output).toContain("Ask for a different model")
+  })
+
+  test("rate_limited providers and a measured retry_after_s are surfaced, never invented", async () => {
+    using fake = atlas({
+      launch: () =>
+        Response.json(
+          {
+            detail: {
+              error: "no_capacity",
+              gpu: "A100-80GB",
+              count: 2,
+              max_hourly_cents: null,
+              attempted: [{ provider: "runpod", sku: "NVIDIA A100 80GB", reason: "out of stock" }],
+              rate_limited: ["vast"],
+              retry_after_s: 12.5,
+              message: "Tried 1 offer(s) for 2x A100-80GB and every one refused to launch.",
+            },
+          },
+          { status: 503 },
+        ),
+    })
+    const result = await ComputeLaunch.run(SPEC, context(), { base: fake.url, poll: FAST })
+
+    expect(result.output).toContain("vast")
+    expect(result.output).toContain("12.5")
+    expect(result.metadata.rate_limited).toEqual(["vast"])
+    expect(result.metadata.retry_after_seconds).toBe(12.5)
+  })
+
+  test("an unrecognised 503 body still reports sensibly — never [object Object], never a throw", async () => {
+    using fake = atlas({ launch: () => Response.json({ detail: "Upstream overloaded." }, { status: 503 }) })
+    const result = await ComputeLaunch.run(SPEC, context(), { base: fake.url, poll: FAST })
+
+    expect(result.metadata.error).toBe("unexpected")
+    expect(result.output).not.toContain("[object Object]")
+    expect(result.output).toContain("Upstream overloaded.")
+  })
+})
+
 describe("compute_launch: the poll", () => {
   test("ready on the second poll returns the real coordinates and a pasteable ssh command", async () => {
     using fake = atlas({ poll: (n) => Response.json(n === 1 ? PROVISIONING : READY) })
