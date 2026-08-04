@@ -24,6 +24,13 @@ export namespace HarnessEvaluation {
       schemaVersion: z.literal(1),
       runID: z.string().min(1),
       sessionID: z.string().min(1),
+      subject: z
+        .object({
+          type: z.enum(["run", "candidate"]),
+          id: z.string().min(1),
+        })
+        .strict()
+        .optional(),
       evaluator: z
         .object({
           name: z.string().min(1),
