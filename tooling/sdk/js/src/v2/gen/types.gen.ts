@@ -7519,6 +7519,7 @@ export type HarnessBenchmarksResponses = {
           repository: string
           revision: string
           homepage: string
+          requiredPaths: Array<string>
           dataset?: string
           checkedAt: string
         }
@@ -7528,6 +7529,7 @@ export type HarnessBenchmarksResponses = {
           revision: string
           homepage: string
           dataset: string
+          requiredPaths: Array<string>
           publicTasks: number
           totalTasks: number
           scope: string

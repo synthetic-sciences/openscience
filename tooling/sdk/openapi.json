@@ -14705,6 +14705,16 @@
                                 "type": "string",
                                 "format": "uri"
                               },
+                              "requiredPaths": {
+                                "minItems": 1,
+                                "maxItems": 50,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500
+                                }
+                              },
                               "dataset": {
                                 "type": "string",
                                 "format": "uri"
@@ -14719,6 +14729,7 @@
                               "repository",
                               "revision",
                               "homepage",
+                              "requiredPaths",
                               "checkedAt"
                             ],
                             "additionalProperties": false
@@ -14746,6 +14757,16 @@
                                 "type": "string",
                                 "format": "uri"
                               },
+                              "requiredPaths": {
+                                "minItems": 1,
+                                "maxItems": 50,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500
+                                }
+                              },
                               "publicTasks": {
                                 "type": "integer",
                                 "exclusiveMinimum": 0,
@@ -14772,6 +14793,7 @@
                               "revision",
                               "homepage",
                               "dataset",
+                              "requiredPaths",
                               "publicTasks",
                               "totalTasks",
                               "scope",

@@ -88,6 +88,10 @@ describe("benchmark adapters", () => {
     expect(sources.filter((status) => status === "official_open")).toHaveLength(19)
     expect(sources.filter((status) => status === "official_subset")).toHaveLength(1)
     expect(sources.filter((status) => status === "methodology_only")).toHaveLength(3)
+    const paths = Object.values(HarnessBenchmark.catalog).flatMap((manifest) =>
+      manifest.source.status === "methodology_only" ? [] : manifest.source.requiredPaths,
+    )
+    expect(paths).toHaveLength(34)
   })
 
   test("resolves common benchmark spellings without fuzzy guessing", () => {

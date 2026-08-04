@@ -188,11 +188,13 @@ Every catalog manifest reports `execution: external_runner_required`: the adapte
 
 Catalog entries distinguish three source states:
 
-- `official_open` pins the official repository commit and published dataset source;
-- `official_subset` identifies a public reproduction subset and its exact scope; and
+- `official_open` pins the official repository commit, integration-critical paths, and published dataset source;
+- `official_subset` identifies a public reproduction subset, its exact scope, and its integrity files; and
 - `methodology_only` makes explicit that the adapter is a reusable scientific method, not an official benchmark integration.
 
 For a named official adapter, the bound runner repository and commit must match the catalog pin, and a separately published dataset must match its catalog source. OpenScience deliberately rejects source-substituted launches. GeneBench-Pro is currently cataloged as the 10-case public package out of 129 total cases, so it can support validation and reproduction but cannot be labeled as a hidden or release benchmark run.
+
+Use the bundled `audit-benchmark-sources` skill to maintain those records. Its executable auditor fetches every pinned commit without blobs, verifies the catalog-declared runner/evaluator paths at that commit, resolves the current default head, probes separately published dataset endpoints, validates public-subset cardinality, and emits a content-addressed report. An unreachable pin, missing required path, unresolved head, unavailable dataset, or future-dated check fails the audit. A newer upstream head or an old check date creates a review item but never moves a trusted pin automatically. Updating a pin requires inspecting upstream changes and rerunning `verify-benchmark-launch` against the proposed revision.
 
 - clean checkout at the exact 40- or 64-character source revision;
 - locked environment replay;

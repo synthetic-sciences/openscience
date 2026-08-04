@@ -405,3 +405,123 @@ test("verify-benchmark-launch fails a nondeterministic official replay", async (
     await fs.rm(fixture.dir, { recursive: true, force: true })
   }
 })
+
+async function sourceFixture() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-sources-"))
+  const remote = path.join(dir, "official.git")
+  const repo = path.join(dir, "source")
+  const catalog = path.join(dir, "catalog.json")
+  await exec(["git", "init", "--bare", "--initial-branch=main", "-q", remote], dir)
+  await exec(["git", "init", "--initial-branch=main", "-q", repo], dir)
+  await exec(["git", "config", "user.name", "Benchmark Test"], repo)
+  await exec(["git", "config", "user.email", "benchmark@example.test"], repo)
+  await Bun.write(path.join(repo, "evaluate.py"), "print('official evaluator')\n")
+  await exec(["git", "add", "evaluate.py"], repo)
+  await exec(["git", "commit", "-qm", "official release"], repo)
+  await exec(["git", "remote", "add", "origin", remote], repo)
+  await exec(["git", "push", "-q", "-u", "origin", "main"], repo)
+  const revision = await exec(["git", "rev-parse", "HEAD"], repo)
+  const write = (pin = revision, required = ["evaluate.py"]) =>
+    Bun.write(
+      catalog,
+      JSON.stringify([
+        {
+          id: "official",
+          source: {
+            status: "official_open",
+            repository: remote,
+            revision: pin,
+            checkedAt: "2026-08-05",
+            requiredPaths: required,
+          },
+        },
+        {
+          id: "method",
+          source: { status: "methodology_only", reason: "No external benchmark release" },
+        },
+      ]),
+    )
+  await write()
+  return { dir, repo, catalog, revision, write }
+}
+
+test("audit-benchmark-sources verifies exact pins and surfaces non-destructive upstream drift", async () => {
+  const fixture = await sourceFixture()
+  try {
+    const current = await run("research/audit-benchmark-sources/scripts/audit_sources.py", [
+      fixture.catalog,
+      "--allow-local",
+      "--today",
+      "2026-08-05",
+    ])
+    expect(current.code).toBe(0)
+    const initial = JSON.parse(current.stdout)
+    expect(initial).toMatchObject({
+      status: "passed",
+      summary: { official: 1, verified: 1, methodologyOnly: 1, upstreamChanged: 0 },
+    })
+    expect(initial.entries[0]).toMatchObject({
+      pinReachable: true,
+      relation: "current",
+      requiredPaths: { "evaluate.py": true },
+    })
+
+    await Bun.write(path.join(fixture.repo, "release.txt"), "new upstream release\n")
+    await exec(["git", "add", "release.txt"], fixture.repo)
+    await exec(["git", "commit", "-qm", "new upstream release"], fixture.repo)
+    await exec(["git", "push", "-q", "origin", "main"], fixture.repo)
+    const changed = await run("research/audit-benchmark-sources/scripts/audit_sources.py", [
+      fixture.catalog,
+      "--allow-local",
+      "--today",
+      "2026-08-05",
+    ])
+    expect(changed.code).toBe(0)
+    const report = JSON.parse(changed.stdout)
+    expect(report.status).toBe("passed")
+    expect(report.entries[0]).toMatchObject({ pinReachable: true, relation: "upstream_changed" })
+    expect(report.entries[0].revision).toBe(fixture.revision)
+    expect(report.reviews).toEqual(["official:upstream_changed"])
+    expect(report.reportSHA256).toMatch(/^[a-f0-9]{64}$/)
+    const unsigned = structuredClone(report)
+    delete unsigned.reportSHA256
+    expect(report.reportSHA256).toBe(digest(unsigned))
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
+test("audit-benchmark-sources fails closed when a catalog pin is unreachable", async () => {
+  const fixture = await sourceFixture()
+  try {
+    await fixture.write("f".repeat(40))
+    const result = await run("research/audit-benchmark-sources/scripts/audit_sources.py", [
+      fixture.catalog,
+      "--allow-local",
+      "--today",
+      "2026-08-05",
+    ])
+    expect(result.code).toBe(1)
+    const report = JSON.parse(result.stdout)
+    expect(report.status).toBe("failed")
+    expect(report.failures).toEqual(["official:pin_unreachable"])
+    expect(report.entries[0]).toMatchObject({ pinReachable: false, relation: "upstream_changed" })
+
+    await fixture.write(fixture.revision, ["missing-evaluator.py"])
+    const missing = await run("research/audit-benchmark-sources/scripts/audit_sources.py", [
+      fixture.catalog,
+      "--allow-local",
+      "--today",
+      "2026-08-05",
+    ])
+    expect(missing.code).toBe(1)
+    const absent = JSON.parse(missing.stdout)
+    expect(absent.failures).toEqual(["official:required_path_missing"])
+    expect(absent.entries[0]).toMatchObject({
+      pinReachable: true,
+      requiredPaths: { "missing-evaluator.py": false },
+    })
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
