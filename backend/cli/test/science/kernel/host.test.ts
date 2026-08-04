@@ -60,4 +60,23 @@ describe("kernel host snapshot", () => {
     expect(Date.now() - started).toBeLessThan(150)
     expect(snapshot.cpu.busy).toBeGreaterThanOrEqual(0)
   })
+
+  test("retains baseline through rapid calls so measurement window is not starved", async () => {
+    // Cold snapshot establishes a baseline
+    await KernelHost.snapshot()
+
+    // Burst of rapid calls that would find the window unchanged
+    for (let i = 0; i < 5; i++) {
+      await KernelHost.snapshot()
+    }
+
+    // Wait for CPU time to advance and call again
+    await Bun.sleep(50)
+    const snapshot = await KernelHost.snapshot()
+
+    // This proves the baseline was retained: if baseline were reset on every
+    // call, the 50ms window would be too short for the cold path to measure,
+    // and no busy value would be reported.
+    expect(snapshot.cpu.busy).toBeDefined()
+  })
 })

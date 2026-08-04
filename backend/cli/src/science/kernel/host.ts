@@ -46,11 +46,16 @@ export namespace KernelHost {
   const load = async (cores: number) => {
     const previous = baseline
     const fresh = mark()
-    baseline = fresh
     if (previous && fresh.at - previous.at <= 30_000) {
       const value = busy(previous.times, fresh.times, cores)
-      // Warm baseline: if CPU times haven't advanced yet, report zero activity rather than blocking
-      return value === undefined ? { busy: 0 } : { busy: value }
+      // Advance the baseline ONLY when the window produced a reading. Two
+      // calls inside one ~10ms scheduler tick read identical os.cpus() times;
+      // overwriting the baseline there would reset the window every poll and
+      // starve the measurement forever. Keeping the older mark lets the next
+      // call measure across a span that has actually advanced.
+      if (value === undefined) return {}
+      baseline = fresh
+      return { busy: value }
     }
     await Bun.sleep(200)
     const next = mark()
