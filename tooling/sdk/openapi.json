@@ -16583,6 +16583,75 @@
                         "completed"
                       ]
                     },
+                    "consensus": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "rejected",
+                            "disputed",
+                            "insufficient"
+                          ]
+                        },
+                        "verifierCount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "support": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "reject": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "abstain": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "evidenceRefs": {
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          }
+                        },
+                        "provisional": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "derivedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "verifierCount",
+                        "support",
+                        "reject",
+                        "abstain",
+                        "confidence",
+                        "evidenceRefs",
+                        "provisional",
+                        "derivedAt"
+                      ],
+                      "additionalProperties": false
+                    },
                     "work": {
                       "type": "object",
                       "propertyNames": {
@@ -16733,6 +16802,69 @@
                                     "maximum": 9007199254740991
                                   }
                                 },
+                                "additionalProperties": false
+                              },
+                              "verdict": {
+                                "type": "object",
+                                "properties": {
+                                  "decision": {
+                                    "type": "string",
+                                    "enum": [
+                                      "support",
+                                      "reject",
+                                      "abstain"
+                                    ]
+                                  },
+                                  "confidence": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                  },
+                                  "checks": {
+                                    "minItems": 1,
+                                    "maxItems": 64,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 200
+                                        },
+                                        "status": {
+                                          "type": "string",
+                                          "enum": [
+                                            "passed",
+                                            "failed",
+                                            "inconclusive"
+                                          ]
+                                        },
+                                        "evidenceRefs": {
+                                          "minItems": 1,
+                                          "maxItems": 16,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "status",
+                                        "evidenceRefs"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "decision",
+                                  "confidence",
+                                  "checks"
+                                ],
                                 "additionalProperties": false
                               },
                               "completedAt": {
@@ -17003,6 +17135,75 @@
                         "completed"
                       ]
                     },
+                    "consensus": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "rejected",
+                            "disputed",
+                            "insufficient"
+                          ]
+                        },
+                        "verifierCount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "support": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "reject": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "abstain": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "evidenceRefs": {
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          }
+                        },
+                        "provisional": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "derivedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "verifierCount",
+                        "support",
+                        "reject",
+                        "abstain",
+                        "confidence",
+                        "evidenceRefs",
+                        "provisional",
+                        "derivedAt"
+                      ],
+                      "additionalProperties": false
+                    },
                     "work": {
                       "type": "object",
                       "propertyNames": {
@@ -17153,6 +17354,69 @@
                                     "maximum": 9007199254740991
                                   }
                                 },
+                                "additionalProperties": false
+                              },
+                              "verdict": {
+                                "type": "object",
+                                "properties": {
+                                  "decision": {
+                                    "type": "string",
+                                    "enum": [
+                                      "support",
+                                      "reject",
+                                      "abstain"
+                                    ]
+                                  },
+                                  "confidence": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                  },
+                                  "checks": {
+                                    "minItems": 1,
+                                    "maxItems": 64,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 200
+                                        },
+                                        "status": {
+                                          "type": "string",
+                                          "enum": [
+                                            "passed",
+                                            "failed",
+                                            "inconclusive"
+                                          ]
+                                        },
+                                        "evidenceRefs": {
+                                          "minItems": 1,
+                                          "maxItems": 16,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "status",
+                                        "evidenceRefs"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "decision",
+                                  "confidence",
+                                  "checks"
+                                ],
                                 "additionalProperties": false
                               },
                               "completedAt": {

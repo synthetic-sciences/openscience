@@ -20,12 +20,48 @@ export namespace HarnessOrchestrator {
 
   const Allocation = Usage
 
+  export const Verdict = z
+    .object({
+      decision: z.enum(["support", "reject", "abstain"]),
+      confidence: z.number().min(0).max(1),
+      checks: z
+        .array(
+          z
+            .object({
+              id: z.string().min(1).max(200),
+              status: z.enum(["passed", "failed", "inconclusive"]),
+              evidenceRefs: z.array(z.string().min(1).max(2_048)).min(1).max(16),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(64),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (value.decision === "support" && value.checks.some((check) => check.status !== "passed")) {
+        ctx.addIssue({ code: "custom", path: ["checks"], message: "A supporting verdict requires every check to pass" })
+      }
+      if (value.decision === "reject" && !value.checks.some((check) => check.status === "failed")) {
+        ctx.addIssue({ code: "custom", path: ["checks"], message: "A rejecting verdict requires a failed check" })
+      }
+      if (value.decision === "abstain" && !value.checks.some((check) => check.status === "inconclusive")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["checks"],
+          message: "An abstaining verdict requires an inconclusive check",
+        })
+      }
+    })
+  export type Verdict = z.infer<typeof Verdict>
+
   const Submission = z
     .object({
       summary: z.string().min(1).max(8_000),
       artifactRefs: z.array(z.string().min(1).max(2_048)).max(32).default([]),
       evidenceRefs: z.array(z.string().min(1).max(2_048)).max(32).default([]),
       usage: Usage.optional(),
+      verdict: Verdict.optional(),
     })
     .strict()
 
@@ -91,6 +127,21 @@ export namespace HarnessOrchestrator {
     .strict()
   export type Selection = z.infer<typeof Selection>
 
+  export const Consensus = z
+    .object({
+      status: z.enum(["supported", "rejected", "disputed", "insufficient"]),
+      verifierCount: z.number().int().nonnegative(),
+      support: z.number().int().nonnegative(),
+      reject: z.number().int().nonnegative(),
+      abstain: z.number().int().nonnegative(),
+      confidence: z.number().min(0).max(1),
+      evidenceRefs: z.array(z.string().min(1).max(2_048)).max(128),
+      provisional: z.literal(true),
+      derivedAt: z.number().int().positive(),
+    })
+    .strict()
+  export type Consensus = z.infer<typeof Consensus>
+
   export const State = z
     .object({
       schemaVersion: z.literal(1),
@@ -104,6 +155,7 @@ export namespace HarnessOrchestrator {
       maxRounds: z.number().int().min(1).max(8),
       minIndependentVerifiers: z.number().int().min(1).max(2),
       status: z.enum(["active", "completed"]),
+      consensus: Consensus.optional(),
       work: z.record(z.string(), Work),
       order: z.array(z.string().regex(/^[a-f0-9]{64}$/)),
       revision: z.number().int().nonnegative(),
@@ -121,6 +173,15 @@ export namespace HarnessOrchestrator {
       const sessions = Object.values(value.work).flatMap((work) => (work.workerSessionID ? [work.workerSessionID] : []))
       if (new Set(sessions).size !== sessions.length) {
         ctx.addIssue({ code: "custom", path: ["work"], message: "Coalition worker sessions must be unique" })
+      }
+      if (value.consensus && value.status !== "completed") {
+        ctx.addIssue({ code: "custom", path: ["consensus"], message: "Consensus requires settled orchestration" })
+      }
+      if (
+        value.consensus &&
+        value.consensus.support + value.consensus.reject + value.consensus.abstain !== value.consensus.verifierCount
+      ) {
+        ctx.addIssue({ code: "custom", path: ["consensus"], message: "Consensus verdict counts do not reconcile" })
       }
       const seen = new Set<string>()
       for (const id of value.order) {
@@ -290,7 +351,7 @@ export namespace HarnessOrchestrator {
       evolution:
         "Create a new candidate by combining verified strengths while explicitly avoiding documented failure modes.",
       verification:
-        "Verify from a fresh session using artifacts and observable evidence only. Do not trust producer conclusions or hidden reasoning.",
+        "Verify from a fresh session using artifacts and observable evidence only. Do not trust producer conclusions or hidden reasoning. Return support, reject, or abstain with confidence and evidence-backed checks; do not inspect another verifier's verdict.",
       investigation:
         "Search for counterexamples, edge cases, sabotage, reward hacking, and distribution-shift failures.",
       simulation:
@@ -466,7 +527,44 @@ export namespace HarnessOrchestrator {
       }),
     )
     const done = Object.values(work).every((item) => ["completed", "failed", "cancelled"].includes(item.status))
-    return State.parse({ ...state, work, status: done ? "completed" : "active", updatedAt: now })
+    const verifiers = state.order.map((id) => work[id]!).filter((item) => item.role === "verification")
+    const verdicts = verifiers.flatMap((item) => (item.result?.verdict ? [item.result.verdict] : []))
+    const consensus = (() => {
+      if (!done) return
+      const support = verdicts.filter((verdict) => verdict.decision === "support").length
+      const reject = verdicts.filter((verdict) => verdict.decision === "reject").length
+      const abstain = verdicts.filter((verdict) => verdict.decision === "abstain").length
+      const status =
+        verdicts.length < 2
+          ? "insufficient"
+          : support === verifiers.length
+            ? "supported"
+            : reject === verifiers.length
+              ? "rejected"
+              : "disputed"
+      const evidenceRefs = [
+        ...new Set(
+          verifiers.flatMap((item) => [
+            ...(item.result?.evidenceRefs ?? []),
+            ...(item.result?.verdict?.checks.flatMap((check) => check.evidenceRefs) ?? []),
+          ]),
+        ),
+      ]
+      return Consensus.parse({
+        status,
+        verifierCount: verdicts.length,
+        support,
+        reject,
+        abstain,
+        confidence: verdicts.length
+          ? verdicts.reduce((sum, verdict) => sum + verdict.confidence, 0) / verdicts.length
+          : 0,
+        evidenceRefs,
+        provisional: true,
+        derivedAt: now,
+      })
+    })()
+    return State.parse({ ...state, work, status: done ? "completed" : "active", consensus, updatedAt: now })
   }
 
   export async function complete(input: {
@@ -486,6 +584,7 @@ export namespace HarnessOrchestrator {
           artifactRefs: work.result!.artifactRefs,
           evidenceRefs: work.result!.evidenceRefs,
           usage: work.result!.usage,
+          verdict: work.result!.verdict,
         }
         if (work.workerSessionID === input.workerSessionID && JSON.stringify(previous) === JSON.stringify(submission)) {
           return state
@@ -498,6 +597,15 @@ export namespace HarnessOrchestrator {
       }
       if (Object.values(state.work).some((item) => item.workerSessionID === input.workerSessionID)) {
         throw new Error(`Each coalition role requires a distinct worker session`)
+      }
+      if (work.role === "verification" && !submission.verdict) {
+        throw new Error(`Verification work requires a structured verdict`)
+      }
+      if (work.role === "verification" && !submission.evidenceRefs.length) {
+        throw new Error(`Verification work requires observable evidence references`)
+      }
+      if (work.role !== "verification" && submission.verdict) {
+        throw new Error(`Only verification work may submit a verdict`)
       }
       const now = Date.now()
       const result = Result.parse({ ...submission, completedAt: now })

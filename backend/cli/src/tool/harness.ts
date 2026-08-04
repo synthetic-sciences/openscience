@@ -86,6 +86,30 @@ const Parameters = z.object({
     .optional()
     .describe("For coalition_complete: actual resource use"),
   failure: z.string().min(1).max(4_000).optional().describe("For coalition_fail: failure reason"),
+  verdict: z
+    .enum(["support", "reject", "abstain"])
+    .optional()
+    .describe("For verification coalition_complete: blinded structured verdict"),
+  verdict_confidence: z
+    .number()
+    .min(0)
+    .max(1)
+    .optional()
+    .describe("For verification coalition_complete: calibrated verdict confidence"),
+  verdict_checks: z
+    .array(
+      z
+        .object({
+          id: z.string().min(1).max(200),
+          status: z.enum(["passed", "failed", "inconclusive"]),
+          evidence_refs: z.array(z.string().min(1).max(2_048)).min(1).max(16),
+        })
+        .strict(),
+    )
+    .min(1)
+    .max(64)
+    .optional()
+    .describe("For verification coalition_complete: evidence-backed checks"),
 })
 
 const result = (title: string, output: unknown, metadata: Record<string, unknown> = {}) => ({
@@ -132,6 +156,7 @@ const coalition = (state: HarnessOrchestrator.State) => ({
   maxWorkers: state.maxWorkers,
   maxRounds: state.maxRounds,
   minIndependentVerifiers: state.minIndependentVerifiers,
+  consensus: state.consensus,
   revision: state.revision,
   progress: Object.fromEntries(
     ["pending", "completed", "failed", "cancelled"].map((status) => [
@@ -182,6 +207,13 @@ export const HarnessTool = Tool.define("harness", {
           "coalition_complete requires work_id, worker_session_id, and result_summary",
         )
       }
+      const verdict = [params.verdict, params.verdict_confidence, params.verdict_checks]
+      if (verdict.some((value) => value !== undefined) && verdict.some((value) => value === undefined)) {
+        return result(
+          "Invalid coalition completion",
+          "verification completion requires verdict, verdict_confidence, and verdict_checks together",
+        )
+      }
       const state = await HarnessOrchestrator.complete({
         sessionID: ctx.sessionID,
         workID: params.work_id,
@@ -191,6 +223,18 @@ export const HarnessTool = Tool.define("harness", {
           artifactRefs: params.artifact_refs ?? [],
           evidenceRefs: params.evidence_refs ?? [],
           usage: params.usage,
+          verdict:
+            params.verdict && params.verdict_confidence !== undefined && params.verdict_checks
+              ? {
+                  decision: params.verdict,
+                  confidence: params.verdict_confidence,
+                  checks: params.verdict_checks.map((check) => ({
+                    id: check.id,
+                    status: check.status,
+                    evidenceRefs: check.evidence_refs,
+                  })),
+                }
+              : undefined,
         },
       })
       return result("Coalition work completed", coalition(state), {

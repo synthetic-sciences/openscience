@@ -95,6 +95,18 @@ const done = (
   usage,
 })
 
+const verdict = (decision: HarnessOrchestrator.Verdict["decision"]): HarnessOrchestrator.Verdict => ({
+  decision,
+  confidence: decision === "abstain" ? 0.4 : 0.8,
+  checks: [
+    {
+      id: "independent-check",
+      status: decision === "support" ? "passed" : decision === "reject" ? "failed" : "inconclusive",
+      evidenceRefs: [`evidence://verdict-${decision}`],
+    },
+  ],
+})
+
 describe("scientific coalition orchestration", () => {
   test("selects coordination only when task traits justify its overhead", () => {
     expect(HarnessOrchestrator.select(contract("policy-small", { ...config("auto"), maxWorkers: 1 })).topology).toBe(
@@ -231,5 +243,76 @@ describe("scientific coalition orchestration", () => {
     const dependent = state.order.find((id) => state.work[id]!.dependencies.length > 0)!
     const order = [dependent, ...state.order.filter((id) => id !== dependent)]
     expect(HarnessOrchestrator.State.safeParse({ ...state, order }).success).toBe(false)
+  })
+
+  test("aggregates blinded verifier disagreement only after the full panel settles", async () => {
+    await bind("consensus")
+    const initial = await HarnessOrchestrator.initialize("consensus")
+    const sessions = new Map<string, string>()
+    const decisions = new Map([
+      ["independent-verification-1", "support" as const],
+      ["independent-verification-2", "reject" as const],
+    ])
+    const settle = async (state: HarnessOrchestrator.State): Promise<HarnessOrchestrator.State> => {
+      if (state.status === "completed") return state
+      const work = HarnessOrchestrator.ready(state)[0]!
+      const worker = `worker-${sessions.size + 1}`
+      sessions.set(work.id, worker)
+      const result = {
+        ...done(work.label),
+        evidenceRefs: work.role === "verification" ? [`evidence://${work.label}`] : [],
+        verdict: work.role === "verification" ? verdict(decisions.get(work.label)!) : undefined,
+      }
+      const next = await HarnessOrchestrator.complete({
+        sessionID: "consensus",
+        workID: work.id,
+        workerSessionID: worker,
+        result,
+      })
+      if (work.role === "verification" && next.status === "active") expect(next.consensus).toBeUndefined()
+      return settle(next)
+    }
+    const completed = await settle(initial)
+    expect(completed.consensus).toMatchObject({
+      status: "disputed",
+      verifierCount: 2,
+      support: 1,
+      reject: 1,
+      abstain: 0,
+      provisional: true,
+    })
+    expect(completed.consensus!.evidenceRefs).toContain("evidence://verdict-support")
+    expect(completed.consensus!.evidenceRefs).toContain("evidence://verdict-reject")
+  })
+
+  test("does not label one review as consensus and requires observable verifier evidence", async () => {
+    await bind("single-consensus", { ...config("tournament"), minIndependentVerifiers: 1 })
+    const advance = async (state: HarnessOrchestrator.State, count = 0): Promise<HarnessOrchestrator.State> => {
+      if (state.status === "completed") return state
+      const work = HarnessOrchestrator.ready(state)[0]!
+      if (work.role === "verification") {
+        await expect(
+          HarnessOrchestrator.complete({
+            sessionID: "single-consensus",
+            workID: work.id,
+            workerSessionID: `worker-missing-${count}`,
+            result: { ...done("missing-evidence"), evidenceRefs: [], verdict: verdict("support") },
+          }),
+        ).rejects.toThrow("observable evidence")
+      }
+      const next = await HarnessOrchestrator.complete({
+        sessionID: "single-consensus",
+        workID: work.id,
+        workerSessionID: `worker-${count}`,
+        result: {
+          ...done(work.label),
+          evidenceRefs: work.role === "verification" ? ["evidence://single"] : [],
+          verdict: work.role === "verification" ? verdict("support") : undefined,
+        },
+      })
+      return advance(next, count + 1)
+    }
+    const completed = await advance(await HarnessOrchestrator.initialize("single-consensus"))
+    expect(completed.consensus).toMatchObject({ status: "insufficient", verifierCount: 1, support: 1 })
   })
 })

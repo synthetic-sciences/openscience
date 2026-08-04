@@ -138,7 +138,7 @@ The contract overrides heuristic routing. Unbound interactive sessions use a con
 
 Every work unit has a content-derived identity, ordered dependencies, a role-specific agent, and a proportional allocation from the contract budget. A role can settle only from a fresh child session after all dependencies complete. Failure cancels transitive descendants without erasing independent roots. Restarts reload the exact graph rather than re-planning it.
 
-Upstream communication is deliberately bounded to summaries plus artifact and evidence references. Internal reflection, ranking, and verification remain provisional; only the evaluator-authenticated journal can establish benchmark performance or scientific support.
+Upstream communication is deliberately bounded to summaries plus artifact and evidence references. Verifiers run in distinct child sessions, cannot see each other's verdicts, and must return `support`, `reject`, or `abstain` with calibrated confidence and evidence-backed checks. The harness aggregates only after the whole panel settles: one verdict is `insufficient`, unanimous support/rejection is preserved, and any split or abstaining panel is `disputed`. Internal reflection, ranking, verification, and consensus remain provisional; only the evaluator-authenticated journal can establish benchmark performance or scientific support.
 
 ### 4. Search without erasing failures
 

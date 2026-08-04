@@ -7953,6 +7953,17 @@ export type HarnessOrchestrationStatusResponses = {
     maxRounds: number
     minIndependentVerifiers: number
     status: "active" | "completed"
+    consensus?: {
+      status: "supported" | "rejected" | "disputed" | "insufficient"
+      verifierCount: number
+      support: number
+      reject: number
+      abstain: number
+      confidence: number
+      evidenceRefs: Array<string>
+      provisional: true
+      derivedAt: number
+    }
     work: {
       [key: string]: {
         id: string
@@ -7988,6 +7999,15 @@ export type HarnessOrchestrationStatusResponses = {
             tokens?: number
             costUSD?: number
             wallTimeMs?: number
+          }
+          verdict?: {
+            decision: "support" | "reject" | "abstain"
+            confidence: number
+            checks: Array<{
+              id: string
+              status: "passed" | "failed" | "inconclusive"
+              evidenceRefs: Array<string>
+            }>
           }
           completedAt: number
         }
@@ -8057,6 +8077,17 @@ export type HarnessOrchestrationStartResponses = {
     maxRounds: number
     minIndependentVerifiers: number
     status: "active" | "completed"
+    consensus?: {
+      status: "supported" | "rejected" | "disputed" | "insufficient"
+      verifierCount: number
+      support: number
+      reject: number
+      abstain: number
+      confidence: number
+      evidenceRefs: Array<string>
+      provisional: true
+      derivedAt: number
+    }
     work: {
       [key: string]: {
         id: string
@@ -8092,6 +8123,15 @@ export type HarnessOrchestrationStartResponses = {
             tokens?: number
             costUSD?: number
             wallTimeMs?: number
+          }
+          verdict?: {
+            decision: "support" | "reject" | "abstain"
+            confidence: number
+            checks: Array<{
+              id: string
+              status: "passed" | "failed" | "inconclusive"
+              evidenceRefs: Array<string>
+            }>
           }
           completedAt: number
         }
