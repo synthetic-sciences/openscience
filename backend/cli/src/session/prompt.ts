@@ -63,6 +63,8 @@ import { Inference } from "@/provider/inference"
 import { Memory } from "@/settings/memory"
 import { OpenScience } from "@/openscience"
 import { assertExternalDirectory } from "@/tool/external-directory"
+import { HarnessProfile } from "./harness/profile"
+import { SessionTraceStore } from "./trace-store"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -821,6 +823,20 @@ export namespace SessionPrompt {
 
       const sessionMessages = clone(msgs)
 
+      const request =
+        lastUserMsg?.parts
+          .flatMap((part) => (part.type === "text" && !part.synthetic && !part.ignored ? [part.text] : []))
+          .join("\n") ?? ""
+      const profile = await HarnessProfile.resolve({ sessionID, agent: agent.name, text: request })
+      await SessionTraceStore.recordProfile({
+        sessionID,
+        messageID: lastUser.id,
+        id: profile.id,
+        source: profile.source,
+        confidence: profile.confidence,
+        reasons: profile.reasons,
+      })
+
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
         for (const msg of sessionMessages) {
@@ -864,6 +880,7 @@ export namespace SessionPrompt {
         ...(await InstructionPrompt.system()),
         ...(await Memory.recall()),
         ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),
+        profile.prompt,
         ...artifactContext,
       ]
 
