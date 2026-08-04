@@ -241,7 +241,19 @@ Before a proposal exists, OpenScience checks its frontmatter, runtime-risk patte
 
 If later evidence introduces a regression before promotion, qualification returns to pending. Promoted content cannot accept more evidence; changes require a new versioned proposal.
 
-### 11. Compare only compatible runs
+### 11. Execute benchmark-native protocol skills
+
+The bundled skill catalog includes three executable protocols for work that is otherwise easy to describe but hard to audit:
+
+| Skill                        | Executable contract                                                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `active-failure-audit`       | Converts evaluator-private JSONL cases into a public manifest of opaque IDs and SHA-256 commitments without copying hidden case content.   |
+| `simulator-validation`       | Rejects refinement studies that miss decreasing resolution/error, expected convergence order, residual bounds, or declared invariants.     |
+| `scientific-ablation-design` | Rejects attribution plans without exactly one budget-, seed-, split-, and evaluator-matched isolation arm for every predeclared mechanism. |
+
+Their scripts return machine-readable JSON and nonzero failure codes, so an orchestrator can use them as blocking gates instead of relying on prompt compliance. They validate the protocol and reported measurements; they do not manufacture hidden data, run an unavailable simulator, or turn an internal result into official benchmark evidence.
+
+### 12. Compare only compatible runs
 
 Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity protocol, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores.
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Simulator Validation"
+  short_description: "Validate convergence and physical invariants"
+  default_prompt: "Use $simulator-validation to validate a simulator with convergence, residual, and invariant checks."
