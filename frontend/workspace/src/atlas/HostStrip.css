@@ -1,0 +1,62 @@
+.host-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border-weak);
+  background: var(--color-bg);
+}
+
+.host-strip__tile {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.host-strip__reading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.host-strip__value {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.host-strip__caption {
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--color-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-strip__meter {
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-bg-subtle) 72%, transparent);
+}
+
+.host-strip__fill,
+.host-strip__share {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.host-strip__fill {
+  background: color-mix(in srgb, var(--color-text-faint) 40%, transparent);
+}
+
+.host-strip__share {
+  background: var(--color-accent);
+}
