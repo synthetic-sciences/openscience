@@ -1373,4 +1373,29 @@ describe("/notebook routes", () => {
       },
     })
   })
+
+  test("reports machine capacity without a session and never zeroes an unsampled figure", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const response = await NotebookRoutes().request("/compute")
+
+        expect(response.status).toBe(200)
+        const body = (await response.json()) as {
+          memory: { total: number; available: number; kernels?: number }
+          cpu: { cores: number; busy?: number; kernels?: number }
+          kernels: { live: number; running: number }
+        }
+
+        expect(body.memory.total).toBeGreaterThan(0)
+        expect(body.memory.available).toBeGreaterThan(0)
+        expect(body.memory.available).toBeLessThanOrEqual(body.memory.total)
+        expect(body.cpu.cores).toBeGreaterThanOrEqual(1)
+        expect(body.kernels).toEqual({ live: 0, running: 0 })
+        expect("kernels" in body.memory).toBe(false)
+        expect("kernels" in body.cpu).toBe(false)
+      },
+    })
+  })
 })

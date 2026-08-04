@@ -7,6 +7,7 @@ import "../../tool/rkernel"
 import type { ExecuteResult, KernelOutput } from "../../science/kernel/types"
 import { KernelRuntime, KernelStartupCancelled, KernelStatus, type KernelIdentity } from "../../science/kernel/registry"
 import { KernelMetrics } from "../../science/kernel/metrics"
+import { KernelHost } from "../../science/kernel/host"
 import { SessionFilesystem } from "../../session/filesystem"
 import { Identifier } from "../../id/id"
 import { Session } from "../../session"
@@ -110,6 +111,40 @@ function response(result: ExecuteResult) {
 
 export const NotebookRoutes = lazy(() =>
   new Hono()
+    .get(
+      "/compute",
+      describeRoute({
+        summary: "Report host compute capacity",
+        operationId: "notebook.compute",
+        responses: { 200: { description: "Machine capacity and the share kernels hold" } },
+      }),
+      async (c) => {
+        const host = await KernelHost.snapshot()
+        const live = KernelRuntime.list().filter((kernel) => kernel.active)
+        const samples = await KernelMetrics.sampleAll(
+          live.flatMap((kernel) => (kernel.process_id === null ? [] : [kernel.process_id])),
+        )
+        const usage = [...samples.values()]
+        const cpu = usage.filter((sample) => sample.cpu_percent !== undefined)
+        const memory = usage.filter((sample) => sample.memory_bytes !== undefined)
+        return c.json({
+          memory: {
+            total: host.memory.total,
+            available: host.memory.available,
+            ...(memory.length ? { kernels: memory.reduce((sum, item) => sum + (item.memory_bytes ?? 0), 0) } : {}),
+          },
+          cpu: {
+            cores: host.cpu.cores,
+            ...(host.cpu.busy === undefined ? {} : { busy: host.cpu.busy }),
+            ...(cpu.length ? { kernels: cpu.reduce((sum, item) => sum + (item.cpu_percent ?? 0), 0) / 100 } : {}),
+          },
+          kernels: {
+            live: live.length,
+            running: live.filter((kernel) => kernel.state === "running").length,
+          },
+        })
+      },
+    )
     .get(
       "/kernels",
       describeRoute({
