@@ -110,7 +110,11 @@ export namespace KernelMetrics {
         ...(reading.memory_bytes === undefined ? {} : { memory_bytes: reading.memory_bytes }),
       })
     }
-    for (const pid of [...baseline.keys()]) if (!readings.has(pid)) baseline.delete(pid)
+    // Prune only pids THIS call asked about. Iterating the whole baseline would
+    // drop entries belonging to other sessions — /notebook/kernels is polled
+    // per-session, so two tabs on different sessions would wipe each other's
+    // baselines every poll and pin cpu_percent at Unavailable forever.
+    for (const pid of pids) if (!readings.has(pid)) baseline.delete(pid)
     return samples
   }
 }

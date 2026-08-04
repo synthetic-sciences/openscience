@@ -67,4 +67,24 @@ describe("kernel metrics sampling", () => {
     expect(samples.has(process.pid)).toBe(true)
     expect(samples.has(999_999_999)).toBe(false)
   })
+
+  test("keeps a pid's baseline across an interleaved sampleAll for a different pid", async () => {
+    if (process.platform === "win32") return
+    const a = Bun.spawn(["sleep", "30"], { stdout: "ignore", stderr: "ignore" })
+    const b = Bun.spawn(["sleep", "30"], { stdout: "ignore", stderr: "ignore" })
+    try {
+      // Establish A's baseline, the way one browser tab polling session A would.
+      await KernelMetrics.sampleAll([a.pid])
+      // A second tab polling a different session (B) in between — must not touch A's entry.
+      await KernelMetrics.sampleAll([b.pid])
+      await Bun.sleep(120)
+      const second = await KernelMetrics.sampleAll([a.pid])
+
+      expect(typeof second.get(a.pid)?.cpu_percent).toBe("number")
+    } finally {
+      a.kill()
+      b.kill()
+      await Promise.all([a.exited, b.exited])
+    }
+  })
 })
