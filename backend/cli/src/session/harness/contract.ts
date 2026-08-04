@@ -84,6 +84,75 @@ export namespace HarnessContract {
     })
   export type Audit = z.infer<typeof Audit>
 
+  const Hash = z.string().regex(/^[a-f0-9]{64}$/)
+
+  export const SimulationStress = z.enum([
+    "timestep_sensitivity",
+    "solver_tolerance_sensitivity",
+    "reference_replay",
+    "independent_implementation",
+    "unit_convention",
+    "boundary_sensitivity",
+    "perturbation_stability",
+  ])
+  export type SimulationStress = z.infer<typeof SimulationStress>
+
+  export const SimulationEngine = z
+    .object({
+      name: z.string().min(1).max(200),
+      version: z.string().min(1).max(200),
+      commandSHA256: Hash,
+      configSHA256: Hash,
+    })
+    .strict()
+
+  export const SimulationReference = z
+    .object({
+      kind: z.enum(["analytic", "manufactured", "benchmark", "independent_solver", "limiting_case"]),
+      identity: z.string().min(1).max(500),
+      sha256: Hash,
+    })
+    .strict()
+
+  export const Simulation = z
+    .object({
+      kind: z.enum(["ode", "pde", "cfd", "materials", "molecular", "agentic"]),
+      engine: SimulationEngine,
+      problemSHA256: Hash,
+      reference: SimulationReference,
+      validation: z
+        .object({
+          errorNorm: z.string().min(1).max(200),
+          minLevels: z.number().int().min(3).max(12),
+          maxLevels: z.number().int().min(3).max(24).default(12),
+          expectedOrder: z.number().finite().positive().max(20),
+          orderTolerance: z.number().finite().nonnegative().max(10),
+          maxResidual: z.number().finite().nonnegative(),
+          invariantTolerances: z
+            .record(z.string().min(1).max(100), z.number().finite().nonnegative())
+            .refine(
+              (value) => Object.keys(value).length >= 1 && Object.keys(value).length <= 32,
+              "A simulator protocol needs 1 to 32 invariant tolerances",
+            ),
+          requiredStressTests: z
+            .array(SimulationStress)
+            .min(1)
+            .max(SimulationStress.options.length)
+            .refine((items) => new Set(items).size === items.length, "Simulation stress tests must be unique"),
+        })
+        .strict()
+        .superRefine((value, ctx) => {
+          if (value.minLevels <= value.maxLevels) return
+          ctx.addIssue({
+            code: "custom",
+            path: ["maxLevels"],
+            message: "Simulation maximum levels cannot be smaller than its minimum levels",
+          })
+        }),
+    })
+    .strict()
+  export type Simulation = z.infer<typeof Simulation>
+
   export const Split = z.enum(["development", "validation", "held_out", "release"])
   export type Split = z.infer<typeof Split>
 
@@ -127,6 +196,7 @@ export namespace HarnessContract {
       profile: Profile,
       orchestration: Orchestration.optional(),
       audit: Audit.optional(),
+      simulation: Simulation.optional(),
       packs: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -177,6 +247,30 @@ export namespace HarnessContract {
       createdAt: z.number().int().positive(),
     })
     .strict()
+    .superRefine((value, ctx) => {
+      if (!value.simulation) return
+      if (!value.benchmark.evaluatorVersion) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorVersion"],
+          message: "Simulator validation needs an evaluator version",
+        })
+      }
+      if (!value.benchmark.evaluatorSource) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Simulator validation needs an evaluator source",
+        })
+      }
+      if (value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Simulator validation requires a capability-authenticated evaluator source",
+        })
+      }
+    })
   export type Info = z.infer<typeof Info>
 
   const root = path.join(Global.Path.data, "harness", "contracts")

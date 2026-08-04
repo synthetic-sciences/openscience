@@ -7900,6 +7900,261 @@ export type HarnessAuditObserveResponses = {
 
 export type HarnessAuditObserveResponse = HarnessAuditObserveResponses[keyof HarnessAuditObserveResponses]
 
+export type HarnessSimulationRecordData = {
+  body?: {
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    evaluatorToken: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    engine: {
+      name: string
+      version: string
+      commandSHA256: string
+      configSHA256: string
+    }
+    problemSHA256: string
+    reference: {
+      kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
+      identity: string
+      sha256: string
+    }
+    validationInputSHA256: string
+    levels: Array<{
+      label: string
+      h: number
+      error: number
+      residual: number
+      invariants: {
+        [key: string]: number
+      }
+    }>
+    stressTests: Array<{
+      id:
+        | "timestep_sensitivity"
+        | "solver_tolerance_sensitivity"
+        | "reference_replay"
+        | "independent_implementation"
+        | "unit_convention"
+        | "boundary_sensitivity"
+        | "perturbation_stability"
+      status: "passed" | "failed" | "inconclusive"
+      evidence: Array<string>
+    }>
+    evidence: Array<string>
+    evaluatedAt: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/simulations/receipts"
+}
+
+export type HarnessSimulationRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessSimulationRecordError = HarnessSimulationRecordErrors[keyof HarnessSimulationRecordErrors]
+
+export type HarnessSimulationRecordResponses = {
+  /**
+   * Immutable simulator validation receipt
+   */
+  200: {
+    schemaVersion: 1
+    receiptID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "external"
+    }
+    engine: {
+      name: string
+      version: string
+      commandSHA256: string
+      configSHA256: string
+    }
+    problemSHA256: string
+    reference: {
+      kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
+      identity: string
+      sha256: string
+    }
+    validationInputSHA256: string
+    levels: Array<{
+      label: string
+      h: number
+      error: number
+      residual: number
+      invariants: {
+        [key: string]: number
+      }
+    }>
+    observedOrders: Array<number>
+    medianObservedOrder: number
+    stressTests: Array<{
+      id:
+        | "timestep_sensitivity"
+        | "solver_tolerance_sensitivity"
+        | "reference_replay"
+        | "independent_implementation"
+        | "unit_convention"
+        | "boundary_sensitivity"
+        | "perturbation_stability"
+      status: "passed" | "failed" | "inconclusive"
+      evidence: Array<string>
+    }>
+    checks: {
+      enoughLevels: boolean
+      resolutionDecreases: boolean
+      errorDecreases: boolean
+      observedOrder: boolean
+      residualBound: boolean
+      invariants: {
+        [key: string]: boolean
+      }
+      stressTests: {
+        [key: string]: boolean
+      }
+    }
+    status: "passed" | "failed"
+    evidence: Array<string>
+    evaluatedAt: number
+  }
+}
+
+export type HarnessSimulationRecordResponse = HarnessSimulationRecordResponses[keyof HarnessSimulationRecordResponses]
+
+export type HarnessSimulationReceiptData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/simulations/receipts/{receiptID}"
+}
+
+export type HarnessSimulationReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessSimulationReceiptError = HarnessSimulationReceiptErrors[keyof HarnessSimulationReceiptErrors]
+
+export type HarnessSimulationReceiptResponses = {
+  /**
+   * Simulator validation receipt
+   */
+  200: {
+    schemaVersion: 1
+    receiptID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "external"
+    }
+    engine: {
+      name: string
+      version: string
+      commandSHA256: string
+      configSHA256: string
+    }
+    problemSHA256: string
+    reference: {
+      kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
+      identity: string
+      sha256: string
+    }
+    validationInputSHA256: string
+    levels: Array<{
+      label: string
+      h: number
+      error: number
+      residual: number
+      invariants: {
+        [key: string]: number
+      }
+    }>
+    observedOrders: Array<number>
+    medianObservedOrder: number
+    stressTests: Array<{
+      id:
+        | "timestep_sensitivity"
+        | "solver_tolerance_sensitivity"
+        | "reference_replay"
+        | "independent_implementation"
+        | "unit_convention"
+        | "boundary_sensitivity"
+        | "perturbation_stability"
+      status: "passed" | "failed" | "inconclusive"
+      evidence: Array<string>
+    }>
+    checks: {
+      enoughLevels: boolean
+      resolutionDecreases: boolean
+      errorDecreases: boolean
+      observedOrder: boolean
+      residualBound: boolean
+      invariants: {
+        [key: string]: boolean
+      }
+      stressTests: {
+        [key: string]: boolean
+      }
+    }
+    status: "passed" | "failed"
+    evidence: Array<string>
+    evaluatedAt: number
+  } | null
+}
+
+export type HarnessSimulationReceiptResponse =
+  HarnessSimulationReceiptResponses[keyof HarnessSimulationReceiptResponses]
+
 export type HarnessOrchestrationStatusData = {
   body?: never
   path: {
@@ -8206,6 +8461,41 @@ export type HarnessBindData = {
       coverageWeight?: number
       targetFailures?: number
     }
+    simulation?: {
+      kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
+      engine: {
+        name: string
+        version: string
+        commandSHA256: string
+        configSHA256: string
+      }
+      problemSHA256: string
+      reference: {
+        kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
+        identity: string
+        sha256: string
+      }
+      validation: {
+        errorNorm: string
+        minLevels: number
+        maxLevels?: number
+        expectedOrder: number
+        orderTolerance: number
+        maxResidual: number
+        invariantTolerances: {
+          [key: string]: number
+        }
+        requiredStressTests: Array<
+          | "timestep_sensitivity"
+          | "solver_tolerance_sensitivity"
+          | "reference_replay"
+          | "independent_implementation"
+          | "unit_convention"
+          | "boundary_sensitivity"
+          | "perturbation_stability"
+        >
+      }
+    }
     extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     metric?: {
       name?: string
@@ -8332,6 +8622,41 @@ export type HarnessBindResponses = {
       coverageWeight?: number
       targetFailures?: number
     }
+    simulation?: {
+      kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
+      engine: {
+        name: string
+        version: string
+        commandSHA256: string
+        configSHA256: string
+      }
+      problemSHA256: string
+      reference: {
+        kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
+        identity: string
+        sha256: string
+      }
+      validation: {
+        errorNorm: string
+        minLevels: number
+        maxLevels?: number
+        expectedOrder: number
+        orderTolerance: number
+        maxResidual: number
+        invariantTolerances: {
+          [key: string]: number
+        }
+        requiredStressTests: Array<
+          | "timestep_sensitivity"
+          | "solver_tolerance_sensitivity"
+          | "reference_replay"
+          | "independent_implementation"
+          | "unit_convention"
+          | "boundary_sensitivity"
+          | "perturbation_stability"
+        >
+      }
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string
@@ -8374,6 +8699,7 @@ export type HarnessEvaluateData = {
     evaluatorToken: string
     candidateID?: string
     stage?: string
+    simulationReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
     metrics?: {
@@ -8788,6 +9114,41 @@ export type HarnessContractResponses = {
       coverageWeight?: number
       targetFailures?: number
     }
+    simulation?: {
+      kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
+      engine: {
+        name: string
+        version: string
+        commandSHA256: string
+        configSHA256: string
+      }
+      problemSHA256: string
+      reference: {
+        kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
+        identity: string
+        sha256: string
+      }
+      validation: {
+        errorNorm: string
+        minLevels: number
+        maxLevels?: number
+        expectedOrder: number
+        orderTolerance: number
+        maxResidual: number
+        invariantTolerances: {
+          [key: string]: number
+        }
+        requiredStressTests: Array<
+          | "timestep_sensitivity"
+          | "solver_tolerance_sensitivity"
+          | "reference_replay"
+          | "independent_implementation"
+          | "unit_convention"
+          | "boundary_sensitivity"
+          | "perturbation_stability"
+        >
+      }
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string
@@ -8858,6 +9219,7 @@ export type HarnessEvaluationsResponses = {
       stage: string
       final: boolean
     }
+    simulationReceiptID?: string
     evaluator: {
       name: string
       version: string
@@ -8971,6 +9333,7 @@ export type HarnessReportResponses = {
       targetReached: boolean
       evaluator: string
       evaluatorVersion?: string
+      simulationReceiptID?: string
       evaluations: number
     }
     efficiency: {

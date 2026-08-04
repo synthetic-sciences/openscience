@@ -4,6 +4,7 @@ import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
 import { HarnessContract } from "./contract"
 import { HarnessDomain } from "./domain"
+import { HarnessSimulation } from "./simulation"
 
 export namespace HarnessEvaluation {
   export const Status = z.enum(["passed", "failed", "inconclusive"])
@@ -51,6 +52,10 @@ export namespace HarnessEvaluation {
           final: z.boolean(),
         })
         .strict()
+        .optional(),
+      simulationReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
         .optional(),
       evaluator: z
         .object({
@@ -166,6 +171,21 @@ export namespace HarnessEvaluation {
     if (evaluation.fidelity && !stage) throw new Error(`Evaluation fidelity stage is not in the bound contract`)
     if (stage && stage.final !== evaluation.fidelity?.final) {
       throw new Error(`Evaluation fidelity finality does not match the bound contract`)
+    }
+    if (evaluation.simulationReceiptID && !contract.simulation) {
+      throw new Error(`Evaluation references a simulation receipt without a bound simulator protocol`)
+    }
+    if (contract.simulation && evaluation.status === "passed" && final(evaluation) && !evaluation.simulationReceiptID) {
+      throw new Error(`A passing final simulation evaluation must reference a simulator validation receipt`)
+    }
+    if (evaluation.simulationReceiptID) {
+      await HarnessSimulation.assert({
+        contract,
+        receiptID: evaluation.simulationReceiptID,
+        candidateID: evaluation.subject?.type === "candidate" ? evaluation.subject.id : undefined,
+        requirePassed: evaluation.status === "passed" && final(evaluation),
+        evaluatedAt: evaluation.evaluatedAt,
+      })
     }
     if (evaluation.status === "passed" && final(evaluation)) {
       HarnessDomain.assert(contract.packs ?? [], evaluation.checks)

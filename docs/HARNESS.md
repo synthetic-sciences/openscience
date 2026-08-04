@@ -16,6 +16,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 8. **Quality is reported with cost.** Comparable reports include score, pass state, model and intervention metadata, total tokens, wall time, cost, candidate count, and search state.
 9. **Coordination must earn its cost.** The contract can pin a topology, or a deterministic policy can choose direct, centralized, fork/join, tournament, or evolutionary execution from bounded task traits. Tool-heavy sequential work is not automatically expanded into a multi-agent swarm.
 10. **Evaluation actively looks for blind spots.** An optional evaluator-owned audit uses committed opaque probes, uncertainty reduction, failure UCB, diversity, and stratum coverage. Its estimate must abstain while uncertainty remains above the contract threshold and cannot promote itself into benchmark evidence.
+11. **Numerical validation is authenticated and recomputed.** A simulation claim pins the engine, effective problem, reference, convergence order, residual/invariant tolerances, and stress tests. A final pass must cite a passing evaluator receipt for the exact artifact.
 
 ## System boundary
 
@@ -87,6 +88,31 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
     "tolerance": 0.02,
     "maxUncertainty": 0.05,
     "targetFailures": 8
+  },
+  "simulation": {
+    "kind": "pde",
+    "engine": {
+      "name": "reference-solver",
+      "version": "1.2.3",
+      "commandSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "configSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "problemSHA256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "reference": {
+      "kind": "manufactured",
+      "identity": "manufactured-solution-v1",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "validation": {
+      "errorNorm": "relative L2",
+      "minLevels": 3,
+      "maxLevels": 6,
+      "expectedOrder": 2,
+      "orderTolerance": 0.2,
+      "maxResidual": 1e-8,
+      "invariantTolerances": { "mass_drift": 1e-6 },
+      "requiredStressTests": ["solver_tolerance_sensitivity", "reference_replay"]
+    }
   },
   "metric": { "name": "score", "direction": "maximize" },
   "fidelities": [
@@ -190,7 +216,15 @@ Only the bound evaluator capability can initialize, select, read, or submit outc
 
 The report carries posterior mean loss, standard deviation, a clipped 95% interval, failure count, stratum coverage, and an explicit abstention bit. This is an audit estimate, not an official result. The external evaluator must attach its receipt to an ordinary authenticated evaluation before it can affect benchmark state.
 
-### 7. Verify with domain packs
+### 7. Authenticate numerical simulation claims
+
+An optional simulation contract freezes the physical and numerical protocol before execution: simulation kind; engine name/version; hashes of the effective command, configuration, and complete problem statement; reference kind/identity/hash; error norm; refinement range; expected order; residual and invariant tolerances; and mandatory stress tests.
+
+The bound evaluator submits level measurements and evidence to `POST /harness/simulations/receipts`. OpenScience does not accept a producer-supplied pass flag. It recomputes decreasing resolution/error, requires every local observed convergence order to meet the frozen threshold, and checks residual bounds, every declared invariant, and the exact stress-test set. Both passing and failed receipts remain append-only and content-addressed.
+
+A candidate receipt must name the candidate's exact artifact URI and SHA-256 from the search graph. A run receipt binds its output artifact to the run. A final passing evaluation under a simulation contract must cite a passing receipt for the same run or candidate; a missing, failed, wrong-contract, or wrong-artifact receipt blocks promotion. The capability and hidden reference outputs remain outside the agent process.
+
+### 8. Verify with domain packs
 
 Final passing results must contain evidence-backed receipts for every blocking check selected by the adapter.
 
@@ -206,13 +240,13 @@ Final passing results must contain evidence-backed receipts for every blocking c
 
 An adapter can require no universal pack when the benchmark spans incompatible task types; the orchestrator may add task-specific packs at bind time. Pack selection is frozen in the contract and comparison key.
 
-### 8. Reuse only verified hindsight
+### 9. Reuse only verified hindsight
 
 Retrospective entries are scoped by benchmark name, version, task, and evaluator. They contain the exact candidate artifact reference, branch, generation, external outcome, score, metrics, evidence references, evaluator feedback, and evaluation usage.
 
 Retrieval combines query overlap, task affinity, and workflow stage. It deliberately returns a relevant contrasting failure beside a success when possible. Retrieved text is escaped, length-bounded, and explicitly labeled as precedent data rather than instructions.
 
-### 9. Keep claims separate from execution reports
+### 10. Keep claims separate from execution reports
 
 The claim ledger supports descriptive, statistical, causal, mechanistic, theoretical, and performance claims. Status is derived from verified evidence, never assigned by the agent.
 
@@ -223,7 +257,7 @@ The claim ledger supports descriptive, statistical, causal, mechanistic, theoret
 - Clean replay, independent implementation, and independent derivation require a separate verifier session, fresh process, clean workspace, and exact source hash.
 - Independent implementation/derivation additionally withhold the producer's output and require independent code or reasoning.
 
-### 10. Promote skills only after held-out qualification
+### 11. Promote skills only after held-out qualification
 
 `/learn` and RSI distillation write inert proposals under `learned-skill-proposals`; skill discovery reads only promoted content under `learned-skills`.
 
@@ -241,7 +275,7 @@ Before a proposal exists, OpenScience checks its frontmatter, runtime-risk patte
 
 If later evidence introduces a regression before promotion, qualification returns to pending. Promoted content cannot accept more evidence; changes require a new versioned proposal.
 
-### 11. Execute benchmark-native protocol skills
+### 12. Execute benchmark-native protocol skills
 
 The bundled skill catalog includes three executable protocols for work that is otherwise easy to describe but hard to audit:
 
@@ -253,9 +287,9 @@ The bundled skill catalog includes three executable protocols for work that is o
 
 Their scripts return machine-readable JSON and nonzero failure codes, so an orchestrator can use them as blocking gates instead of relying on prompt compliance. They validate the protocol and reported measurements; they do not manufacture hidden data, run an unavailable simulator, or turn an internal result into official benchmark evidence.
 
-### 12. Compare only compatible runs
+### 13. Compare only compatible runs
 
-Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity protocol, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores.
+Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity and simulation protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores.
 
 Cost and wall time include both the agent trace and evaluator-reported stage usage. Direction-aware score deltas and the Pareto frontier are available through `POST /harness/compare`.
 
@@ -286,6 +320,8 @@ Every adapter is version-agnostic. A real run must still bind an exact benchmark
 | `POST` | `/harness/audits/:auditID/status`        | Read capability-protected posterior and stopping state        |
 | `POST` | `/harness/audits/:auditID/selection`     | Select the next opaque probe commitment                       |
 | `POST` | `/harness/audits/:auditID/observations`  | Record an immutable evaluator-authenticated probe outcome     |
+| `POST` | `/harness/simulations/receipts`          | Recompute and record a simulator validation receipt           |
+| `POST` | `/harness/simulations/receipts/:id`      | Read a capability-protected simulator validation receipt      |
 | `POST` | `/harness/evaluations`                   | Record a staged evaluator-authenticated result                |
 | `GET`  | `/harness/runs/:sessionID/contract`      | Inspect the bound protocol                                    |
 | `GET`  | `/harness/runs/:sessionID/evaluations`   | Inspect the immutable evaluation journal                      |

@@ -114,6 +114,39 @@ describe("harness quality-cost reports", () => {
     expect(() => HarnessReport.compare([a, b], "one")).toThrow("only comparable")
   })
 
+  test("refuses comparisons across different simulator protocols", () => {
+    const base = contract("simulation-one")
+    const simulation = HarnessContract.Simulation.parse({
+      kind: "pde",
+      engine: {
+        name: "solver",
+        version: "1",
+        commandSHA256: "a".repeat(64),
+        configSHA256: "b".repeat(64),
+      },
+      problemSHA256: "c".repeat(64),
+      reference: { kind: "analytic", identity: "reference", sha256: "d".repeat(64) },
+      validation: {
+        errorNorm: "L2",
+        minLevels: 3,
+        expectedOrder: 2,
+        orderTolerance: 0.2,
+        maxResidual: 1e-8,
+        invariantTolerances: { mass_drift: 1e-6 },
+        requiredStressTests: ["reference_replay"],
+      },
+    })
+    const first = HarnessContract.Info.parse({ ...base, simulation })
+    const second = HarnessContract.Info.parse({
+      ...contract("simulation-two"),
+      simulation: { ...simulation, engine: { ...simulation.engine, configSHA256: "e".repeat(64) } },
+    })
+    const a = HarnessReport.compile({ contract: first, evaluations: [evaluation(first, 0.8)], generatedAt: 3 })
+    const b = HarnessReport.compile({ contract: second, evaluations: [evaluation(second, 0.9)], generatedAt: 3 })
+    expect(a.comparisonKey).not.toBe(b.comparisonKey)
+    expect(() => HarnessReport.compare([a, b], "simulation-one")).toThrow("only comparable")
+  })
+
   test("reports only final fidelity scores even when a later screening record is present", () => {
     const staged = HarnessContract.Info.parse({
       ...contract("staged"),

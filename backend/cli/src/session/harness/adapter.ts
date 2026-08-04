@@ -34,6 +34,7 @@ export namespace HarnessAdapter {
       profile: HarnessContract.Profile.optional(),
       orchestration: HarnessContract.Orchestration.optional(),
       audit: HarnessContract.Audit.optional(),
+      simulation: HarnessContract.Simulation.optional(),
       extraPacks: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -108,6 +109,10 @@ export namespace HarnessAdapter {
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
       stage: z.string().min(1).max(100).optional(),
+      simulationReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       status: HarnessEvaluation.Status,
       score: z.number().finite().optional(),
       metrics: z
@@ -179,6 +184,9 @@ export namespace HarnessAdapter {
       throw new Error(`An optimize benchmark must declare a candidate budget`)
     }
     const packs = [...benchmark.packs, ...task.extraPacks].filter((pack, index, items) => items.indexOf(pack) === index)
+    if (task.simulation && !packs.some((pack) => ["physics", "pde", "chemistry"].includes(pack))) {
+      throw new Error(`A simulator validation contract requires a physics, PDE, or chemistry verification pack`)
+    }
     const contract = HarnessContract.Info.parse({
       schemaVersion: 1,
       runID: task.runID,
@@ -200,6 +208,7 @@ export namespace HarnessAdapter {
       profile,
       orchestration: task.orchestration,
       audit: task.audit,
+      simulation: task.simulation,
       packs,
       model: task.model,
       tools: task.tools,
@@ -293,6 +302,7 @@ export namespace HarnessAdapter {
       sessionID: value.sessionID,
       subject: value.candidateID ? { type: "candidate", id: value.candidateID } : undefined,
       fidelity,
+      simulationReceiptID: value.simulationReceiptID,
       evaluator: binding.evaluator,
       status: value.status,
       score: value.score,

@@ -57,6 +57,10 @@ export namespace HarnessReport {
           targetReached: z.boolean(),
           evaluator: z.string().min(1),
           evaluatorVersion: z.string().optional(),
+          simulationReceiptID: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
           evaluations: z.number().int().nonnegative(),
         })
         .strict(),
@@ -152,6 +156,7 @@ export namespace HarnessReport {
       direction,
       target: contract.benchmark.target,
       packs: (contract.packs ?? []).toSorted(),
+      simulation: contract.simulation,
       contamination: contract.contamination,
     })
     const tokens = input.trace
@@ -214,6 +219,7 @@ export namespace HarnessReport {
         targetReached: reached(contract, evaluation),
         evaluator: contract.benchmark.evaluator,
         evaluatorVersion: contract.benchmark.evaluatorVersion,
+        simulationReceiptID: evaluation?.simulationReceiptID,
         evaluations: evaluations.length,
       },
       efficiency: {

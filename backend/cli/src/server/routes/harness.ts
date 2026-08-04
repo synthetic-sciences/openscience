@@ -9,6 +9,7 @@ import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
 import { HarnessOrchestrator } from "@/session/harness/orchestrator"
 import { HarnessReport } from "@/session/harness/report"
+import { HarnessSimulation } from "@/session/harness/simulation"
 import { HarnessSkill } from "@/session/harness/skill"
 import { errors } from "../error"
 
@@ -103,6 +104,49 @@ export const HarnessRoutes = lazy(() =>
       validator("param", z.object({ auditID: z.string().regex(/^[a-f0-9]{64}$/) })),
       validator("json", HarnessAudit.Observe),
       async (c) => c.json(await HarnessAudit.observe(c.req.valid("param").auditID, c.req.valid("json"))),
+    )
+    .post(
+      "/simulations/receipts",
+      describeRoute({
+        summary: "Record an evaluator-authenticated simulator validation",
+        description:
+          "Recomputes convergence, residual, invariant, and stress-test gates against the immutable simulator protocol and exact subject artifact.",
+        operationId: "harness.simulation.record",
+        responses: {
+          200: {
+            description: "Immutable simulator validation receipt",
+            content: { "application/json": { schema: resolver(HarnessSimulation.Info) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessSimulation.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessSimulation.record(input, contract))
+      },
+    )
+    .post(
+      "/simulations/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected simulator validation receipt",
+        operationId: "harness.simulation.receipt",
+        responses: {
+          200: {
+            description: "Simulator validation receipt",
+            content: { "application/json": { schema: resolver(HarnessSimulation.Info.nullable()) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessSimulation.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessSimulation.read(input.sessionID, c.req.valid("param").receiptID))
+      },
     )
     .post(
       "/runs/:sessionID/orchestration",

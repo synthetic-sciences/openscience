@@ -117,6 +117,10 @@ import type {
   HarnessOrchestrationStatusResponses,
   HarnessReportErrors,
   HarnessReportResponses,
+  HarnessSimulationReceiptErrors,
+  HarnessSimulationReceiptResponses,
+  HarnessSimulationRecordErrors,
+  HarnessSimulationRecordResponses,
   HarnessSkillAttestErrors,
   HarnessSkillAttestResponses,
   HarnessSkillPromoteErrors,
@@ -3824,6 +3828,147 @@ export class Audit extends HeyApiClient {
   }
 }
 
+export class Simulation extends HeyApiClient {
+  /**
+   * Record an evaluator-authenticated simulator validation
+   *
+   * Recomputes convergence, residual, invariant, and stress-test gates against the immutable simulator protocol and exact subject artifact.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      schemaVersion?: 1
+      runID?: string
+      sessionID?: string
+      evaluatorToken?: string
+      subject?: {
+        type: "run" | "candidate"
+        id: string
+        artifact: {
+          uri: string
+          sha256: string
+        }
+      }
+      engine?: {
+        name: string
+        version: string
+        commandSHA256: string
+        configSHA256: string
+      }
+      problemSHA256?: string
+      reference?: {
+        kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
+        identity: string
+        sha256: string
+      }
+      validationInputSHA256?: string
+      levels?: Array<{
+        label: string
+        h: number
+        error: number
+        residual: number
+        invariants: {
+          [key: string]: number
+        }
+      }>
+      stressTests?: Array<{
+        id:
+          | "timestep_sensitivity"
+          | "solver_tolerance_sensitivity"
+          | "reference_replay"
+          | "independent_implementation"
+          | "unit_convention"
+          | "boundary_sensitivity"
+          | "perturbation_stability"
+        status: "passed" | "failed" | "inconclusive"
+        evidence: Array<string>
+      }>
+      evidence?: Array<string>
+      evaluatedAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "schemaVersion" },
+            { in: "body", key: "runID" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "engine" },
+            { in: "body", key: "problemSHA256" },
+            { in: "body", key: "reference" },
+            { in: "body", key: "validationInputSHA256" },
+            { in: "body", key: "levels" },
+            { in: "body", key: "stressTests" },
+            { in: "body", key: "evidence" },
+            { in: "body", key: "evaluatedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessSimulationRecordResponses,
+      HarnessSimulationRecordErrors,
+      ThrowOnError
+    >({
+      url: "/harness/simulations/receipts",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected simulator validation receipt
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessSimulationReceiptResponses,
+      HarnessSimulationReceiptErrors,
+      ThrowOnError
+    >({
+      url: "/harness/simulations/receipts/{receiptID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Orchestration extends HeyApiClient {
   /**
    * Read scientific orchestration state
@@ -4114,6 +4259,41 @@ export class Harness extends HeyApiClient {
         coverageWeight?: number
         targetFailures?: number
       }
+      simulation?: {
+        kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
+        engine: {
+          name: string
+          version: string
+          commandSHA256: string
+          configSHA256: string
+        }
+        problemSHA256: string
+        reference: {
+          kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
+          identity: string
+          sha256: string
+        }
+        validation: {
+          errorNorm: string
+          minLevels: number
+          maxLevels?: number
+          expectedOrder: number
+          orderTolerance: number
+          maxResidual: number
+          invariantTolerances: {
+            [key: string]: number
+          }
+          requiredStressTests: Array<
+            | "timestep_sensitivity"
+            | "solver_tolerance_sensitivity"
+            | "reference_replay"
+            | "independent_implementation"
+            | "unit_convention"
+            | "boundary_sensitivity"
+            | "perturbation_stability"
+          >
+        }
+      }
       extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
       metric?: {
         name?: string
@@ -4175,6 +4355,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "profile" },
             { in: "body", key: "orchestration" },
             { in: "body", key: "audit" },
+            { in: "body", key: "simulation" },
             { in: "body", key: "extraPacks" },
             { in: "body", key: "metric" },
             { in: "body", key: "fidelities" },
@@ -4216,6 +4397,7 @@ export class Harness extends HeyApiClient {
       evaluatorToken?: string
       candidateID?: string
       stage?: string
+      simulationReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
       metrics?: {
@@ -4251,6 +4433,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "evaluatorToken" },
             { in: "body", key: "candidateID" },
             { in: "body", key: "stage" },
+            { in: "body", key: "simulationReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
             { in: "body", key: "metrics" },
@@ -4416,6 +4599,11 @@ export class Harness extends HeyApiClient {
   private _audit?: Audit
   get audit(): Audit {
     return (this._audit ??= new Audit({ client: this.client }))
+  }
+
+  private _simulation?: Simulation
+  get simulation(): Simulation {
+    return (this._simulation ??= new Simulation({ client: this.client }))
   }
 
   private _orchestration?: Orchestration

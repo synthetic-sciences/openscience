@@ -16419,6 +16419,1144 @@
         ]
       }
     },
+    "/harness/simulations/receipts": {
+      "post": {
+        "operationId": "harness.simulation.record",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Record an evaluator-authenticated simulator validation",
+        "description": "Recomputes convergence, residual, invariant, and stress-test gates against the immutable simulator protocol and exact subject artifact.",
+        "responses": {
+          "200": {
+            "description": "Immutable simulator validation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "run",
+                            "candidate"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "artifact"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "evaluator": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "benchmark",
+                            "gate",
+                            "external"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "engine": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "commandSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "configSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version",
+                        "commandSHA256",
+                        "configSHA256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "problemSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "reference": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "analytic",
+                            "manufactured",
+                            "benchmark",
+                            "independent_solver",
+                            "limiting_case"
+                          ]
+                        },
+                        "identity": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "identity",
+                        "sha256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "validationInputSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "levels": {
+                      "minItems": 3,
+                      "maxItems": 24,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "h": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "error": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "residual": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "invariants": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100
+                            },
+                            "additionalProperties": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "h",
+                          "error",
+                          "residual",
+                          "invariants"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "observedOrders": {
+                      "maxItems": 23,
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "medianObservedOrder": {
+                      "type": "number"
+                    },
+                    "stressTests": {
+                      "maxItems": 7,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "timestep_sensitivity",
+                              "solver_tolerance_sensitivity",
+                              "reference_replay",
+                              "independent_implementation",
+                              "unit_convention",
+                              "boundary_sensitivity",
+                              "perturbation_stability"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "passed",
+                              "failed",
+                              "inconclusive"
+                            ]
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "evidence"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "enoughLevels": {
+                          "type": "boolean"
+                        },
+                        "resolutionDecreases": {
+                          "type": "boolean"
+                        },
+                        "errorDecreases": {
+                          "type": "boolean"
+                        },
+                        "observedOrder": {
+                          "type": "boolean"
+                        },
+                        "residualBound": {
+                          "type": "boolean"
+                        },
+                        "invariants": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          },
+                          "additionalProperties": {
+                            "type": "boolean"
+                          }
+                        },
+                        "stressTests": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "enum": [
+                              "timestep_sensitivity",
+                              "solver_tolerance_sensitivity",
+                              "reference_replay",
+                              "independent_implementation",
+                              "unit_convention",
+                              "boundary_sensitivity",
+                              "perturbation_stability"
+                            ]
+                          },
+                          "additionalProperties": {
+                            "type": "boolean"
+                          }
+                        }
+                      },
+                      "required": [
+                        "enoughLevels",
+                        "resolutionDecreases",
+                        "errorDecreases",
+                        "observedOrder",
+                        "residualBound",
+                        "invariants",
+                        "stressTests"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed"
+                      ]
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "receiptID",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "subject",
+                    "evaluator",
+                    "engine",
+                    "problemSHA256",
+                    "reference",
+                    "validationInputSHA256",
+                    "levels",
+                    "observedOrders",
+                    "medianObservedOrder",
+                    "stressTests",
+                    "checks",
+                    "status",
+                    "evidence",
+                    "evaluatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "runID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "subject": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "run",
+                          "candidate"
+                        ]
+                      },
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240
+                      },
+                      "artifact": {
+                        "type": "object",
+                        "properties": {
+                          "uri": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "uri",
+                          "sha256"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id",
+                      "artifact"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "engine": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "commandSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "configSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "version",
+                      "commandSHA256",
+                      "configSHA256"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "problemSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "reference": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "analytic",
+                          "manufactured",
+                          "benchmark",
+                          "independent_solver",
+                          "limiting_case"
+                        ]
+                      },
+                      "identity": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "identity",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "validationInputSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "levels": {
+                    "minItems": 3,
+                    "maxItems": 24,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "h": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "error": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "residual": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "invariants": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          },
+                          "additionalProperties": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "h",
+                        "error",
+                        "residual",
+                        "invariants"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "stressTests": {
+                    "maxItems": 7,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "enum": [
+                            "timestep_sensitivity",
+                            "solver_tolerance_sensitivity",
+                            "reference_replay",
+                            "independent_implementation",
+                            "unit_convention",
+                            "boundary_sensitivity",
+                            "perturbation_stability"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed",
+                            "inconclusive"
+                          ]
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "evidence": {
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "evaluatedAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "runID",
+                  "sessionID",
+                  "evaluatorToken",
+                  "subject",
+                  "engine",
+                  "problemSHA256",
+                  "reference",
+                  "validationInputSHA256",
+                  "levels",
+                  "stressTests",
+                  "evidence",
+                  "evaluatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.simulation.record({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/simulations/receipts/{receiptID}": {
+      "post": {
+        "operationId": "harness.simulation.receipt",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receiptID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a capability-protected simulator validation receipt",
+        "responses": {
+          "200": {
+            "description": "Simulator validation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "receiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "contractFingerprint": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "subject": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "run",
+                                "candidate"
+                              ]
+                            },
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "artifact": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "artifact"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "evaluator": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "benchmark",
+                                "gate",
+                                "external"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "source"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "engine": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "commandSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "configSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "commandSHA256",
+                            "configSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "problemSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "reference": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "analytic",
+                                "manufactured",
+                                "benchmark",
+                                "independent_solver",
+                                "limiting_case"
+                              ]
+                            },
+                            "identity": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "identity",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "validationInputSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "levels": {
+                          "minItems": 3,
+                          "maxItems": 24,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120
+                              },
+                              "h": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              },
+                              "error": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              },
+                              "residual": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "invariants": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 100
+                                },
+                                "additionalProperties": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "h",
+                              "error",
+                              "residual",
+                              "invariants"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "observedOrders": {
+                          "maxItems": 23,
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "medianObservedOrder": {
+                          "type": "number"
+                        },
+                        "stressTests": {
+                          "maxItems": 7,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "timestep_sensitivity",
+                                  "solver_tolerance_sensitivity",
+                                  "reference_replay",
+                                  "independent_implementation",
+                                  "unit_convention",
+                                  "boundary_sensitivity",
+                                  "perturbation_stability"
+                                ]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "passed",
+                                  "failed",
+                                  "inconclusive"
+                                ]
+                              },
+                              "evidence": {
+                                "minItems": 1,
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "status",
+                              "evidence"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "checks": {
+                          "type": "object",
+                          "properties": {
+                            "enoughLevels": {
+                              "type": "boolean"
+                            },
+                            "resolutionDecreases": {
+                              "type": "boolean"
+                            },
+                            "errorDecreases": {
+                              "type": "boolean"
+                            },
+                            "observedOrder": {
+                              "type": "boolean"
+                            },
+                            "residualBound": {
+                              "type": "boolean"
+                            },
+                            "invariants": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
+                              },
+                              "additionalProperties": {
+                                "type": "boolean"
+                              }
+                            },
+                            "stressTests": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "enum": [
+                                  "timestep_sensitivity",
+                                  "solver_tolerance_sensitivity",
+                                  "reference_replay",
+                                  "independent_implementation",
+                                  "unit_convention",
+                                  "boundary_sensitivity",
+                                  "perturbation_stability"
+                                ]
+                              },
+                              "additionalProperties": {
+                                "type": "boolean"
+                              }
+                            }
+                          },
+                          "required": [
+                            "enoughLevels",
+                            "resolutionDecreases",
+                            "errorDecreases",
+                            "observedOrder",
+                            "residualBound",
+                            "invariants",
+                            "stressTests"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed"
+                          ]
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "evaluatedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "receiptID",
+                        "runID",
+                        "sessionID",
+                        "contractFingerprint",
+                        "subject",
+                        "evaluator",
+                        "engine",
+                        "problemSHA256",
+                        "reference",
+                        "validationInputSHA256",
+                        "levels",
+                        "observedOrders",
+                        "medianObservedOrder",
+                        "stressTests",
+                        "checks",
+                        "status",
+                        "evidence",
+                        "evaluatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.simulation.receipt({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/runs/{sessionID}/orchestration": {
       "post": {
         "operationId": "harness.orchestration.start",
@@ -17869,6 +19007,168 @@
                       ],
                       "additionalProperties": false
                     },
+                    "simulation": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "ode",
+                            "pde",
+                            "cfd",
+                            "materials",
+                            "molecular",
+                            "agentic"
+                          ]
+                        },
+                        "engine": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "commandSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "configSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "commandSHA256",
+                            "configSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "problemSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "reference": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "analytic",
+                                "manufactured",
+                                "benchmark",
+                                "independent_solver",
+                                "limiting_case"
+                              ]
+                            },
+                            "identity": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "identity",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "validation": {
+                          "type": "object",
+                          "properties": {
+                            "errorNorm": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "minLevels": {
+                              "type": "integer",
+                              "minimum": 3,
+                              "maximum": 12
+                            },
+                            "maxLevels": {
+                              "default": 12,
+                              "type": "integer",
+                              "minimum": 3,
+                              "maximum": 24
+                            },
+                            "expectedOrder": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 20
+                            },
+                            "orderTolerance": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            "maxResidual": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "invariantTolerances": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
+                              },
+                              "additionalProperties": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "requiredStressTests": {
+                              "minItems": 1,
+                              "maxItems": 7,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "timestep_sensitivity",
+                                  "solver_tolerance_sensitivity",
+                                  "reference_replay",
+                                  "independent_implementation",
+                                  "unit_convention",
+                                  "boundary_sensitivity",
+                                  "perturbation_stability"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "errorNorm",
+                            "minLevels",
+                            "expectedOrder",
+                            "orderTolerance",
+                            "maxResidual",
+                            "invariantTolerances",
+                            "requiredStressTests"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "engine",
+                        "problemSHA256",
+                        "reference",
+                        "validation"
+                      ],
+                      "additionalProperties": false
+                    },
                     "packs": {
                       "maxItems": 7,
                       "type": "array",
@@ -18339,6 +19639,168 @@
                     ],
                     "additionalProperties": false
                   },
+                  "simulation": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "ode",
+                          "pde",
+                          "cfd",
+                          "materials",
+                          "molecular",
+                          "agentic"
+                        ]
+                      },
+                      "engine": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "commandSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "configSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "version",
+                          "commandSHA256",
+                          "configSHA256"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "problemSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "reference": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "analytic",
+                              "manufactured",
+                              "benchmark",
+                              "independent_solver",
+                              "limiting_case"
+                            ]
+                          },
+                          "identity": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "identity",
+                          "sha256"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "validation": {
+                        "type": "object",
+                        "properties": {
+                          "errorNorm": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "minLevels": {
+                            "type": "integer",
+                            "minimum": 3,
+                            "maximum": 12
+                          },
+                          "maxLevels": {
+                            "default": 12,
+                            "type": "integer",
+                            "minimum": 3,
+                            "maximum": 24
+                          },
+                          "expectedOrder": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 20
+                          },
+                          "orderTolerance": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 10
+                          },
+                          "maxResidual": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "invariantTolerances": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100
+                            },
+                            "additionalProperties": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "requiredStressTests": {
+                            "minItems": 1,
+                            "maxItems": 7,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "timestep_sensitivity",
+                                "solver_tolerance_sensitivity",
+                                "reference_replay",
+                                "independent_implementation",
+                                "unit_convention",
+                                "boundary_sensitivity",
+                                "perturbation_stability"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "errorNorm",
+                          "minLevels",
+                          "expectedOrder",
+                          "orderTolerance",
+                          "maxResidual",
+                          "invariantTolerances",
+                          "requiredStressTests"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "engine",
+                      "problemSHA256",
+                      "reference",
+                      "validation"
+                    ],
+                    "additionalProperties": false
+                  },
                   "extraPacks": {
                     "default": [],
                     "maxItems": 7,
@@ -18645,6 +20107,10 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100
+                  },
+                  "simulationReceiptID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
                   },
                   "status": {
                     "type": "string",
@@ -20201,6 +21667,168 @@
                           ],
                           "additionalProperties": false
                         },
+                        "simulation": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "ode",
+                                "pde",
+                                "cfd",
+                                "materials",
+                                "molecular",
+                                "agentic"
+                              ]
+                            },
+                            "engine": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "commandSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "configSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "commandSHA256",
+                                "configSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "problemSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "reference": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "analytic",
+                                    "manufactured",
+                                    "benchmark",
+                                    "independent_solver",
+                                    "limiting_case"
+                                  ]
+                                },
+                                "identity": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "identity",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "validation": {
+                              "type": "object",
+                              "properties": {
+                                "errorNorm": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "minLevels": {
+                                  "type": "integer",
+                                  "minimum": 3,
+                                  "maximum": 12
+                                },
+                                "maxLevels": {
+                                  "default": 12,
+                                  "type": "integer",
+                                  "minimum": 3,
+                                  "maximum": 24
+                                },
+                                "expectedOrder": {
+                                  "type": "number",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 20
+                                },
+                                "orderTolerance": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 10
+                                },
+                                "maxResidual": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "invariantTolerances": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 100
+                                  },
+                                  "additionalProperties": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  }
+                                },
+                                "requiredStressTests": {
+                                  "minItems": 1,
+                                  "maxItems": 7,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "timestep_sensitivity",
+                                      "solver_tolerance_sensitivity",
+                                      "reference_replay",
+                                      "independent_implementation",
+                                      "unit_convention",
+                                      "boundary_sensitivity",
+                                      "perturbation_stability"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "errorNorm",
+                                "minLevels",
+                                "expectedOrder",
+                                "orderTolerance",
+                                "maxResidual",
+                                "invariantTolerances",
+                                "requiredStressTests"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "engine",
+                            "problemSHA256",
+                            "reference",
+                            "validation"
+                          ],
+                          "additionalProperties": false
+                        },
                         "packs": {
                           "maxItems": 7,
                           "type": "array",
@@ -20475,6 +22103,10 @@
                           "final"
                         ],
                         "additionalProperties": false
+                      },
+                      "simulationReceiptID": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
                       },
                       "evaluator": {
                         "type": "object",
@@ -20862,6 +22494,10 @@
                         },
                         "evaluatorVersion": {
                           "type": "string"
+                        },
+                        "simulationReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
                         },
                         "evaluations": {
                           "type": "integer",
