@@ -44,6 +44,38 @@ describe("kernel metrics parsing", () => {
   })
 })
 
+describe("kernel metrics delta arithmetic", () => {
+  test("derives percent of one core from a known cpu delta across a known window", () => {
+    const sample = KernelMetrics.derive(
+      { cpu_seconds: 10, at: 1_000 },
+      { cpu_seconds: 12.5, memory_bytes: 4_096 },
+      6_000,
+    )
+
+    expect(sample).toEqual({ cpu_percent: 50, memory_bytes: 4_096 })
+  })
+
+  test("reports past 100 for a process holding more than one core", () => {
+    expect(KernelMetrics.derive({ cpu_seconds: 4, at: 0 }, { cpu_seconds: 10 }, 2_000)).toEqual({ cpu_percent: 300 })
+  })
+
+  test("reports an exact zero only when the process genuinely burned nothing", () => {
+    expect(KernelMetrics.derive({ cpu_seconds: 10, at: 1_000 }, { cpu_seconds: 10 }, 3_500)).toEqual({ cpu_percent: 0 })
+  })
+
+  test("omits cpu entirely before a baseline exists, keeping the memory it did read", () => {
+    expect(KernelMetrics.derive(undefined, { cpu_seconds: 12.5, memory_bytes: 4_096 }, 6_000)).toEqual({
+      memory_bytes: 4_096,
+    })
+  })
+
+  test("omits cpu when the window never advanced or the counter went backwards", () => {
+    expect(KernelMetrics.derive({ cpu_seconds: 10, at: 6_000 }, { cpu_seconds: 12.5 }, 6_000)).toEqual({})
+    expect(KernelMetrics.derive({ cpu_seconds: 10, at: 7_000 }, { cpu_seconds: 12.5 }, 6_000)).toEqual({})
+    expect(KernelMetrics.derive({ cpu_seconds: 10, at: 1_000 }, { cpu_seconds: 4 }, 6_000)).toEqual({})
+  })
+})
+
 describe("kernel metrics sampling", () => {
   test("reports memory immediately and cpu only once a baseline exists", async () => {
     const first = await KernelMetrics.sampleAll("kernels", [process.pid])

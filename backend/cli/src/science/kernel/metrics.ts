@@ -20,6 +20,26 @@ export namespace KernelMetrics {
     memory_bytes?: number
   }
 
+  export interface Mark {
+    cpu_seconds: number
+    at: number
+  }
+
+  // The delta arithmetic on its own, so a known cpu delta across a known window
+  // can be asserted exactly instead of against a wall clock. cpu_percent is
+  // percent of ONE core, so a process pinning three cores reads 300. A window
+  // that has not advanced, or cumulative seconds that went backwards because
+  // the OS recycled the pid, yields no cpu_percent at all — never a 0 the UI
+  // would render as an idle kernel.
+  export function derive(previous: Mark | undefined, reading: Reading, at: number) {
+    const elapsed = previous ? (at - previous.at) / 1_000 : 0
+    const used = previous ? reading.cpu_seconds - previous.cpu_seconds : 0
+    return {
+      ...(previous && elapsed > 0 && used >= 0 ? { cpu_percent: (used / elapsed) * 100 } : {}),
+      ...(reading.memory_bytes === undefined ? {} : { memory_bytes: reading.memory_bytes }),
+    }
+  }
+
   // ps prints cumulative processor time as [[dd-]hh:]mm:ss
   export function seconds(value: string) {
     const split = value.split("-")
@@ -94,7 +114,7 @@ export namespace KernelMetrics {
   // Kernels panel polls /notebook/kernels — and a shared per-pid entry would
   // make each poll measure the gap to the OTHER caller's poll. Interleaved by
   // milliseconds that yields a fabricated 0 or a wildly inflated percentage.
-  const baseline = new Map<string, { cpu_seconds: number; at: number }>()
+  const baseline = new Map<string, Mark>()
 
   const key = (scope: string, pid: number) => `${scope}:${pid}`
 
@@ -116,12 +136,7 @@ export namespace KernelMetrics {
     for (const [pid, reading] of readings) {
       const previous = baseline.get(key(scope, pid))
       baseline.set(key(scope, pid), { cpu_seconds: reading.cpu_seconds, at })
-      const elapsed = previous ? (at - previous.at) / 1_000 : 0
-      const used = previous ? reading.cpu_seconds - previous.cpu_seconds : 0
-      samples.set(pid, {
-        ...(elapsed > 0 && used >= 0 ? { cpu_percent: (used / elapsed) * 100 } : {}),
-        ...(reading.memory_bytes === undefined ? {} : { memory_bytes: reading.memory_bytes }),
-      })
+      samples.set(pid, derive(previous, reading, at))
     }
     // Prune only pids THIS call asked about. Iterating the whole baseline would
     // drop entries belonging to other sessions — /notebook/kernels is polled
