@@ -217,6 +217,159 @@ test("active-failure-audit rejects duplicate hidden probes", async () => {
   }
 })
 
+test("verify-benchmark-integrity derives observable violations from an evaluator-owned trace", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-integrity-"))
+  const trace = path.join(dir, "trace.jsonl")
+  const contract = path.join(dir, "contract.json")
+  const subject = path.join(dir, "subject.json")
+  const model = path.join(dir, "model.json")
+  const audits = path.join(dir, "audits.json")
+  const output = path.join(dir, "submission.json")
+  const report = path.join(dir, "report.json")
+  const canaries = hash("canaries")
+  const commitments = await run("research/verify-benchmark-integrity/scripts/verify_integrity.py", ["commitments"])
+  expect(commitments.code).toBe(0)
+  const pins = JSON.parse(commitments.stdout)
+  const kinds = ["test_item_contamination", "external_model_use", "benchmark_lookup"]
+  const identities = kinds.map((kind) => ({
+    kind,
+    name: `${kind}-auditor`,
+    version: "1",
+    promptSHA256: hash(`${kind}-prompt`),
+  }))
+  await Promise.all([
+    Bun.write(
+      contract,
+      JSON.stringify({
+        protocolVersion: "benchmark-integrity-v1",
+        validatorSHA256: pins.validatorSHA256,
+        traceSchemaSHA256: pins.traceSchemaSHA256,
+        minEvents: 4,
+        minCoverage: 0.9,
+        assignedModel: {
+          name: "assigned-model",
+          baseArtifactSHA256: hash("base"),
+          configSHA256: hash("config"),
+        },
+        forbiddenModelArtifacts: [hash("forbidden")],
+        policy: {
+          testItemDerivation: "forbidden",
+          unapprovedExternalModels: "forbidden",
+          benchmarkLookup: "forbidden",
+        },
+        auditors: identities,
+        hiddenCanaryManifestSHA256: canaries,
+        minHiddenCanaries: 2,
+      }),
+    ),
+    Bun.write(
+      trace,
+      [
+        { seq: 0, at: 1_000, kind: "command" },
+        { seq: 1, at: 1_001, kind: "model_call", approved: true },
+        { seq: 2, at: 1_002, kind: "model_call", approved: false },
+        { seq: 3, at: 1_003, kind: "benchmark_lookup" },
+        { seq: 4, at: 1_004, kind: "hidden_canary", manifestSHA256: canaries, canaryID: "a", violation: false },
+        { seq: 5, at: 1_005, kind: "hidden_canary", manifestSHA256: canaries, canaryID: "b", violation: true },
+        { seq: 6, at: 1_006, kind: "trace_gap", dropped: 1 },
+      ]
+        .map((item) => JSON.stringify(item))
+        .join("\n"),
+    ),
+    Bun.write(
+      subject,
+      JSON.stringify({ type: "run", id: "run-1", artifact: { uri: "artifact:output", sha256: hash("output") } }),
+    ),
+    Bun.write(
+      model,
+      JSON.stringify({
+        name: "assigned-model",
+        baseArtifactSHA256: hash("base"),
+        configSHA256: hash("config"),
+        outputArtifactSHA256: hash("fine-tuned"),
+        lineageVerified: true,
+      }),
+    ),
+    Bun.write(
+      audits,
+      JSON.stringify(
+        identities.map((identity) => ({
+          ...identity,
+          decision: "clean",
+          confidence: 0.99,
+          evidence: [`artifact:${identity.kind}.json`],
+        })),
+      ),
+    ),
+  ])
+
+  try {
+    const result = await run("research/verify-benchmark-integrity/scripts/verify_integrity.py", [
+      "build",
+      "--contract",
+      contract,
+      "--trace",
+      trace,
+      "--subject",
+      subject,
+      "--model",
+      model,
+      "--audits",
+      audits,
+      "--run-id",
+      "run-1",
+      "--session-id",
+      "session-1",
+      "--evaluated-at",
+      "1100",
+      "--output",
+      output,
+      "--report",
+      report,
+    ])
+    expect(result.code).toBe(0)
+    const submission = JSON.parse(await Bun.file(output).text())
+    expect(submission.evaluatorToken).toBeUndefined()
+    expect(submission.trace).toMatchObject({ events: 7, dropped: 1, schemaSHA256: pins.traceSchemaSHA256 })
+    expect(submission.activity).toMatchObject({
+      unapprovedExternalModelCalls: 1,
+      benchmarkLookupEvents: 1,
+      hiddenCanariesTested: 2,
+      hiddenCanaryViolations: 1,
+    })
+    expect(JSON.parse(await Bun.file(report).text()).traceCoverage).toBe(0.875)
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("verify-benchmark-integrity rejects a non-contiguous trace", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-integrity-gap-"))
+  const trace = path.join(dir, "trace.jsonl")
+  await Bun.write(
+    trace,
+    [
+      { seq: 0, at: 1, kind: "command" },
+      { seq: 2, at: 2, kind: "command" },
+    ]
+      .map((item) => JSON.stringify(item))
+      .join("\n"),
+  )
+  try {
+    const result = await run("research/verify-benchmark-integrity/scripts/verify_integrity.py", [
+      "check-trace",
+      "--trace",
+      trace,
+      "--canary-manifest",
+      hash("canaries"),
+    ])
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain("trace sequence must be contiguous")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("simulator-validation accepts a convergent invariant-preserving study", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-simulator-"))
   const source = path.join(dir, "study.json")

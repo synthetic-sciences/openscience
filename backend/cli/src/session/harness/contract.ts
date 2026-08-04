@@ -178,6 +178,67 @@ export namespace HarnessContract {
     })
   export type Launch = z.infer<typeof Launch>
 
+  export const IntegrityAuditKind = z.enum(["test_item_contamination", "external_model_use", "benchmark_lookup"])
+  export type IntegrityAuditKind = z.infer<typeof IntegrityAuditKind>
+
+  export const IntegrityAuditor = z
+    .object({
+      kind: IntegrityAuditKind,
+      name: z.string().min(1).max(200),
+      version: z.string().min(1).max(200),
+      promptSHA256: Hash,
+    })
+    .strict()
+
+  export const Integrity = z
+    .object({
+      protocolVersion: z.literal("benchmark-integrity-v1"),
+      validatorSHA256: Hash,
+      traceSchemaSHA256: Hash,
+      minEvents: z.number().int().min(1).max(10_000_000),
+      minCoverage: z.number().min(0.9).max(1),
+      assignedModel: z
+        .object({
+          name: z.string().min(1).max(500),
+          baseArtifactSHA256: Hash,
+          configSHA256: Hash,
+        })
+        .strict(),
+      forbiddenModelArtifacts: z
+        .array(Hash)
+        .max(128)
+        .refine((items) => new Set(items).size === items.length, "Forbidden model artifacts must be unique")
+        .default([]),
+      policy: z
+        .object({
+          testItemDerivation: z.literal("forbidden"),
+          unapprovedExternalModels: z.literal("forbidden"),
+          benchmarkLookup: z.literal("forbidden"),
+        })
+        .strict(),
+      auditors: z
+        .array(IntegrityAuditor)
+        .length(IntegrityAuditKind.options.length)
+        .refine(
+          (items) => new Set(items.map((item) => item.kind)).size === items.length,
+          "Integrity auditors must be unique",
+        ),
+      hiddenCanaryManifestSHA256: Hash,
+      minHiddenCanaries: z.number().int().min(1).max(10_000),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      const expected = IntegrityAuditKind.options.toSorted()
+      const submitted = value.auditors.map((item) => item.kind).toSorted()
+      if (JSON.stringify(expected) !== JSON.stringify(submitted)) {
+        ctx.addIssue({ code: "custom", path: ["auditors"], message: "Integrity protocol requires every audit class" })
+      }
+      const identities = value.auditors.map((item) => `${item.name}\n${item.version}\n${item.promptSHA256}`)
+      if (new Set(identities).size === identities.length) return
+      ctx.addIssue({ code: "custom", path: ["auditors"], message: "Integrity auditor identities must be distinct" })
+    })
+  export type Integrity = z.infer<typeof Integrity>
+
   export const SimulationStress = z.enum([
     "timestep_sensitivity",
     "solver_tolerance_sensitivity",
@@ -336,6 +397,7 @@ export namespace HarnessContract {
       orchestration: Orchestration.optional(),
       audit: Audit.optional(),
       launch: Launch.optional(),
+      integrity: Integrity.optional(),
       simulation: Simulation.optional(),
       evaluatorAudit: EvaluatorAudit.optional(),
       packs: z
@@ -389,14 +451,20 @@ export namespace HarnessContract {
     })
     .strict()
     .superRefine((value, ctx) => {
-      if ((value.launch || value.simulation || value.evaluatorAudit) && !value.benchmark.evaluatorVersion) {
+      if (
+        (value.launch || value.integrity || value.simulation || value.evaluatorAudit) &&
+        !value.benchmark.evaluatorVersion
+      ) {
         ctx.addIssue({
           code: "custom",
           path: ["benchmark", "evaluatorVersion"],
           message: "Evaluator-controlled validation needs an evaluator version",
         })
       }
-      if ((value.launch || value.simulation || value.evaluatorAudit) && !value.benchmark.evaluatorSource) {
+      if (
+        (value.launch || value.integrity || value.simulation || value.evaluatorAudit) &&
+        !value.benchmark.evaluatorSource
+      ) {
         ctx.addIssue({
           code: "custom",
           path: ["benchmark", "evaluatorSource"],
@@ -415,6 +483,25 @@ export namespace HarnessContract {
           code: "custom",
           path: ["benchmark", "evaluatorSource"],
           message: "Benchmark launch validation requires a capability-authenticated evaluator source",
+        })
+      }
+      if (value.integrity && value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Runtime integrity validation requires a capability-authenticated evaluator source",
+        })
+      }
+      if (
+        value.integrity?.auditors.some(
+          (auditor) =>
+            auditor.name === value.benchmark.evaluator && auditor.version === value.benchmark.evaluatorVersion,
+        )
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["integrity", "auditors"],
+          message: "Runtime integrity auditing requires identities distinct from the score evaluator",
         })
       }
       if (value.launch && value.benchmark.direction !== "pass" && value.launch.baseline.expectedScore === undefined) {

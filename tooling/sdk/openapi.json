@@ -19685,6 +19685,1745 @@
         ]
       }
     },
+    "/harness/integrity/receipts": {
+      "post": {
+        "operationId": "harness.integrity.record",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Record evaluator-authenticated runtime integrity",
+        "description": "Derives trace-completeness, model-identity, contamination, external-model, benchmark-lookup, and hidden-canary gates against an immutable protocol.",
+        "responses": {
+          "200": {
+            "description": "Immutable runtime integrity receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "submissionID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "run",
+                            "candidate"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "artifact"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "evaluator": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "benchmark",
+                            "gate",
+                            "external"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "protocol": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "benchmark-integrity-v1"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "traceSchemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "minEvents": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000000
+                        },
+                        "minCoverage": {
+                          "type": "number",
+                          "minimum": 0.9,
+                          "maximum": 1
+                        },
+                        "assignedModel": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "baseArtifactSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "configSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "baseArtifactSHA256",
+                            "configSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "forbiddenModelArtifacts": {
+                          "default": [],
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "policy": {
+                          "type": "object",
+                          "properties": {
+                            "testItemDerivation": {
+                              "type": "string",
+                              "const": "forbidden"
+                            },
+                            "unapprovedExternalModels": {
+                              "type": "string",
+                              "const": "forbidden"
+                            },
+                            "benchmarkLookup": {
+                              "type": "string",
+                              "const": "forbidden"
+                            }
+                          },
+                          "required": [
+                            "testItemDerivation",
+                            "unapprovedExternalModels",
+                            "benchmarkLookup"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "auditors": {
+                          "minItems": 3,
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "test_item_contamination",
+                                  "external_model_use",
+                                  "benchmark_lookup"
+                                ]
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "promptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "name",
+                              "version",
+                              "promptSHA256"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "hiddenCanaryManifestSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "minHiddenCanaries": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "validatorSHA256",
+                        "traceSchemaSHA256",
+                        "minEvents",
+                        "minCoverage",
+                        "assignedModel",
+                        "policy",
+                        "auditors",
+                        "hiddenCanaryManifestSHA256",
+                        "minHiddenCanaries"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "trace": {
+                      "type": "object",
+                      "properties": {
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "schemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "events": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000000
+                        },
+                        "dropped": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "startedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "endedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "artifact",
+                        "schemaSHA256",
+                        "events",
+                        "dropped",
+                        "startedAt",
+                        "endedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "traceCoverage": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "model": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "baseArtifactSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "configSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "outputArtifactSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "lineageVerified": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "baseArtifactSHA256",
+                        "configSHA256",
+                        "outputArtifactSHA256",
+                        "lineageVerified"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "audits": {
+                      "minItems": 3,
+                      "maxItems": 3,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "test_item_contamination",
+                              "external_model_use",
+                              "benchmark_lookup"
+                            ]
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "promptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "decision": {
+                            "type": "string",
+                            "enum": [
+                              "clean",
+                              "flagged",
+                              "abstain"
+                            ]
+                          },
+                          "confidence": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "name",
+                          "version",
+                          "promptSHA256",
+                          "decision",
+                          "confidence",
+                          "evidence"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "activity": {
+                      "type": "object",
+                      "properties": {
+                        "unapprovedExternalModelCalls": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "benchmarkLookupEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000000
+                        },
+                        "hiddenCanaryManifestSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "hiddenCanariesTested": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000
+                        },
+                        "hiddenCanaryViolations": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "unapprovedExternalModelCalls",
+                        "benchmarkLookupEvents",
+                        "hiddenCanaryManifestSHA256",
+                        "hiddenCanariesTested",
+                        "hiddenCanaryViolations"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "validator": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "const": "verify-benchmark-integrity"
+                        },
+                        "version": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "scriptSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version",
+                        "scriptSHA256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "traceCompleteness": {
+                          "type": "boolean"
+                        },
+                        "modelIdentity": {
+                          "type": "boolean"
+                        },
+                        "testItemContamination": {
+                          "type": "boolean"
+                        },
+                        "externalModelUse": {
+                          "type": "boolean"
+                        },
+                        "benchmarkLookup": {
+                          "type": "boolean"
+                        },
+                        "hiddenCanary": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "traceCompleteness",
+                        "modelIdentity",
+                        "testItemContamination",
+                        "externalModelUse",
+                        "benchmarkLookup",
+                        "hiddenCanary"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed"
+                      ]
+                    },
+                    "failures": {
+                      "maxItems": 14,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "trace_schema",
+                          "trace_event_floor",
+                          "trace_coverage",
+                          "model_name",
+                          "model_base_artifact",
+                          "model_config",
+                          "model_lineage",
+                          "forbidden_model_artifact",
+                          "test_item_contamination",
+                          "external_model_use",
+                          "benchmark_lookup",
+                          "hidden_canary_manifest",
+                          "hidden_canary_coverage",
+                          "hidden_canary_violation"
+                        ]
+                      }
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "receiptID",
+                    "submissionID",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "subject",
+                    "evaluator",
+                    "protocol",
+                    "trace",
+                    "traceCoverage",
+                    "model",
+                    "audits",
+                    "activity",
+                    "validator",
+                    "checks",
+                    "status",
+                    "failures",
+                    "evidence",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "runID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "protocol": {
+                    "type": "object",
+                    "properties": {
+                      "protocolVersion": {
+                        "type": "string",
+                        "const": "benchmark-integrity-v1"
+                      },
+                      "validatorSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "traceSchemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "minEvents": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000000
+                      },
+                      "minCoverage": {
+                        "type": "number",
+                        "minimum": 0.9,
+                        "maximum": 1
+                      },
+                      "assignedModel": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "baseArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "configSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "baseArtifactSHA256",
+                          "configSHA256"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "forbiddenModelArtifacts": {
+                        "default": [],
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "policy": {
+                        "type": "object",
+                        "properties": {
+                          "testItemDerivation": {
+                            "type": "string",
+                            "const": "forbidden"
+                          },
+                          "unapprovedExternalModels": {
+                            "type": "string",
+                            "const": "forbidden"
+                          },
+                          "benchmarkLookup": {
+                            "type": "string",
+                            "const": "forbidden"
+                          }
+                        },
+                        "required": [
+                          "testItemDerivation",
+                          "unapprovedExternalModels",
+                          "benchmarkLookup"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "auditors": {
+                        "minItems": 3,
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "test_item_contamination",
+                                "external_model_use",
+                                "benchmark_lookup"
+                              ]
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "promptSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "name",
+                            "version",
+                            "promptSHA256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "hiddenCanaryManifestSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "minHiddenCanaries": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000
+                      }
+                    },
+                    "required": [
+                      "protocolVersion",
+                      "validatorSHA256",
+                      "traceSchemaSHA256",
+                      "minEvents",
+                      "minCoverage",
+                      "assignedModel",
+                      "policy",
+                      "auditors",
+                      "hiddenCanaryManifestSHA256",
+                      "minHiddenCanaries"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "subject": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "run",
+                          "candidate"
+                        ]
+                      },
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240
+                      },
+                      "artifact": {
+                        "type": "object",
+                        "properties": {
+                          "uri": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "uri",
+                          "sha256"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id",
+                      "artifact"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "trace": {
+                    "type": "object",
+                    "properties": {
+                      "artifact": {
+                        "type": "object",
+                        "properties": {
+                          "uri": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "uri",
+                          "sha256"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "schemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "events": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000000
+                      },
+                      "dropped": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000000
+                      },
+                      "startedAt": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "endedAt": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "artifact",
+                      "schemaSHA256",
+                      "events",
+                      "dropped",
+                      "startedAt",
+                      "endedAt"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "baseArtifactSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "configSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "outputArtifactSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "lineageVerified": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "baseArtifactSHA256",
+                      "configSHA256",
+                      "outputArtifactSHA256",
+                      "lineageVerified"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "audits": {
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "test_item_contamination",
+                            "external_model_use",
+                            "benchmark_lookup"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "promptSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "decision": {
+                          "type": "string",
+                          "enum": [
+                            "clean",
+                            "flagged",
+                            "abstain"
+                          ]
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "name",
+                        "version",
+                        "promptSHA256",
+                        "decision",
+                        "confidence",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "activity": {
+                    "type": "object",
+                    "properties": {
+                      "unapprovedExternalModelCalls": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000000
+                      },
+                      "benchmarkLookupEvents": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000000
+                      },
+                      "hiddenCanaryManifestSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "hiddenCanariesTested": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000
+                      },
+                      "hiddenCanaryViolations": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000
+                      }
+                    },
+                    "required": [
+                      "unapprovedExternalModelCalls",
+                      "benchmarkLookupEvents",
+                      "hiddenCanaryManifestSHA256",
+                      "hiddenCanariesTested",
+                      "hiddenCanaryViolations"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "validator": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "const": "verify-benchmark-integrity"
+                      },
+                      "version": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "scriptSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "version",
+                      "scriptSHA256"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "evidence": {
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "evaluatedAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "runID",
+                  "sessionID",
+                  "evaluatorToken",
+                  "protocol",
+                  "subject",
+                  "trace",
+                  "model",
+                  "audits",
+                  "activity",
+                  "validator",
+                  "evidence",
+                  "evaluatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.integrity.record({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/integrity/receipts/{receiptID}": {
+      "post": {
+        "operationId": "harness.integrity.receipt",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receiptID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a capability-protected runtime integrity receipt",
+        "responses": {
+          "200": {
+            "description": "Runtime integrity receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "receiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "submissionID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "contractFingerprint": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "subject": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "run",
+                                "candidate"
+                              ]
+                            },
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "artifact": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "artifact"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "evaluator": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "benchmark",
+                                "gate",
+                                "external"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "source"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "protocol": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "benchmark-integrity-v1"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "traceSchemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "minEvents": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000000
+                            },
+                            "minCoverage": {
+                              "type": "number",
+                              "minimum": 0.9,
+                              "maximum": 1
+                            },
+                            "assignedModel": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500
+                                },
+                                "baseArtifactSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "configSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "baseArtifactSHA256",
+                                "configSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "forbiddenModelArtifacts": {
+                              "default": [],
+                              "maxItems": 128,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "policy": {
+                              "type": "object",
+                              "properties": {
+                                "testItemDerivation": {
+                                  "type": "string",
+                                  "const": "forbidden"
+                                },
+                                "unapprovedExternalModels": {
+                                  "type": "string",
+                                  "const": "forbidden"
+                                },
+                                "benchmarkLookup": {
+                                  "type": "string",
+                                  "const": "forbidden"
+                                }
+                              },
+                              "required": [
+                                "testItemDerivation",
+                                "unapprovedExternalModels",
+                                "benchmarkLookup"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "auditors": {
+                              "minItems": 3,
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "test_item_contamination",
+                                      "external_model_use",
+                                      "benchmark_lookup"
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "promptSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "name",
+                                  "version",
+                                  "promptSHA256"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "hiddenCanaryManifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "minHiddenCanaries": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "validatorSHA256",
+                            "traceSchemaSHA256",
+                            "minEvents",
+                            "minCoverage",
+                            "assignedModel",
+                            "policy",
+                            "auditors",
+                            "hiddenCanaryManifestSHA256",
+                            "minHiddenCanaries"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "trace": {
+                          "type": "object",
+                          "properties": {
+                            "artifact": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "schemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "events": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000000
+                            },
+                            "dropped": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000
+                            },
+                            "startedAt": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "endedAt": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "artifact",
+                            "schemaSHA256",
+                            "events",
+                            "dropped",
+                            "startedAt",
+                            "endedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "traceCoverage": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "baseArtifactSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "configSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "outputArtifactSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "lineageVerified": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "baseArtifactSHA256",
+                            "configSHA256",
+                            "outputArtifactSHA256",
+                            "lineageVerified"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "audits": {
+                          "minItems": 3,
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "test_item_contamination",
+                                  "external_model_use",
+                                  "benchmark_lookup"
+                                ]
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "promptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "decision": {
+                                "type": "string",
+                                "enum": [
+                                  "clean",
+                                  "flagged",
+                                  "abstain"
+                                ]
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "evidence": {
+                                "minItems": 1,
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "name",
+                              "version",
+                              "promptSHA256",
+                              "decision",
+                              "confidence",
+                              "evidence"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "activity": {
+                          "type": "object",
+                          "properties": {
+                            "unapprovedExternalModelCalls": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000
+                            },
+                            "benchmarkLookupEvents": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000
+                            },
+                            "hiddenCanaryManifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "hiddenCanariesTested": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000
+                            },
+                            "hiddenCanaryViolations": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000
+                            }
+                          },
+                          "required": [
+                            "unapprovedExternalModelCalls",
+                            "benchmarkLookupEvents",
+                            "hiddenCanaryManifestSHA256",
+                            "hiddenCanariesTested",
+                            "hiddenCanaryViolations"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "validator": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "const": "verify-benchmark-integrity"
+                            },
+                            "version": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "scriptSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "scriptSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "checks": {
+                          "type": "object",
+                          "properties": {
+                            "traceCompleteness": {
+                              "type": "boolean"
+                            },
+                            "modelIdentity": {
+                              "type": "boolean"
+                            },
+                            "testItemContamination": {
+                              "type": "boolean"
+                            },
+                            "externalModelUse": {
+                              "type": "boolean"
+                            },
+                            "benchmarkLookup": {
+                              "type": "boolean"
+                            },
+                            "hiddenCanary": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "traceCompleteness",
+                            "modelIdentity",
+                            "testItemContamination",
+                            "externalModelUse",
+                            "benchmarkLookup",
+                            "hiddenCanary"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed"
+                          ]
+                        },
+                        "failures": {
+                          "maxItems": 14,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "trace_schema",
+                              "trace_event_floor",
+                              "trace_coverage",
+                              "model_name",
+                              "model_base_artifact",
+                              "model_config",
+                              "model_lineage",
+                              "forbidden_model_artifact",
+                              "test_item_contamination",
+                              "external_model_use",
+                              "benchmark_lookup",
+                              "hidden_canary_manifest",
+                              "hidden_canary_coverage",
+                              "hidden_canary_violation"
+                            ]
+                          }
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "evaluatedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "recordedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "receiptID",
+                        "submissionID",
+                        "runID",
+                        "sessionID",
+                        "contractFingerprint",
+                        "subject",
+                        "evaluator",
+                        "protocol",
+                        "trace",
+                        "traceCoverage",
+                        "model",
+                        "audits",
+                        "activity",
+                        "validator",
+                        "checks",
+                        "status",
+                        "failures",
+                        "evidence",
+                        "evaluatedAt",
+                        "recordedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.integrity.receipt({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/simulations/receipts": {
       "post": {
         "operationId": "harness.simulation.record",
@@ -23474,6 +25213,150 @@
                       ],
                       "additionalProperties": false
                     },
+                    "integrity": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "benchmark-integrity-v1"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "traceSchemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "minEvents": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000000
+                        },
+                        "minCoverage": {
+                          "type": "number",
+                          "minimum": 0.9,
+                          "maximum": 1
+                        },
+                        "assignedModel": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "baseArtifactSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "configSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "baseArtifactSHA256",
+                            "configSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "forbiddenModelArtifacts": {
+                          "default": [],
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "policy": {
+                          "type": "object",
+                          "properties": {
+                            "testItemDerivation": {
+                              "type": "string",
+                              "const": "forbidden"
+                            },
+                            "unapprovedExternalModels": {
+                              "type": "string",
+                              "const": "forbidden"
+                            },
+                            "benchmarkLookup": {
+                              "type": "string",
+                              "const": "forbidden"
+                            }
+                          },
+                          "required": [
+                            "testItemDerivation",
+                            "unapprovedExternalModels",
+                            "benchmarkLookup"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "auditors": {
+                          "minItems": 3,
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "test_item_contamination",
+                                  "external_model_use",
+                                  "benchmark_lookup"
+                                ]
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "promptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "name",
+                              "version",
+                              "promptSHA256"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "hiddenCanaryManifestSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "minHiddenCanaries": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "validatorSHA256",
+                        "traceSchemaSHA256",
+                        "minEvents",
+                        "minCoverage",
+                        "assignedModel",
+                        "policy",
+                        "auditors",
+                        "hiddenCanaryManifestSHA256",
+                        "minHiddenCanaries"
+                      ],
+                      "additionalProperties": false
+                    },
                     "simulation": {
                       "type": "object",
                       "properties": {
@@ -24404,6 +26287,150 @@
                     ],
                     "additionalProperties": false
                   },
+                  "integrity": {
+                    "type": "object",
+                    "properties": {
+                      "protocolVersion": {
+                        "type": "string",
+                        "const": "benchmark-integrity-v1"
+                      },
+                      "validatorSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "traceSchemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "minEvents": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000000
+                      },
+                      "minCoverage": {
+                        "type": "number",
+                        "minimum": 0.9,
+                        "maximum": 1
+                      },
+                      "assignedModel": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "baseArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "configSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "baseArtifactSHA256",
+                          "configSHA256"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "forbiddenModelArtifacts": {
+                        "default": [],
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "policy": {
+                        "type": "object",
+                        "properties": {
+                          "testItemDerivation": {
+                            "type": "string",
+                            "const": "forbidden"
+                          },
+                          "unapprovedExternalModels": {
+                            "type": "string",
+                            "const": "forbidden"
+                          },
+                          "benchmarkLookup": {
+                            "type": "string",
+                            "const": "forbidden"
+                          }
+                        },
+                        "required": [
+                          "testItemDerivation",
+                          "unapprovedExternalModels",
+                          "benchmarkLookup"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "auditors": {
+                        "minItems": 3,
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "test_item_contamination",
+                                "external_model_use",
+                                "benchmark_lookup"
+                              ]
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "promptSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "name",
+                            "version",
+                            "promptSHA256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "hiddenCanaryManifestSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "minHiddenCanaries": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000
+                      }
+                    },
+                    "required": [
+                      "protocolVersion",
+                      "validatorSHA256",
+                      "traceSchemaSHA256",
+                      "minEvents",
+                      "minCoverage",
+                      "assignedModel",
+                      "policy",
+                      "auditors",
+                      "hiddenCanaryManifestSHA256",
+                      "minHiddenCanaries"
+                    ],
+                    "additionalProperties": false
+                  },
                   "simulation": {
                     "type": "object",
                     "properties": {
@@ -25026,6 +27053,10 @@
                     "pattern": "^[a-f0-9]{64}$"
                   },
                   "launchReceiptID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "integrityReceiptID": {
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
@@ -26753,6 +28784,150 @@
                           ],
                           "additionalProperties": false
                         },
+                        "integrity": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "benchmark-integrity-v1"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "traceSchemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "minEvents": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000000
+                            },
+                            "minCoverage": {
+                              "type": "number",
+                              "minimum": 0.9,
+                              "maximum": 1
+                            },
+                            "assignedModel": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500
+                                },
+                                "baseArtifactSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "configSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "baseArtifactSHA256",
+                                "configSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "forbiddenModelArtifacts": {
+                              "default": [],
+                              "maxItems": 128,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "policy": {
+                              "type": "object",
+                              "properties": {
+                                "testItemDerivation": {
+                                  "type": "string",
+                                  "const": "forbidden"
+                                },
+                                "unapprovedExternalModels": {
+                                  "type": "string",
+                                  "const": "forbidden"
+                                },
+                                "benchmarkLookup": {
+                                  "type": "string",
+                                  "const": "forbidden"
+                                }
+                              },
+                              "required": [
+                                "testItemDerivation",
+                                "unapprovedExternalModels",
+                                "benchmarkLookup"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "auditors": {
+                              "minItems": 3,
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "test_item_contamination",
+                                      "external_model_use",
+                                      "benchmark_lookup"
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "promptSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "name",
+                                  "version",
+                                  "promptSHA256"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "hiddenCanaryManifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "minHiddenCanaries": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "validatorSHA256",
+                            "traceSchemaSHA256",
+                            "minEvents",
+                            "minCoverage",
+                            "assignedModel",
+                            "policy",
+                            "auditors",
+                            "hiddenCanaryManifestSHA256",
+                            "minHiddenCanaries"
+                          ],
+                          "additionalProperties": false
+                        },
                         "simulation": {
                           "type": "object",
                           "properties": {
@@ -27331,6 +29506,10 @@
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
                       },
+                      "integrityReceiptID": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
                       "evaluatorAuditReceiptID": {
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
@@ -27732,6 +29911,10 @@
                           "pattern": "^[a-f0-9]{64}$"
                         },
                         "launchReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "integrityReceiptID": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },

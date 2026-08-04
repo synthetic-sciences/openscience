@@ -6,6 +6,7 @@ import { HarnessContract } from "./contract"
 import { HarnessDomain } from "./domain"
 import { HarnessJudge } from "./judge"
 import { HarnessLaunch } from "./launch"
+import { HarnessIntegrity } from "./integrity"
 import { HarnessSimulation } from "./simulation"
 
 export namespace HarnessEvaluation {
@@ -60,6 +61,10 @@ export namespace HarnessEvaluation {
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
       launchReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      integrityReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -200,6 +205,25 @@ export namespace HarnessEvaluation {
         requirePassed: evaluation.status === "passed" && final(evaluation),
         evaluatedAt: evaluation.evaluatedAt,
         recordedAt: evaluation.recordedAt,
+      })
+    }
+    if (evaluation.integrityReceiptID && !contract.integrity) {
+      throw new Error(`Evaluation references an integrity receipt without a bound runtime integrity protocol`)
+    }
+    if (contract.integrity && evaluation.status === "passed" && final(evaluation) && !evaluation.integrityReceiptID) {
+      throw new Error(`A passing final evaluation must reference a runtime integrity receipt`)
+    }
+    if (evaluation.integrityReceiptID) {
+      await HarnessIntegrity.assert({
+        contract,
+        receiptID: evaluation.integrityReceiptID,
+        subject:
+          evaluation.subject?.type === "candidate"
+            ? { type: "candidate", id: evaluation.subject.id }
+            : { type: "run", id: contract.runID },
+        requirePassed: evaluation.status === "passed" && final(evaluation),
+        evaluatedAt: evaluation.evaluatedAt,
+        recordedAt: evaluation.recordedAt!,
       })
     }
     if (contract.simulation && evaluation.status === "passed" && final(evaluation) && !evaluation.simulationReceiptID) {

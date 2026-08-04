@@ -65,6 +65,10 @@ export namespace HarnessReport {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          integrityReceiptID: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
           evaluatorAuditReceiptID: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
@@ -166,6 +170,7 @@ export namespace HarnessReport {
       packs: (contract.packs ?? []).toSorted(),
       simulation: contract.simulation,
       launch: contract.launch,
+      integrity: contract.integrity,
       evaluatorAudit: contract.evaluatorAudit,
       contamination: contract.contamination,
     })
@@ -231,6 +236,7 @@ export namespace HarnessReport {
         evaluatorVersion: contract.benchmark.evaluatorVersion,
         simulationReceiptID: evaluation?.simulationReceiptID,
         launchReceiptID: evaluation?.launchReceiptID,
+        integrityReceiptID: evaluation?.integrityReceiptID,
         evaluatorAuditReceiptID: evaluation?.evaluatorAuditReceiptID,
         evaluations: evaluations.length,
       },

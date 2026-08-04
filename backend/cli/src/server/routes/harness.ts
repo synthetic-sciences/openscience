@@ -10,6 +10,7 @@ import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
 import { HarnessJudge } from "@/session/harness/judge"
 import { HarnessLaunch } from "@/session/harness/launch"
+import { HarnessIntegrity } from "@/session/harness/integrity"
 import { HarnessOrchestrator } from "@/session/harness/orchestrator"
 import { HarnessReport } from "@/session/harness/report"
 import { HarnessSimulation } from "@/session/harness/simulation"
@@ -237,6 +238,49 @@ export const HarnessRoutes = lazy(() =>
         const input = c.req.valid("json")
         await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
         return c.json(await HarnessLaunch.read(input.sessionID, c.req.valid("param").receiptID))
+      },
+    )
+    .post(
+      "/integrity/receipts",
+      describeRoute({
+        summary: "Record evaluator-authenticated runtime integrity",
+        description:
+          "Derives trace-completeness, model-identity, contamination, external-model, benchmark-lookup, and hidden-canary gates against an immutable protocol.",
+        operationId: "harness.integrity.record",
+        responses: {
+          200: {
+            description: "Immutable runtime integrity receipt",
+            content: { "application/json": { schema: resolver(HarnessIntegrity.Info) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessIntegrity.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessIntegrity.record(input, contract))
+      },
+    )
+    .post(
+      "/integrity/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected runtime integrity receipt",
+        operationId: "harness.integrity.receipt",
+        responses: {
+          200: {
+            description: "Runtime integrity receipt",
+            content: { "application/json": { schema: resolver(HarnessIntegrity.Info.nullable()) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessIntegrity.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessIntegrity.read(input.sessionID, c.req.valid("param").receiptID))
       },
     )
     .post(

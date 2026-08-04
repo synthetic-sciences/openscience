@@ -8913,6 +8913,479 @@ export type HarnessLaunchReceiptResponses = {
 
 export type HarnessLaunchReceiptResponse = HarnessLaunchReceiptResponses[keyof HarnessLaunchReceiptResponses]
 
+export type HarnessIntegrityRecordData = {
+  body?: {
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    evaluatorToken: string
+    protocol: {
+      protocolVersion: "benchmark-integrity-v1"
+      validatorSHA256: string
+      traceSchemaSHA256: string
+      minEvents: number
+      minCoverage: number
+      assignedModel: {
+        name: string
+        baseArtifactSHA256: string
+        configSHA256: string
+      }
+      forbiddenModelArtifacts?: Array<string>
+      policy: {
+        testItemDerivation: "forbidden"
+        unapprovedExternalModels: "forbidden"
+        benchmarkLookup: "forbidden"
+      }
+      auditors: [
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+      ]
+      hiddenCanaryManifestSHA256: string
+      minHiddenCanaries: number
+    }
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    trace: {
+      artifact: {
+        uri: string
+        sha256: string
+      }
+      schemaSHA256: string
+      events: number
+      dropped: number
+      startedAt: number
+      endedAt: number
+    }
+    model: {
+      name: string
+      baseArtifactSHA256: string
+      configSHA256: string
+      outputArtifactSHA256: string
+      lineageVerified: boolean
+    }
+    audits: [
+      {
+        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+        name: string
+        version: string
+        promptSHA256: string
+        decision: "clean" | "flagged" | "abstain"
+        confidence: number
+        evidence: Array<string>
+      },
+      {
+        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+        name: string
+        version: string
+        promptSHA256: string
+        decision: "clean" | "flagged" | "abstain"
+        confidence: number
+        evidence: Array<string>
+      },
+      {
+        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+        name: string
+        version: string
+        promptSHA256: string
+        decision: "clean" | "flagged" | "abstain"
+        confidence: number
+        evidence: Array<string>
+      },
+    ]
+    activity: {
+      unapprovedExternalModelCalls: number
+      benchmarkLookupEvents: number
+      hiddenCanaryManifestSHA256: string
+      hiddenCanariesTested: number
+      hiddenCanaryViolations: number
+    }
+    validator: {
+      name: "verify-benchmark-integrity"
+      version: 1
+      scriptSHA256: string
+    }
+    evidence: Array<string>
+    evaluatedAt: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/integrity/receipts"
+}
+
+export type HarnessIntegrityRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessIntegrityRecordError = HarnessIntegrityRecordErrors[keyof HarnessIntegrityRecordErrors]
+
+export type HarnessIntegrityRecordResponses = {
+  /**
+   * Immutable runtime integrity receipt
+   */
+  200: {
+    schemaVersion: 1
+    receiptID: string
+    submissionID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "external"
+    }
+    protocol: {
+      protocolVersion: "benchmark-integrity-v1"
+      validatorSHA256: string
+      traceSchemaSHA256: string
+      minEvents: number
+      minCoverage: number
+      assignedModel: {
+        name: string
+        baseArtifactSHA256: string
+        configSHA256: string
+      }
+      forbiddenModelArtifacts?: Array<string>
+      policy: {
+        testItemDerivation: "forbidden"
+        unapprovedExternalModels: "forbidden"
+        benchmarkLookup: "forbidden"
+      }
+      auditors: [
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+      ]
+      hiddenCanaryManifestSHA256: string
+      minHiddenCanaries: number
+    }
+    trace: {
+      artifact: {
+        uri: string
+        sha256: string
+      }
+      schemaSHA256: string
+      events: number
+      dropped: number
+      startedAt: number
+      endedAt: number
+    }
+    traceCoverage: number
+    model: {
+      name: string
+      baseArtifactSHA256: string
+      configSHA256: string
+      outputArtifactSHA256: string
+      lineageVerified: boolean
+    }
+    audits: [
+      {
+        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+        name: string
+        version: string
+        promptSHA256: string
+        decision: "clean" | "flagged" | "abstain"
+        confidence: number
+        evidence: Array<string>
+      },
+      {
+        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+        name: string
+        version: string
+        promptSHA256: string
+        decision: "clean" | "flagged" | "abstain"
+        confidence: number
+        evidence: Array<string>
+      },
+      {
+        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+        name: string
+        version: string
+        promptSHA256: string
+        decision: "clean" | "flagged" | "abstain"
+        confidence: number
+        evidence: Array<string>
+      },
+    ]
+    activity: {
+      unapprovedExternalModelCalls: number
+      benchmarkLookupEvents: number
+      hiddenCanaryManifestSHA256: string
+      hiddenCanariesTested: number
+      hiddenCanaryViolations: number
+    }
+    validator: {
+      name: "verify-benchmark-integrity"
+      version: 1
+      scriptSHA256: string
+    }
+    checks: {
+      traceCompleteness: boolean
+      modelIdentity: boolean
+      testItemContamination: boolean
+      externalModelUse: boolean
+      benchmarkLookup: boolean
+      hiddenCanary: boolean
+    }
+    status: "passed" | "failed"
+    failures: Array<
+      | "trace_schema"
+      | "trace_event_floor"
+      | "trace_coverage"
+      | "model_name"
+      | "model_base_artifact"
+      | "model_config"
+      | "model_lineage"
+      | "forbidden_model_artifact"
+      | "test_item_contamination"
+      | "external_model_use"
+      | "benchmark_lookup"
+      | "hidden_canary_manifest"
+      | "hidden_canary_coverage"
+      | "hidden_canary_violation"
+    >
+    evidence: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessIntegrityRecordResponse = HarnessIntegrityRecordResponses[keyof HarnessIntegrityRecordResponses]
+
+export type HarnessIntegrityReceiptData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/integrity/receipts/{receiptID}"
+}
+
+export type HarnessIntegrityReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessIntegrityReceiptError = HarnessIntegrityReceiptErrors[keyof HarnessIntegrityReceiptErrors]
+
+export type HarnessIntegrityReceiptResponses = {
+  /**
+   * Runtime integrity receipt
+   */
+  200: {
+    schemaVersion: 1
+    receiptID: string
+    submissionID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "external"
+    }
+    protocol: {
+      protocolVersion: "benchmark-integrity-v1"
+      validatorSHA256: string
+      traceSchemaSHA256: string
+      minEvents: number
+      minCoverage: number
+      assignedModel: {
+        name: string
+        baseArtifactSHA256: string
+        configSHA256: string
+      }
+      forbiddenModelArtifacts?: Array<string>
+      policy: {
+        testItemDerivation: "forbidden"
+        unapprovedExternalModels: "forbidden"
+        benchmarkLookup: "forbidden"
+      }
+      auditors: [
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+      ]
+      hiddenCanaryManifestSHA256: string
+      minHiddenCanaries: number
+    }
+    trace: {
+      artifact: {
+        uri: string
+        sha256: string
+      }
+      schemaSHA256: string
+      events: number
+      dropped: number
+      startedAt: number
+      endedAt: number
+    }
+    traceCoverage: number
+    model: {
+      name: string
+      baseArtifactSHA256: string
+      configSHA256: string
+      outputArtifactSHA256: string
+      lineageVerified: boolean
+    }
+    audits: [
+      {
+        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+        name: string
+        version: string
+        promptSHA256: string
+        decision: "clean" | "flagged" | "abstain"
+        confidence: number
+        evidence: Array<string>
+      },
+      {
+        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+        name: string
+        version: string
+        promptSHA256: string
+        decision: "clean" | "flagged" | "abstain"
+        confidence: number
+        evidence: Array<string>
+      },
+      {
+        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+        name: string
+        version: string
+        promptSHA256: string
+        decision: "clean" | "flagged" | "abstain"
+        confidence: number
+        evidence: Array<string>
+      },
+    ]
+    activity: {
+      unapprovedExternalModelCalls: number
+      benchmarkLookupEvents: number
+      hiddenCanaryManifestSHA256: string
+      hiddenCanariesTested: number
+      hiddenCanaryViolations: number
+    }
+    validator: {
+      name: "verify-benchmark-integrity"
+      version: 1
+      scriptSHA256: string
+    }
+    checks: {
+      traceCompleteness: boolean
+      modelIdentity: boolean
+      testItemContamination: boolean
+      externalModelUse: boolean
+      benchmarkLookup: boolean
+      hiddenCanary: boolean
+    }
+    status: "passed" | "failed"
+    failures: Array<
+      | "trace_schema"
+      | "trace_event_floor"
+      | "trace_coverage"
+      | "model_name"
+      | "model_base_artifact"
+      | "model_config"
+      | "model_lineage"
+      | "forbidden_model_artifact"
+      | "test_item_contamination"
+      | "external_model_use"
+      | "benchmark_lookup"
+      | "hidden_canary_manifest"
+      | "hidden_canary_coverage"
+      | "hidden_canary_violation"
+    >
+    evidence: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  } | null
+}
+
+export type HarnessIntegrityReceiptResponse = HarnessIntegrityReceiptResponses[keyof HarnessIntegrityReceiptResponses]
+
 export type HarnessSimulationRecordData = {
   body?: {
     schemaVersion: 1
@@ -9705,6 +10178,46 @@ export type HarnessBindData = {
         tolerance?: number
       }
     }
+    integrity?: {
+      protocolVersion: "benchmark-integrity-v1"
+      validatorSHA256: string
+      traceSchemaSHA256: string
+      minEvents: number
+      minCoverage: number
+      assignedModel: {
+        name: string
+        baseArtifactSHA256: string
+        configSHA256: string
+      }
+      forbiddenModelArtifacts?: Array<string>
+      policy: {
+        testItemDerivation: "forbidden"
+        unapprovedExternalModels: "forbidden"
+        benchmarkLookup: "forbidden"
+      }
+      auditors: [
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+      ]
+      hiddenCanaryManifestSHA256: string
+      minHiddenCanaries: number
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -9934,6 +10447,46 @@ export type HarnessBindResponses = {
         tolerance?: number
       }
     }
+    integrity?: {
+      protocolVersion: "benchmark-integrity-v1"
+      validatorSHA256: string
+      traceSchemaSHA256: string
+      minEvents: number
+      minCoverage: number
+      assignedModel: {
+        name: string
+        baseArtifactSHA256: string
+        configSHA256: string
+      }
+      forbiddenModelArtifacts?: Array<string>
+      policy: {
+        testItemDerivation: "forbidden"
+        unapprovedExternalModels: "forbidden"
+        benchmarkLookup: "forbidden"
+      }
+      auditors: [
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+      ]
+      hiddenCanaryManifestSHA256: string
+      minHiddenCanaries: number
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -10045,6 +10598,7 @@ export type HarnessEvaluateData = {
     stage?: string
     simulationReceiptID?: string
     launchReceiptID?: string
+    integrityReceiptID?: string
     evaluatorAuditReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
@@ -10493,6 +11047,46 @@ export type HarnessContractResponses = {
         tolerance?: number
       }
     }
+    integrity?: {
+      protocolVersion: "benchmark-integrity-v1"
+      validatorSHA256: string
+      traceSchemaSHA256: string
+      minEvents: number
+      minCoverage: number
+      assignedModel: {
+        name: string
+        baseArtifactSHA256: string
+        configSHA256: string
+      }
+      forbiddenModelArtifacts?: Array<string>
+      policy: {
+        testItemDerivation: "forbidden"
+        unapprovedExternalModels: "forbidden"
+        benchmarkLookup: "forbidden"
+      }
+      auditors: [
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+        },
+      ]
+      hiddenCanaryManifestSHA256: string
+      minHiddenCanaries: number
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -10632,6 +11226,7 @@ export type HarnessEvaluationsResponses = {
     }
     simulationReceiptID?: string
     launchReceiptID?: string
+    integrityReceiptID?: string
     evaluatorAuditReceiptID?: string
     evaluator: {
       name: string
@@ -10749,6 +11344,7 @@ export type HarnessReportResponses = {
       evaluatorVersion?: string
       simulationReceiptID?: string
       launchReceiptID?: string
+      integrityReceiptID?: string
       evaluatorAuditReceiptID?: string
       evaluations: number
     }

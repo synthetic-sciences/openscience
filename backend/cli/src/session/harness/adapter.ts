@@ -35,6 +35,7 @@ export namespace HarnessAdapter {
       orchestration: HarnessContract.Orchestration.optional(),
       audit: HarnessContract.Audit.optional(),
       launch: HarnessContract.Launch.optional(),
+      integrity: HarnessContract.Integrity.optional(),
       simulation: HarnessContract.Simulation.optional(),
       evaluatorAudit: z
         .object({
@@ -138,6 +139,10 @@ export namespace HarnessAdapter {
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
       launchReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      integrityReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -293,6 +298,7 @@ export namespace HarnessAdapter {
       orchestration: task.orchestration,
       audit: task.audit,
       launch: task.launch,
+      integrity: task.integrity,
       simulation: task.simulation,
       evaluatorAudit: task.evaluatorAudit?.protocol,
       packs,
@@ -394,6 +400,7 @@ export namespace HarnessAdapter {
       fidelity,
       simulationReceiptID: value.simulationReceiptID,
       launchReceiptID: value.launchReceiptID,
+      integrityReceiptID: value.integrityReceiptID,
       evaluatorAuditReceiptID: value.evaluatorAuditReceiptID,
       evaluator: binding.evaluator,
       status: value.status,

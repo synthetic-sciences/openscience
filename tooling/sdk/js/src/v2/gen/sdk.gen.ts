@@ -115,6 +115,10 @@ import type {
   HarnessEvaluateResponses,
   HarnessEvaluationsErrors,
   HarnessEvaluationsResponses,
+  HarnessIntegrityReceiptErrors,
+  HarnessIntegrityReceiptResponses,
+  HarnessIntegrityRecordErrors,
+  HarnessIntegrityRecordResponses,
   HarnessJudgeReceiptErrors,
   HarnessJudgeReceiptResponses,
   HarnessJudgeRecordErrors,
@@ -4279,6 +4283,212 @@ export class Launch extends HeyApiClient {
   }
 }
 
+export class Integrity extends HeyApiClient {
+  /**
+   * Record evaluator-authenticated runtime integrity
+   *
+   * Derives trace-completeness, model-identity, contamination, external-model, benchmark-lookup, and hidden-canary gates against an immutable protocol.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      schemaVersion?: 1
+      runID?: string
+      sessionID?: string
+      evaluatorToken?: string
+      protocol?: {
+        protocolVersion: "benchmark-integrity-v1"
+        validatorSHA256: string
+        traceSchemaSHA256: string
+        minEvents: number
+        minCoverage: number
+        assignedModel: {
+          name: string
+          baseArtifactSHA256: string
+          configSHA256: string
+        }
+        forbiddenModelArtifacts?: Array<string>
+        policy: {
+          testItemDerivation: "forbidden"
+          unapprovedExternalModels: "forbidden"
+          benchmarkLookup: "forbidden"
+        }
+        auditors: [
+          {
+            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+            name: string
+            version: string
+            promptSHA256: string
+          },
+          {
+            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+            name: string
+            version: string
+            promptSHA256: string
+          },
+          {
+            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+            name: string
+            version: string
+            promptSHA256: string
+          },
+        ]
+        hiddenCanaryManifestSHA256: string
+        minHiddenCanaries: number
+      }
+      subject?: {
+        type: "run" | "candidate"
+        id: string
+        artifact: {
+          uri: string
+          sha256: string
+        }
+      }
+      trace?: {
+        artifact: {
+          uri: string
+          sha256: string
+        }
+        schemaSHA256: string
+        events: number
+        dropped: number
+        startedAt: number
+        endedAt: number
+      }
+      model?: {
+        name: string
+        baseArtifactSHA256: string
+        configSHA256: string
+        outputArtifactSHA256: string
+        lineageVerified: boolean
+      }
+      audits?: [
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+          decision: "clean" | "flagged" | "abstain"
+          confidence: number
+          evidence: Array<string>
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+          decision: "clean" | "flagged" | "abstain"
+          confidence: number
+          evidence: Array<string>
+        },
+        {
+          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+          name: string
+          version: string
+          promptSHA256: string
+          decision: "clean" | "flagged" | "abstain"
+          confidence: number
+          evidence: Array<string>
+        },
+      ]
+      activity?: {
+        unapprovedExternalModelCalls: number
+        benchmarkLookupEvents: number
+        hiddenCanaryManifestSHA256: string
+        hiddenCanariesTested: number
+        hiddenCanaryViolations: number
+      }
+      validator?: {
+        name: "verify-benchmark-integrity"
+        version: 1
+        scriptSHA256: string
+      }
+      evidence?: Array<string>
+      evaluatedAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "schemaVersion" },
+            { in: "body", key: "runID" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "protocol" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "trace" },
+            { in: "body", key: "model" },
+            { in: "body", key: "audits" },
+            { in: "body", key: "activity" },
+            { in: "body", key: "validator" },
+            { in: "body", key: "evidence" },
+            { in: "body", key: "evaluatedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessIntegrityRecordResponses,
+      HarnessIntegrityRecordErrors,
+      ThrowOnError
+    >({
+      url: "/harness/integrity/receipts",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected runtime integrity receipt
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessIntegrityReceiptResponses,
+      HarnessIntegrityReceiptErrors,
+      ThrowOnError
+    >({
+      url: "/harness/integrity/receipts/{receiptID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Simulation extends HeyApiClient {
   /**
    * Record an evaluator-authenticated simulator validation
@@ -4794,6 +5004,46 @@ export class Harness extends HeyApiClient {
           tolerance?: number
         }
       }
+      integrity?: {
+        protocolVersion: "benchmark-integrity-v1"
+        validatorSHA256: string
+        traceSchemaSHA256: string
+        minEvents: number
+        minCoverage: number
+        assignedModel: {
+          name: string
+          baseArtifactSHA256: string
+          configSHA256: string
+        }
+        forbiddenModelArtifacts?: Array<string>
+        policy: {
+          testItemDerivation: "forbidden"
+          unapprovedExternalModels: "forbidden"
+          benchmarkLookup: "forbidden"
+        }
+        auditors: [
+          {
+            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+            name: string
+            version: string
+            promptSHA256: string
+          },
+          {
+            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+            name: string
+            version: string
+            promptSHA256: string
+          },
+          {
+            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
+            name: string
+            version: string
+            promptSHA256: string
+          },
+        ]
+        hiddenCanaryManifestSHA256: string
+        minHiddenCanaries: number
+      }
       simulation?: {
         kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
         engine: {
@@ -4926,6 +5176,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "orchestration" },
             { in: "body", key: "audit" },
             { in: "body", key: "launch" },
+            { in: "body", key: "integrity" },
             { in: "body", key: "simulation" },
             { in: "body", key: "evaluatorAudit" },
             { in: "body", key: "extraPacks" },
@@ -4971,6 +5222,7 @@ export class Harness extends HeyApiClient {
       stage?: string
       simulationReceiptID?: string
       launchReceiptID?: string
+      integrityReceiptID?: string
       evaluatorAuditReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
@@ -5009,6 +5261,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "stage" },
             { in: "body", key: "simulationReceiptID" },
             { in: "body", key: "launchReceiptID" },
+            { in: "body", key: "integrityReceiptID" },
             { in: "body", key: "evaluatorAuditReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
@@ -5190,6 +5443,11 @@ export class Harness extends HeyApiClient {
   private _launch?: Launch
   get launch(): Launch {
     return (this._launch ??= new Launch({ client: this.client }))
+  }
+
+  private _integrity?: Integrity
+  get integrity(): Integrity {
+    return (this._integrity ??= new Integrity({ client: this.client }))
   }
 
   private _simulation?: Simulation
