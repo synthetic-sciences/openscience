@@ -1,6 +1,7 @@
 import path from "path"
 import z from "zod"
 import { Global } from "@/global"
+import { JsonStore } from "@/util/jsonstore"
 import { HarnessContract } from "./contract"
 import { HarnessDomain } from "./domain"
 
@@ -63,8 +64,39 @@ export namespace HarnessEvaluation {
     })
   export type Info = z.infer<typeof Info>
 
+  const State = z
+    .object({
+      schemaVersion: z.literal(1),
+      items: z.record(z.string(), Info),
+      order: z.array(z.string()),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (new Set(value.order).size !== value.order.length) {
+        ctx.addIssue({ code: "custom", path: ["order"], message: "Evaluation journal order must be unique" })
+      }
+      for (const key of value.order) {
+        if (value.items[key]) continue
+        ctx.addIssue({ code: "custom", path: ["order"], message: `Evaluation journal is missing ${key}` })
+      }
+    })
+  type State = z.infer<typeof State>
+
   const root = path.join(Global.Path.data, "harness", "evaluations")
   const file = (sessionID: string) => path.join(root, `${encodeURIComponent(sessionID)}.json`)
+  const key = (input: Info["subject"]) => (input ? `${input.type}:${input.id}` : "run")
+  const empty = (): State => ({ schemaVersion: 1, items: {}, order: [] })
+
+  function state(input: Record<string, unknown>) {
+    const legacy = Info.safeParse(input)
+    if (!legacy.success) return State.parse(Object.keys(input).length ? input : empty())
+    const id = key(legacy.data.subject)
+    return State.parse({ schemaVersion: 1, items: { [id]: legacy.data }, order: [id] })
+  }
+
+  export function fingerprint(input: Info) {
+    return new Bun.CryptoHasher("sha256").update(JSON.stringify(Info.parse(input))).digest("hex")
+  }
 
   export function verified(input: Info) {
     const evaluation = Info.parse(input)
@@ -85,16 +117,47 @@ export namespace HarnessEvaluation {
         `Evaluation source ${evaluation.evaluator.name} does not match contract evaluator ${contract.benchmark.evaluator}`,
       )
     }
+    if (
+      contract.benchmark.evaluatorVersion !== undefined &&
+      contract.benchmark.evaluatorVersion !== evaluation.evaluator.version
+    ) {
+      throw new Error(
+        `Evaluation version ${evaluation.evaluator.version} does not match contract evaluator version ${contract.benchmark.evaluatorVersion}`,
+      )
+    }
+    if (
+      contract.benchmark.evaluatorSource !== undefined &&
+      contract.benchmark.evaluatorSource !== evaluation.evaluator.source
+    ) {
+      throw new Error(
+        `Evaluation source ${evaluation.evaluator.source} does not match contract source ${contract.benchmark.evaluatorSource}`,
+      )
+    }
     if (evaluation.status === "passed") HarnessDomain.assert(contract.packs ?? [], evaluation.checks)
-    await Bun.write(file(evaluation.sessionID), JSON.stringify(evaluation, null, 2) + "\n")
+    await JsonStore.update(file(evaluation.sessionID), (data) => {
+      const current = state(data)
+      const id = key(evaluation.subject)
+      const existing = current.items[id]
+      if (existing && fingerprint(existing) === fingerprint(evaluation)) return current
+      if (existing) throw new Error(`Evaluation for ${id} is immutable once recorded`)
+      return State.parse({
+        ...current,
+        items: { ...current.items, [id]: evaluation },
+        order: [...current.order, id],
+      })
+    })
     return evaluation
   }
 
-  export async function read(sessionID: string): Promise<Info | null> {
-    const data = await Bun.file(file(sessionID))
-      .json()
-      .catch(() => null)
-    const parsed = Info.safeParse(data)
-    return parsed.success ? parsed.data : null
+  export async function list(sessionID: string): Promise<Info[]> {
+    const data = await JsonStore.read(file(sessionID))
+    const parsed = state(data)
+    return parsed.order.map((id) => parsed.items[id]!)
+  }
+
+  export async function read(sessionID: string, subject?: Info["subject"]): Promise<Info | null> {
+    const items = await list(sessionID)
+    if (!subject) return items.at(-1) ?? null
+    return items.find((item) => key(item.subject) === key(subject)) ?? null
   }
 }

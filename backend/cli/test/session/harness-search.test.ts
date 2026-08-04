@@ -298,12 +298,13 @@ describe("harness candidate graph", () => {
     await setup("search-stop")
     const seed = await add("search-stop", "seed")
     await evaluate("search-stop", seed.id, 0.5)
-    await HarnessEvaluation.record({
-      ...(await HarnessEvaluation.read("search-stop"))!,
-      score: 0.6,
-      metrics: { score: 0.6 },
-    })
-    await expect(HarnessSearch.verify({ sessionID: "search-stop", candidateID: seed.id })).rejects.toThrow("immutable")
+    await expect(
+      HarnessEvaluation.record({
+        ...(await HarnessEvaluation.read("search-stop"))!,
+        score: 0.6,
+        metrics: { score: 0.6 },
+      }),
+    ).rejects.toThrow("immutable")
     const stopped = await HarnessSearch.finish("search-stop", "user_cancelled")
     expect(await HarnessSearch.read("search-stop")).toEqual(stopped)
   })

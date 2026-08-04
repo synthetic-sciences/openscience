@@ -6517,6 +6517,14 @@ export type SessionTraceResponses = {
       delayMs: number
       createdAt: number
     }>
+    profiles: Array<{
+      messageID: string
+      id: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+      source: "contract" | "heuristic" | "control"
+      confidence: number
+      reasons: Array<string>
+      selectedAt: number
+    }>
     privacy: {
       local: true
       atlasRequired: false
@@ -7459,6 +7467,489 @@ export type PermissionRespondResponses = {
 }
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
+
+export type HarnessBenchmarksData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/benchmarks"
+}
+
+export type HarnessBenchmarksResponses = {
+  /**
+   * Benchmark adapter manifests
+   */
+  200: Array<{
+    id:
+      | "statistics"
+      | "bixbench"
+      | "lifescience"
+      | "genebench"
+      | "biomni"
+      | "physics"
+      | "pde"
+      | "chembench"
+      | "matscibench"
+      | "mle"
+      | "posttrain"
+      | "ale"
+      | "weather"
+      | "researchclaw"
+    title: string
+    family: "data" | "biology" | "physics" | "chemistry" | "ml" | "generalist"
+    aliases: Array<string>
+    profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+    profiles: Array<"react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast">
+    packs: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+    task: string
+  }>
+}
+
+export type HarnessBenchmarksResponse = HarnessBenchmarksResponses[keyof HarnessBenchmarksResponses]
+
+export type HarnessBindData = {
+  body?: {
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    benchmark: string
+    version: string
+    taskID: string
+    split: "development" | "validation" | "held_out" | "release"
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "external"
+      token: string
+    }
+    objective: string
+    profile?: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+    extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+    metric?: {
+      name?: string
+      direction: "maximize" | "minimize" | "pass"
+      target?: number
+    }
+    model: {
+      provider: string
+      name: string
+      effort?: string
+    }
+    tools?: Array<string>
+    skills?: Array<{
+      name: string
+      version?: string
+      sha256?: string
+    }>
+    budget: {
+      wallTimeMs?: number
+      steps?: number
+      candidates?: number
+      tokens?: number
+      costUSD?: number
+      cpuHours?: number
+      gpuHours?: number
+    }
+    seed: number
+    intervention: "autonomous" | "human_reprompted"
+    contamination: {
+      policy: string
+      hiddenTestsAccessible: false
+      publicDataCutoff?: string
+    }
+    createdAt: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/runs"
+}
+
+export type HarnessBindErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessBindError = HarnessBindErrors[keyof HarnessBindErrors]
+
+export type HarnessBindResponses = {
+  /**
+   * Bound harness contract
+   */
+  200: {
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    objective: string
+    benchmark: {
+      name: string
+      version: string
+      taskID: string
+      split: "development" | "validation" | "held_out" | "release"
+      evaluator: string
+      evaluatorVersion?: string
+      evaluatorSource?: "benchmark" | "gate" | "human" | "external"
+      metric?: string
+      direction?: "maximize" | "minimize" | "pass"
+      target?: number
+    }
+    profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+    packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+    model: {
+      provider: string
+      name: string
+      effort?: string
+    }
+    tools?: Array<string>
+    skills?: Array<{
+      name: string
+      version?: string
+      sha256?: string
+    }>
+    budget: {
+      wallTimeMs?: number
+      steps?: number
+      candidates?: number
+      tokens?: number
+      costUSD?: number
+      cpuHours?: number
+      gpuHours?: number
+    }
+    seed: number
+    intervention: "autonomous" | "human_reprompted"
+    contamination: {
+      policy: string
+      hiddenTestsAccessible: false
+      publicDataCutoff?: string
+    }
+    createdAt: number
+  }
+}
+
+export type HarnessBindResponse = HarnessBindResponses[keyof HarnessBindResponses]
+
+export type HarnessEvaluateData = {
+  body?: {
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    evaluatorToken: string
+    candidateID?: string
+    status: "passed" | "failed" | "inconclusive"
+    score?: number
+    metrics?: {
+      [key: string]: number
+    }
+    checks: Array<{
+      id: string
+      status: "passed" | "failed" | "inconclusive"
+      blocking: boolean
+      score?: number
+      evidence?: Array<string>
+      note?: string
+    }>
+    evidence: Array<string>
+    evaluatedAt: number
+    notes?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/evaluations"
+}
+
+export type HarnessEvaluateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessEvaluateError = HarnessEvaluateErrors[keyof HarnessEvaluateErrors]
+
+export type HarnessEvaluateResponses = {
+  /**
+   * Recorded external evaluation
+   */
+  200: unknown
+}
+
+export type HarnessCompareData = {
+  body?: {
+    sessionIDs: Array<string>
+    baselineRunID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/compare"
+}
+
+export type HarnessCompareErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessCompareError = HarnessCompareErrors[keyof HarnessCompareErrors]
+
+export type HarnessCompareResponses = {
+  /**
+   * Comparable run deltas
+   */
+  200: unknown
+}
+
+export type HarnessContractData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/runs/{sessionID}/contract"
+}
+
+export type HarnessContractErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessContractError = HarnessContractErrors[keyof HarnessContractErrors]
+
+export type HarnessContractResponses = {
+  /**
+   * Harness contract
+   */
+  200: {
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    objective: string
+    benchmark: {
+      name: string
+      version: string
+      taskID: string
+      split: "development" | "validation" | "held_out" | "release"
+      evaluator: string
+      evaluatorVersion?: string
+      evaluatorSource?: "benchmark" | "gate" | "human" | "external"
+      metric?: string
+      direction?: "maximize" | "minimize" | "pass"
+      target?: number
+    }
+    profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+    packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+    model: {
+      provider: string
+      name: string
+      effort?: string
+    }
+    tools?: Array<string>
+    skills?: Array<{
+      name: string
+      version?: string
+      sha256?: string
+    }>
+    budget: {
+      wallTimeMs?: number
+      steps?: number
+      candidates?: number
+      tokens?: number
+      costUSD?: number
+      cpuHours?: number
+      gpuHours?: number
+    }
+    seed: number
+    intervention: "autonomous" | "human_reprompted"
+    contamination: {
+      policy: string
+      hiddenTestsAccessible: false
+      publicDataCutoff?: string
+    }
+    createdAt: number
+  } | null
+}
+
+export type HarnessContractResponse = HarnessContractResponses[keyof HarnessContractResponses]
+
+export type HarnessEvaluationsData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/runs/{sessionID}/evaluations"
+}
+
+export type HarnessEvaluationsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessEvaluationsError = HarnessEvaluationsErrors[keyof HarnessEvaluationsErrors]
+
+export type HarnessEvaluationsResponses = {
+  /**
+   * Evaluation journal
+   */
+  200: Array<{
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    subject?: {
+      type: "run" | "candidate"
+      id: string
+    }
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "human" | "external"
+    }
+    status: "passed" | "failed" | "inconclusive"
+    score?: number
+    metrics?: {
+      [key: string]: number
+    }
+    checks: Array<{
+      id: string
+      status: "passed" | "failed" | "inconclusive"
+      blocking: boolean
+      score?: number
+      evidence?: Array<string>
+      note?: string
+    }>
+    evidence: Array<string>
+    evaluatedAt: number
+    notes?: string
+  }>
+}
+
+export type HarnessEvaluationsResponse = HarnessEvaluationsResponses[keyof HarnessEvaluationsResponses]
+
+export type HarnessReportData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/runs/{sessionID}/report"
+}
+
+export type HarnessReportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessReportError = HarnessReportErrors[keyof HarnessReportErrors]
+
+export type HarnessReportResponses = {
+  /**
+   * Quality-cost report
+   */
+  200: {
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    comparisonKey: string
+    benchmark: {
+      id:
+        | "statistics"
+        | "bixbench"
+        | "lifescience"
+        | "genebench"
+        | "biomni"
+        | "physics"
+        | "pde"
+        | "chembench"
+        | "matscibench"
+        | "mle"
+        | "posttrain"
+        | "ale"
+        | "weather"
+        | "researchclaw"
+      title: string
+      family: "data" | "biology" | "physics" | "chemistry" | "ml" | "generalist"
+      version: string
+      taskID: string
+      split: "development" | "validation" | "held_out" | "release"
+    }
+    execution: {
+      profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+      packs: Array<string>
+      provider: string
+      model: string
+      effort?: string
+      intervention: "autonomous" | "human_reprompted"
+      seed: number
+    }
+    quality: {
+      status?: "passed" | "failed" | "inconclusive"
+      metric?: string
+      direction: "maximize" | "minimize" | "pass"
+      score?: number
+      target?: number
+      targetReached: boolean
+      evaluator: string
+      evaluatorVersion?: string
+      evaluations: number
+    }
+    efficiency: {
+      costUSD?: number
+      tokens?: {
+        input: number
+        output: number
+        reasoning: number
+        cacheRead: number
+        cacheWrite: number
+        total: number
+      }
+      wallTimeMs?: number
+      toolCalls?: number
+      searches?: number
+      dedupeHits?: number
+      retries?: number
+      failures?: number
+      candidates?: number
+    }
+    search?: {
+      status: "active" | "completed"
+      stopReason?: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
+      bestID?: string
+      candidates: number
+      verified: number
+      generations: number
+      stalled: number
+    }
+    generatedAt: number
+  }
+}
+
+export type HarnessReportResponse = HarnessReportResponses[keyof HarnessReportResponses]
 
 export type SearchQueryData = {
   body?: never

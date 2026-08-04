@@ -1,0 +1,275 @@
+import path from "path"
+import z from "zod"
+import { Global } from "@/global"
+import { JsonStore } from "@/util/jsonstore"
+import { timingSafeEqual } from "@/util/timing-safe"
+import { HarnessBenchmark } from "./benchmark"
+import { HarnessContract } from "./contract"
+import { HarnessEvaluation } from "./evaluation"
+import { HarnessMemory } from "./memory"
+import { HarnessPack } from "./pack"
+import { HarnessSearch } from "./search"
+
+export namespace HarnessAdapter {
+  const Token = z.string().min(32).max(1_024)
+
+  export const Task = z
+    .object({
+      schemaVersion: z.literal(1),
+      runID: z.string().min(1).max(240),
+      sessionID: z.string().min(1).max(240),
+      benchmark: z.string().min(1).max(120),
+      version: z.string().min(1).max(120),
+      taskID: z.string().min(1).max(500),
+      split: HarnessContract.Split,
+      evaluator: z
+        .object({
+          name: z.string().min(1).max(200),
+          version: z.string().min(1).max(200),
+          source: z.enum(["benchmark", "gate", "external"]),
+          token: Token,
+        })
+        .strict(),
+      objective: z.string().min(1).max(4_000),
+      profile: HarnessContract.Profile.optional(),
+      extraPacks: z
+        .array(HarnessPack.Id)
+        .max(HarnessPack.Id.options.length)
+        .refine((items) => new Set(items).size === items.length, "Extra harness packs must be unique")
+        .default([]),
+      metric: z
+        .object({
+          name: z.string().min(1).max(200).optional(),
+          direction: z.enum(["maximize", "minimize", "pass"]),
+          target: z.number().finite().optional(),
+        })
+        .strict()
+        .default({ direction: "pass" }),
+      model: z
+        .object({
+          provider: z.string().min(1),
+          name: z.string().min(1),
+          effort: z.string().min(1).optional(),
+        })
+        .strict(),
+      tools: z.array(z.string().min(1)).max(256).default([]),
+      skills: z
+        .array(
+          z
+            .object({
+              name: z.string().min(1),
+              version: z.string().min(1).optional(),
+              sha256: z
+                .string()
+                .regex(/^[a-f0-9]{64}$/)
+                .optional(),
+            })
+            .strict(),
+        )
+        .max(256)
+        .default([]),
+      budget: z
+        .object({
+          wallTimeMs: z.number().int().positive().optional(),
+          steps: z.number().int().positive().optional(),
+          candidates: z.number().int().positive().optional(),
+          tokens: z.number().int().positive().optional(),
+          costUSD: z.number().nonnegative().optional(),
+          cpuHours: z.number().nonnegative().optional(),
+          gpuHours: z.number().nonnegative().optional(),
+        })
+        .strict(),
+      seed: z.number().int(),
+      intervention: z.enum(["autonomous", "human_reprompted"]),
+      contamination: z
+        .object({
+          policy: z.string().min(1).max(2_000),
+          hiddenTestsAccessible: z.literal(false),
+          publicDataCutoff: z.string().min(1).max(120).optional(),
+        })
+        .strict(),
+      createdAt: z.number().int().positive(),
+    })
+    .strict()
+
+  export type Task = z.infer<typeof Task>
+
+  export const Evaluation = z
+    .object({
+      schemaVersion: z.literal(1),
+      runID: z.string().min(1).max(240),
+      sessionID: z.string().min(1).max(240),
+      evaluatorToken: Token,
+      candidateID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      status: HarnessEvaluation.Status,
+      score: z.number().finite().optional(),
+      metrics: z
+        .record(z.string().max(200), z.number().finite())
+        .refine((value) => Object.keys(value).length <= 128, "An evaluation may contain at most 128 metrics")
+        .default({}),
+      checks: z.array(HarnessEvaluation.Check).min(1).max(128),
+      evidence: z.array(z.string().min(1).max(1_000)).min(1).max(128),
+      evaluatedAt: z.number().int().positive(),
+      notes: z.string().max(8_000).optional(),
+    })
+    .strict()
+  export type Evaluation = z.infer<typeof Evaluation>
+
+  const Binding = z
+    .object({
+      schemaVersion: z.literal(1),
+      sessionID: z.string().min(1),
+      runID: z.string().min(1),
+      contractFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      tokenSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+      evaluator: z
+        .object({
+          name: z.string().min(1),
+          version: z.string().min(1),
+          source: z.enum(["benchmark", "gate", "external"]),
+        })
+        .strict(),
+      createdAt: z.number().int().positive(),
+    })
+    .strict()
+  type Binding = z.infer<typeof Binding>
+
+  const root = path.join(Global.Path.data, "harness", "bindings")
+  const file = (sessionID: string) => path.join(root, `${encodeURIComponent(sessionID)}.json`)
+  const digest = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
+
+  async function credential(sessionID: string): Promise<Binding> {
+    const data = await JsonStore.read(file(sessionID))
+    const parsed = Binding.safeParse(data)
+    if (!parsed.success) throw new Error(`No evaluator capability is bound to session ${sessionID}`)
+    return parsed.data
+  }
+
+  export async function bind(input: Task) {
+    const task = Task.parse(input)
+    const benchmark = HarnessBenchmark.resolve(task.benchmark)
+    const profile = task.profile ?? benchmark.profile
+    if (!benchmark.profiles.includes(profile)) {
+      throw new Error(`Profile ${profile} is not valid for the ${benchmark.id} adapter`)
+    }
+    if (task.metric.direction !== "pass" && !task.metric.name) {
+      throw new Error(`A ${task.metric.direction} benchmark must declare its metric name`)
+    }
+    if (profile === "optimize" && task.budget.candidates === undefined) {
+      throw new Error(`An optimize benchmark must declare a candidate budget`)
+    }
+    const packs = [...benchmark.packs, ...task.extraPacks].filter((pack, index, items) => items.indexOf(pack) === index)
+    const contract = HarnessContract.Info.parse({
+      schemaVersion: 1,
+      runID: task.runID,
+      sessionID: task.sessionID,
+      objective: task.objective,
+      benchmark: {
+        name: benchmark.id,
+        version: task.version,
+        taskID: task.taskID,
+        split: task.split,
+        evaluator: task.evaluator.name,
+        evaluatorVersion: task.evaluator.version,
+        evaluatorSource: task.evaluator.source,
+        metric: task.metric.name,
+        direction: task.metric.direction,
+        target: task.metric.target,
+      },
+      profile,
+      packs,
+      model: task.model,
+      tools: task.tools,
+      skills: task.skills,
+      budget: task.budget,
+      seed: task.seed,
+      intervention: task.intervention,
+      contamination: task.contamination,
+      createdAt: task.createdAt,
+    })
+    await HarnessContract.bind(contract)
+    const binding = Binding.parse({
+      schemaVersion: 1,
+      sessionID: task.sessionID,
+      runID: task.runID,
+      contractFingerprint: HarnessContract.fingerprint(contract),
+      tokenSHA256: digest(task.evaluator.token),
+      evaluator: {
+        name: task.evaluator.name,
+        version: task.evaluator.version,
+        source: task.evaluator.source,
+      },
+      createdAt: task.createdAt,
+    })
+    await JsonStore.update(file(task.sessionID), (data) => {
+      if (!Object.keys(data).length) return binding
+      const current = Binding.parse(data)
+      if (current.contractFingerprint === binding.contractFingerprint && current.tokenSHA256 === binding.tokenSHA256) {
+        return current
+      }
+      throw new Error(`Evaluator capability for session ${task.sessionID} is immutable once bound`)
+    })
+    return contract
+  }
+
+  export async function ingest(input: Evaluation) {
+    const value = Evaluation.parse(input)
+    const [contract, binding] = await Promise.all([HarnessContract.read(value.sessionID), credential(value.sessionID)])
+    if (!contract) throw new Error(`No harness contract is bound to session ${value.sessionID}`)
+    if (contract.runID !== value.runID || binding.runID !== value.runID) {
+      throw new Error(`Evaluation does not match the bound harness run`)
+    }
+    if (binding.contractFingerprint !== HarnessContract.fingerprint(contract)) {
+      throw new Error(`Evaluator capability does not match the bound harness contract`)
+    }
+    if (!timingSafeEqual(binding.tokenSHA256, digest(value.evaluatorToken))) {
+      throw new Error(`Evaluator capability was rejected`)
+    }
+    if (value.evaluatedAt < contract.createdAt) {
+      throw new Error(`Evaluation predates the bound harness contract`)
+    }
+    const metric = contract.benchmark.metric
+    if (
+      value.status === "passed" &&
+      contract.benchmark.direction !== "pass" &&
+      (value.score === undefined || metric === undefined || value.metrics[metric] === undefined)
+    ) {
+      throw new Error(`A passing numeric benchmark evaluation must report its bound score and metric`)
+    }
+    if (metric !== undefined && value.score !== undefined && value.metrics[metric] !== value.score) {
+      throw new Error(`Evaluation score does not match the bound ${metric} metric`)
+    }
+    if (value.candidateID) {
+      const search = await HarnessSearch.read(value.sessionID)
+      if (search.runID !== value.runID || !search.candidates[value.candidateID]) {
+        throw new Error(`Evaluation candidate does not exist in the bound search`)
+      }
+    }
+    const evaluation = HarnessEvaluation.Info.parse({
+      schemaVersion: 1,
+      runID: value.runID,
+      sessionID: value.sessionID,
+      subject: value.candidateID ? { type: "candidate", id: value.candidateID } : undefined,
+      evaluator: binding.evaluator,
+      status: value.status,
+      score: value.score,
+      metrics: value.metrics,
+      checks: value.checks,
+      evidence: value.evidence,
+      evaluatedAt: value.evaluatedAt,
+      notes: value.notes,
+    })
+    await HarnessEvaluation.record(evaluation)
+    if (!value.candidateID) return { evaluation }
+    const search = await HarnessSearch.verify({ sessionID: value.sessionID, candidateID: value.candidateID })
+    const memory = await HarnessMemory.capture({
+      sessionID: value.sessionID,
+      candidateID: value.candidateID,
+      stage: "evaluation",
+    })
+    return { evaluation, search, memory }
+  }
+}

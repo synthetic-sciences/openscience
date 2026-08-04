@@ -24,6 +24,8 @@ export namespace HarnessContract {
           taskID: z.string().min(1),
           split: Split,
           evaluator: z.string().min(1),
+          evaluatorVersion: z.string().min(1).optional(),
+          evaluatorSource: z.enum(["benchmark", "gate", "human", "external"]).optional(),
           metric: z.string().min(1).optional(),
           direction: z.enum(["maximize", "minimize", "pass"]).optional(),
           target: z.number().finite().optional(),

@@ -91,4 +91,23 @@ describe("harness contract", () => {
     mismatch.runID = "different-run"
     await expect(HarnessEvaluation.record(mismatch)).rejects.toThrow("does not match contract run")
   })
+
+  test("pins evaluator version and source when the adapter declares them", async () => {
+    const input = contract("session-evaluator-version")
+    input.benchmark.evaluatorVersion = "1.0.0"
+    input.benchmark.evaluatorSource = "benchmark"
+    await HarnessContract.bind(input)
+    await expect(
+      HarnessEvaluation.record({
+        ...evaluation(input.sessionID),
+        evaluator: { name: "official-evaluator", version: "2.0.0", source: "benchmark" },
+      }),
+    ).rejects.toThrow("does not match contract evaluator version")
+    await expect(
+      HarnessEvaluation.record({
+        ...evaluation(input.sessionID),
+        evaluator: { name: "official-evaluator", version: "1.0.0", source: "external" },
+      }),
+    ).rejects.toThrow("does not match contract source")
+  })
 })

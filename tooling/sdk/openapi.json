@@ -12141,6 +12141,59 @@
                         ]
                       }
                     },
+                    "profiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "messageID": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "react",
+                              "optimize",
+                              "reproduce",
+                              "theory",
+                              "numerical",
+                              "training",
+                              "forecast"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "contract",
+                              "heuristic",
+                              "control"
+                            ]
+                          },
+                          "confidence": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "reasons": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "selectedAt": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "messageID",
+                          "id",
+                          "source",
+                          "confidence",
+                          "reasons",
+                          "selectedAt"
+                        ]
+                      }
+                    },
                     "privacy": {
                       "type": "object",
                       "properties": {
@@ -12186,6 +12239,7 @@
                     "reviewerFindings",
                     "failures",
                     "retries",
+                    "profiles",
                     "privacy"
                   ]
                 }
@@ -14504,6 +14558,1934 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.permission.respond({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/benchmarks": {
+      "get": {
+        "operationId": "harness.benchmarks",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List scientific benchmark adapters",
+        "description": "Lists version-agnostic adapter manifests and their required verification packs.",
+        "responses": {
+          "200": {
+            "description": "Benchmark adapter manifests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "enum": [
+                          "statistics",
+                          "bixbench",
+                          "lifescience",
+                          "genebench",
+                          "biomni",
+                          "physics",
+                          "pde",
+                          "chembench",
+                          "matscibench",
+                          "mle",
+                          "posttrain",
+                          "ale",
+                          "weather",
+                          "researchclaw"
+                        ]
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "family": {
+                        "type": "string",
+                        "enum": [
+                          "data",
+                          "biology",
+                          "physics",
+                          "chemistry",
+                          "ml",
+                          "generalist"
+                        ]
+                      },
+                      "aliases": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "profile": {
+                        "type": "string",
+                        "enum": [
+                          "react",
+                          "optimize",
+                          "reproduce",
+                          "theory",
+                          "numerical",
+                          "training",
+                          "forecast"
+                        ]
+                      },
+                      "profiles": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "react",
+                            "optimize",
+                            "reproduce",
+                            "theory",
+                            "numerical",
+                            "training",
+                            "forecast"
+                          ]
+                        }
+                      },
+                      "packs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "statistics",
+                            "biology",
+                            "physics",
+                            "pde",
+                            "chemistry",
+                            "ml",
+                            "forecast"
+                          ]
+                        }
+                      },
+                      "task": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "title",
+                      "family",
+                      "aliases",
+                      "profile",
+                      "profiles",
+                      "packs",
+                      "task"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.benchmarks({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/runs": {
+      "post": {
+        "operationId": "harness.bind",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Bind an immutable benchmark run",
+        "description": "Called by a benchmark orchestrator before agent execution. The evaluator capability is hashed and never returned.",
+        "responses": {
+          "200": {
+            "description": "Bound harness contract",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "objective": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "benchmark": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "taskID": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "split": {
+                          "type": "string",
+                          "enum": [
+                            "development",
+                            "validation",
+                            "held_out",
+                            "release"
+                          ]
+                        },
+                        "evaluator": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "evaluatorVersion": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "evaluatorSource": {
+                          "type": "string",
+                          "enum": [
+                            "benchmark",
+                            "gate",
+                            "human",
+                            "external"
+                          ]
+                        },
+                        "metric": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "maximize",
+                            "minimize",
+                            "pass"
+                          ]
+                        },
+                        "target": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version",
+                        "taskID",
+                        "split",
+                        "evaluator"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "profile": {
+                      "type": "string",
+                      "enum": [
+                        "react",
+                        "optimize",
+                        "reproduce",
+                        "theory",
+                        "numerical",
+                        "training",
+                        "forecast"
+                      ]
+                    },
+                    "packs": {
+                      "maxItems": 7,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "statistics",
+                          "biology",
+                          "physics",
+                          "pde",
+                          "chemistry",
+                          "ml",
+                          "forecast"
+                        ]
+                      }
+                    },
+                    "model": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "tools": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "skills": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "budget": {
+                      "type": "object",
+                      "properties": {
+                        "wallTimeMs": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "steps": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "candidates": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "tokens": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "costUSD": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "cpuHours": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "gpuHours": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "seed": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "intervention": {
+                      "type": "string",
+                      "enum": [
+                        "autonomous",
+                        "human_reprompted"
+                      ]
+                    },
+                    "contamination": {
+                      "type": "object",
+                      "properties": {
+                        "policy": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "hiddenTestsAccessible": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "publicDataCutoff": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "policy",
+                        "hiddenTestsAccessible"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "createdAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "runID",
+                    "sessionID",
+                    "objective",
+                    "benchmark",
+                    "profile",
+                    "model",
+                    "budget",
+                    "seed",
+                    "intervention",
+                    "contamination",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "runID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "benchmark": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "taskID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "split": {
+                    "type": "string",
+                    "enum": [
+                      "development",
+                      "validation",
+                      "held_out",
+                      "release"
+                    ]
+                  },
+                  "evaluator": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "benchmark",
+                          "gate",
+                          "external"
+                        ]
+                      },
+                      "token": {
+                        "type": "string",
+                        "minLength": 32,
+                        "maxLength": 1024
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "version",
+                      "source",
+                      "token"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "objective": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "profile": {
+                    "type": "string",
+                    "enum": [
+                      "react",
+                      "optimize",
+                      "reproduce",
+                      "theory",
+                      "numerical",
+                      "training",
+                      "forecast"
+                    ]
+                  },
+                  "extraPacks": {
+                    "default": [],
+                    "maxItems": 7,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "statistics",
+                        "biology",
+                        "physics",
+                        "pde",
+                        "chemistry",
+                        "ml",
+                        "forecast"
+                      ]
+                    }
+                  },
+                  "metric": {
+                    "default": {
+                      "direction": "pass"
+                    },
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "direction": {
+                        "type": "string",
+                        "enum": [
+                          "maximize",
+                          "minimize",
+                          "pass"
+                        ]
+                      },
+                      "target": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "direction"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "effort": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "tools": {
+                    "default": [],
+                    "maxItems": 256,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "skills": {
+                    "default": [],
+                    "maxItems": 256,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "budget": {
+                    "type": "object",
+                    "properties": {
+                      "wallTimeMs": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "steps": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "candidates": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "tokens": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "costUSD": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "cpuHours": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "gpuHours": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "intervention": {
+                    "type": "string",
+                    "enum": [
+                      "autonomous",
+                      "human_reprompted"
+                    ]
+                  },
+                  "contamination": {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      "hiddenTestsAccessible": {
+                        "type": "boolean",
+                        "const": false
+                      },
+                      "publicDataCutoff": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      }
+                    },
+                    "required": [
+                      "policy",
+                      "hiddenTestsAccessible"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "createdAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "runID",
+                  "sessionID",
+                  "benchmark",
+                  "version",
+                  "taskID",
+                  "split",
+                  "evaluator",
+                  "objective",
+                  "model",
+                  "budget",
+                  "seed",
+                  "intervention",
+                  "contamination",
+                  "createdAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.bind({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/evaluations": {
+      "post": {
+        "operationId": "harness.evaluate",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Ingest an evaluator-authenticated result",
+        "description": "Records an immutable subject result, promotes a verified search candidate, and captures task-scoped hindsight.",
+        "responses": {
+          "200": {
+            "description": "Recorded external evaluation"
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "runID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "candidateID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "passed",
+                      "failed",
+                      "inconclusive"
+                    ]
+                  },
+                  "score": {
+                    "type": "number"
+                  },
+                  "metrics": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "additionalProperties": {
+                      "type": "number"
+                    }
+                  },
+                  "checks": {
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed",
+                            "inconclusive"
+                          ]
+                        },
+                        "blocking": {
+                          "type": "boolean"
+                        },
+                        "score": {
+                          "type": "number"
+                        },
+                        "evidence": {
+                          "default": [],
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 4000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status",
+                        "blocking"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "evidence": {
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "evaluatedAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 8000
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "runID",
+                  "sessionID",
+                  "evaluatorToken",
+                  "status",
+                  "checks",
+                  "evidence",
+                  "evaluatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.evaluate({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/compare": {
+      "post": {
+        "operationId": "harness.compare",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Compare compatible benchmark runs",
+        "description": "Reports direction-aware deltas and the quality-cost Pareto frontier.",
+        "responses": {
+          "200": {
+            "description": "Comparable run deltas"
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionIDs": {
+                    "minItems": 2,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "baselineRunID": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "sessionIDs",
+                  "baselineRunID"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.compare({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/runs/{sessionID}/contract": {
+      "get": {
+        "operationId": "harness.contract",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a bound harness contract",
+        "responses": {
+          "200": {
+            "description": "Harness contract",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "objective": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "benchmark": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "taskID": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "split": {
+                              "type": "string",
+                              "enum": [
+                                "development",
+                                "validation",
+                                "held_out",
+                                "release"
+                              ]
+                            },
+                            "evaluator": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "evaluatorVersion": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "evaluatorSource": {
+                              "type": "string",
+                              "enum": [
+                                "benchmark",
+                                "gate",
+                                "human",
+                                "external"
+                              ]
+                            },
+                            "metric": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": [
+                                "maximize",
+                                "minimize",
+                                "pass"
+                              ]
+                            },
+                            "target": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "taskID",
+                            "split",
+                            "evaluator"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "profile": {
+                          "type": "string",
+                          "enum": [
+                            "react",
+                            "optimize",
+                            "reproduce",
+                            "theory",
+                            "numerical",
+                            "training",
+                            "forecast"
+                          ]
+                        },
+                        "packs": {
+                          "maxItems": 7,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "statistics",
+                              "biology",
+                              "physics",
+                              "pde",
+                              "chemistry",
+                              "ml",
+                              "forecast"
+                            ]
+                          }
+                        },
+                        "model": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "effort": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "tools": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "skills": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "budget": {
+                          "type": "object",
+                          "properties": {
+                            "wallTimeMs": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "steps": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "candidates": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "tokens": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "costUSD": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "cpuHours": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "gpuHours": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "intervention": {
+                          "type": "string",
+                          "enum": [
+                            "autonomous",
+                            "human_reprompted"
+                          ]
+                        },
+                        "contamination": {
+                          "type": "object",
+                          "properties": {
+                            "policy": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "hiddenTestsAccessible": {
+                              "type": "boolean",
+                              "const": false
+                            },
+                            "publicDataCutoff": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "policy",
+                            "hiddenTestsAccessible"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "createdAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "runID",
+                        "sessionID",
+                        "objective",
+                        "benchmark",
+                        "profile",
+                        "model",
+                        "budget",
+                        "seed",
+                        "intervention",
+                        "contamination",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.contract({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/runs/{sessionID}/evaluations": {
+      "get": {
+        "operationId": "harness.evaluations",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "List immutable harness evaluations",
+        "responses": {
+          "200": {
+            "description": "Evaluation journal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "runID": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "subject": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "run",
+                              "candidate"
+                            ]
+                          },
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "evaluator": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "benchmark",
+                              "gate",
+                              "human",
+                              "external"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "version",
+                          "source"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "inconclusive"
+                        ]
+                      },
+                      "score": {
+                        "type": "number"
+                      },
+                      "metrics": {
+                        "default": {},
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "additionalProperties": {
+                          "type": "number"
+                        }
+                      },
+                      "checks": {
+                        "minItems": 1,
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "passed",
+                                "failed",
+                                "inconclusive"
+                              ]
+                            },
+                            "blocking": {
+                              "type": "boolean"
+                            },
+                            "score": {
+                              "type": "number"
+                            },
+                            "evidence": {
+                              "default": [],
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              }
+                            },
+                            "note": {
+                              "type": "string",
+                              "maxLength": 4000
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "status",
+                            "blocking"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "evidence": {
+                        "minItems": 1,
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000
+                        }
+                      },
+                      "evaluatedAt": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "notes": {
+                        "type": "string",
+                        "maxLength": 8000
+                      }
+                    },
+                    "required": [
+                      "schemaVersion",
+                      "runID",
+                      "sessionID",
+                      "evaluator",
+                      "status",
+                      "checks",
+                      "evidence",
+                      "evaluatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.evaluations({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/runs/{sessionID}/report": {
+      "get": {
+        "operationId": "harness.report",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Build a benchmark quality-cost report",
+        "responses": {
+          "200": {
+            "description": "Quality-cost report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "comparisonKey": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "benchmark": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "enum": [
+                            "statistics",
+                            "bixbench",
+                            "lifescience",
+                            "genebench",
+                            "biomni",
+                            "physics",
+                            "pde",
+                            "chembench",
+                            "matscibench",
+                            "mle",
+                            "posttrain",
+                            "ale",
+                            "weather",
+                            "researchclaw"
+                          ]
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "family": {
+                          "type": "string",
+                          "enum": [
+                            "data",
+                            "biology",
+                            "physics",
+                            "chemistry",
+                            "ml",
+                            "generalist"
+                          ]
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "taskID": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "split": {
+                          "type": "string",
+                          "enum": [
+                            "development",
+                            "validation",
+                            "held_out",
+                            "release"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "family",
+                        "version",
+                        "taskID",
+                        "split"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "execution": {
+                      "type": "object",
+                      "properties": {
+                        "profile": {
+                          "type": "string",
+                          "enum": [
+                            "react",
+                            "optimize",
+                            "reproduce",
+                            "theory",
+                            "numerical",
+                            "training",
+                            "forecast"
+                          ]
+                        },
+                        "packs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "type": "string"
+                        },
+                        "intervention": {
+                          "type": "string",
+                          "enum": [
+                            "autonomous",
+                            "human_reprompted"
+                          ]
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "packs",
+                        "provider",
+                        "model",
+                        "intervention",
+                        "seed"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "quality": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed",
+                            "inconclusive"
+                          ]
+                        },
+                        "metric": {
+                          "type": "string"
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "maximize",
+                            "minimize",
+                            "pass"
+                          ]
+                        },
+                        "score": {
+                          "type": "number"
+                        },
+                        "target": {
+                          "type": "number"
+                        },
+                        "targetReached": {
+                          "type": "boolean"
+                        },
+                        "evaluator": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "evaluatorVersion": {
+                          "type": "string"
+                        },
+                        "evaluations": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "direction",
+                        "targetReached",
+                        "evaluator",
+                        "evaluations"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "efficiency": {
+                      "type": "object",
+                      "properties": {
+                        "costUSD": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "tokens": {
+                          "type": "object",
+                          "properties": {
+                            "input": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "output": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "reasoning": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "cacheRead": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "cacheWrite": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "total": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "input",
+                            "output",
+                            "reasoning",
+                            "cacheRead",
+                            "cacheWrite",
+                            "total"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "wallTimeMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "toolCalls": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "searches": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "dedupeHits": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "retries": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "failures": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "candidates": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "search": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "completed"
+                          ]
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "budget_exhausted",
+                            "objective_met",
+                            "no_improvement",
+                            "user_cancelled",
+                            "runtime_error"
+                          ]
+                        },
+                        "bestID": {
+                          "type": "string"
+                        },
+                        "candidates": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "verified": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "generations": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "stalled": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "candidates",
+                        "verified",
+                        "generations",
+                        "stalled"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "generatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "comparisonKey",
+                    "benchmark",
+                    "execution",
+                    "quality",
+                    "efficiency",
+                    "generatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.report({\n  ...\n})"
           }
         ]
       }

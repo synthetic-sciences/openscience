@@ -92,6 +92,19 @@ import type {
   GlobalProjectCreateErrors,
   GlobalProjectCreateResponses,
   GlobalSyncResponses,
+  HarnessBenchmarksResponses,
+  HarnessBindErrors,
+  HarnessBindResponses,
+  HarnessCompareErrors,
+  HarnessCompareResponses,
+  HarnessContractErrors,
+  HarnessContractResponses,
+  HarnessEvaluateErrors,
+  HarnessEvaluateResponses,
+  HarnessEvaluationsErrors,
+  HarnessEvaluationsResponses,
+  HarnessReportErrors,
+  HarnessReportResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -3607,6 +3620,316 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Harness extends HeyApiClient {
+  /**
+   * List scientific benchmark adapters
+   *
+   * Lists version-agnostic adapter manifests and their required verification packs.
+   */
+  public benchmarks<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<HarnessBenchmarksResponses, unknown, ThrowOnError>({
+      url: "/harness/benchmarks",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Bind an immutable benchmark run
+   *
+   * Called by a benchmark orchestrator before agent execution. The evaluator capability is hashed and never returned.
+   */
+  public bind<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      schemaVersion?: 1
+      runID?: string
+      sessionID?: string
+      benchmark?: string
+      version?: string
+      taskID?: string
+      split?: "development" | "validation" | "held_out" | "release"
+      evaluator?: {
+        name: string
+        version: string
+        source: "benchmark" | "gate" | "external"
+        token: string
+      }
+      objective?: string
+      profile?: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+      extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+      metric?: {
+        name?: string
+        direction: "maximize" | "minimize" | "pass"
+        target?: number
+      }
+      model?: {
+        provider: string
+        name: string
+        effort?: string
+      }
+      tools?: Array<string>
+      skills?: Array<{
+        name: string
+        version?: string
+        sha256?: string
+      }>
+      budget?: {
+        wallTimeMs?: number
+        steps?: number
+        candidates?: number
+        tokens?: number
+        costUSD?: number
+        cpuHours?: number
+        gpuHours?: number
+      }
+      seed?: number
+      intervention?: "autonomous" | "human_reprompted"
+      contamination?: {
+        policy: string
+        hiddenTestsAccessible: false
+        publicDataCutoff?: string
+      }
+      createdAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "schemaVersion" },
+            { in: "body", key: "runID" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "benchmark" },
+            { in: "body", key: "version" },
+            { in: "body", key: "taskID" },
+            { in: "body", key: "split" },
+            { in: "body", key: "evaluator" },
+            { in: "body", key: "objective" },
+            { in: "body", key: "profile" },
+            { in: "body", key: "extraPacks" },
+            { in: "body", key: "metric" },
+            { in: "body", key: "model" },
+            { in: "body", key: "tools" },
+            { in: "body", key: "skills" },
+            { in: "body", key: "budget" },
+            { in: "body", key: "seed" },
+            { in: "body", key: "intervention" },
+            { in: "body", key: "contamination" },
+            { in: "body", key: "createdAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessBindResponses, HarnessBindErrors, ThrowOnError>({
+      url: "/harness/runs",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Ingest an evaluator-authenticated result
+   *
+   * Records an immutable subject result, promotes a verified search candidate, and captures task-scoped hindsight.
+   */
+  public evaluate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      schemaVersion?: 1
+      runID?: string
+      sessionID?: string
+      evaluatorToken?: string
+      candidateID?: string
+      status?: "passed" | "failed" | "inconclusive"
+      score?: number
+      metrics?: {
+        [key: string]: number
+      }
+      checks?: Array<{
+        id: string
+        status: "passed" | "failed" | "inconclusive"
+        blocking: boolean
+        score?: number
+        evidence?: Array<string>
+        note?: string
+      }>
+      evidence?: Array<string>
+      evaluatedAt?: number
+      notes?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "schemaVersion" },
+            { in: "body", key: "runID" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "candidateID" },
+            { in: "body", key: "status" },
+            { in: "body", key: "score" },
+            { in: "body", key: "metrics" },
+            { in: "body", key: "checks" },
+            { in: "body", key: "evidence" },
+            { in: "body", key: "evaluatedAt" },
+            { in: "body", key: "notes" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessEvaluateResponses, HarnessEvaluateErrors, ThrowOnError>({
+      url: "/harness/evaluations",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Compare compatible benchmark runs
+   *
+   * Reports direction-aware deltas and the quality-cost Pareto frontier.
+   */
+  public compare<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionIDs?: Array<string>
+      baselineRunID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionIDs" },
+            { in: "body", key: "baselineRunID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessCompareResponses, HarnessCompareErrors, ThrowOnError>({
+      url: "/harness/compare",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a bound harness contract
+   */
+  public contract<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<HarnessContractResponses, HarnessContractErrors, ThrowOnError>({
+      url: "/harness/runs/{sessionID}/contract",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List immutable harness evaluations
+   */
+  public evaluations<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<HarnessEvaluationsResponses, HarnessEvaluationsErrors, ThrowOnError>({
+      url: "/harness/runs/{sessionID}/evaluations",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Build a benchmark quality-cost report
+   */
+  public report<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<HarnessReportResponses, HarnessReportErrors, ThrowOnError>({
+      url: "/harness/runs/{sessionID}/report",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Search extends HeyApiClient {
   /**
    * Search sessions, messages, and artifacts
@@ -6514,6 +6837,11 @@ export class OpenScienceClient extends HeyApiClient {
   private _permission?: Permission
   get permission(): Permission {
     return (this._permission ??= new Permission({ client: this.client }))
+  }
+
+  private _harness?: Harness
+  get harness(): Harness {
+    return (this._harness ??= new Harness({ client: this.client }))
   }
 
   private _search?: Search

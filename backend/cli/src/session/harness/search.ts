@@ -308,8 +308,12 @@ export namespace HarnessSearch {
   }
 
   export async function verify(input: { sessionID: string; candidateID: string }) {
-    const evaluation = await HarnessEvaluation.read(input.sessionID)
-    if (!evaluation) throw new Error(`No recorded external evaluation exists for session ${input.sessionID}`)
+    const evaluation = await HarnessEvaluation.read(input.sessionID, { type: "candidate", id: input.candidateID })
+    if (!evaluation) {
+      const latest = await HarnessEvaluation.read(input.sessionID)
+      if (latest) throw new Error(`The recorded evaluation is not bound to candidate ${input.candidateID}`)
+      throw new Error(`No recorded external evaluation exists for session ${input.sessionID}`)
+    }
     if (evaluation.subject?.type !== "candidate" || evaluation.subject.id !== input.candidateID) {
       throw new Error(`The recorded evaluation is not bound to candidate ${input.candidateID}`)
     }
