@@ -2,6 +2,7 @@ import path from "path"
 import z from "zod"
 import { Global } from "@/global"
 import { HarnessContract } from "./contract"
+import { HarnessDomain } from "./domain"
 
 export namespace HarnessEvaluation {
   export const Status = z.enum(["passed", "failed", "inconclusive"])
@@ -84,6 +85,7 @@ export namespace HarnessEvaluation {
         `Evaluation source ${evaluation.evaluator.name} does not match contract evaluator ${contract.benchmark.evaluator}`,
       )
     }
+    if (evaluation.status === "passed") HarnessDomain.assert(contract.packs ?? [], evaluation.checks)
     await Bun.write(file(evaluation.sessionID), JSON.stringify(evaluation, null, 2) + "\n")
     return evaluation
   }

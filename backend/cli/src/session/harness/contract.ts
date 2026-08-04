@@ -2,6 +2,7 @@ import path from "path"
 import z from "zod"
 import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
+import { HarnessPack } from "./pack"
 
 export namespace HarnessContract {
   export const Profile = z.enum(["react", "optimize", "reproduce", "theory", "numerical", "training", "forecast"])
@@ -29,6 +30,11 @@ export namespace HarnessContract {
         })
         .strict(),
       profile: Profile,
+      packs: z
+        .array(HarnessPack.Id)
+        .max(HarnessPack.Id.options.length)
+        .refine((items) => new Set(items).size === items.length, "Harness packs must be unique")
+        .optional(),
       model: z
         .object({
           provider: z.string().min(1),

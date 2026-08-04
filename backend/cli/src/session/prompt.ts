@@ -66,6 +66,7 @@ import { assertExternalDirectory } from "@/tool/external-directory"
 import { HarnessProfile } from "./harness/profile"
 import { HarnessMemory } from "./harness/memory"
 import { HarnessClaims } from "./harness/claims"
+import { HarnessDomain } from "./harness/domain"
 import { SessionTraceStore } from "./trace-store"
 
 // @ts-ignore
@@ -835,6 +836,8 @@ export namespace SessionPrompt {
           ? await HarnessMemory.prompt({ sessionID, query: request, stage: "planning" }).catch(() => "")
           : ""
       const claims = profile.id === "react" ? "" : await HarnessClaims.prompt(sessionID).catch(() => "")
+      const domain = await HarnessDomain.resolve({ sessionID, agent: agent.name, profile: profile.id, text: request })
+      const methodology = HarnessDomain.prompt(domain)
       await SessionTraceStore.recordProfile({
         sessionID,
         messageID: lastUser.id,
@@ -890,6 +893,7 @@ export namespace SessionPrompt {
         profile.prompt,
         ...(hindsight ? [hindsight] : []),
         ...(claims ? [claims] : []),
+        ...(methodology ? [methodology] : []),
         ...artifactContext,
       ]
 
