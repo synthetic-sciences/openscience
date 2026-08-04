@@ -6,6 +6,7 @@ import { Session } from "../../src/session"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { ArtifactTool } from "../../src/tool/artifact"
 import { HarnessTool } from "../../src/tool/harness"
+import { ClaimTool } from "../../src/tool/claim"
 import { AtlasTool } from "../../src/tool/atlas"
 import { AtlasRecordTool } from "../../src/tool/atlas-record"
 import { BashTool } from "../../src/tool/bash"
@@ -126,6 +127,17 @@ describe("tool.plan-mode", () => {
               context("plan"),
             ),
           async () => (await HarnessTool.init()).execute({ action: "start" }, context("plan")),
+          async () =>
+            (await ClaimTool.init()).execute(
+              {
+                action: "declare",
+                text: "must not persist",
+                kind: "descriptive",
+                importance: "supporting",
+                subject_uri: "artifact://blocked",
+              },
+              context("plan"),
+            ),
           async () => (await PlanExitTool.init()).execute({}, context("plan")),
         ]
 
@@ -144,6 +156,7 @@ describe("tool.plan-mode", () => {
           "atlas_record",
           "artifact",
           "harness",
+          "claim",
           "plan_exit",
         ])
         expect(await Bun.file(marker).exists()).toBe(false)

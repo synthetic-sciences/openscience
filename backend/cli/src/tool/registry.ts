@@ -40,6 +40,7 @@ import { AtlasTool } from "./atlas"
 import { AtlasRecordTool } from "./atlas-record"
 import { ArtifactSnapshotTool } from "./artifact-snapshot"
 import { HarnessTool } from "./harness"
+import { ClaimTool } from "./claim"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -143,6 +144,7 @@ export namespace ToolRegistry {
       LearnTool,
       MemoryTool,
       HarnessTool,
+      ClaimTool,
       ...custom,
     ]
   }
@@ -156,6 +158,7 @@ export namespace ToolRegistry {
   const MEMORY_TOOL_ID = "memory"
   const MEMORY_AGENTS = ["research", "biology", "physics", "ml"]
   const HARNESS_TOOL_ID = "harness"
+  const CLAIM_TOOL_ID = "claim"
 
   export async function ids() {
     return all().then((x) => x.map((t) => t.id))
@@ -187,6 +190,10 @@ export namespace ToolRegistry {
           }
 
           if (t.id === HARNESS_TOOL_ID) {
+            return !!agent?.name && MEMORY_AGENTS.includes(agent.name)
+          }
+
+          if (t.id === CLAIM_TOOL_ID) {
             return !!agent?.name && MEMORY_AGENTS.includes(agent.name)
           }
 

@@ -65,6 +65,7 @@ import { OpenScience } from "@/openscience"
 import { assertExternalDirectory } from "@/tool/external-directory"
 import { HarnessProfile } from "./harness/profile"
 import { HarnessMemory } from "./harness/memory"
+import { HarnessClaims } from "./harness/claims"
 import { SessionTraceStore } from "./trace-store"
 
 // @ts-ignore
@@ -833,6 +834,7 @@ export namespace SessionPrompt {
         profile.id === "optimize"
           ? await HarnessMemory.prompt({ sessionID, query: request, stage: "planning" }).catch(() => "")
           : ""
+      const claims = profile.id === "react" ? "" : await HarnessClaims.prompt(sessionID).catch(() => "")
       await SessionTraceStore.recordProfile({
         sessionID,
         messageID: lastUser.id,
@@ -887,6 +889,7 @@ export namespace SessionPrompt {
         ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),
         profile.prompt,
         ...(hindsight ? [hindsight] : []),
+        ...(claims ? [claims] : []),
         ...artifactContext,
       ]
 

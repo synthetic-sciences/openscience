@@ -22,11 +22,14 @@ export namespace HarnessSearch {
       source: z.enum(["observed", "verified"]),
       status: HarnessEvaluation.Status,
       score: z.number().finite().optional(),
-      metrics: z.record(z.string(), z.number().finite()).default({}),
+      metrics: z
+        .record(z.string().max(200), z.number().finite())
+        .refine((value) => Object.keys(value).length <= 128, "A candidate result may contain at most 128 metrics")
+        .default({}),
       checks: z.array(HarnessEvaluation.Check).default([]),
-      evidence: z.array(z.string().min(1)).default([]),
-      feedback: z.string().optional(),
-      evaluator: z.string().optional(),
+      evidence: z.array(z.string().min(1).max(1_000)).max(128).default([]),
+      feedback: z.string().max(8_000).optional(),
+      evaluator: z.string().max(200).optional(),
       evaluatedAt: z.number().int().positive(),
     })
     .strict()

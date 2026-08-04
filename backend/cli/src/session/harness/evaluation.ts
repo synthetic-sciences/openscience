@@ -9,12 +9,12 @@ export namespace HarnessEvaluation {
 
   export const Check = z
     .object({
-      id: z.string().min(1),
+      id: z.string().min(1).max(200),
       status: Status,
       blocking: z.boolean(),
-      score: z.number().optional(),
-      evidence: z.array(z.string().min(1)).default([]),
-      note: z.string().optional(),
+      score: z.number().finite().optional(),
+      evidence: z.array(z.string().min(1).max(1_000)).max(32).default([]),
+      note: z.string().max(4_000).optional(),
     })
     .strict()
   export type Check = z.infer<typeof Check>
@@ -33,18 +33,21 @@ export namespace HarnessEvaluation {
         .optional(),
       evaluator: z
         .object({
-          name: z.string().min(1),
-          version: z.string().min(1),
+          name: z.string().min(1).max(200),
+          version: z.string().min(1).max(200),
           source: z.enum(["benchmark", "gate", "human", "external"]),
         })
         .strict(),
       status: Status,
-      score: z.number().optional(),
-      metrics: z.record(z.string(), z.number()).default({}),
-      checks: z.array(Check).min(1),
-      evidence: z.array(z.string().min(1)).min(1),
+      score: z.number().finite().optional(),
+      metrics: z
+        .record(z.string().max(200), z.number().finite())
+        .refine((value) => Object.keys(value).length <= 128, "An evaluation may contain at most 128 metrics")
+        .default({}),
+      checks: z.array(Check).min(1).max(128),
+      evidence: z.array(z.string().min(1).max(1_000)).min(1).max(128),
       evaluatedAt: z.number().int().positive(),
-      notes: z.string().optional(),
+      notes: z.string().max(8_000).optional(),
     })
     .strict()
     .superRefine((value, ctx) => {

@@ -33,7 +33,11 @@ const Parameters = z.object({
     .describe("For observe: candidate identity"),
   status: z.enum(["passed", "failed", "inconclusive"]).optional().describe("For observe: provisional status"),
   score: z.number().finite().optional().describe("For observe: provisional primary score"),
-  metrics: z.record(z.string(), z.number().finite()).optional().describe("For observe: provisional metric values"),
+  metrics: z
+    .record(z.string().max(200), z.number().finite())
+    .refine((value) => Object.keys(value).length <= 128, "At most 128 provisional metrics")
+    .optional()
+    .describe("For observe: provisional metric values"),
   evidence: z.array(z.string().min(1).max(500)).max(12).optional().describe("For observe: provisional references"),
   feedback: z.string().max(4_000).optional().describe("For observe: provisional evaluator or process feedback"),
   query: z.string().min(1).max(2_000).optional().describe("For hindsight: current problem or failure query"),

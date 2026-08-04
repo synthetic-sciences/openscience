@@ -18,6 +18,7 @@ describe("tool registry agent boundaries", () => {
           expect(ids).toContain("notebook")
           expect(ids).toContain("artifact")
           expect(ids).toContain("harness")
+          expect(ids).toContain("claim")
           expect(ids).not.toContain("query_uniprot")
         }
       },
@@ -35,6 +36,7 @@ describe("tool registry agent boundaries", () => {
 
         expect(ids).toContain("notebook")
         expect(ids).toContain("harness")
+        expect(ids).toContain("claim")
         expect(ids).toContain("query_uniprot")
       },
     })
