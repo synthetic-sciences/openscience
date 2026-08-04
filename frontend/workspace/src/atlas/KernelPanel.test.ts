@@ -97,4 +97,12 @@ describe("kernel control room", () => {
     expect(panel).toContain("summary().running === 0 && summary().queued === 0")
     expect(panel).not.toContain('disabled={!params.id || params.id === "new"')
   })
+
+  test("names the empty state for live kernels and scopes its promise to this session", () => {
+    const panel = source()
+
+    expect(panel).toContain("No live kernels")
+    expect(panel).toContain("Kernels appear here the moment this session starts computing.")
+    expect(panel).not.toContain("on this machine")
+  })
 })

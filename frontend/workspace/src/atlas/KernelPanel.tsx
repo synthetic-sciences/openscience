@@ -271,8 +271,8 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
               <span aria-hidden="true">
                 <IconCpu size={15} strokeWidth={1.4} />
               </span>
-              <strong>No active kernels</strong>
-              <p>A real session exposes its default Python record here before starting a process.</p>
+              <strong>No live kernels</strong>
+              <p>Kernels appear here the moment this session starts computing.</p>
             </div>
           }
         >
