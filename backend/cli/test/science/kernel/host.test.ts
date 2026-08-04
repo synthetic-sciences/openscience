@@ -54,6 +54,10 @@ describe("kernel host snapshot", () => {
 
   test("serves the second snapshot from the rolling baseline without a blocking sample", async () => {
     await KernelHost.snapshot()
+    // A same-tick second call has no window to measure. 50ms is enough for the
+    // scheduler to advance os.cpus() while staying far below the 200ms a cold
+    // sample would cost — so this still proves the warm path never blocks.
+    await Bun.sleep(50)
     const started = Date.now()
     const snapshot = await KernelHost.snapshot()
 
