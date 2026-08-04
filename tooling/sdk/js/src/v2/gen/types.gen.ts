@@ -7900,6 +7900,261 @@ export type HarnessAuditObserveResponses = {
 
 export type HarnessAuditObserveResponse = HarnessAuditObserveResponses[keyof HarnessAuditObserveResponses]
 
+export type HarnessAblationInitializeData = {
+  body?: {
+    schemaVersion: 1
+    studyID: string
+    factor: {
+      kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+      name?: string
+    }
+    minEffect: number
+    maxPairRegression?: number
+    pairs: Array<{
+      baseline: {
+        sessionID: string
+        evaluatorToken: string
+      }
+      arm: {
+        sessionID: string
+        evaluatorToken: string
+      }
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/ablations"
+}
+
+export type HarnessAblationInitializeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessAblationInitializeError = HarnessAblationInitializeErrors[keyof HarnessAblationInitializeErrors]
+
+export type HarnessAblationInitializeResponses = {
+  /**
+   * Immutable matched ablation plan
+   */
+  200: {
+    schemaVersion: 1
+    plan: {
+      schemaVersion: 1
+      planID: string
+      studyID: string
+      factor: {
+        kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+        name?: string
+      }
+      baselineValueSHA256: string
+      armValueSHA256: string
+      contextSHA256: string
+      benchmark: {
+        name: string
+        version: string
+        taskID: string
+        split: "held_out" | "release"
+        evaluator: string
+        evaluatorVersion: string
+        metric: string
+        direction: "maximize" | "minimize"
+      }
+      minEffect: number
+      maxPairRegression: number
+      pairs: Array<{
+        seed: number
+        baseline: {
+          sessionID: string
+          runID: string
+          contractFingerprint: string
+        }
+        arm: {
+          sessionID: string
+          runID: string
+          contractFingerprint: string
+        }
+      }>
+      createdAt: number
+    }
+    receipt?: {
+      schemaVersion: 1
+      receiptID: string
+      planID: string
+      studyID: string
+      factor: {
+        kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+        name?: string
+      }
+      pairs: Array<{
+        seed: number
+        baseline: {
+          sessionID: string
+          runID: string
+          status: "passed" | "failed" | "inconclusive"
+          score?: number
+          evaluationSHA256: string
+          evaluatedAt: number
+          recordedAt: number
+        }
+        arm: {
+          sessionID: string
+          runID: string
+          status: "passed" | "failed" | "inconclusive"
+          score?: number
+          evaluationSHA256: string
+          evaluatedAt: number
+          recordedAt: number
+        }
+        effect?: number
+      }>
+      statistics: {
+        pairs: number
+        validPairs: number
+        meanEffect?: number
+        standardDeviation?: number
+        standardError?: number
+        confidence95?: [number, number]
+        regressions: number
+        minEffect: number
+        maxPairRegression: number
+      }
+      verdict: "supported" | "rejected" | "inconclusive"
+      assessedAt: number
+    }
+  }
+}
+
+export type HarnessAblationInitializeResponse =
+  HarnessAblationInitializeResponses[keyof HarnessAblationInitializeResponses]
+
+export type HarnessAblationAssessData = {
+  body?: {
+    runs: Array<{
+      sessionID: string
+      evaluatorToken: string
+    }>
+  }
+  path: {
+    planID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/ablations/{planID}/assessment"
+}
+
+export type HarnessAblationAssessErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessAblationAssessError = HarnessAblationAssessErrors[keyof HarnessAblationAssessErrors]
+
+export type HarnessAblationAssessResponses = {
+  /**
+   * Immutable matched ablation assessment
+   */
+  200: {
+    schemaVersion: 1
+    plan: {
+      schemaVersion: 1
+      planID: string
+      studyID: string
+      factor: {
+        kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+        name?: string
+      }
+      baselineValueSHA256: string
+      armValueSHA256: string
+      contextSHA256: string
+      benchmark: {
+        name: string
+        version: string
+        taskID: string
+        split: "held_out" | "release"
+        evaluator: string
+        evaluatorVersion: string
+        metric: string
+        direction: "maximize" | "minimize"
+      }
+      minEffect: number
+      maxPairRegression: number
+      pairs: Array<{
+        seed: number
+        baseline: {
+          sessionID: string
+          runID: string
+          contractFingerprint: string
+        }
+        arm: {
+          sessionID: string
+          runID: string
+          contractFingerprint: string
+        }
+      }>
+      createdAt: number
+    }
+    receipt?: {
+      schemaVersion: 1
+      receiptID: string
+      planID: string
+      studyID: string
+      factor: {
+        kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+        name?: string
+      }
+      pairs: Array<{
+        seed: number
+        baseline: {
+          sessionID: string
+          runID: string
+          status: "passed" | "failed" | "inconclusive"
+          score?: number
+          evaluationSHA256: string
+          evaluatedAt: number
+          recordedAt: number
+        }
+        arm: {
+          sessionID: string
+          runID: string
+          status: "passed" | "failed" | "inconclusive"
+          score?: number
+          evaluationSHA256: string
+          evaluatedAt: number
+          recordedAt: number
+        }
+        effect?: number
+      }>
+      statistics: {
+        pairs: number
+        validPairs: number
+        meanEffect?: number
+        standardDeviation?: number
+        standardError?: number
+        confidence95?: [number, number]
+        regressions: number
+        minEffect: number
+        maxPairRegression: number
+      }
+      verdict: "supported" | "rejected" | "inconclusive"
+      assessedAt: number
+    }
+  }
+}
+
+export type HarnessAblationAssessResponse = HarnessAblationAssessResponses[keyof HarnessAblationAssessResponses]
+
 export type HarnessSimulationRecordData = {
   body?: {
     schemaVersion: 1
@@ -9244,6 +9499,7 @@ export type HarnessEvaluationsResponses = {
       costUSD?: number
     }
     evaluatedAt: number
+    recordedAt?: number
     notes?: string
   }>
 }

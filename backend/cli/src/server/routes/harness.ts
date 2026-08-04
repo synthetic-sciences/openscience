@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { lazy } from "@/util/lazy"
+import { HarnessAblation } from "@/session/harness/ablation"
 import { HarnessAdapter } from "@/session/harness/adapter"
 import { HarnessAudit } from "@/session/harness/audit"
 import { HarnessBenchmark } from "@/session/harness/benchmark"
@@ -104,6 +105,43 @@ export const HarnessRoutes = lazy(() =>
       validator("param", z.object({ auditID: z.string().regex(/^[a-f0-9]{64}$/) })),
       validator("json", HarnessAudit.Observe),
       async (c) => c.json(await HarnessAudit.observe(c.req.valid("param").auditID, c.req.valid("json"))),
+    )
+    .post(
+      "/ablations",
+      describeRoute({
+        summary: "Freeze a matched scientific ablation plan",
+        description:
+          "Binds at least three evaluator-authenticated seed pairs before evaluation and permits exactly one declared contract factor to differ.",
+        operationId: "harness.ablation.initialize",
+        responses: {
+          200: {
+            description: "Immutable matched ablation plan",
+            content: { "application/json": { schema: resolver(HarnessAblation.State) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessAblation.Initialize),
+      async (c) => c.json(await HarnessAblation.initialize(c.req.valid("json"))),
+    )
+    .post(
+      "/ablations/:planID/assessment",
+      describeRoute({
+        summary: "Assess a frozen matched ablation",
+        description:
+          "Authenticates every paired run, verifies immutable contracts and final evaluations, then derives paired effects and a 95% interval.",
+        operationId: "harness.ablation.assess",
+        responses: {
+          200: {
+            description: "Immutable matched ablation assessment",
+            content: { "application/json": { schema: resolver(HarnessAblation.State) } },
+          },
+          ...errors(400, 403, 404, 409),
+        },
+      }),
+      validator("param", z.object({ planID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessAblation.Assess),
+      async (c) => c.json(await HarnessAblation.assess(c.req.valid("param").planID, c.req.valid("json"))),
     )
     .post(
       "/simulations/receipts",

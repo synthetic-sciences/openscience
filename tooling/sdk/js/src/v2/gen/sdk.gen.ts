@@ -92,6 +92,10 @@ import type {
   GlobalProjectCreateErrors,
   GlobalProjectCreateResponses,
   GlobalSyncResponses,
+  HarnessAblationAssessErrors,
+  HarnessAblationAssessResponses,
+  HarnessAblationInitializeErrors,
+  HarnessAblationInitializeResponses,
   HarnessAuditInitializeErrors,
   HarnessAuditInitializeResponses,
   HarnessAuditObserveErrors,
@@ -3828,6 +3832,113 @@ export class Audit extends HeyApiClient {
   }
 }
 
+export class Ablation extends HeyApiClient {
+  /**
+   * Freeze a matched scientific ablation plan
+   *
+   * Binds at least three evaluator-authenticated seed pairs before evaluation and permits exactly one declared contract factor to differ.
+   */
+  public initialize<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      schemaVersion?: 1
+      studyID?: string
+      factor?: {
+        kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+        name?: string
+      }
+      minEffect?: number
+      maxPairRegression?: number
+      pairs?: Array<{
+        baseline: {
+          sessionID: string
+          evaluatorToken: string
+        }
+        arm: {
+          sessionID: string
+          evaluatorToken: string
+        }
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "schemaVersion" },
+            { in: "body", key: "studyID" },
+            { in: "body", key: "factor" },
+            { in: "body", key: "minEffect" },
+            { in: "body", key: "maxPairRegression" },
+            { in: "body", key: "pairs" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessAblationInitializeResponses,
+      HarnessAblationInitializeErrors,
+      ThrowOnError
+    >({
+      url: "/harness/ablations",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Assess a frozen matched ablation
+   *
+   * Authenticates every paired run, verifies immutable contracts and final evaluations, then derives paired effects and a 95% interval.
+   */
+  public assess<ThrowOnError extends boolean = false>(
+    parameters: {
+      planID: string
+      directory?: string
+      runs?: Array<{
+        sessionID: string
+        evaluatorToken: string
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "planID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "runs" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessAblationAssessResponses,
+      HarnessAblationAssessErrors,
+      ThrowOnError
+    >({
+      url: "/harness/ablations/{planID}/assessment",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Simulation extends HeyApiClient {
   /**
    * Record an evaluator-authenticated simulator validation
@@ -4599,6 +4710,11 @@ export class Harness extends HeyApiClient {
   private _audit?: Audit
   get audit(): Audit {
     return (this._audit ??= new Audit({ client: this.client }))
+  }
+
+  private _ablation?: Ablation
+  get ablation(): Ablation {
+    return (this._ablation ??= new Ablation({ client: this.client }))
   }
 
   private _simulation?: Simulation

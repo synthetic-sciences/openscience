@@ -83,9 +83,13 @@ describe("harness contract", () => {
   test("records only the evaluator and run bound by the contract", async () => {
     const input = contract("session-evaluation")
     await HarnessContract.bind(input)
-    const result = await HarnessEvaluation.record(evaluation(input.sessionID))
+    const submitted = { ...evaluation(input.sessionID), recordedAt: 1 }
+    const before = Date.now()
+    const result = await HarnessEvaluation.record(submitted)
     expect(HarnessEvaluation.verified(result)).toBe(true)
+    expect(result.recordedAt).toBeGreaterThanOrEqual(before)
     expect(await HarnessEvaluation.read(input.sessionID)).toEqual(result)
+    expect(await HarnessEvaluation.record(submitted)).toEqual(result)
 
     const mismatch = evaluation(input.sessionID)
     mismatch.runID = "different-run"

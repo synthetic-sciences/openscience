@@ -313,15 +313,15 @@ export namespace HarnessAdapter {
       evaluatedAt: value.evaluatedAt,
       notes: value.notes,
     })
-    await HarnessEvaluation.record(evaluation)
-    if (!value.candidateID) return { evaluation }
+    const recorded = await HarnessEvaluation.record(evaluation)
+    if (!value.candidateID) return { evaluation: recorded }
     if (fidelity?.final === false) {
       const search = await HarnessSearch.screen({
         sessionID: value.sessionID,
         candidateID: value.candidateID,
-        evaluation,
+        evaluation: recorded,
       })
-      return { evaluation, search }
+      return { evaluation: recorded, search }
     }
     const search = await HarnessSearch.verify({ sessionID: value.sessionID, candidateID: value.candidateID })
     const memory = await HarnessMemory.capture({
@@ -329,6 +329,6 @@ export namespace HarnessAdapter {
       candidateID: value.candidateID,
       stage: "evaluation",
     })
-    return { evaluation, search, memory }
+    return { evaluation: recorded, search, memory }
   }
 }

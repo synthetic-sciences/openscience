@@ -17,6 +17,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 9. **Coordination must earn its cost.** The contract can pin a topology, or a deterministic policy can choose direct, centralized, fork/join, tournament, or evolutionary execution from bounded task traits. Tool-heavy sequential work is not automatically expanded into a multi-agent swarm.
 10. **Evaluation actively looks for blind spots.** An optional evaluator-owned audit uses committed opaque probes, uncertainty reduction, failure UCB, diversity, and stratum coverage. Its estimate must abstain while uncertainty remains above the contract threshold and cannot promote itself into benchmark evidence.
 11. **Numerical validation is authenticated and recomputed.** A simulation claim pins the engine, effective problem, reference, convergence order, residual/invariant tolerances, and stress tests. A final pass must cite a passing evaluator receipt for the exact artifact.
+12. **Feature attribution is predeclared and paired.** Harness architecture claims require at least three evaluator-authenticated, same-seed baseline/arm pairs frozen before any result exists. Exactly one declared contract factor may differ.
 
 ## System boundary
 
@@ -287,7 +288,17 @@ The bundled skill catalog includes three executable protocols for work that is o
 
 Their scripts return machine-readable JSON and nonzero failure codes, so an orchestrator can use them as blocking gates instead of relying on prompt compliance. They validate the protocol and reported measurements; they do not manufacture hidden data, run an unavailable simulator, or turn an internal result into official benchmark evidence.
 
-### 13. Compare only compatible runs
+### 13. Attribute gains with matched ablations
+
+`POST /harness/ablations` freezes a server-timestamped study before any paired evaluation exists. A study supports `profile`, `orchestration`, `audit`, `simulation`, `fidelities`, and named `skill` or `tool` factors. It requires at least three distinct seeds on a held-out or release split. Within each seed, baseline and arm must have identical objectives, benchmark/evaluator protocol, packs, model, remaining tools/skills, budget, intervention, contamination policy, and seed after removing exactly the declared factor. Across pairs, every non-seed field and both factor values must remain identical.
+
+The plan stores contract fingerprints plus hashes of the baseline value, arm value, and matched context; evaluator capabilities are never persisted. Initialization fails if any paired session already has an evaluation. Every accepted evaluation receives a server-owned receipt time, and assessment rejects receipts older than the plan, closing concurrent initialization races without trusting evaluator-supplied clocks.
+
+After all runs settle, `POST /harness/ablations/:planID/assessment` reauthenticates every session, checks the frozen contract fingerprints, selects the final evaluator-verified run or best candidate outcome, and computes direction-aware paired effects. It reports the mean, sample standard deviation, standard error, a 95% paired Student interval, practical-effect threshold, and pair-level regressions. Support requires the interval's lower bound to exceed the predeclared minimum effect and no pair to violate the regression tolerance. Missing/failed pairs or a forbidden regression reject the attribution; an interval overlapping the threshold remains inconclusive.
+
+The resulting content-addressed receipt establishes matched evidence for one declared harness mechanism. It does not by itself establish benchmark SOTA, generalize beyond the bound task, or rescue an incompatible official comparison.
+
+### 14. Compare only compatible runs
 
 Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity and simulation protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores.
 
@@ -320,6 +331,8 @@ Every adapter is version-agnostic. A real run must still bind an exact benchmark
 | `POST` | `/harness/audits/:auditID/status`        | Read capability-protected posterior and stopping state        |
 | `POST` | `/harness/audits/:auditID/selection`     | Select the next opaque probe commitment                       |
 | `POST` | `/harness/audits/:auditID/observations`  | Record an immutable evaluator-authenticated probe outcome     |
+| `POST` | `/harness/ablations`                     | Freeze a same-seed, one-factor matched ablation               |
+| `POST` | `/harness/ablations/:planID/assessment`  | Derive an immutable paired-effect assessment                  |
 | `POST` | `/harness/simulations/receipts`          | Recompute and record a simulator validation receipt           |
 | `POST` | `/harness/simulations/receipts/:id`      | Read a capability-protected simulator validation receipt      |
 | `POST` | `/harness/evaluations`                   | Record a staged evaluator-authenticated result                |

@@ -74,6 +74,7 @@ export namespace HarnessEvaluation {
       evidence: z.array(z.string().min(1).max(1_000)).min(1).max(128),
       usage: Usage.optional(),
       evaluatedAt: z.number().int().positive(),
+      recordedAt: z.number().int().positive().optional(),
       notes: z.string().max(8_000).optional(),
     })
     .strict()
@@ -137,7 +138,8 @@ export namespace HarnessEvaluation {
   export const verified = (input: Info) => passed(input) && final(input)
 
   export async function record(input: Info) {
-    const evaluation = Info.parse(input)
+    const submitted = Info.parse(input)
+    const evaluation = Info.parse({ ...submitted, recordedAt: Date.now() })
     const contract = await HarnessContract.read(evaluation.sessionID)
     if (!contract) throw new Error(`No harness contract is bound to session ${evaluation.sessionID}`)
     if (contract.runID !== evaluation.runID) {
@@ -194,7 +196,11 @@ export namespace HarnessEvaluation {
       const current = state(data)
       const id = key(evaluation)
       const existing = current.items[id]
-      if (existing && fingerprint(existing) === fingerprint(evaluation)) return current
+      const prior = existing ? structuredClone(existing) : undefined
+      const retry = structuredClone(evaluation)
+      if (prior) delete prior.recordedAt
+      delete retry.recordedAt
+      if (prior && JSON.stringify(prior) === JSON.stringify(retry)) return current
       if (existing) throw new Error(`Evaluation for ${id} is immutable once recorded`)
       if (stage && plan) {
         const index = plan.findIndex((item) => item.id === stage.id)
@@ -214,7 +220,9 @@ export namespace HarnessEvaluation {
         order: [...current.order, id],
       })
     })
-    return evaluation
+    const stored = (await list(evaluation.sessionID)).find((item) => key(item) === key(evaluation))
+    if (!stored) throw new Error(`Evaluation was not durable after recording`)
+    return stored
   }
 
   export async function list(sessionID: string): Promise<Info[]> {

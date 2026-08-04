@@ -16419,6 +16419,1207 @@
         ]
       }
     },
+    "/harness/ablations": {
+      "post": {
+        "operationId": "harness.ablation.initialize",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Freeze a matched scientific ablation plan",
+        "description": "Binds at least three evaluator-authenticated seed pairs before evaluation and permits exactly one declared contract factor to differ.",
+        "responses": {
+          "200": {
+            "description": "Immutable matched ablation plan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "plan": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "planID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "studyID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "factor": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "profile",
+                                "orchestration",
+                                "audit",
+                                "simulation",
+                                "fidelities",
+                                "skill",
+                                "tool"
+                              ]
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "baselineValueSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "armValueSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "contextSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "benchmark": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "taskID": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "split": {
+                              "type": "string",
+                              "enum": [
+                                "held_out",
+                                "release"
+                              ]
+                            },
+                            "evaluator": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "evaluatorVersion": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "metric": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": [
+                                "maximize",
+                                "minimize"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "taskID",
+                            "split",
+                            "evaluator",
+                            "evaluatorVersion",
+                            "metric",
+                            "direction"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minEffect": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "maxPairRegression": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "pairs": {
+                          "minItems": 3,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "seed": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "baseline": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "runID": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "contractFingerprint": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "sessionID",
+                                  "runID",
+                                  "contractFingerprint"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "arm": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "runID": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "contractFingerprint": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "sessionID",
+                                  "runID",
+                                  "contractFingerprint"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "seed",
+                              "baseline",
+                              "arm"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "createdAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "planID",
+                        "studyID",
+                        "factor",
+                        "baselineValueSHA256",
+                        "armValueSHA256",
+                        "contextSHA256",
+                        "benchmark",
+                        "minEffect",
+                        "maxPairRegression",
+                        "pairs",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "receipt": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "receiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "planID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "studyID": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "factor": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "profile",
+                                "orchestration",
+                                "audit",
+                                "simulation",
+                                "fidelities",
+                                "skill",
+                                "tool"
+                              ]
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "pairs": {
+                          "minItems": 3,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "seed": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "baseline": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "runID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "passed",
+                                      "failed",
+                                      "inconclusive"
+                                    ]
+                                  },
+                                  "score": {
+                                    "type": "number"
+                                  },
+                                  "evaluationSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "evaluatedAt": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "recordedAt": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "sessionID",
+                                  "runID",
+                                  "status",
+                                  "evaluationSHA256",
+                                  "evaluatedAt",
+                                  "recordedAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "arm": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "runID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "passed",
+                                      "failed",
+                                      "inconclusive"
+                                    ]
+                                  },
+                                  "score": {
+                                    "type": "number"
+                                  },
+                                  "evaluationSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "evaluatedAt": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "recordedAt": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "sessionID",
+                                  "runID",
+                                  "status",
+                                  "evaluationSHA256",
+                                  "evaluatedAt",
+                                  "recordedAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "effect": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "seed",
+                              "baseline",
+                              "arm"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "statistics": {
+                          "type": "object",
+                          "properties": {
+                            "pairs": {
+                              "type": "integer",
+                              "minimum": 3,
+                              "maximum": 9007199254740991
+                            },
+                            "validPairs": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "meanEffect": {
+                              "type": "number"
+                            },
+                            "standardDeviation": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "standardError": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "confidence95": {
+                              "type": "array",
+                              "prefixItems": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ]
+                            },
+                            "regressions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "minEffect": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "maxPairRegression": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "pairs",
+                            "validPairs",
+                            "regressions",
+                            "minEffect",
+                            "maxPairRegression"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "verdict": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "rejected",
+                            "inconclusive"
+                          ]
+                        },
+                        "assessedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "receiptID",
+                        "planID",
+                        "studyID",
+                        "factor",
+                        "pairs",
+                        "statistics",
+                        "verdict",
+                        "assessedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "plan"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "studyID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "factor": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "profile",
+                          "orchestration",
+                          "audit",
+                          "simulation",
+                          "fidelities",
+                          "skill",
+                          "tool"
+                        ]
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minEffect": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "maxPairRegression": {
+                    "default": 0,
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "pairs": {
+                    "minItems": 3,
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "baseline": {
+                          "type": "object",
+                          "properties": {
+                            "sessionID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "evaluatorToken": {
+                              "type": "string",
+                              "minLength": 32,
+                              "maxLength": 1024
+                            }
+                          },
+                          "required": [
+                            "sessionID",
+                            "evaluatorToken"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "arm": {
+                          "type": "object",
+                          "properties": {
+                            "sessionID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "evaluatorToken": {
+                              "type": "string",
+                              "minLength": 32,
+                              "maxLength": 1024
+                            }
+                          },
+                          "required": [
+                            "sessionID",
+                            "evaluatorToken"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "baseline",
+                        "arm"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "studyID",
+                  "factor",
+                  "minEffect",
+                  "pairs"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.ablation.initialize({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/ablations/{planID}/assessment": {
+      "post": {
+        "operationId": "harness.ablation.assess",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "planID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Assess a frozen matched ablation",
+        "description": "Authenticates every paired run, verifies immutable contracts and final evaluations, then derives paired effects and a 95% interval.",
+        "responses": {
+          "200": {
+            "description": "Immutable matched ablation assessment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "plan": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "planID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "studyID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "factor": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "profile",
+                                "orchestration",
+                                "audit",
+                                "simulation",
+                                "fidelities",
+                                "skill",
+                                "tool"
+                              ]
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "baselineValueSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "armValueSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "contextSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "benchmark": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "taskID": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "split": {
+                              "type": "string",
+                              "enum": [
+                                "held_out",
+                                "release"
+                              ]
+                            },
+                            "evaluator": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "evaluatorVersion": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "metric": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": [
+                                "maximize",
+                                "minimize"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "taskID",
+                            "split",
+                            "evaluator",
+                            "evaluatorVersion",
+                            "metric",
+                            "direction"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minEffect": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "maxPairRegression": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "pairs": {
+                          "minItems": 3,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "seed": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "baseline": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "runID": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "contractFingerprint": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "sessionID",
+                                  "runID",
+                                  "contractFingerprint"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "arm": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "runID": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "contractFingerprint": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "sessionID",
+                                  "runID",
+                                  "contractFingerprint"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "seed",
+                              "baseline",
+                              "arm"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "createdAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "planID",
+                        "studyID",
+                        "factor",
+                        "baselineValueSHA256",
+                        "armValueSHA256",
+                        "contextSHA256",
+                        "benchmark",
+                        "minEffect",
+                        "maxPairRegression",
+                        "pairs",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "receipt": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "receiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "planID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "studyID": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "factor": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "profile",
+                                "orchestration",
+                                "audit",
+                                "simulation",
+                                "fidelities",
+                                "skill",
+                                "tool"
+                              ]
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "pairs": {
+                          "minItems": 3,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "seed": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "baseline": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "runID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "passed",
+                                      "failed",
+                                      "inconclusive"
+                                    ]
+                                  },
+                                  "score": {
+                                    "type": "number"
+                                  },
+                                  "evaluationSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "evaluatedAt": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "recordedAt": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "sessionID",
+                                  "runID",
+                                  "status",
+                                  "evaluationSHA256",
+                                  "evaluatedAt",
+                                  "recordedAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "arm": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "runID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "passed",
+                                      "failed",
+                                      "inconclusive"
+                                    ]
+                                  },
+                                  "score": {
+                                    "type": "number"
+                                  },
+                                  "evaluationSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "evaluatedAt": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "recordedAt": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "sessionID",
+                                  "runID",
+                                  "status",
+                                  "evaluationSHA256",
+                                  "evaluatedAt",
+                                  "recordedAt"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "effect": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "seed",
+                              "baseline",
+                              "arm"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "statistics": {
+                          "type": "object",
+                          "properties": {
+                            "pairs": {
+                              "type": "integer",
+                              "minimum": 3,
+                              "maximum": 9007199254740991
+                            },
+                            "validPairs": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "meanEffect": {
+                              "type": "number"
+                            },
+                            "standardDeviation": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "standardError": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "confidence95": {
+                              "type": "array",
+                              "prefixItems": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ]
+                            },
+                            "regressions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "minEffect": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "maxPairRegression": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "pairs",
+                            "validPairs",
+                            "regressions",
+                            "minEffect",
+                            "maxPairRegression"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "verdict": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "rejected",
+                            "inconclusive"
+                          ]
+                        },
+                        "assessedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "receiptID",
+                        "planID",
+                        "studyID",
+                        "factor",
+                        "pairs",
+                        "statistics",
+                        "verdict",
+                        "assessedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "plan"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "runs": {
+                    "minItems": 6,
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "sessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "evaluatorToken": {
+                          "type": "string",
+                          "minLength": 32,
+                          "maxLength": 1024
+                        }
+                      },
+                      "required": [
+                        "sessionID",
+                        "evaluatorToken"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "runs"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.ablation.assess({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/simulations/receipts": {
       "post": {
         "operationId": "harness.simulation.record",
@@ -22234,6 +23435,11 @@
                         "additionalProperties": false
                       },
                       "evaluatedAt": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "recordedAt": {
                         "type": "integer",
                         "exclusiveMinimum": 0,
                         "maximum": 9007199254740991
