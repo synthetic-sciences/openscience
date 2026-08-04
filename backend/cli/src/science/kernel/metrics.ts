@@ -89,20 +89,33 @@ export namespace KernelMetrics {
     return unix(output)
   }
 
-  const baseline = new Map<number, { cpu_seconds: number; at: number }>()
+  // Keyed by caller scope AND pid. Independent pollers watch the same pids on
+  // their own cadence — the Compute strip polls /notebook/compute while the
+  // Kernels panel polls /notebook/kernels — and a shared per-pid entry would
+  // make each poll measure the gap to the OTHER caller's poll. Interleaved by
+  // milliseconds that yields a fabricated 0 or a wildly inflated percentage.
+  const baseline = new Map<string, { cpu_seconds: number; at: number }>()
+
+  const key = (scope: string, pid: number) => `${scope}:${pid}`
 
   export function reset() {
     baseline.clear()
   }
 
-  export async function sampleAll(pids: number[]) {
+  // The scoped keys currently held. A leaked baseline is invisible in a sample
+  // map, yet it would derive a percentage for a pid the OS later recycles.
+  export function tracked() {
+    return [...baseline.keys()]
+  }
+
+  export async function sampleAll(scope: string, pids: number[]) {
     const samples = new Map<number, Sample>()
     if (!pids.length) return samples
     const readings = await read(pids)
     const at = Date.now()
     for (const [pid, reading] of readings) {
-      const previous = baseline.get(pid)
-      baseline.set(pid, { cpu_seconds: reading.cpu_seconds, at })
+      const previous = baseline.get(key(scope, pid))
+      baseline.set(key(scope, pid), { cpu_seconds: reading.cpu_seconds, at })
       const elapsed = previous ? (at - previous.at) / 1_000 : 0
       const used = previous ? reading.cpu_seconds - previous.cpu_seconds : 0
       samples.set(pid, {
@@ -114,7 +127,7 @@ export namespace KernelMetrics {
     // drop entries belonging to other sessions — /notebook/kernels is polled
     // per-session, so two tabs on different sessions would wipe each other's
     // baselines every poll and pin cpu_percent at Unavailable forever.
-    for (const pid of pids) if (!readings.has(pid)) baseline.delete(pid)
+    for (const pid of pids) if (!readings.has(pid)) baseline.delete(key(scope, pid))
     return samples
   }
 }

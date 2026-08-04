@@ -122,6 +122,7 @@ export const NotebookRoutes = lazy(() =>
         const host = await KernelHost.snapshot()
         const live = KernelRuntime.list().filter((kernel) => kernel.active)
         const samples = await KernelMetrics.sampleAll(
+          "compute",
           live.flatMap((kernel) => (kernel.process_id === null ? [] : [kernel.process_id])),
         )
         const usage = [...samples.values()]
@@ -178,6 +179,7 @@ export const NotebookRoutes = lazy(() =>
         }
         const live = KernelRuntime.list(query.sessionID).filter((kernel) => owners.has(kernel.sessionID))
         const samples = await KernelMetrics.sampleAll(
+          "kernels",
           live.flatMap((kernel) => (kernel.active && kernel.process_id !== null ? [kernel.process_id] : [])),
         )
         const kernels = live.map((kernel) => {

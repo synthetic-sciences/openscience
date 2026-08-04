@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test"
+import os from "node:os"
 import { KernelMetrics } from "../../../src/science/kernel/metrics"
 
 beforeEach(() => KernelMetrics.reset())
@@ -45,24 +46,24 @@ describe("kernel metrics parsing", () => {
 
 describe("kernel metrics sampling", () => {
   test("reports memory immediately and cpu only once a baseline exists", async () => {
-    const first = await KernelMetrics.sampleAll([process.pid])
+    const first = await KernelMetrics.sampleAll("kernels", [process.pid])
 
     expect(first.get(process.pid)?.memory_bytes).toBeGreaterThan(0)
     expect(first.get(process.pid)?.cpu_percent).toBeUndefined()
 
     await Bun.sleep(120)
-    const second = await KernelMetrics.sampleAll([process.pid])
+    const second = await KernelMetrics.sampleAll("kernels", [process.pid])
 
     expect(second.get(process.pid)?.cpu_percent).toBeGreaterThanOrEqual(0)
     expect(second.get(process.pid)?.memory_bytes).toBeGreaterThan(0)
   })
 
   test("returns an empty map for no pids without spawning anything", async () => {
-    expect((await KernelMetrics.sampleAll([])).size).toBe(0)
+    expect((await KernelMetrics.sampleAll("kernels", [])).size).toBe(0)
   })
 
   test("ignores a pid that does not exist", async () => {
-    const samples = await KernelMetrics.sampleAll([process.pid, 999_999_999])
+    const samples = await KernelMetrics.sampleAll("kernels", [process.pid, 999_999_999])
 
     expect(samples.has(process.pid)).toBe(true)
     expect(samples.has(999_999_999)).toBe(false)
@@ -74,17 +75,62 @@ describe("kernel metrics sampling", () => {
     const b = Bun.spawn(["sleep", "30"], { stdout: "ignore", stderr: "ignore" })
     try {
       // Establish A's baseline, the way one browser tab polling session A would.
-      await KernelMetrics.sampleAll([a.pid])
+      await KernelMetrics.sampleAll("kernels", [a.pid])
       // A second tab polling a different session (B) in between — must not touch A's entry.
-      await KernelMetrics.sampleAll([b.pid])
+      await KernelMetrics.sampleAll("kernels", [b.pid])
       await Bun.sleep(120)
-      const second = await KernelMetrics.sampleAll([a.pid])
+      const second = await KernelMetrics.sampleAll("kernels", [a.pid])
 
       expect(typeof second.get(a.pid)?.cpu_percent).toBe("number")
     } finally {
       a.kill()
       b.kill()
       await Promise.all([a.exited, b.exited])
+    }
+  })
+
+  test("forgets a pid that died between two samples", async () => {
+    if (process.platform === "win32") return
+    const doomed = Bun.spawn(["sleep", "30"], { stdout: "ignore", stderr: "ignore" })
+    const pid = doomed.pid
+    const first = await KernelMetrics.sampleAll("kernels", [pid])
+    doomed.kill()
+    await doomed.exited
+
+    const second = await KernelMetrics.sampleAll("kernels", [pid])
+
+    expect(first.has(pid)).toBe(true)
+    expect(second.has(pid)).toBe(false)
+    // The dead pid's baseline is gone, so a pid the OS later recycles starts
+    // cold rather than deriving a percentage from a stranger's cpu seconds.
+    expect(KernelMetrics.tracked()).toEqual([])
+  })
+
+  test("gives each scope its own cpu window when both poll the same pid", async () => {
+    if (process.platform === "win32") return
+    // A real process pegged at 100% of one core, so the derived percentage is
+    // large enough that a corrupted window shows up as 0 or as a wild multiple.
+    const busy = Bun.spawn(["sh", "-c", "while :; do :; done"], { stdout: "ignore", stderr: "ignore" })
+    const ceiling = 100 * Math.max(os.cpus().length, 4)
+    try {
+      // Both surfaces mount together: the Compute strip polls /notebook/compute
+      // and the Kernels panel polls /notebook/kernels, milliseconds apart.
+      await KernelMetrics.sampleAll("compute", [busy.pid])
+      await KernelMetrics.sampleAll("kernels", [busy.pid])
+      await Bun.sleep(2_500)
+      const compute = await KernelMetrics.sampleAll("compute", [busy.pid])
+      const kernels = await KernelMetrics.sampleAll("kernels", [busy.pid])
+
+      for (const samples of [compute, kernels]) {
+        const value = samples.get(busy.pid)?.cpu_percent
+        // Never a fabricated 0 on a fully busy process, never a percentage the
+        // machine could not physically produce.
+        expect(value).toBeGreaterThan(0)
+        expect(value).toBeLessThan(ceiling)
+      }
+    } finally {
+      busy.kill()
+      await busy.exited
     }
   })
 })
