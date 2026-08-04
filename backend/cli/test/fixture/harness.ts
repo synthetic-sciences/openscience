@@ -1,21 +1,25 @@
 import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessLaunch } from "../../src/session/harness/launch"
+import { HarnessBenchmark } from "../../src/session/harness/benchmark"
 
 export const harnessHash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
 
 export function launchProtocol(key = "official") {
+  const id = HarnessBenchmark.Id.safeParse(key)
+  const benchmark = id.success ? HarnessBenchmark.catalog[id.data] : undefined
+  const source = benchmark?.source.status === "methodology_only" ? undefined : benchmark?.source
   return HarnessContract.Launch.parse({
     protocolVersion: "benchmark-launch-v1",
     runner: {
-      repository: `https://example.org/${key}/benchmark.git`,
-      revision: harnessHash(`${key}-runner`).slice(0, 40),
+      repository: source?.repository ?? `https://example.org/${key}/benchmark.git`,
+      revision: source?.revision ?? harnessHash(`${key}-runner`).slice(0, 40),
       entrypoint: "benchmark/run.py",
       commandSHA256: harnessHash(`${key}-command`),
       environmentSHA256: harnessHash(`${key}-environment`),
     },
     dataset: {
       name: `${key}-dataset`,
-      source: `https://example.org/${key}/dataset`,
+      source: source?.dataset ?? `https://example.org/${key}/dataset`,
       revision: `${key}-dataset-v1`,
       manifestSHA256: harnessHash(`${key}-dataset-manifest`),
     },

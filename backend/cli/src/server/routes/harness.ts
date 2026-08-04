@@ -30,7 +30,8 @@ export const HarnessRoutes = lazy(() =>
       "/benchmarks",
       describeRoute({
         summary: "List scientific benchmark adapters",
-        description: "Lists version-agnostic adapter manifests and their required verification packs.",
+        description:
+          "Lists version-agnostic adapter manifests, exact official source pins or subset limitations, and required verification packs.",
         operationId: "harness.benchmarks",
         responses: {
           200: {

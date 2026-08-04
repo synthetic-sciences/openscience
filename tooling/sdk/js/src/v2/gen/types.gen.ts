@@ -7513,6 +7513,30 @@ export type HarnessBenchmarksResponses = {
     profiles: Array<"react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast">
     packs: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     execution: "external_runner_required"
+    source:
+      | {
+          status: "official_open"
+          repository: string
+          revision: string
+          homepage: string
+          dataset?: string
+          checkedAt: string
+        }
+      | {
+          status: "official_subset"
+          repository: string
+          revision: string
+          homepage: string
+          dataset: string
+          publicTasks: number
+          totalTasks: number
+          scope: string
+          checkedAt: string
+        }
+      | {
+          status: "methodology_only"
+          reason: string
+        }
     task: string
   }>
 }

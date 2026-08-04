@@ -8,6 +8,7 @@ import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessDomain } from "../../src/session/harness/domain"
 import { HarnessEvaluation } from "../../src/session/harness/evaluation"
 import { HarnessSearch } from "../../src/session/harness/search"
+import { launchProtocol } from "../fixture/harness"
 
 const sessions = new Set<string>()
 const token = "benchmark-evaluator-capability-token-0000000000000000"
@@ -83,6 +84,10 @@ describe("benchmark adapters", () => {
       expect(HarnessBenchmark.Manifest.parse(manifest)).toEqual(manifest)
       expect(HarnessBenchmark.resolve(manifest.title).id).toBe(manifest.id)
     }
+    const sources = Object.values(HarnessBenchmark.catalog).map((manifest) => manifest.source.status)
+    expect(sources.filter((status) => status === "official_open")).toHaveLength(19)
+    expect(sources.filter((status) => status === "official_subset")).toHaveLength(1)
+    expect(sources.filter((status) => status === "methodology_only")).toHaveLength(3)
   })
 
   test("resolves common benchmark spellings without fuzzy guessing", () => {
@@ -114,6 +119,37 @@ describe("benchmark adapters", () => {
     const input = task("mle", "adapter-budget")
     delete input.budget.candidates
     await expect(HarnessAdapter.bind(input)).rejects.toThrow("candidate budget")
+  })
+
+  test("rejects substituted official sources and public subsets posing as hidden benchmarks", async () => {
+    const official = await HarnessAdapter.bind({
+      ...task("mle", "adapter-official-source"),
+      launch: launchProtocol("mle"),
+    })
+    expect(official.launch?.runner).toMatchObject({
+      repository:
+        HarnessBenchmark.catalog.mle.source.status === "official_open"
+          ? HarnessBenchmark.catalog.mle.source.repository
+          : undefined,
+      revision:
+        HarnessBenchmark.catalog.mle.source.status === "official_open"
+          ? HarnessBenchmark.catalog.mle.source.revision
+          : undefined,
+    })
+
+    const changed = launchProtocol("mle")
+    changed.runner.repository = "https://example.org/substituted/mle-bench"
+    await expect(
+      HarnessAdapter.bind({ ...task("mle", "adapter-substituted-source"), launch: changed }),
+    ).rejects.toThrow("catalog-pinned official source revision")
+
+    await expect(
+      HarnessAdapter.bind({
+        ...task("genebench", "adapter-public-subset"),
+        split: "held_out",
+        launch: launchProtocol("genebench"),
+      }),
+    ).rejects.toThrow("cannot represent the 129-task hidden benchmark")
   })
 
   test("requires the out-of-band evaluator capability and exact bound metric", async () => {

@@ -191,6 +191,11 @@ export namespace HarnessAdapter {
   const root = path.join(Global.Path.data, "harness", "bindings")
   const file = (sessionID: string) => path.join(root, `${encodeURIComponent(sessionID)}.json`)
   const digest = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
+  const repository = (value: string) =>
+    value
+      .trim()
+      .replace(/\.git\/?$/, "")
+      .replace(/\/$/, "")
 
   async function credential(sessionID: string): Promise<Binding> {
     const data = await JsonStore.read(file(sessionID))
@@ -245,6 +250,22 @@ export namespace HarnessAdapter {
     }
     if (profile === "optimize" && task.budget.candidates === undefined) {
       throw new Error(`An optimize benchmark must declare a candidate budget`)
+    }
+    if (benchmark.source.status === "official_subset" && (task.split === "held_out" || task.split === "release")) {
+      throw new Error(
+        `${benchmark.title} exposes only ${benchmark.source.publicTasks} public tasks and cannot represent the ${benchmark.source.totalTasks}-task hidden benchmark`,
+      )
+    }
+    if (task.launch && benchmark.source.status !== "methodology_only") {
+      if (
+        repository(task.launch.runner.repository) !== repository(benchmark.source.repository) ||
+        task.launch.runner.revision !== benchmark.source.revision
+      ) {
+        throw new Error(`Benchmark launch does not match the catalog-pinned official source revision`)
+      }
+      if (benchmark.source.dataset && repository(task.launch.dataset.source) !== repository(benchmark.source.dataset)) {
+        throw new Error(`Benchmark launch does not match the catalog-pinned official dataset source`)
+      }
     }
     const packs = [...benchmark.packs, ...task.extraPacks].filter((pack, index, items) => items.indexOf(pack) === index)
     if (task.simulation && !packs.some((pack) => ["physics", "pde", "chemistry"].includes(pack))) {

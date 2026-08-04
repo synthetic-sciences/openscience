@@ -21,6 +21,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 13. **The evaluator must earn trust.** An optional independent auditor capability scores the bound evaluator on a committed hidden suite of clean and realistically faulty outputs. Final passes require a content-addressed qualification receipt whose discrimination, calibration, and per-fault recall clear the frozen thresholds.
 14. **Overthinking must earn another round.** Adaptive evolution advances only after a sequential, evaluator-authenticated utility checkpoint. Uncertain measurements cannot stop search, and a target hit or exhausted marginal gain preserves investigation and independent verification instead of declaring success.
 15. **A benchmark name is not a runnable integration.** Held-out and release runs must pin an official runner revision, environment, dataset manifest, task manifest, evaluator artifact, and replayable baseline. Search and orchestration remain blocked until the external evaluator proves the complete launch suite and records a content-addressed readiness receipt.
+16. **Official means source-identical.** Every named open benchmark adapter records its official repository at an exact commit and, when published separately, its dataset source. A launch using a fork, replacement runner, or replacement dataset is rejected rather than reported under the official benchmark name. Methodology families are labeled as such, and public reproduction subsets cannot be bound as hidden or release runs.
 
 ## System boundary
 
@@ -184,6 +185,14 @@ Rebinding the session with any changed field or evaluator capability fails.
 #### Prove launch readiness before execution
 
 Every catalog manifest reports `execution: external_runner_required`: the adapter supplies scientific methodology and routing, not a bundled official runner. A held-out or release bind is rejected unless it includes `benchmark-launch-v1`. The external evaluator must then submit all eight checks to `POST /harness/launches/receipts`:
+
+Catalog entries distinguish three source states:
+
+- `official_open` pins the official repository commit and published dataset source;
+- `official_subset` identifies a public reproduction subset and its exact scope; and
+- `methodology_only` makes explicit that the adapter is a reusable scientific method, not an official benchmark integration.
+
+For a named official adapter, the bound runner repository and commit must match the catalog pin, and a separately published dataset must match its catalog source. OpenScience deliberately rejects source-substituted launches. GeneBench-Pro is currently cataloged as the 10-case public package out of 129 total cases, so it can support validation and reproduction but cannot be labeled as a hidden or release benchmark run.
 
 - clean checkout at the exact 40- or 64-character source revision;
 - locked environment replay;

@@ -4681,7 +4681,7 @@ export class Harness extends HeyApiClient {
   /**
    * List scientific benchmark adapters
    *
-   * Lists version-agnostic adapter manifests and their required verification packs.
+   * Lists version-agnostic adapter manifests, exact official source pins or subset limitations, and required verification packs.
    */
   public benchmarks<ThrowOnError extends boolean = false>(
     parameters?: {

@@ -34,7 +34,18 @@ describe("/harness routes", () => {
     const app = HarnessRoutes()
     const benchmarks = await app.request("/benchmarks")
     expect(benchmarks.status).toBe(200)
-    expect((await benchmarks.json()) as unknown[]).toHaveLength(HarnessBenchmark.Id.options.length)
+    const catalog = (await benchmarks.json()) as HarnessBenchmark.Manifest[]
+    expect(catalog).toHaveLength(HarnessBenchmark.Id.options.length)
+    expect(catalog.find((item) => item.id === "mle")?.source).toMatchObject({
+      status: "official_open",
+      repository: "https://github.com/openai/mle-bench",
+      revision: "507f92e1138bb6e40dac5c6ee7a6758e6424bf97",
+    })
+    expect(catalog.find((item) => item.id === "genebench")?.source).toMatchObject({
+      status: "official_subset",
+      publicTasks: 10,
+      totalTasks: 129,
+    })
 
     const bound = await app.request("/runs", {
       method: "POST",
