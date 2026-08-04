@@ -4,7 +4,7 @@
   gap: 12px;
   box-sizing: border-box;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--color-border-weak);
+  border-bottom: 1px solid var(--color-border-weak-base);
   background: var(--color-bg);
 }
 
