@@ -7905,7 +7905,7 @@ export type HarnessAblationInitializeData = {
     schemaVersion: 1
     studyID: string
     factor: {
-      kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+      kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
       name?: string
     }
     minEffect: number
@@ -7948,7 +7948,7 @@ export type HarnessAblationInitializeResponses = {
       planID: string
       studyID: string
       factor: {
-        kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+        kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
         name?: string
       }
       baselineValueSHA256: string
@@ -7987,7 +7987,7 @@ export type HarnessAblationInitializeResponses = {
       planID: string
       studyID: string
       factor: {
-        kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+        kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
         name?: string
       }
       pairs: Array<{
@@ -8072,7 +8072,7 @@ export type HarnessAblationAssessResponses = {
       planID: string
       studyID: string
       factor: {
-        kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+        kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
         name?: string
       }
       baselineValueSHA256: string
@@ -8111,7 +8111,7 @@ export type HarnessAblationAssessResponses = {
       planID: string
       studyID: string
       factor: {
-        kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+        kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
         name?: string
       }
       pairs: Array<{
@@ -8154,6 +8154,217 @@ export type HarnessAblationAssessResponses = {
 }
 
 export type HarnessAblationAssessResponse = HarnessAblationAssessResponses[keyof HarnessAblationAssessResponses]
+
+export type HarnessJudgeRecordData = {
+  body?: {
+    sessionID: string
+    auditorToken: string
+    cases: Array<{
+      id: string
+      commitment: string
+      kind: "clean" | "fault"
+      fault?:
+        | "wrong_answer"
+        | "unsupported_claim"
+        | "missing_evidence"
+        | "data_leakage"
+        | "non_reproducible"
+        | "reward_hacking"
+        | "invalid_statistics"
+        | "invalid_simulation"
+        | "distribution_shift"
+        | "evaluation_awareness"
+      decision: "accept" | "reject" | "abstain"
+      failureProbability: number
+      evidence: Array<string>
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/evaluators/qualifications"
+}
+
+export type HarnessJudgeRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessJudgeRecordError = HarnessJudgeRecordErrors[keyof HarnessJudgeRecordErrors]
+
+export type HarnessJudgeRecordResponses = {
+  /**
+   * Immutable evaluator audit receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "evaluator-audit-receipt-v1"
+    receiptID: string
+    protocolSHA256: string
+    sourceSessionID: string
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "human" | "external"
+    }
+    auditor: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "human" | "external"
+    }
+    suite: {
+      name: string
+      version: string
+      commitmentSHA256: string
+    }
+    cases: Array<{
+      id: string
+      commitment: string
+      kind: "clean" | "fault"
+      fault?:
+        | "wrong_answer"
+        | "unsupported_claim"
+        | "missing_evidence"
+        | "data_leakage"
+        | "non_reproducible"
+        | "reward_hacking"
+        | "invalid_statistics"
+        | "invalid_simulation"
+        | "distribution_shift"
+        | "evaluation_awareness"
+      decision: "accept" | "reject" | "abstain"
+      failureProbability: number
+      evidence: Array<string>
+    }>
+    metrics: {
+      cases: number
+      cleanCases: number
+      faultCases: number
+      truePositive: number
+      falseNegative: number
+      trueNegative: number
+      falsePositive: number
+      sensitivity: number
+      specificity: number
+      balancedAccuracy: number
+      brierScore: number
+      perFault: {
+        [key: string]: {
+          cases: number
+          detected: number
+          recall: number
+        }
+      }
+    }
+    status: "passed" | "failed"
+    failures: Array<string>
+    recordedAt: number
+  }
+}
+
+export type HarnessJudgeRecordResponse = HarnessJudgeRecordResponses[keyof HarnessJudgeRecordResponses]
+
+export type HarnessJudgeReceiptData = {
+  body?: {
+    sessionID: string
+    auditorToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/evaluators/qualifications/{receiptID}"
+}
+
+export type HarnessJudgeReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessJudgeReceiptError = HarnessJudgeReceiptErrors[keyof HarnessJudgeReceiptErrors]
+
+export type HarnessJudgeReceiptResponses = {
+  /**
+   * Evaluator audit receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "evaluator-audit-receipt-v1"
+    receiptID: string
+    protocolSHA256: string
+    sourceSessionID: string
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "human" | "external"
+    }
+    auditor: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "human" | "external"
+    }
+    suite: {
+      name: string
+      version: string
+      commitmentSHA256: string
+    }
+    cases: Array<{
+      id: string
+      commitment: string
+      kind: "clean" | "fault"
+      fault?:
+        | "wrong_answer"
+        | "unsupported_claim"
+        | "missing_evidence"
+        | "data_leakage"
+        | "non_reproducible"
+        | "reward_hacking"
+        | "invalid_statistics"
+        | "invalid_simulation"
+        | "distribution_shift"
+        | "evaluation_awareness"
+      decision: "accept" | "reject" | "abstain"
+      failureProbability: number
+      evidence: Array<string>
+    }>
+    metrics: {
+      cases: number
+      cleanCases: number
+      faultCases: number
+      truePositive: number
+      falseNegative: number
+      trueNegative: number
+      falsePositive: number
+      sensitivity: number
+      specificity: number
+      balancedAccuracy: number
+      brierScore: number
+      perFault: {
+        [key: string]: {
+          cases: number
+          detected: number
+          recall: number
+        }
+      }
+    }
+    status: "passed" | "failed"
+    failures: Array<string>
+    recordedAt: number
+  }
+}
+
+export type HarnessJudgeReceiptResponse = HarnessJudgeReceiptResponses[keyof HarnessJudgeReceiptResponses]
 
 export type HarnessSimulationRecordData = {
   body?: {
@@ -8751,6 +8962,41 @@ export type HarnessBindData = {
         >
       }
     }
+    evaluatorAudit?: {
+      protocol: {
+        protocolVersion: "evaluator-audit-v1"
+        auditor: {
+          name: string
+          version: string
+          source: "benchmark" | "gate" | "human" | "external"
+        }
+        suite: {
+          name: string
+          version: string
+          commitmentSHA256: string
+        }
+        minCleanCases: number
+        minCasesPerFault: number
+        requiredFaults: Array<
+          | "wrong_answer"
+          | "unsupported_claim"
+          | "missing_evidence"
+          | "data_leakage"
+          | "non_reproducible"
+          | "reward_hacking"
+          | "invalid_statistics"
+          | "invalid_simulation"
+          | "distribution_shift"
+          | "evaluation_awareness"
+        >
+        minSensitivity: number
+        minSpecificity: number
+        minBalancedAccuracy: number
+        minFaultRecall: number
+        maxBrierScore: number
+      }
+      token: string
+    }
     extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     metric?: {
       name?: string
@@ -8912,6 +9158,38 @@ export type HarnessBindResponses = {
         >
       }
     }
+    evaluatorAudit?: {
+      protocolVersion: "evaluator-audit-v1"
+      auditor: {
+        name: string
+        version: string
+        source: "benchmark" | "gate" | "human" | "external"
+      }
+      suite: {
+        name: string
+        version: string
+        commitmentSHA256: string
+      }
+      minCleanCases: number
+      minCasesPerFault: number
+      requiredFaults: Array<
+        | "wrong_answer"
+        | "unsupported_claim"
+        | "missing_evidence"
+        | "data_leakage"
+        | "non_reproducible"
+        | "reward_hacking"
+        | "invalid_statistics"
+        | "invalid_simulation"
+        | "distribution_shift"
+        | "evaluation_awareness"
+      >
+      minSensitivity: number
+      minSpecificity: number
+      minBalancedAccuracy: number
+      minFaultRecall: number
+      maxBrierScore: number
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string
@@ -8955,6 +9233,7 @@ export type HarnessEvaluateData = {
     candidateID?: string
     stage?: string
     simulationReceiptID?: string
+    evaluatorAuditReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
     metrics?: {
@@ -9404,6 +9683,38 @@ export type HarnessContractResponses = {
         >
       }
     }
+    evaluatorAudit?: {
+      protocolVersion: "evaluator-audit-v1"
+      auditor: {
+        name: string
+        version: string
+        source: "benchmark" | "gate" | "human" | "external"
+      }
+      suite: {
+        name: string
+        version: string
+        commitmentSHA256: string
+      }
+      minCleanCases: number
+      minCasesPerFault: number
+      requiredFaults: Array<
+        | "wrong_answer"
+        | "unsupported_claim"
+        | "missing_evidence"
+        | "data_leakage"
+        | "non_reproducible"
+        | "reward_hacking"
+        | "invalid_statistics"
+        | "invalid_simulation"
+        | "distribution_shift"
+        | "evaluation_awareness"
+      >
+      minSensitivity: number
+      minSpecificity: number
+      minBalancedAccuracy: number
+      minFaultRecall: number
+      maxBrierScore: number
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string
@@ -9475,6 +9786,7 @@ export type HarnessEvaluationsResponses = {
       final: boolean
     }
     simulationReceiptID?: string
+    evaluatorAuditReceiptID?: string
     evaluator: {
       name: string
       version: string
@@ -9590,6 +9902,7 @@ export type HarnessReportResponses = {
       evaluator: string
       evaluatorVersion?: string
       simulationReceiptID?: string
+      evaluatorAuditReceiptID?: string
       evaluations: number
     }
     efficiency: {

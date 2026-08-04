@@ -8,6 +8,7 @@ import { HarnessAudit } from "@/session/harness/audit"
 import { HarnessBenchmark } from "@/session/harness/benchmark"
 import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
+import { HarnessJudge } from "@/session/harness/judge"
 import { HarnessOrchestrator } from "@/session/harness/orchestrator"
 import { HarnessReport } from "@/session/harness/report"
 import { HarnessSimulation } from "@/session/harness/simulation"
@@ -142,6 +143,56 @@ export const HarnessRoutes = lazy(() =>
       validator("param", z.object({ planID: z.string().regex(/^[a-f0-9]{64}$/) })),
       validator("json", HarnessAblation.Assess),
       async (c) => c.json(await HarnessAblation.assess(c.req.valid("param").planID, c.req.valid("json"))),
+    )
+    .post(
+      "/evaluators/qualifications",
+      describeRoute({
+        summary: "Qualify a bound benchmark evaluator",
+        description:
+          "Uses an independent auditor capability and a committed hidden fault suite to recompute evaluator discrimination and calibration metrics.",
+        operationId: "harness.judge.record",
+        responses: {
+          200: {
+            description: "Immutable evaluator audit receipt",
+            content: { "application/json": { schema: resolver(HarnessJudge.Receipt) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessJudge.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorizeAuditor(input.sessionID, input.auditorToken)
+        return c.json(await HarnessJudge.record(input, contract))
+      },
+    )
+    .post(
+      "/evaluators/qualifications/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected evaluator qualification",
+        operationId: "harness.judge.receipt",
+        responses: {
+          200: {
+            description: "Evaluator audit receipt",
+            content: { "application/json": { schema: resolver(HarnessJudge.Receipt) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessJudge.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorizeAuditor(input.sessionID, input.auditorToken)
+        return c.json(
+          await HarnessJudge.assert({
+            contract,
+            receiptID: c.req.valid("param").receiptID,
+            recordedAt: Date.now(),
+            requirePassed: false,
+          }),
+        )
+      },
     )
     .post(
       "/simulations/receipts",

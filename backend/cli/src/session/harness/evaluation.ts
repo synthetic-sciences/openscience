@@ -4,6 +4,7 @@ import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
 import { HarnessContract } from "./contract"
 import { HarnessDomain } from "./domain"
+import { HarnessJudge } from "./judge"
 import { HarnessSimulation } from "./simulation"
 
 export namespace HarnessEvaluation {
@@ -54,6 +55,10 @@ export namespace HarnessEvaluation {
         .strict()
         .optional(),
       simulationReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      evaluatorAuditReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -187,6 +192,25 @@ export namespace HarnessEvaluation {
         candidateID: evaluation.subject?.type === "candidate" ? evaluation.subject.id : undefined,
         requirePassed: evaluation.status === "passed" && final(evaluation),
         evaluatedAt: evaluation.evaluatedAt,
+      })
+    }
+    if (evaluation.evaluatorAuditReceiptID && !contract.evaluatorAudit) {
+      throw new Error(`Evaluation references an auditor receipt without a bound evaluator audit protocol`)
+    }
+    if (
+      contract.evaluatorAudit &&
+      evaluation.status === "passed" &&
+      final(evaluation) &&
+      !evaluation.evaluatorAuditReceiptID
+    ) {
+      throw new Error(`A passing final evaluation must reference a qualified evaluator audit receipt`)
+    }
+    if (evaluation.evaluatorAuditReceiptID) {
+      await HarnessJudge.assert({
+        contract,
+        receiptID: evaluation.evaluatorAuditReceiptID,
+        recordedAt: evaluation.recordedAt!,
+        requirePassed: evaluation.status === "passed" && final(evaluation),
       })
     }
     if (evaluation.status === "passed" && final(evaluation)) {

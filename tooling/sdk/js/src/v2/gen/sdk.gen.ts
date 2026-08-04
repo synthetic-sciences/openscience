@@ -115,6 +115,10 @@ import type {
   HarnessEvaluateResponses,
   HarnessEvaluationsErrors,
   HarnessEvaluationsResponses,
+  HarnessJudgeReceiptErrors,
+  HarnessJudgeReceiptResponses,
+  HarnessJudgeRecordErrors,
+  HarnessJudgeRecordResponses,
   HarnessOrchestrationStartErrors,
   HarnessOrchestrationStartResponses,
   HarnessOrchestrationStatusErrors,
@@ -3844,7 +3848,7 @@ export class Ablation extends HeyApiClient {
       schemaVersion?: 1
       studyID?: string
       factor?: {
-        kind: "profile" | "orchestration" | "audit" | "simulation" | "fidelities" | "skill" | "tool"
+        kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
         name?: string
       }
       minEffect?: number
@@ -3936,6 +3940,104 @@ export class Ablation extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+}
+
+export class Judge extends HeyApiClient {
+  /**
+   * Qualify a bound benchmark evaluator
+   *
+   * Uses an independent auditor capability and a committed hidden fault suite to recompute evaluator discrimination and calibration metrics.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      auditorToken?: string
+      cases?: Array<{
+        id: string
+        commitment: string
+        kind: "clean" | "fault"
+        fault?:
+          | "wrong_answer"
+          | "unsupported_claim"
+          | "missing_evidence"
+          | "data_leakage"
+          | "non_reproducible"
+          | "reward_hacking"
+          | "invalid_statistics"
+          | "invalid_simulation"
+          | "distribution_shift"
+          | "evaluation_awareness"
+        decision: "accept" | "reject" | "abstain"
+        failureProbability: number
+        evidence: Array<string>
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "auditorToken" },
+            { in: "body", key: "cases" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessJudgeRecordResponses, HarnessJudgeRecordErrors, ThrowOnError>({
+      url: "/harness/evaluators/qualifications",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected evaluator qualification
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      auditorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "auditorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessJudgeReceiptResponses, HarnessJudgeReceiptErrors, ThrowOnError>(
+      {
+        url: "/harness/evaluators/qualifications/{receiptID}",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
   }
 }
 
@@ -4405,6 +4507,41 @@ export class Harness extends HeyApiClient {
           >
         }
       }
+      evaluatorAudit?: {
+        protocol: {
+          protocolVersion: "evaluator-audit-v1"
+          auditor: {
+            name: string
+            version: string
+            source: "benchmark" | "gate" | "human" | "external"
+          }
+          suite: {
+            name: string
+            version: string
+            commitmentSHA256: string
+          }
+          minCleanCases: number
+          minCasesPerFault: number
+          requiredFaults: Array<
+            | "wrong_answer"
+            | "unsupported_claim"
+            | "missing_evidence"
+            | "data_leakage"
+            | "non_reproducible"
+            | "reward_hacking"
+            | "invalid_statistics"
+            | "invalid_simulation"
+            | "distribution_shift"
+            | "evaluation_awareness"
+          >
+          minSensitivity: number
+          minSpecificity: number
+          minBalancedAccuracy: number
+          minFaultRecall: number
+          maxBrierScore: number
+        }
+        token: string
+      }
       extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
       metric?: {
         name?: string
@@ -4467,6 +4604,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "orchestration" },
             { in: "body", key: "audit" },
             { in: "body", key: "simulation" },
+            { in: "body", key: "evaluatorAudit" },
             { in: "body", key: "extraPacks" },
             { in: "body", key: "metric" },
             { in: "body", key: "fidelities" },
@@ -4509,6 +4647,7 @@ export class Harness extends HeyApiClient {
       candidateID?: string
       stage?: string
       simulationReceiptID?: string
+      evaluatorAuditReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
       metrics?: {
@@ -4545,6 +4684,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "candidateID" },
             { in: "body", key: "stage" },
             { in: "body", key: "simulationReceiptID" },
+            { in: "body", key: "evaluatorAuditReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
             { in: "body", key: "metrics" },
@@ -4715,6 +4855,11 @@ export class Harness extends HeyApiClient {
   private _ablation?: Ablation
   get ablation(): Ablation {
     return (this._ablation ??= new Ablation({ client: this.client }))
+  }
+
+  private _judge?: Judge
+  get judge(): Judge {
+    return (this._judge ??= new Judge({ client: this.client }))
   }
 
   private _simulation?: Simulation

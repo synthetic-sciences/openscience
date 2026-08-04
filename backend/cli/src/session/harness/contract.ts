@@ -153,6 +153,53 @@ export namespace HarnessContract {
     .strict()
   export type Simulation = z.infer<typeof Simulation>
 
+  export const EvaluatorFault = z.enum([
+    "wrong_answer",
+    "unsupported_claim",
+    "missing_evidence",
+    "data_leakage",
+    "non_reproducible",
+    "reward_hacking",
+    "invalid_statistics",
+    "invalid_simulation",
+    "distribution_shift",
+    "evaluation_awareness",
+  ])
+  export type EvaluatorFault = z.infer<typeof EvaluatorFault>
+
+  export const EvaluatorAudit = z
+    .object({
+      protocolVersion: z.literal("evaluator-audit-v1"),
+      auditor: z
+        .object({
+          name: z.string().min(1).max(200),
+          version: z.string().min(1).max(200),
+          source: z.enum(["benchmark", "gate", "human", "external"]),
+        })
+        .strict(),
+      suite: z
+        .object({
+          name: z.string().min(1).max(200),
+          version: z.string().min(1).max(200),
+          commitmentSHA256: Hash,
+        })
+        .strict(),
+      minCleanCases: z.number().int().min(2).max(512),
+      minCasesPerFault: z.number().int().min(1).max(128),
+      requiredFaults: z
+        .array(EvaluatorFault)
+        .min(1)
+        .max(EvaluatorFault.options.length)
+        .refine((items) => new Set(items).size === items.length, "Evaluator audit fault classes must be unique"),
+      minSensitivity: z.number().min(0.5).max(1),
+      minSpecificity: z.number().min(0.5).max(1),
+      minBalancedAccuracy: z.number().min(0.5).max(1),
+      minFaultRecall: z.number().min(0.5).max(1),
+      maxBrierScore: z.number().min(0).max(0.5),
+    })
+    .strict()
+  export type EvaluatorAudit = z.infer<typeof EvaluatorAudit>
+
   export const Split = z.enum(["development", "validation", "held_out", "release"])
   export type Split = z.infer<typeof Split>
 
@@ -197,6 +244,7 @@ export namespace HarnessContract {
       orchestration: Orchestration.optional(),
       audit: Audit.optional(),
       simulation: Simulation.optional(),
+      evaluatorAudit: EvaluatorAudit.optional(),
       packs: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -248,26 +296,37 @@ export namespace HarnessContract {
     })
     .strict()
     .superRefine((value, ctx) => {
-      if (!value.simulation) return
-      if (!value.benchmark.evaluatorVersion) {
+      if ((value.simulation || value.evaluatorAudit) && !value.benchmark.evaluatorVersion) {
         ctx.addIssue({
           code: "custom",
           path: ["benchmark", "evaluatorVersion"],
-          message: "Simulator validation needs an evaluator version",
+          message: "Evaluator-controlled validation needs an evaluator version",
         })
       }
-      if (!value.benchmark.evaluatorSource) {
+      if ((value.simulation || value.evaluatorAudit) && !value.benchmark.evaluatorSource) {
         ctx.addIssue({
           code: "custom",
           path: ["benchmark", "evaluatorSource"],
-          message: "Simulator validation needs an evaluator source",
+          message: "Evaluator-controlled validation needs an evaluator source",
         })
       }
-      if (value.benchmark.evaluatorSource === "human") {
+      if (value.simulation && value.benchmark.evaluatorSource === "human") {
         ctx.addIssue({
           code: "custom",
           path: ["benchmark", "evaluatorSource"],
           message: "Simulator validation requires a capability-authenticated evaluator source",
+        })
+      }
+      if (
+        value.evaluatorAudit &&
+        value.evaluatorAudit.auditor.name === value.benchmark.evaluator &&
+        value.evaluatorAudit.auditor.version === value.benchmark.evaluatorVersion &&
+        value.evaluatorAudit.auditor.source === value.benchmark.evaluatorSource
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["evaluatorAudit", "auditor"],
+          message: "Evaluator qualification requires an independent auditor identity",
         })
       }
     })

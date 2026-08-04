@@ -11,6 +11,8 @@ import { HarnessDomain } from "../../src/session/harness/domain"
 const sessions = new Set<string>()
 const plans = new Set<string>()
 const token = "ablation-evaluator-capability-token-0000000000000000"
+const auditor = "ablation-auditor-capability-token-00000000000000000"
+const hash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
 
 afterEach(async () => {
   await Promise.all(
@@ -36,6 +38,7 @@ async function run(input: {
   createdAt: number
   model?: string
   direction?: "maximize" | "minimize"
+  factor?: "orchestration" | "evaluator_audit"
 }) {
   const sessionID = `${input.prefix}-${input.seed}-${input.role}`
   sessions.add(sessionID)
@@ -50,7 +53,28 @@ async function run(input: {
     evaluator: { name: "official-ablation-evaluator", version: "3", source: "benchmark", token },
     objective: "Measure the isolated effect of conditional orchestration",
     orchestration:
-      input.role === "arm" ? { topology: "solo", maxWorkers: 1, maxRounds: 1, minIndependentVerifiers: 1 } : undefined,
+      input.role === "arm" && input.factor !== "evaluator_audit"
+        ? { topology: "solo", maxWorkers: 1, maxRounds: 1, minIndependentVerifiers: 1 }
+        : undefined,
+    evaluatorAudit:
+      input.role === "arm" && input.factor === "evaluator_audit"
+        ? {
+            token: auditor,
+            protocol: {
+              protocolVersion: "evaluator-audit-v1",
+              auditor: { name: "ablation-meta-evaluator", version: "1", source: "external" },
+              suite: { name: "ablation-suite", version: "1", commitmentSHA256: hash("ablation-suite") },
+              minCleanCases: 2,
+              minCasesPerFault: 1,
+              requiredFaults: ["wrong_answer"],
+              minSensitivity: 0.8,
+              minSpecificity: 0.8,
+              minBalancedAccuracy: 0.8,
+              minFaultRecall: 0.8,
+              maxBrierScore: 0.15,
+            },
+          }
+        : undefined,
     metric: { name: "score", direction: input.direction ?? "maximize" },
     model: { provider: "test", name: input.model ?? "model" },
     tools: ["read", "bash"],
@@ -63,17 +87,23 @@ async function run(input: {
   })
 }
 
-async function study(prefix: string, drift = false, direction: "maximize" | "minimize" = "maximize") {
+async function study(
+  prefix: string,
+  drift = false,
+  direction: "maximize" | "minimize" = "maximize",
+  factor: "orchestration" | "evaluator_audit" = "orchestration",
+) {
   const createdAt = Date.now()
   const pairs = await Promise.all(
     [1, 2, 3].map(async (seed) => ({
-      baseline: await run({ prefix, seed, role: "baseline", createdAt, direction }),
+      baseline: await run({ prefix, seed, role: "baseline", createdAt, direction, factor }),
       arm: await run({
         prefix,
         seed,
         role: "arm",
         createdAt,
         direction,
+        factor,
         model: drift && seed === 2 ? "different-model" : undefined,
       }),
     })),
@@ -81,7 +111,7 @@ async function study(prefix: string, drift = false, direction: "maximize" | "min
   const plan = {
     schemaVersion: 1 as const,
     studyID: `${prefix}-study`,
-    factor: { kind: "orchestration" as const },
+    factor: { kind: factor },
     minEffect: 0.05,
     maxPairRegression: 0,
     pairs: pairs.map((pair) => ({
@@ -181,6 +211,15 @@ describe("matched scientific ablations", () => {
   test("rejects an arm with model drift outside the declared factor", async () => {
     const input = await study("ablation-drift", true)
     await expect(HarnessAblation.initialize(input.plan)).rejects.toThrow("differs outside the declared factor")
+  })
+
+  test("isolates evaluator qualification as its own ablatable protocol factor", async () => {
+    const input = await study("ablation-evaluator-audit", false, "maximize", "evaluator_audit")
+    const initialized = await HarnessAblation.initialize(input.plan)
+    if (!initialized) throw new Error("Expected an initialized ablation")
+    plans.add(initialized.plan.planID)
+    expect(initialized.plan.factor.kind).toBe("evaluator_audit")
+    expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
   })
 
   test("requires predeclaration before any paired outcome is visible", async () => {

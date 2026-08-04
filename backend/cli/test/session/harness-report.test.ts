@@ -147,6 +147,31 @@ describe("harness quality-cost reports", () => {
     expect(() => HarnessReport.compare([a, b], "simulation-one")).toThrow("only comparable")
   })
 
+  test("refuses comparisons across different evaluator qualification protocols", () => {
+    const audit = HarnessContract.EvaluatorAudit.parse({
+      protocolVersion: "evaluator-audit-v1",
+      auditor: { name: "meta-evaluator", version: "1", source: "external" },
+      suite: { name: "judge-suite", version: "1", commitmentSHA256: "a".repeat(64) },
+      minCleanCases: 2,
+      minCasesPerFault: 1,
+      requiredFaults: ["wrong_answer"],
+      minSensitivity: 0.8,
+      minSpecificity: 0.8,
+      minBalancedAccuracy: 0.8,
+      minFaultRecall: 0.8,
+      maxBrierScore: 0.15,
+    })
+    const first = HarnessContract.Info.parse({ ...contract("judge-one"), evaluatorAudit: audit })
+    const second = HarnessContract.Info.parse({
+      ...contract("judge-two"),
+      evaluatorAudit: { ...audit, suite: { ...audit.suite, commitmentSHA256: "b".repeat(64) } },
+    })
+    const a = HarnessReport.compile({ contract: first, evaluations: [evaluation(first, 0.8)], generatedAt: 3 })
+    const b = HarnessReport.compile({ contract: second, evaluations: [evaluation(second, 0.9)], generatedAt: 3 })
+    expect(a.comparisonKey).not.toBe(b.comparisonKey)
+    expect(() => HarnessReport.compare([a, b], "judge-one")).toThrow("only comparable")
+  })
+
   test("reports only final fidelity scores even when a later screening record is present", () => {
     const staged = HarnessContract.Info.parse({
       ...contract("staged"),

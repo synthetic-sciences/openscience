@@ -15,7 +15,16 @@ export namespace HarnessAblation {
 
   export const Factor = z
     .object({
-      kind: z.enum(["profile", "orchestration", "audit", "simulation", "fidelities", "skill", "tool"]),
+      kind: z.enum([
+        "profile",
+        "orchestration",
+        "audit",
+        "simulation",
+        "evaluator_audit",
+        "fidelities",
+        "skill",
+        "tool",
+      ]),
       name: z.string().min(1).max(200).optional(),
     })
     .strict()
@@ -203,6 +212,7 @@ export namespace HarnessAblation {
     if (factor.kind === "orchestration") return contract.orchestration ?? null
     if (factor.kind === "audit") return contract.audit ?? null
     if (factor.kind === "simulation") return contract.simulation ?? null
+    if (factor.kind === "evaluator_audit") return contract.evaluatorAudit ?? null
     if (factor.kind === "fidelities") return contract.benchmark.fidelities ?? null
     if (factor.kind === "skill") return contract.skills.find((item) => item.name === factor.name) ?? null
     return contract.tools.includes(factor.name!)
@@ -229,6 +239,7 @@ export namespace HarnessAblation {
       ...(factor.kind === "orchestration" ? {} : { orchestration: contract.orchestration }),
       ...(factor.kind === "audit" ? {} : { audit: contract.audit }),
       ...(factor.kind === "simulation" ? {} : { simulation: contract.simulation }),
+      ...(factor.kind === "evaluator_audit" ? {} : { evaluatorAudit: contract.evaluatorAudit }),
       packs: (contract.packs ?? []).toSorted(),
       model: contract.model,
       tools: contract.tools.filter((item) => factor.kind !== "tool" || item !== factor.name).toSorted(),

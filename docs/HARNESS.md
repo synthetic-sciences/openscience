@@ -18,6 +18,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 10. **Evaluation actively looks for blind spots.** An optional evaluator-owned audit uses committed opaque probes, uncertainty reduction, failure UCB, diversity, and stratum coverage. Its estimate must abstain while uncertainty remains above the contract threshold and cannot promote itself into benchmark evidence.
 11. **Numerical validation is authenticated and recomputed.** A simulation claim pins the engine, effective problem, reference, convergence order, residual/invariant tolerances, and stress tests. A final pass must cite a passing evaluator receipt for the exact artifact.
 12. **Feature attribution is predeclared and paired.** Harness architecture claims require at least three evaluator-authenticated, same-seed baseline/arm pairs frozen before any result exists. Exactly one declared contract factor may differ.
+13. **The evaluator must earn trust.** An optional independent auditor capability scores the bound evaluator on a committed hidden suite of clean and realistically faulty outputs. Final passes require a content-addressed qualification receipt whose discrimination, calibration, and per-fault recall clear the frozen thresholds.
 
 ## System boundary
 
@@ -29,6 +30,8 @@ flowchart LR
     Q["Conditional scientific coalition\npersisted role DAG + bounded workers"]
     G["Candidate graph\nindependent roots + lineage"]
     E["External evaluator\nstaged checks + score + usage"]
+    V["Independent evaluator auditor\ncommitted clean + fault suite"]
+    W["Evaluator qualification\nbackend-recomputed metrics"]
     U["Active audit\nopaque committed probes + GP posterior"]
     J["Immutable evaluation journal"]
     M["Verified hindsight memory"]
@@ -42,6 +45,9 @@ flowchart LR
     Q --> G
     G -->|artifact| E
     O --> E
+    V -->|separate capability| W
+    E -->|hidden-suite decisions| W
+    W -->|qualification receipt| E
     E --> U
     U --> E
     E -->|authenticated result| J
@@ -290,7 +296,7 @@ Their scripts return machine-readable JSON and nonzero failure codes, so an orch
 
 ### 13. Attribute gains with matched ablations
 
-`POST /harness/ablations` freezes a server-timestamped study before any paired evaluation exists. A study supports `profile`, `orchestration`, `audit`, `simulation`, `fidelities`, and named `skill` or `tool` factors. It requires at least three distinct seeds on a held-out or release split. Within each seed, baseline and arm must have identical objectives, benchmark/evaluator protocol, packs, model, remaining tools/skills, budget, intervention, contamination policy, and seed after removing exactly the declared factor. Across pairs, every non-seed field and both factor values must remain identical.
+`POST /harness/ablations` freezes a server-timestamped study before any paired evaluation exists. A study supports `profile`, `orchestration`, active `audit`, `simulation`, `evaluator_audit`, `fidelities`, and named `skill` or `tool` factors. It requires at least three distinct seeds on a held-out or release split. Within each seed, baseline and arm must have identical objectives, benchmark/evaluator protocol, packs, model, remaining tools/skills, budget, intervention, contamination policy, and seed after removing exactly the declared factor. Across pairs, every non-seed field and both factor values must remain identical.
 
 The plan stores contract fingerprints plus hashes of the baseline value, arm value, and matched context; evaluator capabilities are never persisted. Initialization fails if any paired session already has an evaluation. Every accepted evaluation receives a server-owned receipt time, and assessment rejects receipts older than the plan, closing concurrent initialization races without trusting evaluator-supplied clocks.
 
@@ -298,9 +304,19 @@ After all runs settle, `POST /harness/ablations/:planID/assessment` reauthentica
 
 The resulting content-addressed receipt establishes matched evidence for one declared harness mechanism. It does not by itself establish benchmark SOTA, generalize beyond the bound task, or rescue an incompatible official comparison.
 
-### 14. Compare only compatible runs
+### 14. Qualify the evaluator before trusting a pass
 
-Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity and simulation protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores.
+Authentication proves who submitted an evaluation; it does not prove that evaluator is competent. A run can therefore bind an `evaluatorAudit` protocol with an auditor identity and bearer capability distinct from the evaluator, a hidden-suite commitment, minimum clean and per-fault case counts, required fault classes, and thresholds for sensitivity, specificity, balanced accuracy, Brier score, and recall for every required fault.
+
+The suite commitment is the SHA-256 returned by `HarnessJudge.commitment` over the case ID, content commitment, clean/fault label, and fault class sorted by ID; evaluator decisions are deliberately excluded. The independent auditor then submits those opaque fields plus the evaluator's accept/reject/abstain decision, failure probability, and evidence references to `POST /harness/evaluators/qualifications`. Substituting even one hidden case or label fails the frozen commitment. OpenScience recomputes the confusion matrix, calibration loss, aggregate rates, and per-class recall. Abstentions do not silently count as correct. The resulting receipt is immutable and content-addressed; neither bearer capability is stored.
+
+A passing final evaluation under this protocol must cite a passing receipt recorded before the evaluation. The receipt must match the exact evaluator name, version, source, audit protocol, suite commitment, and independent auditor. Failed evaluations can still be retained without qualification, so this gate cannot erase negative evidence. Qualifications may be reused across runs only when the entire evaluator/audit identity is identical.
+
+This mechanism does not claim that a finite meta-evaluation suite makes a judge infallible. It prevents an authenticated but untested judge from silently becoming ground truth and makes evaluator quality a versioned, ablatable part of the benchmark protocol.
+
+### 15. Compare only compatible runs
+
+Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, simulation, and evaluator-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores.
 
 Cost and wall time include both the agent trace and evaluator-reported stage usage. Direction-aware score deltas and the Pareto frontier are available through `POST /harness/compare`.
 
@@ -333,6 +349,8 @@ Every adapter is version-agnostic. A real run must still bind an exact benchmark
 | `POST` | `/harness/audits/:auditID/observations`  | Record an immutable evaluator-authenticated probe outcome     |
 | `POST` | `/harness/ablations`                     | Freeze a same-seed, one-factor matched ablation               |
 | `POST` | `/harness/ablations/:planID/assessment`  | Derive an immutable paired-effect assessment                  |
+| `POST` | `/harness/evaluators/qualifications`     | Audit a judge on a committed hidden fault suite               |
+| `POST` | `/harness/evaluators/qualifications/:id` | Read a qualification with the independent auditor capability  |
 | `POST` | `/harness/simulations/receipts`          | Recompute and record a simulator validation receipt           |
 | `POST` | `/harness/simulations/receipts/:id`      | Read a capability-protected simulator validation receipt      |
 | `POST` | `/harness/evaluations`                   | Record a staged evaluator-authenticated result                |
@@ -358,6 +376,8 @@ The implementation borrows principles, not source code, from the following prima
 | [ProEval](https://deepmind.google/research/publications/238239/)                                                           | Actively discover failure regions and estimate capability from a small, strategically chosen evaluation subset.                             |
 | [Towards a Science of Scaling Agent Systems](https://arxiv.org/abs/2512.08296)                                             | Add agents conditionally: coordination can hurt sequential and tool-heavy work, while centralized structures control error amplification.   |
 | [Gram](https://deepmind.google/research/publications/252981/)                                                              | Audit autonomous agents for sabotage, overeagerness, and hidden side effects with an investigator distinct from the producer.               |
+| [Realistic honeypot evaluations](https://deepmind.google/research/publications/253391/)                                    | Include evaluation-awareness and realistic deployment-context failures instead of relying only on artificial judge tests.                   |
+| [RubricEval](https://arxiv.org/abs/2603.25133) and [Who Validates the Validators?](https://arxiv.org/abs/2404.12272)       | Meta-evaluate judges on realistic failures and version criteria rather than treating an LLM judge as ground truth by default.               |
 | [MLEvolve](https://github.com/InternScience/MLEvolve) and its [paper](https://arxiv.org/abs/2606.06473)                    | Progressive multi-branch search, success/failure hindsight, adaptive exploration, and branch fusion for MLE.                                |
 | [AI Scientist v2](https://github.com/SakanaAI/AI-Scientist-v2) and its [paper](https://arxiv.org/abs/2504.08066)           | Multiple independent experimental roots and agentic tree search rather than a single linear attempt.                                        |
 | [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954)                                                                   | Preserve an open-ended archive with lineage; do not collapse self-improvement into one incumbent.                                           |
@@ -375,8 +395,9 @@ The expanded evaluation frontier is grounded in [PaperBench](https://openai.com/
 The harness is ready for benchmark integration, but architecture alone does not establish performance. For each target benchmark:
 
 1. Pin an official repository/evaluator commit, dataset revision, split, hardware class, model, tools, budget, seed policy, and intervention policy.
-2. Reproduce the strongest public baseline under exactly that contract.
-3. Run ablations for profile routing, multi-root search, UCB exploration, fidelity screening, hindsight, fusion, strategy divergence, domain packs, and learned skills.
-4. Use multiple seeds or the benchmark's prescribed repeat protocol.
-5. Publish every final run, failed run, cost report, artifact hash, and contamination statement.
-6. Call a result SOTA only when the official metric improves under a comparison the benchmark owners would accept.
+2. Qualify any learned or hybrid evaluator against a separately controlled, committed meta-evaluation suite; retain official deterministic runners as the preferred ground truth where available.
+3. Reproduce the strongest public baseline under exactly that contract.
+4. Run ablations for profile routing, multi-root search, UCB exploration, fidelity screening, hindsight, fusion, strategy divergence, domain packs, evaluator qualification, and learned skills.
+5. Use multiple seeds or the benchmark's prescribed repeat protocol.
+6. Publish every final run, failed run, cost report, artifact hash, evaluator receipt, and contamination statement.
+7. Call a result SOTA only when the official metric improves under a comparison the benchmark owners would accept.

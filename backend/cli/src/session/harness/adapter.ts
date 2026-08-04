@@ -35,6 +35,13 @@ export namespace HarnessAdapter {
       orchestration: HarnessContract.Orchestration.optional(),
       audit: HarnessContract.Audit.optional(),
       simulation: HarnessContract.Simulation.optional(),
+      evaluatorAudit: z
+        .object({
+          protocol: HarnessContract.EvaluatorAudit,
+          token: Token,
+        })
+        .strict()
+        .optional(),
       extraPacks: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -95,6 +102,14 @@ export namespace HarnessAdapter {
       createdAt: z.number().int().positive(),
     })
     .strict()
+    .superRefine((value, ctx) => {
+      if (!value.evaluatorAudit || value.evaluatorAudit.token !== value.evaluator.token) return
+      ctx.addIssue({
+        code: "custom",
+        path: ["evaluatorAudit", "token"],
+        message: "Evaluator and independent auditor capabilities must differ",
+      })
+    })
 
   export type Task = z.input<typeof Task>
 
@@ -110,6 +125,10 @@ export namespace HarnessAdapter {
         .optional(),
       stage: z.string().min(1).max(100).optional(),
       simulationReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      evaluatorAuditReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -142,6 +161,15 @@ export namespace HarnessAdapter {
           source: z.enum(["benchmark", "gate", "external"]),
         })
         .strict(),
+      auditor: z
+        .object({
+          name: z.string().min(1),
+          version: z.string().min(1),
+          source: z.enum(["benchmark", "gate", "human", "external"]),
+          tokenSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+        })
+        .strict()
+        .optional(),
       createdAt: z.number().int().positive(),
     })
     .strict()
@@ -166,6 +194,28 @@ export namespace HarnessAdapter {
     }
     if (!timingSafeEqual(binding.tokenSHA256, digest(Token.parse(token)))) {
       throw new Error(`Evaluator capability was rejected`)
+    }
+    return contract
+  }
+
+  export async function authorizeAuditor(sessionID: string, token: string) {
+    const [contract, binding] = await Promise.all([HarnessContract.read(sessionID), credential(sessionID)])
+    if (!contract || !contract.evaluatorAudit || !binding.auditor) {
+      throw new Error(`No independent evaluator auditor is bound to session ${sessionID}`)
+    }
+    if (binding.contractFingerprint !== HarnessContract.fingerprint(contract)) {
+      throw new Error(`Evaluator auditor capability does not match the bound harness contract`)
+    }
+    if (!timingSafeEqual(binding.auditor.tokenSHA256, digest(Token.parse(token)))) {
+      throw new Error(`Evaluator auditor capability was rejected`)
+    }
+    const auditor = contract.evaluatorAudit.auditor
+    if (
+      binding.auditor.name !== auditor.name ||
+      binding.auditor.version !== auditor.version ||
+      binding.auditor.source !== auditor.source
+    ) {
+      throw new Error(`Evaluator auditor identity does not match the bound harness contract`)
     }
     return contract
   }
@@ -209,6 +259,7 @@ export namespace HarnessAdapter {
       orchestration: task.orchestration,
       audit: task.audit,
       simulation: task.simulation,
+      evaluatorAudit: task.evaluatorAudit?.protocol,
       packs,
       model: task.model,
       tools: task.tools,
@@ -231,14 +282,18 @@ export namespace HarnessAdapter {
         version: task.evaluator.version,
         source: task.evaluator.source,
       },
+      auditor: task.evaluatorAudit
+        ? {
+            ...task.evaluatorAudit.protocol.auditor,
+            tokenSHA256: digest(task.evaluatorAudit.token),
+          }
+        : undefined,
       createdAt: task.createdAt,
     })
     await JsonStore.update(file(task.sessionID), (data) => {
       if (!Object.keys(data).length) return binding
       const current = Binding.parse(data)
-      if (current.contractFingerprint === binding.contractFingerprint && current.tokenSHA256 === binding.tokenSHA256) {
-        return current
-      }
+      if (JSON.stringify(current) === JSON.stringify(binding)) return current
       throw new Error(`Evaluator capability for session ${task.sessionID} is immutable once bound`)
     })
     return contract
@@ -303,6 +358,7 @@ export namespace HarnessAdapter {
       subject: value.candidateID ? { type: "candidate", id: value.candidateID } : undefined,
       fidelity,
       simulationReceiptID: value.simulationReceiptID,
+      evaluatorAuditReceiptID: value.evaluatorAuditReceiptID,
       evaluator: binding.evaluator,
       status: value.status,
       score: value.score,
