@@ -7497,6 +7497,15 @@ export type HarnessBenchmarksResponses = {
       | "ale"
       | "weather"
       | "researchclaw"
+      | "paperbench"
+      | "corebench"
+      | "scienceagentbench"
+      | "discoverybench"
+      | "scicode"
+      | "labbench"
+      | "sciagentarena"
+      | "ainsteinbench"
+      | "critpt"
     title: string
     family: "data" | "biology" | "physics" | "chemistry" | "ml" | "generalist"
     aliases: Array<string>
@@ -7532,6 +7541,12 @@ export type HarnessBindData = {
       direction: "maximize" | "minimize" | "pass"
       target?: number
     }
+    fidelities?: Array<{
+      id: string
+      final: boolean
+      maxWallTimeMs?: number
+      maxCostUSD?: number
+    }>
     model: {
       provider: string
       name: string
@@ -7594,6 +7609,12 @@ export type HarnessBindResponses = {
       evaluator: string
       evaluatorVersion?: string
       evaluatorSource?: "benchmark" | "gate" | "human" | "external"
+      fidelities?: Array<{
+        id: string
+        final: boolean
+        maxWallTimeMs?: number
+        maxCostUSD?: number
+      }>
       metric?: string
       direction?: "maximize" | "minimize" | "pass"
       target?: number
@@ -7640,6 +7661,7 @@ export type HarnessEvaluateData = {
     sessionID: string
     evaluatorToken: string
     candidateID?: string
+    stage?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
     metrics?: {
@@ -7654,6 +7676,10 @@ export type HarnessEvaluateData = {
       note?: string
     }>
     evidence: Array<string>
+    usage?: {
+      wallTimeMs?: number
+      costUSD?: number
+    }
     evaluatedAt: number
     notes?: string
   }
@@ -7708,6 +7734,259 @@ export type HarnessCompareResponses = {
   200: unknown
 }
 
+export type HarnessSkillsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/skills"
+}
+
+export type HarnessSkillsResponses = {
+  /**
+   * Learned skill qualification manifests
+   */
+  200: Array<{
+    schemaVersion: 1
+    name: string
+    description: string
+    contentSHA256: string
+    origin: "conversation" | "rsi"
+    source: {
+      sessionID?: string
+      runID?: string
+    }
+    status: "pending" | "qualified" | "promoted" | "rejected"
+    evidence: Array<{
+      id: string
+      proposalSHA256: string
+      benchmark: {
+        name: string
+        version: string
+        taskID: string
+        split: "held_out" | "release"
+        metric?: string
+        direction: "maximize" | "minimize" | "pass"
+      }
+      candidate: {
+        sessionID: string
+        runID: string
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        evaluationSHA256: string
+      }
+      control: {
+        sessionID: string
+        runID: string
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        evaluationSHA256: string
+      }
+      nonregressing: boolean
+      improved: boolean
+      trigger: {
+        datasetSHA256: string
+        split: "held_out"
+        examples: number
+        truePositive: number
+        falsePositive: number
+        trueNegative: number
+        falseNegative: number
+        precision: number
+        recall: number
+      }
+      evaluator: {
+        name: string
+        version: string
+      }
+      recordedAt: number
+    }>
+    criteria: {
+      tasks: 3
+      improvements: 2
+      triggerPrecision: 0.8
+      triggerRecall: 0.8
+    }
+    createdAt: number
+    updatedAt: number
+    promotedAt?: number
+  }>
+}
+
+export type HarnessSkillsResponse = HarnessSkillsResponses[keyof HarnessSkillsResponses]
+
+export type HarnessSkillProposeData = {
+  body?: {
+    name: string
+    description: string
+    content: string
+    origin: "conversation" | "rsi"
+    sessionID?: string
+    runID?: string
+    createdAt?: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/skills"
+}
+
+export type HarnessSkillProposeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessSkillProposeError = HarnessSkillProposeErrors[keyof HarnessSkillProposeErrors]
+
+export type HarnessSkillProposeResponses = {
+  /**
+   * Quarantined proposal
+   */
+  200: {
+    schemaVersion: 1
+    name: string
+    description: string
+    contentSHA256: string
+    origin: "conversation" | "rsi"
+    source: {
+      sessionID?: string
+      runID?: string
+    }
+    status: "pending" | "qualified" | "promoted" | "rejected"
+    evidence: Array<{
+      id: string
+      proposalSHA256: string
+      benchmark: {
+        name: string
+        version: string
+        taskID: string
+        split: "held_out" | "release"
+        metric?: string
+        direction: "maximize" | "minimize" | "pass"
+      }
+      candidate: {
+        sessionID: string
+        runID: string
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        evaluationSHA256: string
+      }
+      control: {
+        sessionID: string
+        runID: string
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        evaluationSHA256: string
+      }
+      nonregressing: boolean
+      improved: boolean
+      trigger: {
+        datasetSHA256: string
+        split: "held_out"
+        examples: number
+        truePositive: number
+        falsePositive: number
+        trueNegative: number
+        falseNegative: number
+        precision: number
+        recall: number
+      }
+      evaluator: {
+        name: string
+        version: string
+      }
+      recordedAt: number
+    }>
+    criteria: {
+      tasks: 3
+      improvements: 2
+      triggerPrecision: 0.8
+      triggerRecall: 0.8
+    }
+    createdAt: number
+    updatedAt: number
+    promotedAt?: number
+  } | null
+}
+
+export type HarnessSkillProposeResponse = HarnessSkillProposeResponses[keyof HarnessSkillProposeResponses]
+
+export type HarnessSkillAttestData = {
+  body?: {
+    name: string
+    candidate: {
+      sessionID: string
+      evaluatorToken: string
+    }
+    control: {
+      sessionID: string
+      evaluatorToken: string
+    }
+    trigger: {
+      datasetSHA256: string
+      split: "held_out"
+      examples: number
+      truePositive: number
+      falsePositive: number
+      trueNegative: number
+      falseNegative: number
+    }
+    recordedAt?: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/skills/evidence"
+}
+
+export type HarnessSkillAttestErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessSkillAttestError = HarnessSkillAttestErrors[keyof HarnessSkillAttestErrors]
+
+export type HarnessSkillAttestResponses = {
+  /**
+   * Updated qualification state
+   */
+  200: unknown
+}
+
+export type HarnessSkillPromoteData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/skills/{name}/promotion"
+}
+
+export type HarnessSkillPromoteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessSkillPromoteError = HarnessSkillPromoteErrors[keyof HarnessSkillPromoteErrors]
+
+export type HarnessSkillPromoteResponses = {
+  /**
+   * Promoted skill
+   */
+  200: unknown
+}
+
 export type HarnessContractData = {
   body?: never
   path: {
@@ -7745,6 +8024,12 @@ export type HarnessContractResponses = {
       evaluator: string
       evaluatorVersion?: string
       evaluatorSource?: "benchmark" | "gate" | "human" | "external"
+      fidelities?: Array<{
+        id: string
+        final: boolean
+        maxWallTimeMs?: number
+        maxCostUSD?: number
+      }>
       metric?: string
       direction?: "maximize" | "minimize" | "pass"
       target?: number
@@ -7816,6 +8101,10 @@ export type HarnessEvaluationsResponses = {
       type: "run" | "candidate"
       id: string
     }
+    fidelity?: {
+      stage: string
+      final: boolean
+    }
     evaluator: {
       name: string
       version: string
@@ -7835,6 +8124,10 @@ export type HarnessEvaluationsResponses = {
       note?: string
     }>
     evidence: Array<string>
+    usage?: {
+      wallTimeMs?: number
+      costUSD?: number
+    }
     evaluatedAt: number
     notes?: string
   }>
@@ -7892,6 +8185,15 @@ export type HarnessReportResponses = {
         | "ale"
         | "weather"
         | "researchclaw"
+        | "paperbench"
+        | "corebench"
+        | "scienceagentbench"
+        | "discoverybench"
+        | "scicode"
+        | "labbench"
+        | "sciagentarena"
+        | "ainsteinbench"
+        | "critpt"
       title: string
       family: "data" | "biology" | "physics" | "chemistry" | "ml" | "generalist"
       version: string
@@ -7920,6 +8222,7 @@ export type HarnessReportResponses = {
     }
     efficiency: {
       costUSD?: number
+      evaluatorCostUSD?: number
       tokens?: {
         input: number
         output: number
@@ -7929,6 +8232,7 @@ export type HarnessReportResponses = {
         total: number
       }
       wallTimeMs?: number
+      evaluatorWallTimeMs?: number
       toolCalls?: number
       searches?: number
       dedupeHits?: number

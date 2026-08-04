@@ -14602,7 +14602,16 @@
                           "posttrain",
                           "ale",
                           "weather",
-                          "researchclaw"
+                          "researchclaw",
+                          "paperbench",
+                          "corebench",
+                          "scienceagentbench",
+                          "discoverybench",
+                          "scicode",
+                          "labbench",
+                          "sciagentarena",
+                          "ainsteinbench",
+                          "critpt"
                         ]
                       },
                       "title": {
@@ -14779,6 +14788,38 @@
                             "human",
                             "external"
                           ]
+                        },
+                        "fidelities": {
+                          "minItems": 2,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
+                              },
+                              "final": {
+                                "type": "boolean"
+                              },
+                              "maxWallTimeMs": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "maxCostUSD": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "final"
+                            ],
+                            "additionalProperties": false
+                          }
                         },
                         "metric": {
                           "type": "string",
@@ -15137,6 +15178,38 @@
                     ],
                     "additionalProperties": false
                   },
+                  "fidelities": {
+                    "minItems": 2,
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "final": {
+                          "type": "boolean"
+                        },
+                        "maxWallTimeMs": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "maxCostUSD": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "final"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
                   "model": {
                     "type": "object",
                     "properties": {
@@ -15362,6 +15435,11 @@
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
+                  "stage": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
                   "status": {
                     "type": "string",
                     "enum": [
@@ -15442,6 +15520,20 @@
                       "minLength": 1,
                       "maxLength": 1000
                     }
+                  },
+                  "usage": {
+                    "type": "object",
+                    "properties": {
+                      "wallTimeMs": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "costUSD": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
                   },
                   "evaluatedAt": {
                     "type": "integer",
@@ -15542,6 +15634,1016 @@
         ]
       }
     },
+    "/harness/skills": {
+      "get": {
+        "operationId": "harness.skills",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List quarantined learned skill proposals",
+        "responses": {
+          "200": {
+            "description": "Learned skill qualification manifests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "contentSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "origin": {
+                        "type": "string",
+                        "enum": [
+                          "conversation",
+                          "rsi"
+                        ]
+                      },
+                      "source": {
+                        "type": "object",
+                        "properties": {
+                          "sessionID": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "runID": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "pending",
+                          "qualified",
+                          "promoted",
+                          "rejected"
+                        ]
+                      },
+                      "evidence": {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "proposalSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "benchmark": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "taskID": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "split": {
+                                  "type": "string",
+                                  "enum": [
+                                    "held_out",
+                                    "release"
+                                  ]
+                                },
+                                "metric": {
+                                  "type": "string"
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": [
+                                    "maximize",
+                                    "minimize",
+                                    "pass"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "taskID",
+                                "split",
+                                "direction"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "candidate": {
+                              "type": "object",
+                              "properties": {
+                                "sessionID": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "runID": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "passed",
+                                    "failed",
+                                    "inconclusive"
+                                  ]
+                                },
+                                "score": {
+                                  "type": "number"
+                                },
+                                "evaluationSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "sessionID",
+                                "runID",
+                                "status",
+                                "evaluationSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "control": {
+                              "type": "object",
+                              "properties": {
+                                "sessionID": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "runID": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "passed",
+                                    "failed",
+                                    "inconclusive"
+                                  ]
+                                },
+                                "score": {
+                                  "type": "number"
+                                },
+                                "evaluationSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "sessionID",
+                                "runID",
+                                "status",
+                                "evaluationSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "nonregressing": {
+                              "type": "boolean"
+                            },
+                            "improved": {
+                              "type": "boolean"
+                            },
+                            "trigger": {
+                              "type": "object",
+                              "properties": {
+                                "datasetSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "split": {
+                                  "type": "string",
+                                  "const": "held_out"
+                                },
+                                "examples": {
+                                  "type": "integer",
+                                  "minimum": 20,
+                                  "maximum": 9007199254740991
+                                },
+                                "truePositive": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "falsePositive": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "trueNegative": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "falseNegative": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "precision": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "recall": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                }
+                              },
+                              "required": [
+                                "datasetSHA256",
+                                "split",
+                                "examples",
+                                "truePositive",
+                                "falsePositive",
+                                "trueNegative",
+                                "falseNegative",
+                                "precision",
+                                "recall"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "evaluator": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "recordedAt": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "proposalSHA256",
+                            "benchmark",
+                            "candidate",
+                            "control",
+                            "nonregressing",
+                            "improved",
+                            "trigger",
+                            "evaluator",
+                            "recordedAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "criteria": {
+                        "type": "object",
+                        "properties": {
+                          "tasks": {
+                            "type": "number",
+                            "const": 3
+                          },
+                          "improvements": {
+                            "type": "number",
+                            "const": 2
+                          },
+                          "triggerPrecision": {
+                            "type": "number",
+                            "const": 0.8
+                          },
+                          "triggerRecall": {
+                            "type": "number",
+                            "const": 0.8
+                          }
+                        },
+                        "required": [
+                          "tasks",
+                          "improvements",
+                          "triggerPrecision",
+                          "triggerRecall"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "createdAt": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "updatedAt": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "promotedAt": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "schemaVersion",
+                      "name",
+                      "description",
+                      "contentSHA256",
+                      "origin",
+                      "source",
+                      "status",
+                      "evidence",
+                      "criteria",
+                      "createdAt",
+                      "updatedAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.skills({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "harness.skill.propose",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Create an inactive learned skill proposal",
+        "responses": {
+          "200": {
+            "description": "Quarantined proposal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "name": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                        },
+                        "description": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "contentSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "origin": {
+                          "type": "string",
+                          "enum": [
+                            "conversation",
+                            "rsi"
+                          ]
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "sessionID": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "runID": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "qualified",
+                            "promoted",
+                            "rejected"
+                          ]
+                        },
+                        "evidence": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "proposalSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "benchmark": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "taskID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "split": {
+                                    "type": "string",
+                                    "enum": [
+                                      "held_out",
+                                      "release"
+                                    ]
+                                  },
+                                  "metric": {
+                                    "type": "string"
+                                  },
+                                  "direction": {
+                                    "type": "string",
+                                    "enum": [
+                                      "maximize",
+                                      "minimize",
+                                      "pass"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "version",
+                                  "taskID",
+                                  "split",
+                                  "direction"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "candidate": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "runID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "passed",
+                                      "failed",
+                                      "inconclusive"
+                                    ]
+                                  },
+                                  "score": {
+                                    "type": "number"
+                                  },
+                                  "evaluationSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "sessionID",
+                                  "runID",
+                                  "status",
+                                  "evaluationSHA256"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "control": {
+                                "type": "object",
+                                "properties": {
+                                  "sessionID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "runID": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "passed",
+                                      "failed",
+                                      "inconclusive"
+                                    ]
+                                  },
+                                  "score": {
+                                    "type": "number"
+                                  },
+                                  "evaluationSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "sessionID",
+                                  "runID",
+                                  "status",
+                                  "evaluationSHA256"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "nonregressing": {
+                                "type": "boolean"
+                              },
+                              "improved": {
+                                "type": "boolean"
+                              },
+                              "trigger": {
+                                "type": "object",
+                                "properties": {
+                                  "datasetSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "split": {
+                                    "type": "string",
+                                    "const": "held_out"
+                                  },
+                                  "examples": {
+                                    "type": "integer",
+                                    "minimum": 20,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "truePositive": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "falsePositive": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "trueNegative": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "falseNegative": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "precision": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                  },
+                                  "recall": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                  }
+                                },
+                                "required": [
+                                  "datasetSHA256",
+                                  "split",
+                                  "examples",
+                                  "truePositive",
+                                  "falsePositive",
+                                  "trueNegative",
+                                  "falseNegative",
+                                  "precision",
+                                  "recall"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "evaluator": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "recordedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "proposalSHA256",
+                              "benchmark",
+                              "candidate",
+                              "control",
+                              "nonregressing",
+                              "improved",
+                              "trigger",
+                              "evaluator",
+                              "recordedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "criteria": {
+                          "type": "object",
+                          "properties": {
+                            "tasks": {
+                              "type": "number",
+                              "const": 3
+                            },
+                            "improvements": {
+                              "type": "number",
+                              "const": 2
+                            },
+                            "triggerPrecision": {
+                              "type": "number",
+                              "const": 0.8
+                            },
+                            "triggerRecall": {
+                              "type": "number",
+                              "const": 0.8
+                            }
+                          },
+                          "required": [
+                            "tasks",
+                            "improvements",
+                            "triggerPrecision",
+                            "triggerRecall"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "createdAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "updatedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "promotedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "name",
+                        "description",
+                        "contentSHA256",
+                        "origin",
+                        "source",
+                        "status",
+                        "evidence",
+                        "criteria",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64000
+                  },
+                  "origin": {
+                    "type": "string",
+                    "enum": [
+                      "conversation",
+                      "rsi"
+                    ]
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "runID": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "createdAt": {
+                    "default": 1785857727648,
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "name",
+                  "description",
+                  "content",
+                  "origin"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.skill.propose({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/skills/evidence": {
+      "post": {
+        "operationId": "harness.skill.attest",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Attach paired held-out skill evidence",
+        "description": "Requires both evaluator capabilities and accepts only otherwise-identical candidate/control contracts.",
+        "responses": {
+          "200": {
+            "description": "Updated qualification state"
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "candidate": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "evaluatorToken": {
+                        "type": "string",
+                        "minLength": 32,
+                        "maxLength": 1024
+                      }
+                    },
+                    "required": [
+                      "sessionID",
+                      "evaluatorToken"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "control": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "evaluatorToken": {
+                        "type": "string",
+                        "minLength": 32,
+                        "maxLength": 1024
+                      }
+                    },
+                    "required": [
+                      "sessionID",
+                      "evaluatorToken"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "trigger": {
+                    "type": "object",
+                    "properties": {
+                      "datasetSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "split": {
+                        "type": "string",
+                        "const": "held_out"
+                      },
+                      "examples": {
+                        "type": "integer",
+                        "minimum": 20,
+                        "maximum": 9007199254740991
+                      },
+                      "truePositive": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "falsePositive": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "trueNegative": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "falseNegative": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "datasetSHA256",
+                      "split",
+                      "examples",
+                      "truePositive",
+                      "falsePositive",
+                      "trueNegative",
+                      "falseNegative"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "recordedAt": {
+                    "default": 1785857727648,
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "name",
+                  "candidate",
+                  "control",
+                  "trigger"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.skill.attest({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/skills/{name}/promotion": {
+      "post": {
+        "operationId": "harness.skill.promote",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Promote a qualified learned skill",
+        "description": "Copies only an unchanged proposal that has met every held-out qualification criterion.",
+        "responses": {
+          "200": {
+            "description": "Promoted skill"
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.skill.promote({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/runs/{sessionID}/contract": {
       "get": {
         "operationId": "harness.contract",
@@ -15630,6 +16732,38 @@
                                 "human",
                                 "external"
                               ]
+                            },
+                            "fidelities": {
+                              "minItems": 2,
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 100
+                                  },
+                                  "final": {
+                                    "type": "boolean"
+                                  },
+                                  "maxWallTimeMs": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "maxCostUSD": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "final"
+                                ],
+                                "additionalProperties": false
+                              }
                             },
                             "metric": {
                               "type": "string",
@@ -15925,6 +17059,24 @@
                         ],
                         "additionalProperties": false
                       },
+                      "fidelity": {
+                        "type": "object",
+                        "properties": {
+                          "stage": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          },
+                          "final": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "stage",
+                          "final"
+                        ],
+                        "additionalProperties": false
+                      },
                       "evaluator": {
                         "type": "object",
                         "properties": {
@@ -16035,6 +17187,20 @@
                           "minLength": 1,
                           "maxLength": 1000
                         }
+                      },
+                      "usage": {
+                        "type": "object",
+                        "properties": {
+                          "wallTimeMs": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "costUSD": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "additionalProperties": false
                       },
                       "evaluatedAt": {
                         "type": "integer",
@@ -16150,7 +17316,16 @@
                             "posttrain",
                             "ale",
                             "weather",
-                            "researchclaw"
+                            "researchclaw",
+                            "paperbench",
+                            "corebench",
+                            "scienceagentbench",
+                            "discoverybench",
+                            "scicode",
+                            "labbench",
+                            "sciagentarena",
+                            "ainsteinbench",
+                            "critpt"
                           ]
                         },
                         "title": {
@@ -16310,6 +17485,10 @@
                           "type": "number",
                           "minimum": 0
                         },
+                        "evaluatorCostUSD": {
+                          "type": "number",
+                          "minimum": 0
+                        },
                         "tokens": {
                           "type": "object",
                           "properties": {
@@ -16349,6 +17528,10 @@
                           "additionalProperties": false
                         },
                         "wallTimeMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "evaluatorWallTimeMs": {
                           "type": "number",
                           "minimum": 0
                         },

@@ -10,15 +10,12 @@
  * discoverable. Promotion requires held-out evidence in the lifecycle layer.
  */
 
-import path from "path"
-import fs from "fs/promises"
-import { Global } from "@/global"
 import { Log } from "@/util/log"
 import { RSITrajectory } from "./trajectory"
+import { HarnessSkill } from "../harness/skill"
 
 export namespace RSIDistill {
   const log = Log.create({ service: "rsi-distill" })
-  const PROPOSALS_DIR = path.join(Global.Path.data, "learned-skill-proposals")
   const SCORE_THRESHOLD = 75
 
   /** Draft a proposal only when an external evaluator passed the trajectory. */
@@ -38,10 +35,15 @@ export namespace RSIDistill {
     const description = generateDescription(trajectory)
     const content = generateSkillContent(name, description, trajectory)
 
-    // Write to local disk
-    const dir = path.join(PROPOSALS_DIR, name)
-    await fs.mkdir(dir, { recursive: true })
-    await Bun.write(path.join(dir, "SKILL.md"), content)
+    await HarnessSkill.propose({
+      name,
+      description,
+      content,
+      origin: "rsi",
+      sessionID: trajectory.sessionId,
+      runID: trajectory.verification.runID,
+      createdAt: trajectory.timestamp,
+    })
     log.info("learned skill proposal drafted", { name, score: trajectory.score })
 
     return name

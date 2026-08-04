@@ -114,6 +114,37 @@ describe("harness quality-cost reports", () => {
     expect(() => HarnessReport.compare([a, b], "one")).toThrow("only comparable")
   })
 
+  test("reports only final fidelity scores even when a later screening record is present", () => {
+    const staged = HarnessContract.Info.parse({
+      ...contract("staged"),
+      benchmark: {
+        ...contract("staged").benchmark,
+        fidelities: [
+          { id: "smoke", final: false },
+          { id: "official", final: true },
+        ],
+      },
+    })
+    const final = HarnessEvaluation.Info.parse({
+      ...evaluation(staged, 0.85),
+      fidelity: { stage: "official", final: true },
+      usage: { wallTimeMs: 100, costUSD: 0.2 },
+    })
+    const screen = HarnessEvaluation.Info.parse({
+      ...evaluation(staged, 0.99),
+      fidelity: { stage: "smoke", final: false },
+      usage: { wallTimeMs: 10, costUSD: 0.01 },
+    })
+    const report = HarnessReport.compile({ contract: staged, evaluations: [final, screen], generatedAt: 3 })
+    expect(report.quality.score).toBe(0.85)
+    expect(report.efficiency).toMatchObject({
+      costUSD: 0.21000000000000002,
+      evaluatorCostUSD: 0.21000000000000002,
+      wallTimeMs: 110,
+      evaluatorWallTimeMs: 110,
+    })
+  })
+
   test("validates adapter inputs before they become reports", () => {
     expect(() => HarnessAdapter.Task.parse({ hiddenTestsAccessible: true })).toThrow()
   })

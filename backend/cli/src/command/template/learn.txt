@@ -8,7 +8,7 @@ Analyze the following aspects:
 4. **Key Parameters**: What specific configurations, thresholds, or settings were important?
 5. **Reproducibility**: What would someone need to know to reproduce this workflow on a similar problem?
 
-Then call the `learn` tool with:
+Then call the `learn` tool to create an inactive, content-addressed proposal with:
 - `name`: A descriptive kebab-case identifier (e.g., "debug-cuda-memory-leak", "deploy-vercel-prebuilt")
 - `description`: A one-line summary of what this skill teaches
 - `content`: A complete SKILL.md with this structure:

@@ -11,6 +11,22 @@ export namespace HarnessContract {
   export const Split = z.enum(["development", "validation", "held_out", "release"])
   export type Split = z.infer<typeof Split>
 
+  export const Fidelity = z
+    .object({
+      id: z.string().min(1).max(100),
+      final: z.boolean(),
+      maxWallTimeMs: z.number().int().positive().optional(),
+      maxCostUSD: z.number().nonnegative().optional(),
+    })
+    .strict()
+  export const FidelityPlan = z
+    .array(Fidelity)
+    .min(2)
+    .max(8)
+    .refine((items) => new Set(items.map((item) => item.id)).size === items.length, "Fidelity stages must be unique")
+    .refine((items) => items.filter((item) => item.final).length === 1, "A fidelity plan needs exactly one final stage")
+    .refine((items) => items.at(-1)?.final === true, "The final fidelity stage must be last")
+
   export const Info = z
     .object({
       schemaVersion: z.literal(1),
@@ -26,6 +42,7 @@ export namespace HarnessContract {
           evaluator: z.string().min(1),
           evaluatorVersion: z.string().min(1).optional(),
           evaluatorSource: z.enum(["benchmark", "gate", "human", "external"]).optional(),
+          fidelities: FidelityPlan.optional(),
           metric: z.string().min(1).optional(),
           direction: z.enum(["maximize", "minimize", "pass"]).optional(),
           target: z.number().finite().optional(),

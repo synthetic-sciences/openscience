@@ -45,6 +45,7 @@ export namespace HarnessAdapter {
         })
         .strict()
         .default({ direction: "pass" }),
+      fidelities: HarnessContract.FidelityPlan.optional(),
       model: z
         .object({
           provider: z.string().min(1),
@@ -92,7 +93,7 @@ export namespace HarnessAdapter {
     })
     .strict()
 
-  export type Task = z.infer<typeof Task>
+  export type Task = z.input<typeof Task>
 
   export const Evaluation = z
     .object({
@@ -104,6 +105,7 @@ export namespace HarnessAdapter {
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
+      stage: z.string().min(1).max(100).optional(),
       status: HarnessEvaluation.Status,
       score: z.number().finite().optional(),
       metrics: z
@@ -112,11 +114,12 @@ export namespace HarnessAdapter {
         .default({}),
       checks: z.array(HarnessEvaluation.Check).min(1).max(128),
       evidence: z.array(z.string().min(1).max(1_000)).min(1).max(128),
+      usage: HarnessEvaluation.Usage.optional(),
       evaluatedAt: z.number().int().positive(),
       notes: z.string().max(8_000).optional(),
     })
     .strict()
-  export type Evaluation = z.infer<typeof Evaluation>
+  export type Evaluation = z.input<typeof Evaluation>
 
   const Binding = z
     .object({
@@ -148,6 +151,18 @@ export namespace HarnessAdapter {
     return parsed.data
   }
 
+  export async function authorize(sessionID: string, token: string) {
+    const [contract, binding] = await Promise.all([HarnessContract.read(sessionID), credential(sessionID)])
+    if (!contract) throw new Error(`No harness contract is bound to session ${sessionID}`)
+    if (binding.contractFingerprint !== HarnessContract.fingerprint(contract)) {
+      throw new Error(`Evaluator capability does not match the bound harness contract`)
+    }
+    if (!timingSafeEqual(binding.tokenSHA256, digest(Token.parse(token)))) {
+      throw new Error(`Evaluator capability was rejected`)
+    }
+    return contract
+  }
+
   export async function bind(input: Task) {
     const task = Task.parse(input)
     const benchmark = HarnessBenchmark.resolve(task.benchmark)
@@ -175,6 +190,7 @@ export namespace HarnessAdapter {
         evaluator: task.evaluator.name,
         evaluatorVersion: task.evaluator.version,
         evaluatorSource: task.evaluator.source,
+        fidelities: task.fidelities,
         metric: task.metric.name,
         direction: task.metric.direction,
         target: task.metric.target,
@@ -217,19 +233,38 @@ export namespace HarnessAdapter {
 
   export async function ingest(input: Evaluation) {
     const value = Evaluation.parse(input)
-    const [contract, binding] = await Promise.all([HarnessContract.read(value.sessionID), credential(value.sessionID)])
-    if (!contract) throw new Error(`No harness contract is bound to session ${value.sessionID}`)
+    const [contract, binding] = await Promise.all([
+      authorize(value.sessionID, value.evaluatorToken),
+      credential(value.sessionID),
+    ])
     if (contract.runID !== value.runID || binding.runID !== value.runID) {
       throw new Error(`Evaluation does not match the bound harness run`)
     }
-    if (binding.contractFingerprint !== HarnessContract.fingerprint(contract)) {
-      throw new Error(`Evaluator capability does not match the bound harness contract`)
-    }
-    if (!timingSafeEqual(binding.tokenSHA256, digest(value.evaluatorToken))) {
-      throw new Error(`Evaluator capability was rejected`)
-    }
     if (value.evaluatedAt < contract.createdAt) {
       throw new Error(`Evaluation predates the bound harness contract`)
+    }
+    const fidelity = (() => {
+      if (!contract.benchmark.fidelities && value.stage === undefined) return undefined
+      if (!contract.benchmark.fidelities) throw new Error(`Evaluation stage is not declared by the contract`)
+      if (!value.stage) throw new Error(`Evaluation must name a fidelity stage`)
+      const stage = contract.benchmark.fidelities.find((item) => item.id === value.stage)
+      if (!stage) throw new Error(`Evaluation fidelity stage is not in the bound contract`)
+      return { stage: stage.id, final: stage.final }
+    })()
+    const stage = value.stage ? contract.benchmark.fidelities?.find((item) => item.id === value.stage) : undefined
+    if (stage?.maxWallTimeMs !== undefined && value.usage?.wallTimeMs === undefined) {
+      throw new Error(`Evaluation stage ${stage.id} must report wall-time usage`)
+    }
+    if (stage?.maxCostUSD !== undefined && value.usage?.costUSD === undefined) {
+      throw new Error(`Evaluation stage ${stage.id} must report cost usage`)
+    }
+    const wall = value.usage?.wallTimeMs
+    const cost = value.usage?.costUSD
+    if (stage?.maxWallTimeMs !== undefined && wall !== undefined && wall > stage.maxWallTimeMs) {
+      throw new Error(`Evaluation stage ${stage.id} exceeded its wall-time budget`)
+    }
+    if (stage?.maxCostUSD !== undefined && cost !== undefined && cost > stage.maxCostUSD) {
+      throw new Error(`Evaluation stage ${stage.id} exceeded its cost budget`)
     }
     const metric = contract.benchmark.metric
     if (
@@ -253,17 +288,27 @@ export namespace HarnessAdapter {
       runID: value.runID,
       sessionID: value.sessionID,
       subject: value.candidateID ? { type: "candidate", id: value.candidateID } : undefined,
+      fidelity,
       evaluator: binding.evaluator,
       status: value.status,
       score: value.score,
       metrics: value.metrics,
       checks: value.checks,
       evidence: value.evidence,
+      usage: value.usage,
       evaluatedAt: value.evaluatedAt,
       notes: value.notes,
     })
     await HarnessEvaluation.record(evaluation)
     if (!value.candidateID) return { evaluation }
+    if (fidelity?.final === false) {
+      const search = await HarnessSearch.screen({
+        sessionID: value.sessionID,
+        candidateID: value.candidateID,
+        evaluation,
+      })
+      return { evaluation, search }
+    }
     const search = await HarnessSearch.verify({ sessionID: value.sessionID, candidateID: value.candidateID })
     const memory = await HarnessMemory.capture({
       sessionID: value.sessionID,

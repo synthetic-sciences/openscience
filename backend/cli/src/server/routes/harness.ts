@@ -7,6 +7,7 @@ import { HarnessBenchmark } from "@/session/harness/benchmark"
 import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
 import { HarnessReport } from "@/session/harness/report"
+import { HarnessSkill } from "@/session/harness/skill"
 import { errors } from "../error"
 
 const SessionID = z.object({ sessionID: z.string().min(1) })
@@ -78,6 +79,59 @@ export const HarnessRoutes = lazy(() =>
         const reports = await Promise.all(input.sessionIDs.map((sessionID) => HarnessReport.build(sessionID)))
         return c.json(HarnessReport.compare(reports, input.baselineRunID))
       },
+    )
+    .get(
+      "/skills",
+      describeRoute({
+        summary: "List quarantined learned skill proposals",
+        operationId: "harness.skills",
+        responses: {
+          200: {
+            description: "Learned skill qualification manifests",
+            content: { "application/json": { schema: resolver(z.array(HarnessSkill.Manifest)) } },
+          },
+        },
+      }),
+      async (c) => c.json(await HarnessSkill.list()),
+    )
+    .post(
+      "/skills",
+      describeRoute({
+        summary: "Create an inactive learned skill proposal",
+        operationId: "harness.skill.propose",
+        responses: {
+          200: {
+            description: "Quarantined proposal",
+            content: { "application/json": { schema: resolver(HarnessSkill.Manifest.nullable()) } },
+          },
+          ...errors(400, 409),
+        },
+      }),
+      validator("json", HarnessSkill.ProposalInput),
+      async (c) => c.json(await HarnessSkill.propose(c.req.valid("json"))),
+    )
+    .post(
+      "/skills/evidence",
+      describeRoute({
+        summary: "Attach paired held-out skill evidence",
+        description:
+          "Requires both evaluator capabilities and accepts only otherwise-identical candidate/control contracts.",
+        operationId: "harness.skill.attest",
+        responses: { 200: { description: "Updated qualification state" }, ...errors(400, 403, 409) },
+      }),
+      validator("json", HarnessSkill.Attestation),
+      async (c) => c.json(await HarnessSkill.attest(c.req.valid("json"))),
+    )
+    .post(
+      "/skills/:name/promotion",
+      describeRoute({
+        summary: "Promote a qualified learned skill",
+        description: "Copies only an unchanged proposal that has met every held-out qualification criterion.",
+        operationId: "harness.skill.promote",
+        responses: { 200: { description: "Promoted skill" }, ...errors(400, 409) },
+      }),
+      validator("param", z.object({ name: z.string().min(1) })),
+      async (c) => c.json(await HarnessSkill.promote(c.req.valid("param").name)),
     )
     .get(
       "/runs/:sessionID/contract",

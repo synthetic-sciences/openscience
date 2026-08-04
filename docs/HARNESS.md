@@ -1,0 +1,254 @@
+# Scientific benchmark harness
+
+OpenScience has a benchmark-facing control plane for scientific agents. It binds an immutable run protocol before execution, routes the session through a domain-appropriate method, accepts results only from the bound evaluator, and keeps optimization, evidence, reusable memory, claims, and cost reporting attached to that protocol.
+
+This is a **state-of-the-art-oriented harness architecture**, not a claim of state-of-the-art benchmark performance. A score becomes a SOTA claim only after an official, reproducible run beats the relevant public baseline under a comparable protocol. The harness is designed to make that test difficult to game and easy to audit.
+
+## Design invariants
+
+1. **The task is frozen before the agent runs.** Benchmark identity, version, task, split, evaluator, metric, direction, model, tools, skills, budgets, seed, intervention policy, and contamination policy are hashed into an immutable contract.
+2. **The evaluator is outside the agent loop.** The orchestrator holds a bearer capability. OpenScience stores only its SHA-256 digest and never returns the token in the contract.
+3. **Self-report is not evidence.** Agent observations cannot promote candidates, support scientific claims, enter verified memory, or qualify learned skills.
+4. **Search has lineage and a hard budget.** Every candidate binds its parent(s), branch, proposal, and content-addressed artifact. Only final, externally evaluated passing candidates can become parents.
+5. **Cheap screens cannot become final scores.** Optional fidelity stages execute in order. Only the last stage can promote a candidate, enter verified memory, appear as report quality, or qualify a skill.
+6. **Scientific validity is domain-specific.** Benchmark adapters select blocking verification packs for statistics, biology, physics, PDEs, chemistry, ML, and forecasting.
+7. **Learning is quarantined.** A trajectory can propose a skill, but cannot activate it. Promotion requires paired held-out candidate/control evidence across multiple tasks and an unchanged content hash.
+8. **Quality is reported with cost.** Comparable reports include score, pass state, model and intervention metadata, total tokens, wall time, cost, candidate count, and search state.
+
+## System boundary
+
+```mermaid
+flowchart LR
+    O["Benchmark orchestrator\nsecret evaluator capability + hidden tests"]
+    C["Immutable run contract"]
+    A["OpenScience agent session\nprofile + domain packs"]
+    G["Candidate graph\nindependent roots + lineage"]
+    E["External evaluator\nstaged checks + score + usage"]
+    J["Immutable evaluation journal"]
+    M["Verified hindsight memory"]
+    K["Scientific claim ledger"]
+    S["Quarantined skill lifecycle"]
+    R["Quality-cost report"]
+
+    O -->|bind| C
+    C --> A
+    A --> G
+    G -->|artifact| E
+    O --> E
+    E -->|authenticated result| J
+    J --> G
+    J --> M
+    J --> K
+    J --> S
+    J --> R
+```
+
+The bearer capability and hidden tests must live in a separate process, container, VM, or account that the agent cannot inspect. Application-level hashing prevents accidental drift and API forgery; it is not an operating-system sandbox. OpenScience's ordinary agent runtime can execute local code, so a same-user process with unrestricted filesystem access is outside this threat model.
+
+## Run lifecycle
+
+### 1. Bind
+
+The orchestrator calls `POST /harness/runs` before the model sees the task. The request selects a version-agnostic adapter and supplies the exact benchmark version and evaluator protocol.
+
+```json
+{
+  "schemaVersion": 1,
+  "runID": "mle-2026-08-task-17-seed-3",
+  "sessionID": "session-id",
+  "benchmark": "mle",
+  "version": "official-release-sha-or-version",
+  "taskID": "competition-id",
+  "split": "held_out",
+  "evaluator": {
+    "name": "official-evaluator",
+    "version": "evaluator-sha",
+    "source": "benchmark",
+    "token": "out-of-band-secret-with-at-least-32-characters"
+  },
+  "objective": "Maximize the official held-out score",
+  "metric": { "name": "score", "direction": "maximize" },
+  "fidelities": [
+    { "id": "smoke", "final": false, "maxWallTimeMs": 300000 },
+    { "id": "official", "final": true, "maxWallTimeMs": 43200000 }
+  ],
+  "model": { "provider": "provider", "name": "model", "effort": "high" },
+  "tools": ["read", "bash", "edit"],
+  "skills": [],
+  "budget": { "steps": 200, "candidates": 30, "tokens": 1000000, "costUSD": 100 },
+  "seed": 3,
+  "intervention": "autonomous",
+  "contamination": {
+    "policy": "Hidden tests and outputs stay outside the agent process",
+    "hiddenTestsAccessible": false,
+    "publicDataCutoff": "2026-08-01"
+  },
+  "createdAt": 1785859200000
+}
+```
+
+Rebinding the session with any changed field or evaluator capability fails.
+
+### 2. Execute through a profile
+
+The contract overrides heuristic routing. Unbound interactive sessions use a conservative `react` default and select a specialized profile only from strong task signals.
+
+| Profile     | Intended work                                       | Required discipline                                                |
+| ----------- | --------------------------------------------------- | ------------------------------------------------------------------ |
+| `react`     | Direct tool-using tasks                             | Smallest reliable execution path                                   |
+| `optimize`  | MLE, algorithm, or score optimization               | Candidate lineage, external scores, bounded exploration            |
+| `reproduce` | Papers, published analyses, and benchmark artifacts | Claim extraction, protocol replay, clean verification              |
+| `theory`    | Analytical physics and mathematical derivation      | Assumptions, dimensions, limits, independent route                 |
+| `numerical` | PDEs and simulation                                 | Equation/BC/IC pinning, stability, convergence, reference solution |
+| `training`  | Fine-tuning and post-training                       | Data/model identity, checkpoints, held-out evaluation, compute     |
+| `forecast`  | Weather and spatiotemporal prediction               | Lead-time portfolio, calibration, leakage, baseline, compute       |
+
+### 3. Search without erasing failures
+
+The optimizer is an open candidate graph rather than a single mutable working file.
+
+- Candidate IDs hash parents, branch, proposal, artifact URI, and artifact SHA-256.
+- The graph admits multiple independent roots early, bounded by `min(4, max(2, ceil(sqrt(candidate budget))))`.
+- A root must use a distinct branch while another live root with that branch exists.
+- Descendants require final, evaluator-verified passing parents. A cheap screening pass is insufficient.
+- Early selection opens independent roots and then applies branch-level UCB-style exploration with minimum-visit protection.
+- After half the candidate budget, selection exploits the strongest verified branch.
+- At the configured stall threshold it fuses two strong, distinct branches. At twice that threshold it recommends a strategy-level mutation while preserving the best parent.
+- Self-reported observations remain visible for debugging but cannot enter elite state or lineage.
+- Passing, failing, and inconclusive final evaluations are immutable and retained as hindsight.
+
+This combines breadth, exploitation, fusion, and escape from strategy stagnation without allowing the model to award itself fitness.
+
+### 4. Cascade evaluation
+
+Fidelity plans contain two to eight unique stages and exactly one final stage, which must be last. The journal enforces stage order per run or candidate. Every prior stage must pass all blocking checks before the next result can be recorded.
+
+If a stage declares a wall-time or cost cap, the evaluator must report the corresponding usage and the result is rejected when it exceeds the cap. Screening evaluations can cull candidates and attach feedback, but cannot:
+
+- become the search best;
+- create descendants;
+- satisfy final domain packs;
+- enter verified retrospective memory;
+- become the quality score in a report; or
+- qualify a learned skill.
+
+### 5. Verify with domain packs
+
+Final passing results must contain evidence-backed receipts for every blocking check selected by the adapter.
+
+| Pack       | Representative blocking checks                                                                     |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| Statistics | estimand, assumptions, effect size, uncertainty, multiplicity, exact replay                        |
+| Biology    | identifiers, design, QC, batch structure, covariates, multiplicity, biological validity            |
+| Physics    | assumptions, units, conventions, limiting cases, conservation, independent derivation              |
+| PDE        | equation, domain, BC/IC, discretization, convergence, stability, invariants, reference, error norm |
+| Chemistry  | identity, standardization, valence, stereochemistry, conditions, split leakage, physical validity  |
+| ML         | data/model identity, held-out split, leakage, baseline, metric, seed variance, compute             |
+| Forecast   | dataset/init/grid/leads, full metric portfolio, mode, calibration, temporal leakage, compute       |
+
+An adapter can require no universal pack when the benchmark spans incompatible task types; the orchestrator may add task-specific packs at bind time. Pack selection is frozen in the contract and comparison key.
+
+### 6. Reuse only verified hindsight
+
+Retrospective entries are scoped by benchmark name, version, task, and evaluator. They contain the exact candidate artifact reference, branch, generation, external outcome, score, metrics, evidence references, evaluator feedback, and evaluation usage.
+
+Retrieval combines query overlap, task affinity, and workflow stage. It deliberately returns a relevant contrasting failure beside a success when possible. Retrieved text is escaped, length-bounded, and explicitly labeled as precedent data rather than instructions.
+
+### 7. Keep claims separate from execution reports
+
+The claim ledger supports descriptive, statistical, causal, mechanistic, theoretical, and performance claims. Status is derived from verified evidence, never assigned by the agent.
+
+- Observations can make a claim provisional, but not supported.
+- A refuting verified source wins over supporting sources.
+- Support requires the claim's blocking checks and enough distinct independence keys.
+- Headline performance claims must bind an immutable artifact SHA-256.
+- Clean replay, independent implementation, and independent derivation require a separate verifier session, fresh process, clean workspace, and exact source hash.
+- Independent implementation/derivation additionally withhold the producer's output and require independent code or reasoning.
+
+### 8. Promote skills only after held-out qualification
+
+`/learn` and RSI distillation write inert proposals under `learned-skill-proposals`; skill discovery reads only promoted content under `learned-skills`.
+
+Before a proposal exists, OpenScience checks its frontmatter, runtime-risk patterns, prompt-injection patterns, and suspicious content. The proposal is then immutable by content hash. Promotion requires:
+
+- otherwise-identical candidate and control contracts;
+- the candidate contract pinned to the exact proposed skill SHA-256;
+- evaluator capabilities for both runs;
+- held-out or release splits;
+- at least three distinct benchmark tasks;
+- at least two strict score improvements;
+- no candidate failure and no regression;
+- a held-out skill-trigger set with at least 20 examples; and
+- trigger precision and recall of at least 0.8 for every attestation.
+
+If later evidence introduces a regression before promotion, qualification returns to pending. Promoted content cannot accept more evidence; changes require a new versioned proposal.
+
+### 9. Compare only compatible runs
+
+Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity protocol, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores.
+
+Cost and wall time include both the agent trace and evaluator-reported stage usage. Direction-aware score deltas and the Pareto frontier are available through `POST /harness/compare`.
+
+## Adapter catalog
+
+An adapter is a protocol mapping, not an embedded copy of a benchmark runner. The official runner owns workspace construction, hidden data, evaluator code, and task-specific score semantics; the adapter pins those facts and selects a safe execution profile.
+
+| Family                    | Adapters                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Data/statistics           | Statistical methodology, DiscoveryBench                                                                 |
+| Biology                   | BixBench, LifeSciBench/life-science tasks, GeneBench/GeneBench-Pro, BioMni, LABBench2                   |
+| Physics                   | Pure/agentic physics, PDE tasks, CritPt                                                                 |
+| Chemistry/materials       | ChemBench, MatSciBench                                                                                  |
+| ML                        | MLE-bench, post-training, ALE, weather, PaperBench                                                      |
+| General scientific agents | ResearchClawBench, reproducibility CORE-Bench, ScienceAgentBench, SciCode, SciAgentArena, AInsteinBench |
+
+Every adapter is version-agnostic. A real run must still bind an exact benchmark version, evaluator version, task ID, split, metric, budget, seed, and contamination policy.
+
+## HTTP API
+
+| Method | Route                                  | Purpose                                                       |
+| ------ | -------------------------------------- | ------------------------------------------------------------- |
+| `GET`  | `/harness/benchmarks`                  | List adapter manifests                                        |
+| `POST` | `/harness/runs`                        | Bind the immutable run and hashed evaluator capability        |
+| `POST` | `/harness/evaluations`                 | Record a staged evaluator-authenticated result                |
+| `GET`  | `/harness/runs/:sessionID/contract`    | Inspect the bound protocol                                    |
+| `GET`  | `/harness/runs/:sessionID/evaluations` | Inspect the immutable evaluation journal                      |
+| `GET`  | `/harness/runs/:sessionID/report`      | Build a quality-cost report                                   |
+| `POST` | `/harness/compare`                     | Compare compatible reports and identify Pareto-efficient runs |
+| `GET`  | `/harness/skills`                      | List quarantined skill proposals and qualification state      |
+| `POST` | `/harness/skills`                      | Create an inert, content-addressed proposal                   |
+| `POST` | `/harness/skills/evidence`             | Add paired evaluator-authenticated held-out evidence          |
+| `POST` | `/harness/skills/:name/promotion`      | Promote only a currently qualified, unchanged proposal        |
+
+The generated JavaScript SDK exposes the same API.
+
+## Research basis
+
+The implementation borrows principles, not source code, from the following primary systems and papers:
+
+| Source                                                                                                                     | Principle reflected here                                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [AlphaEvolve](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)   | Programs compete through objective external evaluators and remain in an evolutionary database.                                              |
+| [Google DeepMind Co-Scientist](https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/) | Generate diverse hypotheses, critique/rank them, combine strong ideas, and spend substantial compute on verification.                       |
+| [MLEvolve](https://github.com/InternScience/MLEvolve) and its [paper](https://arxiv.org/abs/2606.06473)                    | Progressive multi-branch search, success/failure hindsight, adaptive exploration, and branch fusion for MLE.                                |
+| [AI Scientist v2](https://github.com/SakanaAI/AI-Scientist-v2) and its [paper](https://arxiv.org/abs/2504.08066)           | Multiple independent experimental roots and agentic tree search rather than a single linear attempt.                                        |
+| [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954)                                                                   | Preserve an open-ended archive with lineage; do not collapse self-improvement into one incumbent.                                           |
+| [SkyDiscover](https://github.com/skydiscover-ai/skydiscover)                                                               | Island-style diversity, UCB selection, migration/fusion, staged evaluation, and strategy mutation after stagnation.                         |
+| [GEPA](https://arxiv.org/abs/2507.19457)                                                                                   | Feed detailed evaluator feedback into reflective search rather than optimizing from a scalar alone.                                         |
+| [EvoScientist](https://github.com/EvoScientist/EvoScientist) and its [paper](https://arxiv.org/abs/2603.08127)             | Turn repeated observations into proposed reusable skills; OpenScience adds stricter quarantine and held-out promotion.                      |
+| [ResearchHarness](https://github.com/InternScience/ResearchHarness)                                                        | Keep the benchmark substrate explicit, inspectable, tool-bounded, and traceable while isolating agent workspaces from evaluator state.      |
+| [PhysicsIntern](https://github.com/huggingface/physics-intern-skills)                                                      | Use durable research state, fresh verification contexts, independent derivations/computations, and adversarial critique.                    |
+| [ResearchClawBench](https://arxiv.org/abs/2606.07591)                                                                      | Evaluate end-to-end research against hidden target work and make protocol mismatch, evidence mismatch, and missing scientific core visible. |
+
+The expanded evaluation frontier is grounded in [PaperBench](https://openai.com/index/paperbench/), [computational reproducibility CORE-Bench](https://arxiv.org/abs/2409.11363), [ScienceAgentBench](https://arxiv.org/abs/2410.05080), [DiscoveryBench](https://arxiv.org/abs/2407.01725), [SciCode](https://arxiv.org/abs/2407.13168), [LABBench2](https://arxiv.org/abs/2604.09554), [SciAgentArena](https://arxiv.org/abs/2606.12736), and [AInsteinBench](https://arxiv.org/abs/2512.21373).
+
+## What remains before a SOTA claim
+
+The harness is ready for benchmark integration, but architecture alone does not establish performance. For each target benchmark:
+
+1. Pin an official repository/evaluator commit, dataset revision, split, hardware class, model, tools, budget, seed policy, and intervention policy.
+2. Reproduce the strongest public baseline under exactly that contract.
+3. Run ablations for profile routing, multi-root search, UCB exploration, fidelity screening, hindsight, fusion, strategy divergence, domain packs, and learned skills.
+4. Use multiple seeds or the benchmark's prescribed repeat protocol.
+5. Publish every final run, failed run, cost report, artifact hash, and contamination statement.
+6. Call a result SOTA only when the official metric improves under a comparison the benchmark owners would accept.

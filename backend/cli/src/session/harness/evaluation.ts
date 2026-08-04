@@ -21,6 +21,18 @@ export namespace HarnessEvaluation {
     .strict()
   export type Check = z.infer<typeof Check>
 
+  export const Usage = z
+    .object({
+      wallTimeMs: z.number().nonnegative().optional(),
+      costUSD: z.number().nonnegative().optional(),
+    })
+    .strict()
+    .refine(
+      (value) => value.wallTimeMs !== undefined || value.costUSD !== undefined,
+      "Evaluation usage cannot be empty",
+    )
+  export type Usage = z.infer<typeof Usage>
+
   export const Info = z
     .object({
       schemaVersion: z.literal(1),
@@ -30,6 +42,13 @@ export namespace HarnessEvaluation {
         .object({
           type: z.enum(["run", "candidate"]),
           id: z.string().min(1),
+        })
+        .strict()
+        .optional(),
+      fidelity: z
+        .object({
+          stage: z.string().min(1).max(100),
+          final: z.boolean(),
         })
         .strict()
         .optional(),
@@ -48,6 +67,7 @@ export namespace HarnessEvaluation {
         .default({}),
       checks: z.array(Check).min(1).max(128),
       evidence: z.array(z.string().min(1).max(1_000)).min(1).max(128),
+      usage: Usage.optional(),
       evaluatedAt: z.number().int().positive(),
       notes: z.string().max(8_000).optional(),
     })
@@ -84,13 +104,16 @@ export namespace HarnessEvaluation {
 
   const root = path.join(Global.Path.data, "harness", "evaluations")
   const file = (sessionID: string) => path.join(root, `${encodeURIComponent(sessionID)}.json`)
-  const key = (input: Info["subject"]) => (input ? `${input.type}:${input.id}` : "run")
+  const key = (input: Pick<Info, "subject" | "fidelity">) => {
+    const subject = input.subject ? `${input.subject.type}:${input.subject.id}` : "run"
+    return input.fidelity ? `${subject}@${input.fidelity.stage}` : subject
+  }
   const empty = (): State => ({ schemaVersion: 1, items: {}, order: [] })
 
   function state(input: Record<string, unknown>) {
     const legacy = Info.safeParse(input)
     if (!legacy.success) return State.parse(Object.keys(input).length ? input : empty())
-    const id = key(legacy.data.subject)
+    const id = key(legacy.data)
     return State.parse({ schemaVersion: 1, items: { [id]: legacy.data }, order: [id] })
   }
 
@@ -98,12 +121,15 @@ export namespace HarnessEvaluation {
     return new Bun.CryptoHasher("sha256").update(JSON.stringify(Info.parse(input))).digest("hex")
   }
 
-  export function verified(input: Info) {
+  export function passed(input: Info) {
     const evaluation = Info.parse(input)
     return (
       evaluation.status === "passed" && evaluation.checks.every((check) => !check.blocking || check.status === "passed")
     )
   }
+
+  export const final = (input: Info) => Info.parse(input).fidelity?.final !== false
+  export const verified = (input: Info) => passed(input) && final(input)
 
   export async function record(input: Info) {
     const evaluation = Info.parse(input)
@@ -133,13 +159,35 @@ export namespace HarnessEvaluation {
         `Evaluation source ${evaluation.evaluator.source} does not match contract source ${contract.benchmark.evaluatorSource}`,
       )
     }
-    if (evaluation.status === "passed") HarnessDomain.assert(contract.packs ?? [], evaluation.checks)
+    const plan = contract.benchmark.fidelities
+    if (!plan && evaluation.fidelity) throw new Error(`Evaluation fidelity is not declared by the bound contract`)
+    if (plan && !evaluation.fidelity) throw new Error(`Evaluation must name a fidelity stage`)
+    const stage = evaluation.fidelity ? plan?.find((item) => item.id === evaluation.fidelity?.stage) : undefined
+    if (evaluation.fidelity && !stage) throw new Error(`Evaluation fidelity stage is not in the bound contract`)
+    if (stage && stage.final !== evaluation.fidelity?.final) {
+      throw new Error(`Evaluation fidelity finality does not match the bound contract`)
+    }
+    if (evaluation.status === "passed" && final(evaluation)) {
+      HarnessDomain.assert(contract.packs ?? [], evaluation.checks)
+    }
     await JsonStore.update(file(evaluation.sessionID), (data) => {
       const current = state(data)
-      const id = key(evaluation.subject)
+      const id = key(evaluation)
       const existing = current.items[id]
       if (existing && fingerprint(existing) === fingerprint(evaluation)) return current
       if (existing) throw new Error(`Evaluation for ${id} is immutable once recorded`)
+      if (stage && plan) {
+        const index = plan.findIndex((item) => item.id === stage.id)
+        const prior = plan
+          .slice(0, index)
+          .map(
+            (item) =>
+              current.items[key({ subject: evaluation.subject, fidelity: { stage: item.id, final: item.final } })],
+          )
+        if (prior.some((item) => !item || !passed(item))) {
+          throw new Error(`Evaluation cannot advance before every prior fidelity stage passes`)
+        }
+      }
       return State.parse({
         ...current,
         items: { ...current.items, [id]: evaluation },
@@ -158,6 +206,6 @@ export namespace HarnessEvaluation {
   export async function read(sessionID: string, subject?: Info["subject"]): Promise<Info | null> {
     const items = await list(sessionID)
     if (!subject) return items.at(-1) ?? null
-    return items.find((item) => key(item.subject) === key(subject)) ?? null
+    return items.findLast((item) => item.subject?.type === subject.type && item.subject.id === subject.id) ?? null
   }
 }

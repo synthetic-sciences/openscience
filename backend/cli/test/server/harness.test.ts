@@ -2,16 +2,23 @@ import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Global } from "../../src/global"
+import { HarnessBenchmark } from "../../src/session/harness/benchmark"
 import { HarnessDomain } from "../../src/session/harness/domain"
 import { HarnessRoutes } from "../../src/server/routes/harness"
 
 const sessionID = "route-harness-adapter"
 const token = "route-evaluator-capability-token-000000000000000000"
+const skill = "route-harness-skill"
 
 afterEach(async () => {
   await Promise.all(
     ["bindings", "contracts", "evaluations"].map((name) =>
       fs.rm(path.join(Global.Path.data, "harness", name, `${encodeURIComponent(sessionID)}.json`), { force: true }),
+    ),
+  )
+  await Promise.all(
+    ["learned-skill-proposals", "learned-skills"].map((name) =>
+      fs.rm(path.join(Global.Path.data, name, skill), { recursive: true, force: true }),
     ),
   )
 })
@@ -21,7 +28,7 @@ describe("/harness routes", () => {
     const app = HarnessRoutes()
     const benchmarks = await app.request("/benchmarks")
     expect(benchmarks.status).toBe(200)
-    expect((await benchmarks.json()) as unknown[]).toHaveLength(14)
+    expect((await benchmarks.json()) as unknown[]).toHaveLength(HarnessBenchmark.Id.options.length)
 
     const bound = await app.request("/runs", {
       method: "POST",
@@ -80,5 +87,26 @@ describe("/harness routes", () => {
     expect((await stored.json()) as unknown[]).toHaveLength(1)
     const read = await app.request(`/runs/${sessionID}/contract`)
     expect(await read.json()).toMatchObject({ runID: "route-run" })
+  })
+
+  test("creates and lists an inactive learned skill proposal", async () => {
+    const app = HarnessRoutes()
+    const description = "Use when a held-out route workflow has been qualified."
+    const proposed = await app.request("/skills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: skill,
+        description,
+        content: `---\nname: ${skill}\ndescription: ${description}\n---\n\n# Route workflow\n`,
+        origin: "conversation",
+      }),
+    })
+    expect(proposed.status).toBe(200)
+    expect(await proposed.json()).toMatchObject({ name: skill, status: "pending" })
+
+    const listed = await app.request("/skills")
+    expect(listed.status).toBe(200)
+    expect(await listed.json()).toContainEqual(expect.objectContaining({ name: skill, status: "pending" }))
   })
 })

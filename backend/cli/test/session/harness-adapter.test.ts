@@ -168,6 +168,114 @@ describe("benchmark adapters", () => {
     )
   })
 
+  test("cascades candidates through declared fidelity stages before final promotion", async () => {
+    const input = task("mle", "adapter-fidelity")
+    input.fidelities = [
+      { id: "smoke", final: false, maxWallTimeMs: 30_000 },
+      { id: "official", final: true, maxWallTimeMs: 300_000 },
+    ]
+    const contract = await HarnessAdapter.bind(input)
+    await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 3 })
+    const first = await HarnessSearch.add({
+      sessionID: contract.sessionID,
+      parentIDs: [],
+      branch: "baseline",
+      proposal: "Screen a deterministic baseline before the official evaluator",
+      artifact: { uri: "artifact:fidelity-baseline", sha256: "3".repeat(64) },
+    })
+    await expect(HarnessAdapter.ingest(evaluation(contract, first.id))).rejects.toThrow("name a fidelity stage")
+    await expect(HarnessAdapter.ingest({ ...evaluation(contract, first.id), stage: "undeclared" })).rejects.toThrow(
+      "not in the bound contract",
+    )
+    await expect(
+      HarnessAdapter.ingest({
+        ...evaluation(contract, first.id),
+        stage: "smoke",
+        usage: { wallTimeMs: 30_001 },
+      }),
+    ).rejects.toThrow("exceeded its wall-time budget")
+
+    const screen = await HarnessAdapter.ingest({
+      ...evaluation(contract, first.id),
+      stage: "smoke",
+      score: 0.6,
+      metrics: { score: 0.6 },
+      checks: [{ id: "smoke", status: "passed", blocking: true, evidence: ["receipt:smoke"] }],
+      usage: { wallTimeMs: 10_000 },
+    })
+    expect(screen.search?.candidates[first.id]?.result).toMatchObject({ source: "screened", score: 0.6 })
+    expect(screen.search?.bestID).toBeUndefined()
+    if (!screen.search) throw new Error("Expected screening to update the candidate search")
+    const recorded = await HarnessEvaluation.read(contract.sessionID, { type: "candidate", id: first.id })
+    expect(recorded).not.toBeNull()
+    if (!recorded) throw new Error("Expected the screening evaluation to be recorded")
+    const replay = await HarnessSearch.screen({
+      sessionID: contract.sessionID,
+      candidateID: first.id,
+      evaluation: recorded,
+    })
+    expect(replay.revision).toBe(screen.search.revision)
+    await expect(
+      HarnessSearch.screen({
+        sessionID: contract.sessionID,
+        candidateID: first.id,
+        evaluation: HarnessEvaluation.Info.parse({ ...recorded, notes: "unrecorded mutation" }),
+      }),
+    ).rejects.toThrow("recorded external evaluation")
+    await expect(
+      HarnessSearch.add({
+        sessionID: contract.sessionID,
+        parentIDs: [first.id],
+        branch: "premature-child",
+        proposal: "Should not descend from a screened candidate",
+        artifact: { uri: "artifact:premature", sha256: "4".repeat(64) },
+      }),
+    ).rejects.toThrow("externally verified passing parents")
+
+    const final = await HarnessAdapter.ingest({
+      ...evaluation(contract, first.id),
+      stage: "official",
+      usage: { wallTimeMs: 100_000 },
+    })
+    expect(final.search?.candidates[first.id]?.result).toMatchObject({ source: "verified", score: 0.8 })
+    expect(final.search?.bestID).toBe(first.id)
+
+    const second = await HarnessSearch.add({
+      sessionID: contract.sessionID,
+      parentIDs: [],
+      branch: "alternative",
+      proposal: "Cull a weak independent strategy after screening",
+      artifact: { uri: "artifact:fidelity-alternative", sha256: "5".repeat(64) },
+    })
+    await expect(
+      HarnessAdapter.ingest({
+        ...evaluation(contract, second.id),
+        stage: "official",
+        usage: { wallTimeMs: 100_000 },
+      }),
+    ).rejects.toThrow("prior fidelity stage passes")
+    await HarnessAdapter.ingest({
+      ...evaluation(contract, second.id),
+      stage: "smoke",
+      score: 0.4,
+      metrics: { score: 0.4 },
+      checks: [{ id: "smoke", status: "passed", blocking: true, evidence: ["receipt:smoke"] }],
+      usage: { wallTimeMs: 8_000 },
+    })
+    const failed = await HarnessAdapter.ingest({
+      ...evaluation(contract, second.id),
+      stage: "official",
+      status: "failed",
+      score: undefined,
+      metrics: {},
+      checks: [{ id: "official", status: "failed", blocking: true, evidence: ["receipt:failure"] }],
+      usage: { wallTimeMs: 50_000 },
+    })
+    expect(failed.search?.candidates[second.id]?.result).toMatchObject({ source: "verified", status: "failed" })
+    expect(failed.search?.bestID).toBe(first.id)
+    expect(await HarnessEvaluation.list(contract.sessionID)).toHaveLength(4)
+  })
+
   test("keeps evaluator bindings immutable even when the contract is unchanged", async () => {
     const input = task("weather", "adapter-binding")
     await HarnessAdapter.bind(input)

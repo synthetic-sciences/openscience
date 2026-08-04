@@ -79,7 +79,7 @@ Bring-your-own-key usage is always free and is never gated — Atlas only meters
 
 ## How it works
 
-OpenScience runs a local server that hosts the workspace UI, the agent runtime, and the tool layer. The agent plans with a research harness, calls tools (shell, editor, LSP, MCP servers, scientific connectors, and skills), and streams its work back to the browser. Models are routed per request, so you can switch between providers or run local models without changing anything else. Sessions, artifacts, and provenance are stored on disk and can be shared as links.
+OpenScience runs a local server that hosts the workspace UI, the agent runtime, and the tool layer. The agent plans with a research harness, calls tools (shell, editor, LSP, MCP servers, scientific connectors, and skills), and streams its work back to the browser. Models are routed per request, so you can switch between providers or run local models without changing anything else. Sessions, artifacts, and provenance are stored on disk and can be shared as links. The evaluator-grounded benchmark architecture is documented in [Scientific benchmark harness](docs/HARNESS.md).
 
 | Path                 | Contents                                                     |
 | -------------------- | ------------------------------------------------------------ |

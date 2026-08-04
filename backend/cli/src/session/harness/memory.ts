@@ -35,6 +35,10 @@ export namespace HarnessMemory {
       score: z.number().finite().optional(),
       metrics: z.record(z.string(), z.number().finite()),
       evidence: z.array(z.string().min(1).max(500)).max(12),
+      usage: z
+        .object({ wallTimeMs: z.number().nonnegative().optional(), costUSD: z.number().nonnegative().optional() })
+        .strict()
+        .optional(),
       branch: z.string().min(1).max(120),
       generation: z.number().int().nonnegative(),
       artifact: HarnessSearch.Artifact,
@@ -137,6 +141,7 @@ export namespace HarnessMemory {
       score: candidate.result.score,
       metrics: Object.fromEntries(Object.entries(candidate.result.metrics).slice(0, 32)),
       evidence: candidate.result.evidence.slice(0, 12).map((item) => clip(item, 500)),
+      usage: candidate.result.usage,
       branch: candidate.branch,
       generation: candidate.generation,
       artifact: candidate.artifact,

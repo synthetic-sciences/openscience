@@ -105,6 +105,13 @@ import type {
   HarnessEvaluationsResponses,
   HarnessReportErrors,
   HarnessReportResponses,
+  HarnessSkillAttestErrors,
+  HarnessSkillAttestResponses,
+  HarnessSkillPromoteErrors,
+  HarnessSkillPromoteResponses,
+  HarnessSkillProposeErrors,
+  HarnessSkillProposeResponses,
+  HarnessSkillsResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -3620,6 +3627,144 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Skill extends HeyApiClient {
+  /**
+   * Create an inactive learned skill proposal
+   */
+  public propose<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      name?: string
+      description?: string
+      content?: string
+      origin?: "conversation" | "rsi"
+      sessionID?: string
+      runID?: string
+      createdAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "name" },
+            { in: "body", key: "description" },
+            { in: "body", key: "content" },
+            { in: "body", key: "origin" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "runID" },
+            { in: "body", key: "createdAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessSkillProposeResponses, HarnessSkillProposeErrors, ThrowOnError>(
+      {
+        url: "/harness/skills",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Attach paired held-out skill evidence
+   *
+   * Requires both evaluator capabilities and accepts only otherwise-identical candidate/control contracts.
+   */
+  public attest<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      name?: string
+      candidate?: {
+        sessionID: string
+        evaluatorToken: string
+      }
+      control?: {
+        sessionID: string
+        evaluatorToken: string
+      }
+      trigger?: {
+        datasetSHA256: string
+        split: "held_out"
+        examples: number
+        truePositive: number
+        falsePositive: number
+        trueNegative: number
+        falseNegative: number
+      }
+      recordedAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "name" },
+            { in: "body", key: "candidate" },
+            { in: "body", key: "control" },
+            { in: "body", key: "trigger" },
+            { in: "body", key: "recordedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessSkillAttestResponses, HarnessSkillAttestErrors, ThrowOnError>({
+      url: "/harness/skills/evidence",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Promote a qualified learned skill
+   *
+   * Copies only an unchanged proposal that has met every held-out qualification criterion.
+   */
+  public promote<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessSkillPromoteResponses, HarnessSkillPromoteErrors, ThrowOnError>(
+      {
+        url: "/harness/skills/{name}/promotion",
+        ...options,
+        ...params,
+      },
+    )
+  }
+}
+
 export class Harness extends HeyApiClient {
   /**
    * List scientific benchmark adapters
@@ -3669,6 +3814,12 @@ export class Harness extends HeyApiClient {
         direction: "maximize" | "minimize" | "pass"
         target?: number
       }
+      fidelities?: Array<{
+        id: string
+        final: boolean
+        maxWallTimeMs?: number
+        maxCostUSD?: number
+      }>
       model?: {
         provider: string
         name: string
@@ -3718,6 +3869,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "profile" },
             { in: "body", key: "extraPacks" },
             { in: "body", key: "metric" },
+            { in: "body", key: "fidelities" },
             { in: "body", key: "model" },
             { in: "body", key: "tools" },
             { in: "body", key: "skills" },
@@ -3755,6 +3907,7 @@ export class Harness extends HeyApiClient {
       sessionID?: string
       evaluatorToken?: string
       candidateID?: string
+      stage?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
       metrics?: {
@@ -3769,6 +3922,10 @@ export class Harness extends HeyApiClient {
         note?: string
       }>
       evidence?: Array<string>
+      usage?: {
+        wallTimeMs?: number
+        costUSD?: number
+      }
       evaluatedAt?: number
       notes?: string
     },
@@ -3785,11 +3942,13 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "sessionID" },
             { in: "body", key: "evaluatorToken" },
             { in: "body", key: "candidateID" },
+            { in: "body", key: "stage" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
             { in: "body", key: "metrics" },
             { in: "body", key: "checks" },
             { in: "body", key: "evidence" },
+            { in: "body", key: "usage" },
             { in: "body", key: "evaluatedAt" },
             { in: "body", key: "notes" },
           ],
@@ -3842,6 +4001,23 @@ export class Harness extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * List quarantined learned skill proposals
+   */
+  public skills<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<HarnessSkillsResponses, unknown, ThrowOnError>({
+      url: "/harness/skills",
+      ...options,
+      ...params,
     })
   }
 
@@ -3927,6 +4103,11 @@ export class Harness extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _skill?: Skill
+  get skill(): Skill {
+    return (this._skill ??= new Skill({ client: this.client }))
   }
 }
 
@@ -6425,7 +6606,7 @@ export class Command extends HeyApiClient {
   }
 }
 
-export class Skill extends HeyApiClient {
+export class Skill2 extends HeyApiClient {
   /**
    * Delete user skill
    *
@@ -6576,9 +6757,9 @@ export class App extends HeyApiClient {
     })
   }
 
-  private _skill?: Skill
-  get skill(): Skill {
-    return (this._skill ??= new Skill({ client: this.client }))
+  private _skill?: Skill2
+  get skill(): Skill2 {
+    return (this._skill ??= new Skill2({ client: this.client }))
   }
 }
 

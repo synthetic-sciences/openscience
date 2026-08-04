@@ -63,8 +63,10 @@ export namespace HarnessReport {
       efficiency: z
         .object({
           costUSD: z.number().nonnegative().optional(),
+          evaluatorCostUSD: z.number().nonnegative().optional(),
           tokens: Tokens.optional(),
           wallTimeMs: z.number().nonnegative().optional(),
+          evaluatorWallTimeMs: z.number().nonnegative().optional(),
           toolCalls: z.number().int().nonnegative().optional(),
           searches: z.number().int().nonnegative().optional(),
           dedupeHits: z.number().int().nonnegative().optional(),
@@ -125,9 +127,17 @@ export namespace HarnessReport {
     const benchmark = HarnessBenchmark.resolve(contract.benchmark.name)
     const evaluations = input.evaluations.map((item) => HarnessEvaluation.Info.parse(item))
     const best = input.search?.bestID
-      ? evaluations.find((item) => item.subject?.type === "candidate" && item.subject.id === input.search?.bestID)
+      ? evaluations.findLast(
+          (item) =>
+            item.subject?.type === "candidate" &&
+            item.subject.id === input.search?.bestID &&
+            HarnessEvaluation.final(item),
+        )
       : undefined
-    const evaluation = best ?? evaluations.findLast((item) => !item.subject) ?? evaluations.at(-1)
+    const evaluation =
+      best ??
+      evaluations.findLast((item) => !item.subject && HarnessEvaluation.final(item)) ??
+      evaluations.findLast(HarnessEvaluation.final)
     const direction = contract.benchmark.direction ?? "pass"
     const comparisonKey = digest({
       benchmark: benchmark.id,
@@ -137,6 +147,7 @@ export namespace HarnessReport {
       evaluator: contract.benchmark.evaluator,
       evaluatorVersion: contract.benchmark.evaluatorVersion,
       evaluatorSource: contract.benchmark.evaluatorSource,
+      fidelities: contract.benchmark.fidelities,
       metric: contract.benchmark.metric,
       direction,
       target: contract.benchmark.target,
@@ -159,6 +170,18 @@ export namespace HarnessReport {
         }
       : undefined
     const candidates = input.search ? Object.values(input.search.candidates) : []
+    const costs = evaluations.flatMap((item) => (item.usage?.costUSD === undefined ? [] : [item.usage.costUSD]))
+    const walls = evaluations.flatMap((item) => (item.usage?.wallTimeMs === undefined ? [] : [item.usage.wallTimeMs]))
+    const evaluatorCostUSD = costs.length ? costs.reduce((sum, value) => sum + value, 0) : undefined
+    const evaluatorWallTimeMs = walls.length ? walls.reduce((sum, value) => sum + value, 0) : undefined
+    const costUSD =
+      input.trace?.cost === undefined && evaluatorCostUSD === undefined
+        ? undefined
+        : (input.trace?.cost ?? 0) + (evaluatorCostUSD ?? 0)
+    const wallTimeMs =
+      input.trace?.totalCompletionTimeMs === undefined && evaluatorWallTimeMs === undefined
+        ? undefined
+        : (input.trace?.totalCompletionTimeMs ?? 0) + (evaluatorWallTimeMs ?? 0)
     return Info.parse({
       schemaVersion: 1,
       runID: contract.runID,
@@ -194,9 +217,11 @@ export namespace HarnessReport {
         evaluations: evaluations.length,
       },
       efficiency: {
-        costUSD: input.trace?.cost,
+        costUSD,
+        evaluatorCostUSD,
         tokens,
-        wallTimeMs: input.trace?.totalCompletionTimeMs,
+        wallTimeMs,
+        evaluatorWallTimeMs,
         toolCalls: input.trace?.toolCalls,
         searches: input.trace?.searchCount,
         dedupeHits: input.trace?.dedupeHits,

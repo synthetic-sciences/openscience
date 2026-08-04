@@ -19,7 +19,7 @@ export namespace HarnessSearch {
 
   export const Result = z
     .object({
-      source: z.enum(["observed", "verified"]),
+      source: z.enum(["observed", "screened", "verified"]),
       status: HarnessEvaluation.Status,
       score: z.number().finite().optional(),
       metrics: z
@@ -28,6 +28,11 @@ export namespace HarnessSearch {
         .default({}),
       checks: z.array(HarnessEvaluation.Check).default([]),
       evidence: z.array(z.string().min(1).max(1_000)).max(128).default([]),
+      usage: HarnessEvaluation.Usage.optional(),
+      fidelity: z
+        .object({ stage: z.string().min(1).max(100), final: z.boolean() })
+        .strict()
+        .optional(),
       feedback: z.string().max(8_000).optional(),
       evaluator: z.string().max(200).optional(),
       evaluatedAt: z.number().int().positive(),
@@ -85,7 +90,7 @@ export namespace HarnessSearch {
   export type State = z.infer<typeof State>
 
   export type Recommendation = {
-    strategy: "seed" | "explore" | "exploit" | "fuse"
+    strategy: "seed" | "explore" | "exploit" | "fuse" | "diverge"
     parentIDs: string[]
     reasons: string[]
   }
@@ -250,7 +255,19 @@ export namespace HarnessSearch {
       if (ancestors.some((parent) => !verified(parent!))) {
         throw new Error(`Candidates may only descend from externally verified passing parents`)
       }
-      if (!parents.length && candidates(state).length) throw new Error(`Only the first candidate may be parentless`)
+      if (!parents.length && candidates(state).length) {
+        const roots = candidates(state).filter(
+          (candidate) =>
+            !candidate.parentIDs.length &&
+            (candidate.result === undefined ||
+              (candidate.result.source === "verified" && candidate.result.status === "passed")),
+        )
+        const limit = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(state.budget.candidates))))
+        if (roots.length >= limit) throw new Error(`Independent candidate root budget is exhausted`)
+        if (roots.some((candidate) => candidate.branch === input.branch)) {
+          throw new Error(`An active independent root already exists for branch ${input.branch}`)
+        }
+      }
       const generation = ancestors.length ? Math.max(...ancestors.map((parent) => parent!.generation)) + 1 : 0
       const candidate: Candidate = Candidate.parse({
         id,
@@ -285,8 +302,9 @@ export namespace HarnessSearch {
       const state = parse(data)
       const candidate = state.candidates[input.candidateID]
       if (!candidate) throw new Error(`Unknown candidate ${input.candidateID}`)
-      if (candidate.result?.source === "verified")
-        throw new Error(`A verified result cannot be replaced by an observation`)
+      if (candidate.result?.source === "verified" || candidate.result?.source === "screened") {
+        throw new Error(`An external result cannot be replaced by an observation`)
+      }
       const now = Date.now()
       const result = Result.parse({
         source: "observed",
@@ -308,7 +326,10 @@ export namespace HarnessSearch {
   }
 
   export async function verify(input: { sessionID: string; candidateID: string }) {
-    const evaluation = await HarnessEvaluation.read(input.sessionID, { type: "candidate", id: input.candidateID })
+    const evaluation = (await HarnessEvaluation.list(input.sessionID)).findLast(
+      (item) =>
+        item.subject?.type === "candidate" && item.subject.id === input.candidateID && HarnessEvaluation.final(item),
+    )
     if (!evaluation) {
       const latest = await HarnessEvaluation.read(input.sessionID)
       if (latest) throw new Error(`The recorded evaluation is not bound to candidate ${input.candidateID}`)
@@ -335,6 +356,8 @@ export namespace HarnessSearch {
         metrics: evaluation.metrics,
         checks: evaluation.checks,
         evidence: evaluation.evidence,
+        usage: evaluation.usage,
+        fidelity: evaluation.fidelity,
         evaluator: evaluation.evaluator.name,
         feedback: evaluation.notes,
         evaluatedAt: evaluation.evaluatedAt,
@@ -367,6 +390,56 @@ export namespace HarnessSearch {
     return read(input.sessionID)
   }
 
+  export async function screen(input: { sessionID: string; candidateID: string; evaluation: HarnessEvaluation.Info }) {
+    const evaluation = HarnessEvaluation.Info.parse(input.evaluation)
+    if (evaluation.fidelity?.final !== false) throw new Error(`Screening requires a non-final fidelity stage`)
+    if (evaluation.subject?.type !== "candidate" || evaluation.subject.id !== input.candidateID) {
+      throw new Error(`Screening evaluation is not bound to candidate ${input.candidateID}`)
+    }
+    const [contract, journal] = await Promise.all([
+      HarnessContract.read(input.sessionID),
+      HarnessEvaluation.list(input.sessionID),
+    ])
+    if (!contract?.benchmark.fidelities) throw new Error(`Screening requires a bound fidelity plan`)
+    const plan = contract.benchmark.fidelities
+    if (!journal.some((item) => HarnessEvaluation.fingerprint(item) === HarnessEvaluation.fingerprint(evaluation))) {
+      throw new Error(`Screening requires a recorded external evaluation`)
+    }
+    const index = plan.findIndex((item) => item.id === evaluation.fidelity?.stage)
+    if (index < 0) throw new Error(`Screening fidelity stage is not in the bound contract`)
+    await JsonStore.update(file(input.sessionID), (data) => {
+      const state = parse(data)
+      const candidate = state.candidates[input.candidateID]
+      if (!candidate) throw new Error(`Unknown candidate ${input.candidateID}`)
+      if (candidate.result?.source === "verified") throw new Error(`A final verified result is immutable`)
+      const result = Result.parse({
+        source: "screened",
+        status: evaluation.status,
+        score: evaluation.score,
+        metrics: evaluation.metrics,
+        checks: evaluation.checks,
+        evidence: evaluation.evidence,
+        usage: evaluation.usage,
+        fidelity: evaluation.fidelity,
+        evaluator: evaluation.evaluator.name,
+        feedback: evaluation.notes,
+        evaluatedAt: evaluation.evaluatedAt,
+      })
+      if (candidate.result?.source === "screened") {
+        if (JSON.stringify(candidate.result) === JSON.stringify(result)) return state
+        const current = plan.findIndex((item) => item.id === candidate.result?.fidelity?.stage)
+        if (current >= index) throw new Error(`A screening result cannot replace the same or a later fidelity stage`)
+      }
+      return {
+        ...state,
+        candidates: { ...state.candidates, [candidate.id]: { ...candidate, result } },
+        revision: state.revision + 1,
+        updatedAt: Date.now(),
+      }
+    })
+    return read(input.sessionID)
+  }
+
   export async function finish(sessionID: string, reason: Exclude<Stop, "budget_exhausted" | "objective_met">) {
     await JsonStore.update(file(sessionID), (data) => {
       const state = parse(data)
@@ -382,6 +455,13 @@ export namespace HarnessSearch {
     const distinct = pool.filter(
       (candidate, index) => pool.findIndex((item) => item.branch === candidate.branch) === index,
     )
+    if (state.stalled >= state.budget.stall * 2) {
+      return {
+        strategy: "diverge",
+        parentIDs: [pool[0]!.id],
+        reasons: [`stalled:${state.stalled}`, "strategy-level-mutation", "preserve-best"],
+      }
+    }
     if (state.stalled >= state.budget.stall && distinct.length >= 2) {
       return {
         strategy: "fuse",
@@ -390,6 +470,20 @@ export namespace HarnessSearch {
       }
     }
     const progress = candidates(state).length / state.budget.candidates
+    const roots = candidates(state).filter(
+      (candidate) =>
+        !candidate.parentIDs.length &&
+        (candidate.result === undefined ||
+          (candidate.result.source === "verified" && candidate.result.status === "passed")),
+    )
+    const rootTarget = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(state.budget.candidates))))
+    if (progress < 0.35 && roots.length < rootTarget) {
+      return {
+        strategy: "explore",
+        parentIDs: [],
+        reasons: [`budget-progress:${progress.toFixed(2)}`, `independent-roots:${roots.length}/${rootTarget}`],
+      }
+    }
     if (progress >= 0.5) {
       return {
         strategy: "exploit",
@@ -399,13 +493,26 @@ export namespace HarnessSearch {
     }
     const counts = new Map<string, number>()
     for (const candidate of candidates(state)) counts.set(candidate.branch, (counts.get(candidate.branch) ?? 0) + 1)
-    const diverse = distinct.toSorted(
-      (a, b) => (counts.get(a.branch) ?? 0) - (counts.get(b.branch) ?? 0) || order(state, a, b),
-    )
+    const visits = distinct.map((candidate) => counts.get(candidate.branch) ?? 1)
+    const least = Math.min(...visits)
+    const warmup = distinct.filter((candidate) => (counts.get(candidate.branch) ?? 1) === least)
+    const scale = Math.max(1, ...pool.map((candidate) => Math.abs(candidate.result?.score ?? 0)))
+    const total = Math.max(1, candidates(state).length)
+    const value = (candidate: Candidate) => {
+      const raw = candidate.result?.score ?? 0
+      const quality = state.direction === "minimize" ? -raw / scale : raw / scale
+      const count = counts.get(candidate.branch) ?? 1
+      return quality + Math.sqrt((2 * Math.log(total + 1)) / count)
+    }
+    const diverse = warmup.toSorted((a, b) => value(b) - value(a) || order(state, a, b))
     return {
       strategy: "explore",
       parentIDs: [diverse[0]!.id],
-      reasons: [`budget-progress:${progress.toFixed(2)}`, "underexplored-branches"],
+      reasons: [
+        `budget-progress:${progress.toFixed(2)}`,
+        `branch-visits:${least}`,
+        warmup.length < distinct.length ? "ucb-minimum-visits" : "ucb-quality-exploration",
+      ],
     }
   }
 }

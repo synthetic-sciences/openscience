@@ -146,10 +146,13 @@ describe("harness candidate graph", () => {
     expect(Object.keys(duplicate.state.candidates)).toHaveLength(1)
   })
 
-  test("allows only one parentless seed", async () => {
-    await setup("search-seed")
-    await add("search-seed", "seed")
-    await expect(add("search-seed", "orphan")).rejects.toThrow("Only the first candidate")
+  test("allows bounded independent roots and releases failed root capacity", async () => {
+    await setup("search-seed", { candidates: 4 })
+    const first = await add("search-seed", "seed", [], "branch-a")
+    await evaluate("search-seed", first.id, 0, "failed")
+    await add("search-seed", "replacement", [], "branch-a")
+    await add("search-seed", "independent", [], "branch-b")
+    await expect(add("search-seed", "overflow", [], "branch-c")).rejects.toThrow("root budget")
   })
 
   test("rejects unknown, duplicate, and unverified parents", async () => {
@@ -228,6 +231,19 @@ describe("harness candidate graph", () => {
     const choice = HarnessSearch.recommend(state)
     expect(choice.strategy).toBe("explore")
     expect(choice.parentIDs).toEqual([b.id])
+  })
+
+  test("opens independent roots early and switches to strategy divergence after prolonged stagnation", async () => {
+    await setup("search-adaptive", { candidates: 10, stall: 1 })
+    const seed = await add("search-adaptive", "seed", [], "base")
+    let state = await evaluate("search-adaptive", seed.id, 0.9)
+    expect(HarnessSearch.recommend(state)).toMatchObject({ strategy: "explore", parentIDs: [] })
+    const alternate = await add("search-adaptive", "alternate", [], "alternate")
+    state = await evaluate("search-adaptive", alternate.id, 0.7)
+    expect(HarnessSearch.recommend(state).strategy).toBe("fuse")
+    const fused = await add("search-adaptive", "fused", [seed.id, alternate.id], "fusion")
+    state = await evaluate("search-adaptive", fused.id, 0.8)
+    expect(HarnessSearch.recommend(state)).toMatchObject({ strategy: "diverge", parentIDs: [seed.id] })
   })
 
   test("switches to verified-rank exploitation after half the budget", async () => {
