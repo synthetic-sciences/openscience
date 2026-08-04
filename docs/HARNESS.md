@@ -126,6 +126,7 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
     },
     "taskManifestSHA256": "4444444444444444444444444444444444444444444444444444444444444444",
     "evaluatorSHA256": "5555555555555555555555555555555555555555555555555555555555555555",
+    "validatorSHA256": "7777777777777777777777777777777777777777777777777777777777777777",
     "baseline": {
       "name": "official-reference-baseline",
       "artifactSHA256": "6666666666666666666666666666666666666666666666666666666666666666",
@@ -193,7 +194,9 @@ Every catalog manifest reports `execution: external_runner_required`: the adapte
 - artifact round-trip; and
 - pinned baseline replay.
 
-OpenScience derives the pass state. It rejects a partial or substituted check set and recomputes baseline error against the frozen tolerance. Failed attempts remain in the append-only journal. Receipts bind the full contract fingerprint, evaluator identity, protocol, evidence, evaluator timestamp, and server-owned record time into their SHA-256 identity; edited storage fails validation. A separate content-derived submission ID preserves retry idempotence without trusting the submitter's clock. The bearer capability never enters the receipt.
+Use the bundled `verify-benchmark-launch` skill from the evaluator-owned launcher to inspect the real Git checkout, environment locks, dataset and task bytes, evaluator bytes, hidden-mount canaries, replay outputs, serialization round trip, and public baseline. Bind the report's `protocol` before agent execution, then submit its `validator`, `checks`, `baselineScore`, and evidence. The contract pins the validator script SHA-256; the receipt is rejected if its exact executable does not match.
+
+OpenScience derives the pass state. It rejects a partial or substituted check set, a substituted validator, and recomputes baseline error against the frozen tolerance. Failed attempts remain in the append-only journal. Receipts bind the full contract fingerprint, evaluator identity, protocol, validator and manifest identity, evidence, evaluator timestamp, and server-owned record time into their SHA-256 identity; edited storage fails validation. A separate content-derived submission ID preserves retry idempotence without trusting the submitter's clock. The bearer capability never enters the receipt.
 
 Search and scientific orchestration will not initialize until a passing receipt exists. Every final passing evaluation must cite the exact receipt and must occur after it. This separates four states that older catalog-only integrations conflated: supported methodology, bound official protocol, launch-ready runner, and externally verified result.
 

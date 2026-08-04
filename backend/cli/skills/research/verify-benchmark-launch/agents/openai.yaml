@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Benchmark Launch"
+  short_description: "Validate pinned official benchmark readiness"
+  default_prompt: "Use $verify-benchmark-launch to validate a pinned official benchmark checkout, environment, data, evaluator, replay, and baseline before execution."

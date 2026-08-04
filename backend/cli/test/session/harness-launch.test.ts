@@ -108,6 +108,7 @@ describe("official benchmark launch readiness", () => {
 
     const receipt = await HarnessLaunch.record(input, contract)
     expect(receipt).toMatchObject({ status: "passed", baselineDelta: 0 })
+    expect(receipt.validator).toEqual(input.validator)
     expect(receipt.checks.map((check) => check.id).toSorted()).toEqual(HarnessContract.LaunchCheck.options.toSorted())
     expect(JSON.stringify(receipt)).not.toContain(token)
     expect((await HarnessLaunch.record(input, contract)).receiptID).toBe(receipt.receiptID)
@@ -152,6 +153,15 @@ describe("official benchmark launch readiness", () => {
         contract,
       ),
     ).rejects.toThrow("immutable harness contract")
+    await expect(
+      HarnessLaunch.record(
+        {
+          ...input,
+          validator: { ...input.validator, scriptSHA256: "f".repeat(64) },
+        },
+        contract,
+      ),
+    ).rejects.toThrow("validator does not match")
     await expect(HarnessLaunch.record({ ...input, evaluatedAt: Date.now() + 600_000 }, contract)).rejects.toThrow(
       "future-dated",
     )

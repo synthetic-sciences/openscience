@@ -23,6 +23,16 @@ export namespace HarnessLaunch {
     .strict()
   export type Check = z.infer<typeof Check>
 
+  export const Validator = z
+    .object({
+      name: z.literal("verify-benchmark-launch"),
+      version: z.literal("1"),
+      scriptSHA256: Hash,
+      manifestSHA256: Hash,
+    })
+    .strict()
+  export type Validator = z.infer<typeof Validator>
+
   export const Submit = z
     .object({
       schemaVersion: z.literal(1),
@@ -30,6 +40,7 @@ export namespace HarnessLaunch {
       sessionID: z.string().min(1).max(240),
       evaluatorToken: Token,
       protocol: HarnessContract.Launch,
+      validator: Validator,
       checks: z
         .array(Check)
         .length(HarnessContract.LaunchCheck.options.length)
@@ -68,6 +79,7 @@ export namespace HarnessLaunch {
         })
         .strict(),
       protocol: HarnessContract.Launch,
+      validator: Validator,
       checks: z.array(Check).length(HarnessContract.LaunchCheck.options.length),
       baselineScore: z.number().finite().optional(),
       baselineDelta: z.number().finite().optional(),
@@ -98,6 +110,7 @@ export namespace HarnessLaunch {
     runID: string
     sessionID: string
     protocol: HarnessContract.Launch
+    validator: Validator
     checks: Check[]
     baselineScore?: number
     evidence: string[]
@@ -150,6 +163,7 @@ export namespace HarnessLaunch {
             runID: receipt.runID,
             sessionID: receipt.sessionID,
             protocol: receipt.protocol,
+            validator: receipt.validator,
             checks: receipt.checks,
             baselineScore: receipt.baselineScore,
             evidence: receipt.evidence,
@@ -183,6 +197,9 @@ export namespace HarnessLaunch {
     if (value.evaluatedAt > Date.now() + 300_000) throw new Error(`Launch receipt is implausibly future-dated`)
     if (!same(value.protocol, protocol))
       throw new Error(`Launch protocol does not match the immutable harness contract`)
+    if (value.validator.scriptSHA256 !== protocol.validatorSHA256) {
+      throw new Error(`Launch validator does not match the immutable harness contract`)
+    }
     const expected = HarnessContract.LaunchCheck.options.toSorted()
     const submitted = value.checks.map((item) => item.id).toSorted()
     if (!same(expected, submitted)) throw new Error(`Launch receipt does not contain the complete readiness suite`)
@@ -198,6 +215,7 @@ export namespace HarnessLaunch {
       runID: value.runID,
       sessionID: value.sessionID,
       protocol,
+      validator: value.validator,
       checks,
       baselineScore: value.baselineScore,
       evidence,
@@ -216,6 +234,7 @@ export namespace HarnessLaunch {
         source: bound.benchmark.evaluatorSource!,
       },
       protocol,
+      validator: value.validator,
       checks,
       baselineScore: value.baselineScore,
       ...result,

@@ -21,6 +21,7 @@ export function launchProtocol(key = "official") {
     },
     taskManifestSHA256: harnessHash(`${key}-task-manifest`),
     evaluatorSHA256: harnessHash(`${key}-evaluator`),
+    validatorSHA256: harnessHash(`${key}-launch-validator`),
     baseline: {
       name: `${key}-baseline`,
       artifactSHA256: harnessHash(`${key}-baseline-artifact`),
@@ -38,6 +39,12 @@ export function launchSubmit(contract: HarnessContract.Info, token: string) {
     sessionID: contract.sessionID,
     evaluatorToken: token,
     protocol: contract.launch,
+    validator: {
+      name: "verify-benchmark-launch",
+      version: "1",
+      scriptSHA256: contract.launch.validatorSHA256,
+      manifestSHA256: harnessHash(`${contract.sessionID}-launch-manifest`),
+    },
     checks: HarnessContract.LaunchCheck.options.map((id) => ({
       id,
       status: "passed" as const,

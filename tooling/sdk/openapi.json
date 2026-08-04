@@ -18680,6 +18680,10 @@
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
                         "baseline": {
                           "type": "object",
                           "properties": {
@@ -18713,7 +18717,36 @@
                         "dataset",
                         "taskManifestSHA256",
                         "evaluatorSHA256",
+                        "validatorSHA256",
                         "baseline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "validator": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "const": "verify-benchmark-launch"
+                        },
+                        "version": {
+                          "type": "string",
+                          "const": "1"
+                        },
+                        "scriptSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "manifestSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version",
+                        "scriptSHA256",
+                        "manifestSHA256"
                       ],
                       "additionalProperties": false
                     },
@@ -18815,6 +18848,7 @@
                     "contractFingerprint",
                     "evaluator",
                     "protocol",
+                    "validator",
                     "checks",
                     "status",
                     "failures",
@@ -18944,6 +18978,10 @@
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
                       },
+                      "validatorSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
                       "baseline": {
                         "type": "object",
                         "properties": {
@@ -18977,7 +19015,36 @@
                       "dataset",
                       "taskManifestSHA256",
                       "evaluatorSHA256",
+                      "validatorSHA256",
                       "baseline"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "validator": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "const": "verify-benchmark-launch"
+                      },
+                      "version": {
+                        "type": "string",
+                        "const": "1"
+                      },
+                      "scriptSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "manifestSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "version",
+                      "scriptSHA256",
+                      "manifestSHA256"
                     ],
                     "additionalProperties": false
                   },
@@ -19052,6 +19119,7 @@
                   "sessionID",
                   "evaluatorToken",
                   "protocol",
+                  "validator",
                   "checks",
                   "evidence",
                   "evaluatedAt"
@@ -19237,6 +19305,10 @@
                               "type": "string",
                               "pattern": "^[a-f0-9]{64}$"
                             },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
                             "baseline": {
                               "type": "object",
                               "properties": {
@@ -19270,7 +19342,36 @@
                             "dataset",
                             "taskManifestSHA256",
                             "evaluatorSHA256",
+                            "validatorSHA256",
                             "baseline"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "validator": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "const": "verify-benchmark-launch"
+                            },
+                            "version": {
+                              "type": "string",
+                              "const": "1"
+                            },
+                            "scriptSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "manifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "scriptSHA256",
+                            "manifestSHA256"
                           ],
                           "additionalProperties": false
                         },
@@ -19372,6 +19473,7 @@
                         "contractFingerprint",
                         "evaluator",
                         "protocol",
+                        "validator",
                         "checks",
                         "status",
                         "failures",
@@ -23191,6 +23293,10 @@
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
                         "baseline": {
                           "type": "object",
                           "properties": {
@@ -23224,6 +23330,7 @@
                         "dataset",
                         "taskManifestSHA256",
                         "evaluatorSHA256",
+                        "validatorSHA256",
                         "baseline"
                       ],
                       "additionalProperties": false
@@ -24116,6 +24223,10 @@
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
                       },
+                      "validatorSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
                       "baseline": {
                         "type": "object",
                         "properties": {
@@ -24149,6 +24260,7 @@
                       "dataset",
                       "taskManifestSHA256",
                       "evaluatorSHA256",
+                      "validatorSHA256",
                       "baseline"
                     ],
                     "additionalProperties": false
@@ -26460,6 +26572,10 @@
                               "type": "string",
                               "pattern": "^[a-f0-9]{64}$"
                             },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
                             "baseline": {
                               "type": "object",
                               "properties": {
@@ -26493,6 +26609,7 @@
                             "dataset",
                             "taskManifestSHA256",
                             "evaluatorSHA256",
+                            "validatorSHA256",
                             "baseline"
                           ],
                           "additionalProperties": false

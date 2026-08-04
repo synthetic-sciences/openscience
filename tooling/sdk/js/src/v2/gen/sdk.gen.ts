@@ -4077,12 +4077,19 @@ export class Launch extends HeyApiClient {
         }
         taskManifestSHA256: string
         evaluatorSHA256: string
+        validatorSHA256: string
         baseline: {
           name: string
           artifactSHA256: string
           expectedScore?: number
           tolerance?: number
         }
+      }
+      validator?: {
+        name: "verify-benchmark-launch"
+        version: "1"
+        scriptSHA256: string
+        manifestSHA256: string
       }
       checks?: [
         {
@@ -4207,6 +4214,7 @@ export class Launch extends HeyApiClient {
             { in: "body", key: "sessionID" },
             { in: "body", key: "evaluatorToken" },
             { in: "body", key: "protocol" },
+            { in: "body", key: "validator" },
             { in: "body", key: "checks" },
             { in: "body", key: "baselineScore" },
             { in: "body", key: "evidence" },
@@ -4778,6 +4786,7 @@ export class Harness extends HeyApiClient {
         }
         taskManifestSHA256: string
         evaluatorSHA256: string
+        validatorSHA256: string
         baseline: {
           name: string
           artifactSHA256: string

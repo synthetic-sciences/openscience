@@ -8390,12 +8390,19 @@ export type HarnessLaunchRecordData = {
       }
       taskManifestSHA256: string
       evaluatorSHA256: string
+      validatorSHA256: string
       baseline: {
         name: string
         artifactSHA256: string
         expectedScore?: number
         tolerance?: number
       }
+    }
+    validator: {
+      name: "verify-benchmark-launch"
+      version: "1"
+      scriptSHA256: string
+      manifestSHA256: string
     }
     checks: [
       {
@@ -8556,12 +8563,19 @@ export type HarnessLaunchRecordResponses = {
       }
       taskManifestSHA256: string
       evaluatorSHA256: string
+      validatorSHA256: string
       baseline: {
         name: string
         artifactSHA256: string
         expectedScore?: number
         tolerance?: number
       }
+    }
+    validator: {
+      name: "verify-benchmark-launch"
+      version: "1"
+      scriptSHA256: string
+      manifestSHA256: string
     }
     checks: [
       {
@@ -8741,12 +8755,19 @@ export type HarnessLaunchReceiptResponses = {
       }
       taskManifestSHA256: string
       evaluatorSHA256: string
+      validatorSHA256: string
       baseline: {
         name: string
         artifactSHA256: string
         expectedScore?: number
         tolerance?: number
       }
+    }
+    validator: {
+      name: "verify-benchmark-launch"
+      version: "1"
+      scriptSHA256: string
+      manifestSHA256: string
     }
     checks: [
       {
@@ -9650,6 +9671,7 @@ export type HarnessBindData = {
       }
       taskManifestSHA256: string
       evaluatorSHA256: string
+      validatorSHA256: string
       baseline: {
         name: string
         artifactSHA256: string
@@ -9878,6 +9900,7 @@ export type HarnessBindResponses = {
       }
       taskManifestSHA256: string
       evaluatorSHA256: string
+      validatorSHA256: string
       baseline: {
         name: string
         artifactSHA256: string
@@ -10436,6 +10459,7 @@ export type HarnessContractResponses = {
       }
       taskManifestSHA256: string
       evaluatorSHA256: string
+      validatorSHA256: string
       baseline: {
         name: string
         artifactSHA256: string

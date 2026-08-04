@@ -157,6 +157,7 @@ export namespace HarnessContract {
         .strict(),
       taskManifestSHA256: Hash,
       evaluatorSHA256: Hash,
+      validatorSHA256: Hash,
       baseline: z
         .object({
           name: z.string().min(1).max(200),
