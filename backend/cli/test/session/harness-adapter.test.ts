@@ -33,7 +33,7 @@ function task(benchmark: string, sessionID = `adapter-${benchmark}`): HarnessAda
     benchmark,
     version: "2026.08",
     taskID: "task-1",
-    split: "held_out",
+    split: "validation",
     evaluator: { name: "official-evaluator", version: "2", source: "benchmark", token },
     objective: "Maximize the official held-out score without seeing hidden tests",
     metric: { name: "score", direction: "maximize" },
@@ -102,6 +102,7 @@ describe("benchmark adapters", () => {
       expect(contract.packs).toEqual(manifest.packs)
       expect(contract.benchmark.evaluatorVersion).toBe("2")
       expect(contract.benchmark.evaluatorSource).toBe("benchmark")
+      expect(manifest.execution).toBe("external_runner_required")
       expect(JSON.stringify(contract)).not.toContain(token)
     }
   })

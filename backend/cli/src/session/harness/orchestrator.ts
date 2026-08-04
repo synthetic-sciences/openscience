@@ -4,6 +4,7 @@ import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
 import { HarnessBenchmark } from "./benchmark"
 import { HarnessContract } from "./contract"
+import { HarnessLaunch } from "./launch"
 
 export namespace HarnessOrchestrator {
   const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
@@ -100,11 +101,7 @@ export namespace HarnessOrchestrator {
     .extend({ sessionID: z.string().min(1) })
     .strict()
 
-  const checkpointID = (
-    fingerprint: string,
-    sessionID: string,
-    value: Omit<z.infer<typeof Checkpoint>, "id">,
-  ) =>
+  const checkpointID = (fingerprint: string, sessionID: string, value: Omit<z.infer<typeof Checkpoint>, "id">) =>
     digest({
       fingerprint,
       sessionID,
@@ -124,13 +121,7 @@ export namespace HarnessOrchestrator {
         const previous = checkpoints[index - 1]
         const gain = previous ? item.utility - previous.utility : null
         const qualified = item.uncertainty <= config.maxUncertainty
-        const stalled = !qualified
-          ? 0
-          : gain === null
-            ? 0
-            : gain < config.minUtilityGain
-              ? state.stalled + 1
-              : 0
+        const stalled = !qualified ? 0 : gain === null ? 0 : gain < config.minUtilityGain ? state.stalled + 1 : 0
         const target =
           qualified &&
           item.round >= config.minRounds &&
@@ -332,7 +323,11 @@ export namespace HarnessOrchestrator {
           ctx.addIssue({ code: "custom", path: ["adaptive", "checkpoints"], message: "Checkpoint derivation drifted" })
         }
         if (derived.reasons.slice(0, -1).some((reason) => reason !== undefined)) {
-          ctx.addIssue({ code: "custom", path: ["adaptive", "checkpoints"], message: "Checkpoints continued after a stop" })
+          ctx.addIssue({
+            code: "custom",
+            path: ["adaptive", "checkpoints"],
+            message: "Checkpoints continued after a stop",
+          })
         }
         const reason = derived.reasons.at(-1)
         const phase = reason ? "finalizing" : "searching"
@@ -623,6 +618,7 @@ export namespace HarnessOrchestrator {
   export async function initialize(sessionID: string) {
     const contract = await HarnessContract.read(sessionID)
     if (!contract) throw new Error(`No harness contract is bound to session ${sessionID}`)
+    await HarnessLaunch.ready(contract)
     const selection = select(contract)
     const planned = plan(contract, selection)
     if (!planned.length) throw new Error(`Orchestration policy produced no work`)

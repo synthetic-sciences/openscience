@@ -238,6 +238,7 @@ export namespace HarnessAblation {
       ...(factor.kind === "profile" ? {} : { profile: contract.profile }),
       ...(factor.kind === "orchestration" ? {} : { orchestration: contract.orchestration }),
       ...(factor.kind === "audit" ? {} : { audit: contract.audit }),
+      launch: contract.launch,
       ...(factor.kind === "simulation" ? {} : { simulation: contract.simulation }),
       ...(factor.kind === "evaluator_audit" ? {} : { evaluatorAudit: contract.evaluatorAudit }),
       packs: (contract.packs ?? []).toSorted(),

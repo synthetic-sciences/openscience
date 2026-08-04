@@ -5,7 +5,9 @@ import { Global } from "../../src/global"
 import { HarnessAdapter } from "../../src/session/harness/adapter"
 import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessDomain } from "../../src/session/harness/domain"
+import { HarnessLaunch } from "../../src/session/harness/launch"
 import { HarnessSkill } from "../../src/session/harness/skill"
+import { launchProtocol, launchReady } from "../fixture/harness"
 
 const names = new Set<string>()
 const sessions = new Set<string>()
@@ -21,7 +23,7 @@ afterEach(async () => {
   )
   await Promise.all(
     [...sessions].flatMap((sessionID) =>
-      ["bindings", "contracts", "evaluations"].map((name) =>
+      ["bindings", "contracts", "evaluations", "launches"].map((name) =>
         fs.rm(path.join(Global.Path.data, "harness", name, `${encodeURIComponent(sessionID)}.json`), { force: true }),
       ),
     ),
@@ -113,6 +115,7 @@ async function pair(input: {
       split: "held_out",
       evaluator: { name: "official", version: "1", source: "benchmark", token },
       objective: "Improve the fixed held-out statistical workflow",
+      launch: launchProtocol("skill"),
       metric: { name: "score", direction: "maximize" },
       model: { provider: "test", name: "model" },
       tools: ["read", "bash"],
@@ -123,6 +126,7 @@ async function pair(input: {
       contamination: { policy: "hidden", hiddenTestsAccessible: false },
       createdAt: Date.now(),
     })
+    const launch = await launchReady(contract, token)
     const checks = HarnessDomain.compose(contract.packs ?? []).map((check) => ({
       id: check.id,
       status: "passed" as const,
@@ -134,6 +138,7 @@ async function pair(input: {
       runID: contract.runID,
       sessionID,
       evaluatorToken: token,
+      launchReceiptID: launch.receiptID,
       status: "passed",
       score,
       metrics: { score },

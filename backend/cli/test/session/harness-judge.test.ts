@@ -40,7 +40,7 @@ function task(sessionID: string, evaluatorVersion = "3"): HarnessAdapter.Task {
     benchmark: "statistics",
     version: "2026.08",
     taskID: "judge-qualification-task",
-    split: "held_out",
+    split: "validation",
     evaluator: {
       name: "official-scientific-evaluator",
       version: evaluatorVersion,

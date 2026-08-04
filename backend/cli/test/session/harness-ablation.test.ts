@@ -7,6 +7,8 @@ import { HarnessAblation } from "../../src/session/harness/ablation"
 import { HarnessAdapter } from "../../src/session/harness/adapter"
 import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessDomain } from "../../src/session/harness/domain"
+import { HarnessLaunch } from "../../src/session/harness/launch"
+import { launchProtocol, launchReady } from "../fixture/harness"
 
 const sessions = new Set<string>()
 const plans = new Set<string>()
@@ -17,7 +19,7 @@ const hash = (value: string) => new Bun.CryptoHasher("sha256").update(value).dig
 afterEach(async () => {
   await Promise.all(
     [...sessions].flatMap((sessionID) =>
-      ["bindings", "contracts", "evaluations", "search"].map((name) =>
+      ["bindings", "contracts", "evaluations", "launches", "search"].map((name) =>
         fs.rm(path.join(Global.Path.data, "harness", name, `${encodeURIComponent(sessionID)}.json`), { force: true }),
       ),
     ),
@@ -42,7 +44,7 @@ async function run(input: {
 }) {
   const sessionID = `${input.prefix}-${input.seed}-${input.role}`
   sessions.add(sessionID)
-  return HarnessAdapter.bind({
+  const contract = await HarnessAdapter.bind({
     schemaVersion: 1,
     runID: `run-${sessionID}`,
     sessionID,
@@ -52,6 +54,7 @@ async function run(input: {
     split: "held_out",
     evaluator: { name: "official-ablation-evaluator", version: "3", source: "benchmark", token },
     objective: "Measure the isolated effect of conditional orchestration",
+    launch: launchProtocol("ablation"),
     orchestration:
       input.role === "arm" && input.factor !== "evaluator_audit"
         ? { topology: "solo", maxWorkers: 1, maxRounds: 1, minIndependentVerifiers: 1 }
@@ -85,6 +88,8 @@ async function run(input: {
     contamination: { policy: "hidden outcomes remain evaluator-private", hiddenTestsAccessible: false },
     createdAt: input.createdAt,
   })
+  await launchReady(contract, token)
+  return contract
 }
 
 async function study(
@@ -127,6 +132,7 @@ async function study(
 }
 
 async function evaluate(contract: HarnessContract.Info, score: number, evaluatedAt: number) {
+  const launch = await HarnessLaunch.ready(contract)
   const checks = HarnessDomain.compose(contract.packs ?? []).map((check) => ({
     id: check.id,
     status: "passed" as const,
@@ -138,6 +144,7 @@ async function evaluate(contract: HarnessContract.Info, score: number, evaluated
     runID: contract.runID,
     sessionID: contract.sessionID,
     evaluatorToken: token,
+    launchReceiptID: launch?.receiptID,
     status: "passed",
     score,
     metrics: { score },

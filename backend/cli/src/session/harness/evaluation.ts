@@ -5,6 +5,7 @@ import { JsonStore } from "@/util/jsonstore"
 import { HarnessContract } from "./contract"
 import { HarnessDomain } from "./domain"
 import { HarnessJudge } from "./judge"
+import { HarnessLaunch } from "./launch"
 import { HarnessSimulation } from "./simulation"
 
 export namespace HarnessEvaluation {
@@ -55,6 +56,10 @@ export namespace HarnessEvaluation {
         .strict()
         .optional(),
       simulationReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      launchReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -181,6 +186,21 @@ export namespace HarnessEvaluation {
     }
     if (evaluation.simulationReceiptID && !contract.simulation) {
       throw new Error(`Evaluation references a simulation receipt without a bound simulator protocol`)
+    }
+    if (evaluation.launchReceiptID && !contract.launch) {
+      throw new Error(`Evaluation references a launch receipt without a bound benchmark launch protocol`)
+    }
+    if (contract.launch && evaluation.status === "passed" && final(evaluation) && !evaluation.launchReceiptID) {
+      throw new Error(`A passing final evaluation must reference a benchmark launch readiness receipt`)
+    }
+    if (evaluation.launchReceiptID) {
+      await HarnessLaunch.assert({
+        contract,
+        receiptID: evaluation.launchReceiptID,
+        requirePassed: evaluation.status === "passed" && final(evaluation),
+        evaluatedAt: evaluation.evaluatedAt,
+        recordedAt: evaluation.recordedAt,
+      })
     }
     if (contract.simulation && evaluation.status === "passed" && final(evaluation) && !evaluation.simulationReceiptID) {
       throw new Error(`A passing final simulation evaluation must reference a simulator validation receipt`)

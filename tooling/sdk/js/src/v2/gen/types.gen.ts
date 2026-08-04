@@ -7512,6 +7512,7 @@ export type HarnessBenchmarksResponses = {
     profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
     profiles: Array<"react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast">
     packs: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+    execution: "external_runner_required"
     task: string
   }>
 }
@@ -8366,6 +8367,505 @@ export type HarnessJudgeReceiptResponses = {
 
 export type HarnessJudgeReceiptResponse = HarnessJudgeReceiptResponses[keyof HarnessJudgeReceiptResponses]
 
+export type HarnessLaunchRecordData = {
+  body?: {
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    evaluatorToken: string
+    protocol: {
+      protocolVersion: "benchmark-launch-v1"
+      runner: {
+        repository: string
+        revision: string
+        entrypoint: string
+        commandSHA256: string
+        environmentSHA256: string
+      }
+      dataset: {
+        name: string
+        source: string
+        revision: string
+        manifestSHA256: string
+      }
+      taskManifestSHA256: string
+      evaluatorSHA256: string
+      baseline: {
+        name: string
+        artifactSHA256: string
+        expectedScore?: number
+        tolerance?: number
+      }
+    }
+    checks: [
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+    ]
+    baselineScore?: number
+    evidence: Array<string>
+    evaluatedAt: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/launches/receipts"
+}
+
+export type HarnessLaunchRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessLaunchRecordError = HarnessLaunchRecordErrors[keyof HarnessLaunchRecordErrors]
+
+export type HarnessLaunchRecordResponses = {
+  /**
+   * Immutable benchmark launch receipt
+   */
+  200: {
+    schemaVersion: 1
+    receiptID: string
+    submissionID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "external"
+    }
+    protocol: {
+      protocolVersion: "benchmark-launch-v1"
+      runner: {
+        repository: string
+        revision: string
+        entrypoint: string
+        commandSHA256: string
+        environmentSHA256: string
+      }
+      dataset: {
+        name: string
+        source: string
+        revision: string
+        manifestSHA256: string
+      }
+      taskManifestSHA256: string
+      evaluatorSHA256: string
+      baseline: {
+        name: string
+        artifactSHA256: string
+        expectedScore?: number
+        tolerance?: number
+      }
+    }
+    checks: [
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+    ]
+    baselineScore?: number
+    baselineDelta?: number
+    status: "passed" | "failed"
+    failures: Array<string>
+    evidence: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessLaunchRecordResponse = HarnessLaunchRecordResponses[keyof HarnessLaunchRecordResponses]
+
+export type HarnessLaunchReceiptData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/launches/receipts/{receiptID}"
+}
+
+export type HarnessLaunchReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessLaunchReceiptError = HarnessLaunchReceiptErrors[keyof HarnessLaunchReceiptErrors]
+
+export type HarnessLaunchReceiptResponses = {
+  /**
+   * Benchmark launch receipt
+   */
+  200: {
+    schemaVersion: 1
+    receiptID: string
+    submissionID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "external"
+    }
+    protocol: {
+      protocolVersion: "benchmark-launch-v1"
+      runner: {
+        repository: string
+        revision: string
+        entrypoint: string
+        commandSHA256: string
+        environmentSHA256: string
+      }
+      dataset: {
+        name: string
+        source: string
+        revision: string
+        manifestSHA256: string
+      }
+      taskManifestSHA256: string
+      evaluatorSHA256: string
+      baseline: {
+        name: string
+        artifactSHA256: string
+        expectedScore?: number
+        tolerance?: number
+      }
+    }
+    checks: [
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+      {
+        id:
+          | "clean_checkout"
+          | "locked_environment"
+          | "task_manifest_load"
+          | "evaluator_load"
+          | "hidden_boundary"
+          | "deterministic_replay"
+          | "artifact_roundtrip"
+          | "baseline_replay"
+        status: "passed" | "failed"
+        evidence: Array<string>
+      },
+    ]
+    baselineScore?: number
+    baselineDelta?: number
+    status: "passed" | "failed"
+    failures: Array<string>
+    evidence: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  } | null
+}
+
+export type HarnessLaunchReceiptResponse = HarnessLaunchReceiptResponses[keyof HarnessLaunchReceiptResponses]
+
 export type HarnessSimulationRecordData = {
   body?: {
     schemaVersion: 1
@@ -9133,6 +9633,30 @@ export type HarnessBindData = {
       coverageWeight?: number
       targetFailures?: number
     }
+    launch?: {
+      protocolVersion: "benchmark-launch-v1"
+      runner: {
+        repository: string
+        revision: string
+        entrypoint: string
+        commandSHA256: string
+        environmentSHA256: string
+      }
+      dataset: {
+        name: string
+        source: string
+        revision: string
+        manifestSHA256: string
+      }
+      taskManifestSHA256: string
+      evaluatorSHA256: string
+      baseline: {
+        name: string
+        artifactSHA256: string
+        expectedScore?: number
+        tolerance?: number
+      }
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -9337,6 +9861,30 @@ export type HarnessBindResponses = {
       coverageWeight?: number
       targetFailures?: number
     }
+    launch?: {
+      protocolVersion: "benchmark-launch-v1"
+      runner: {
+        repository: string
+        revision: string
+        entrypoint: string
+        commandSHA256: string
+        environmentSHA256: string
+      }
+      dataset: {
+        name: string
+        source: string
+        revision: string
+        manifestSHA256: string
+      }
+      taskManifestSHA256: string
+      evaluatorSHA256: string
+      baseline: {
+        name: string
+        artifactSHA256: string
+        expectedScore?: number
+        tolerance?: number
+      }
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -9447,6 +9995,7 @@ export type HarnessEvaluateData = {
     candidateID?: string
     stage?: string
     simulationReceiptID?: string
+    launchReceiptID?: string
     evaluatorAuditReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
@@ -9870,6 +10419,30 @@ export type HarnessContractResponses = {
       coverageWeight?: number
       targetFailures?: number
     }
+    launch?: {
+      protocolVersion: "benchmark-launch-v1"
+      runner: {
+        repository: string
+        revision: string
+        entrypoint: string
+        commandSHA256: string
+        environmentSHA256: string
+      }
+      dataset: {
+        name: string
+        source: string
+        revision: string
+        manifestSHA256: string
+      }
+      taskManifestSHA256: string
+      evaluatorSHA256: string
+      baseline: {
+        name: string
+        artifactSHA256: string
+        expectedScore?: number
+        tolerance?: number
+      }
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -10008,6 +10581,7 @@ export type HarnessEvaluationsResponses = {
       final: boolean
     }
     simulationReceiptID?: string
+    launchReceiptID?: string
     evaluatorAuditReceiptID?: string
     evaluator: {
       name: string
@@ -10124,6 +10698,7 @@ export type HarnessReportResponses = {
       evaluator: string
       evaluatorVersion?: string
       simulationReceiptID?: string
+      launchReceiptID?: string
       evaluatorAuditReceiptID?: string
       evaluations: number
     }

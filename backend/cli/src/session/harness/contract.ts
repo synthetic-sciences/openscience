@@ -123,6 +123,60 @@ export namespace HarnessContract {
 
   const Hash = z.string().regex(/^[a-f0-9]{64}$/)
 
+  export const LaunchCheck = z.enum([
+    "clean_checkout",
+    "locked_environment",
+    "task_manifest_load",
+    "evaluator_load",
+    "hidden_boundary",
+    "deterministic_replay",
+    "artifact_roundtrip",
+    "baseline_replay",
+  ])
+  export type LaunchCheck = z.infer<typeof LaunchCheck>
+
+  export const Launch = z
+    .object({
+      protocolVersion: z.literal("benchmark-launch-v1"),
+      runner: z
+        .object({
+          repository: z.string().url().max(2_048),
+          revision: z.string().regex(/^[a-f0-9]{40}([a-f0-9]{24})?$/),
+          entrypoint: z.string().min(1).max(1_000),
+          commandSHA256: Hash,
+          environmentSHA256: Hash,
+        })
+        .strict(),
+      dataset: z
+        .object({
+          name: z.string().min(1).max(200),
+          source: z.string().min(1).max(2_048),
+          revision: z.string().min(1).max(500),
+          manifestSHA256: Hash,
+        })
+        .strict(),
+      taskManifestSHA256: Hash,
+      evaluatorSHA256: Hash,
+      baseline: z
+        .object({
+          name: z.string().min(1).max(200),
+          artifactSHA256: Hash,
+          expectedScore: z.number().finite().optional(),
+          tolerance: z.number().finite().nonnegative().optional(),
+        })
+        .strict(),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if ((value.baseline.expectedScore === undefined) === (value.baseline.tolerance === undefined)) return
+      ctx.addIssue({
+        code: "custom",
+        path: ["baseline"],
+        message: "Baseline expected score and tolerance must be declared together",
+      })
+    })
+  export type Launch = z.infer<typeof Launch>
+
   export const SimulationStress = z.enum([
     "timestep_sensitivity",
     "solver_tolerance_sensitivity",
@@ -280,6 +334,7 @@ export namespace HarnessContract {
       profile: Profile,
       orchestration: Orchestration.optional(),
       audit: Audit.optional(),
+      launch: Launch.optional(),
       simulation: Simulation.optional(),
       evaluatorAudit: EvaluatorAudit.optional(),
       packs: z
@@ -333,14 +388,14 @@ export namespace HarnessContract {
     })
     .strict()
     .superRefine((value, ctx) => {
-      if ((value.simulation || value.evaluatorAudit) && !value.benchmark.evaluatorVersion) {
+      if ((value.launch || value.simulation || value.evaluatorAudit) && !value.benchmark.evaluatorVersion) {
         ctx.addIssue({
           code: "custom",
           path: ["benchmark", "evaluatorVersion"],
           message: "Evaluator-controlled validation needs an evaluator version",
         })
       }
-      if ((value.simulation || value.evaluatorAudit) && !value.benchmark.evaluatorSource) {
+      if ((value.launch || value.simulation || value.evaluatorAudit) && !value.benchmark.evaluatorSource) {
         ctx.addIssue({
           code: "custom",
           path: ["benchmark", "evaluatorSource"],
@@ -352,6 +407,20 @@ export namespace HarnessContract {
           code: "custom",
           path: ["benchmark", "evaluatorSource"],
           message: "Simulator validation requires a capability-authenticated evaluator source",
+        })
+      }
+      if (value.launch && value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Benchmark launch validation requires a capability-authenticated evaluator source",
+        })
+      }
+      if (value.launch && value.benchmark.direction !== "pass" && value.launch.baseline.expectedScore === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["launch", "baseline", "expectedScore"],
+          message: "Numeric benchmark launches require a replayable baseline score and tolerance",
         })
       }
       if (

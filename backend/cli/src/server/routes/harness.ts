@@ -9,6 +9,7 @@ import { HarnessBenchmark } from "@/session/harness/benchmark"
 import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
 import { HarnessJudge } from "@/session/harness/judge"
+import { HarnessLaunch } from "@/session/harness/launch"
 import { HarnessOrchestrator } from "@/session/harness/orchestrator"
 import { HarnessReport } from "@/session/harness/report"
 import { HarnessSimulation } from "@/session/harness/simulation"
@@ -192,6 +193,49 @@ export const HarnessRoutes = lazy(() =>
             requirePassed: false,
           }),
         )
+      },
+    )
+    .post(
+      "/launches/receipts",
+      describeRoute({
+        summary: "Record evaluator-authenticated benchmark launch readiness",
+        description:
+          "Verifies the complete clean-checkout, environment, hidden-boundary, deterministic-replay, artifact, and baseline launch suite against a pinned official protocol.",
+        operationId: "harness.launch.record",
+        responses: {
+          200: {
+            description: "Immutable benchmark launch receipt",
+            content: { "application/json": { schema: resolver(HarnessLaunch.Info) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessLaunch.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessLaunch.record(input, contract))
+      },
+    )
+    .post(
+      "/launches/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected benchmark launch receipt",
+        operationId: "harness.launch.receipt",
+        responses: {
+          200: {
+            description: "Benchmark launch receipt",
+            content: { "application/json": { schema: resolver(HarnessLaunch.Info.nullable()) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessLaunch.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessLaunch.read(input.sessionID, c.req.valid("param").receiptID))
       },
     )
     .post(

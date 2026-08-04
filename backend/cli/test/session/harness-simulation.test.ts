@@ -58,7 +58,7 @@ function task(sessionID: string, optimize = false): HarnessAdapter.Task {
     benchmark: optimize ? "physics" : "pde",
     version: "2026.08",
     taskID: "sim-1",
-    split: "held_out",
+    split: "validation",
     evaluator: { name: "simulation-evaluator", version: "4", source: "benchmark", token },
     objective: "Validate the exact numerical artifact before accepting its score",
     profile: optimize ? "optimize" : "numerical",

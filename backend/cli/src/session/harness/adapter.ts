@@ -34,6 +34,7 @@ export namespace HarnessAdapter {
       profile: HarnessContract.Profile.optional(),
       orchestration: HarnessContract.Orchestration.optional(),
       audit: HarnessContract.Audit.optional(),
+      launch: HarnessContract.Launch.optional(),
       simulation: HarnessContract.Simulation.optional(),
       evaluatorAudit: z
         .object({
@@ -103,12 +104,20 @@ export namespace HarnessAdapter {
     })
     .strict()
     .superRefine((value, ctx) => {
-      if (!value.evaluatorAudit || value.evaluatorAudit.token !== value.evaluator.token) return
-      ctx.addIssue({
-        code: "custom",
-        path: ["evaluatorAudit", "token"],
-        message: "Evaluator and independent auditor capabilities must differ",
-      })
+      if ((value.split === "held_out" || value.split === "release") && !value.launch) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["launch"],
+          message: "Held-out and release runs require a pinned official benchmark launch protocol",
+        })
+      }
+      if (value.evaluatorAudit && value.evaluatorAudit.token === value.evaluator.token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["evaluatorAudit", "token"],
+          message: "Evaluator and independent auditor capabilities must differ",
+        })
+      }
     })
 
   export type Task = z.input<typeof Task>
@@ -125,6 +134,10 @@ export namespace HarnessAdapter {
         .optional(),
       stage: z.string().min(1).max(100).optional(),
       simulationReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      launchReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -258,6 +271,7 @@ export namespace HarnessAdapter {
       profile,
       orchestration: task.orchestration,
       audit: task.audit,
+      launch: task.launch,
       simulation: task.simulation,
       evaluatorAudit: task.evaluatorAudit?.protocol,
       packs,
@@ -358,6 +372,7 @@ export namespace HarnessAdapter {
       subject: value.candidateID ? { type: "candidate", id: value.candidateID } : undefined,
       fidelity,
       simulationReceiptID: value.simulationReceiptID,
+      launchReceiptID: value.launchReceiptID,
       evaluatorAuditReceiptID: value.evaluatorAuditReceiptID,
       evaluator: binding.evaluator,
       status: value.status,

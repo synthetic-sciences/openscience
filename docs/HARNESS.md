@@ -20,12 +20,14 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 12. **Feature attribution is predeclared and paired.** Harness architecture claims require at least three evaluator-authenticated, same-seed baseline/arm pairs frozen before any result exists. Exactly one declared contract factor may differ.
 13. **The evaluator must earn trust.** An optional independent auditor capability scores the bound evaluator on a committed hidden suite of clean and realistically faulty outputs. Final passes require a content-addressed qualification receipt whose discrimination, calibration, and per-fault recall clear the frozen thresholds.
 14. **Overthinking must earn another round.** Adaptive evolution advances only after a sequential, evaluator-authenticated utility checkpoint. Uncertain measurements cannot stop search, and a target hit or exhausted marginal gain preserves investigation and independent verification instead of declaring success.
+15. **A benchmark name is not a runnable integration.** Held-out and release runs must pin an official runner revision, environment, dataset manifest, task manifest, evaluator artifact, and replayable baseline. Search and orchestration remain blocked until the external evaluator proves the complete launch suite and records a content-addressed readiness receipt.
 
 ## System boundary
 
 ```mermaid
 flowchart LR
     O["Benchmark orchestrator\nsecret evaluator capability + hidden tests"]
+    L["Official benchmark launcher\npinned runner + data + baseline"]
     C["Immutable run contract"]
     A["OpenScience agent session\nprofile + domain packs"]
     Q["Conditional scientific coalition\npersisted role DAG + bounded workers"]
@@ -41,6 +43,8 @@ flowchart LR
     R["Quality-cost report"]
 
     O -->|bind| C
+    O -->|authenticated launch checks| L
+    L -->|readiness receipt| C
     C --> A
     A --> Q
     Q --> G
@@ -105,6 +109,30 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
     "maxUncertainty": 0.05,
     "targetFailures": 8
   },
+  "launch": {
+    "protocolVersion": "benchmark-launch-v1",
+    "runner": {
+      "repository": "https://github.com/owner/official-benchmark",
+      "revision": "0123456789abcdef0123456789abcdef01234567",
+      "entrypoint": "benchmark/run.py",
+      "commandSHA256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "environmentSHA256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "dataset": {
+      "name": "official-held-out-data",
+      "source": "https://example.org/official-dataset",
+      "revision": "release-2026-08",
+      "manifestSHA256": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "taskManifestSHA256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "evaluatorSHA256": "5555555555555555555555555555555555555555555555555555555555555555",
+    "baseline": {
+      "name": "official-reference-baseline",
+      "artifactSHA256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "expectedScore": 0.5,
+      "tolerance": 1e-9
+    }
+  },
   "simulation": {
     "kind": "pde",
     "engine": {
@@ -151,6 +179,23 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
 ```
 
 Rebinding the session with any changed field or evaluator capability fails.
+
+#### Prove launch readiness before execution
+
+Every catalog manifest reports `execution: external_runner_required`: the adapter supplies scientific methodology and routing, not a bundled official runner. A held-out or release bind is rejected unless it includes `benchmark-launch-v1`. The external evaluator must then submit all eight checks to `POST /harness/launches/receipts`:
+
+- clean checkout at the exact 40- or 64-character source revision;
+- locked environment replay;
+- exact task-manifest load;
+- exact evaluator load;
+- hidden-data boundary isolation;
+- deterministic replay;
+- artifact round-trip; and
+- pinned baseline replay.
+
+OpenScience derives the pass state. It rejects a partial or substituted check set and recomputes baseline error against the frozen tolerance. Failed attempts remain in the append-only journal. Receipts bind the full contract fingerprint, evaluator identity, protocol, evidence, evaluator timestamp, and server-owned record time into their SHA-256 identity; edited storage fails validation. A separate content-derived submission ID preserves retry idempotence without trusting the submitter's clock. The bearer capability never enters the receipt.
+
+Search and scientific orchestration will not initialize until a passing receipt exists. Every final passing evaluation must cite the exact receipt and must occur after it. This separates four states that older catalog-only integrations conflated: supported methodology, bound official protocol, launch-ready runner, and externally verified result.
 
 ### 2. Execute through a profile
 
@@ -327,13 +372,13 @@ This mechanism does not claim that a finite meta-evaluation suite makes a judge 
 
 ### 15. Compare only compatible runs
 
-Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, simulation, and evaluator-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores.
+Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, launch, simulation, and evaluator-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface the launch receipt used by the selected final evaluation.
 
 Cost and wall time include both the agent trace and evaluator-reported stage usage. Direction-aware score deltas and the Pareto frontier are available through `POST /harness/compare`.
 
 ## Adapter catalog
 
-An adapter is a protocol mapping, not an embedded copy of a benchmark runner. The official runner owns workspace construction, hidden data, evaluator code, and task-specific score semantics; the adapter pins those facts and selects a safe execution profile.
+An adapter manifest is a methodology and routing map, not an embedded copy of a benchmark runner and not evidence that the benchmark currently executes. Every manifest therefore declares `external_runner_required`. The official launcher owns workspace construction, hidden data, evaluator code, and task-specific score semantics; a concrete run pins those facts in its launch protocol and proves them with a readiness receipt before the harness executes.
 
 | Family                    | Adapters                                                                                                |
 | ------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -344,7 +389,7 @@ An adapter is a protocol mapping, not an embedded copy of a benchmark runner. Th
 | ML                        | MLE-bench, post-training, ALE, weather, PaperBench                                                      |
 | General scientific agents | ResearchClawBench, reproducibility CORE-Bench, ScienceAgentBench, SciCode, SciAgentArena, AInsteinBench |
 
-Every adapter is version-agnostic. A real run must still bind an exact benchmark version, evaluator version, task ID, split, metric, budget, seed, and contamination policy.
+Every adapter is version-agnostic. A development/validation run must still bind an exact benchmark version, evaluator version, task ID, split, metric, budget, seed, and contamination policy. A held-out/release run additionally requires an exact official launch protocol and passing readiness receipt. Catalog presence alone must never be reported as runnable benchmark coverage.
 
 ## HTTP API
 
@@ -363,6 +408,8 @@ Every adapter is version-agnostic. A real run must still bind an exact benchmark
 | `POST` | `/harness/ablations/:planID/assessment`              | Derive an immutable paired-effect assessment                  |
 | `POST` | `/harness/evaluators/qualifications`                 | Audit a judge on a committed hidden fault suite               |
 | `POST` | `/harness/evaluators/qualifications/:id`             | Read a qualification with the independent auditor capability  |
+| `POST` | `/harness/launches/receipts`                         | Recompute and record official benchmark launch readiness      |
+| `POST` | `/harness/launches/receipts/:id`                     | Read a capability-protected launch readiness receipt          |
 | `POST` | `/harness/simulations/receipts`                      | Recompute and record a simulator validation receipt           |
 | `POST` | `/harness/simulations/receipts/:id`                  | Read a capability-protected simulator validation receipt      |
 | `POST` | `/harness/evaluations`                               | Record a staged evaluator-authenticated result                |
@@ -381,26 +428,28 @@ The generated JavaScript SDK exposes the same API.
 
 The implementation borrows principles, not source code, from the following primary systems and papers:
 
-| Source                                                                                                                     | Principle reflected here                                                                                                                    |
-| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| [AlphaEvolve](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)   | Programs compete through objective external evaluators and remain in an evolutionary database.                                              |
-| [Google DeepMind Co-Scientist](https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/) | Generate diverse hypotheses, critique/rank them, combine strong ideas, and spend substantial compute on verification.                       |
-| [ProEval](https://deepmind.google/research/publications/238239/)                                                           | Actively discover failure regions and estimate capability from a small, strategically chosen evaluation subset.                             |
-| [TRACE: Towards Structural Understanding of LLM Overthinking](https://deepmind.google/research/publications/203490/)       | Detect verification and exploration that continue after their marginal utility has collapsed; stop against a predeclared control rule.      |
-| [Towards a Science of Scaling Agent Systems](https://arxiv.org/abs/2512.08296)                                             | Add agents conditionally: coordination can hurt sequential and tool-heavy work, while centralized structures control error amplification.   |
-| [Gram](https://deepmind.google/research/publications/252981/)                                                              | Audit autonomous agents for sabotage, overeagerness, and hidden side effects with an investigator distinct from the producer.               |
-| [Realistic honeypot evaluations](https://deepmind.google/research/publications/253391/)                                    | Include evaluation-awareness and realistic deployment-context failures instead of relying only on artificial judge tests.                   |
-| [RubricEval](https://arxiv.org/abs/2603.25133) and [Who Validates the Validators?](https://arxiv.org/abs/2404.12272)       | Meta-evaluate judges on realistic failures and version criteria rather than treating an LLM judge as ground truth by default.               |
-| [MLEvolve](https://github.com/InternScience/MLEvolve) and its [paper](https://arxiv.org/abs/2606.06473)                    | Progressive multi-branch search, success/failure hindsight, adaptive exploration, and branch fusion for MLE.                                |
-| [CORAL](https://arxiv.org/abs/2604.01658)                                                                                  | Persist coordination state and heartbeat-like progress across asynchronous research workers rather than relying on chat memory.             |
-| [AI Scientist v2](https://github.com/SakanaAI/AI-Scientist-v2) and its [paper](https://arxiv.org/abs/2504.08066)           | Multiple independent experimental roots and agentic tree search rather than a single linear attempt.                                        |
-| [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954)                                                                   | Preserve an open-ended archive with lineage; do not collapse self-improvement into one incumbent.                                           |
-| [SkyDiscover](https://github.com/skydiscover-ai/skydiscover)                                                               | Island-style diversity, UCB selection, migration/fusion, staged evaluation, and strategy mutation after stagnation.                         |
-| [GEPA](https://arxiv.org/abs/2507.19457)                                                                                   | Feed detailed evaluator feedback into reflective search rather than optimizing from a scalar alone.                                         |
-| [EvoScientist](https://github.com/EvoScientist/EvoScientist) and its [paper](https://arxiv.org/abs/2603.08127)             | Turn repeated observations into proposed reusable skills; OpenScience adds stricter quarantine and held-out promotion.                      |
-| [ResearchHarness](https://github.com/InternScience/ResearchHarness)                                                        | Keep the benchmark substrate explicit, inspectable, tool-bounded, and traceable while isolating agent workspaces from evaluator state.      |
-| [PhysicsIntern](https://github.com/huggingface/physics-intern-skills)                                                      | Use durable research state, fresh verification contexts, independent derivations/computations, and adversarial critique.                    |
-| [ResearchClawBench](https://arxiv.org/abs/2606.07591)                                                                      | Evaluate end-to-end research against hidden target work and make protocol mismatch, evidence mismatch, and missing scientific core visible. |
+| Source                                                                                                                     | Principle reflected here                                                                                                                      |
+| -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [AlphaEvolve](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)   | Programs compete through objective external evaluators and remain in an evolutionary database.                                                |
+| [Google DeepMind Co-Scientist](https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/) | Generate diverse hypotheses, critique/rank them, combine strong ideas, and spend substantial compute on verification.                         |
+| [ProEval](https://deepmind.google/research/publications/238239/)                                                           | Actively discover failure regions and estimate capability from a small, strategically chosen evaluation subset.                               |
+| [TRACE: Towards Structural Understanding of LLM Overthinking](https://deepmind.google/research/publications/203490/)       | Detect verification and exploration that continue after their marginal utility has collapsed; stop against a predeclared control rule.        |
+| [Towards a Science of Scaling Agent Systems](https://arxiv.org/abs/2512.08296)                                             | Add agents conditionally: coordination can hurt sequential and tool-heavy work, while centralized structures control error amplification.     |
+| [Gram](https://deepmind.google/research/publications/252981/)                                                              | Audit autonomous agents for sabotage, overeagerness, and hidden side effects with an investigator distinct from the producer.                 |
+| [Realistic honeypot evaluations](https://deepmind.google/research/publications/253391/)                                    | Include evaluation-awareness and realistic deployment-context failures instead of relying only on artificial judge tests.                     |
+| [Solipsistic superintelligence is unlikely to be cooperative](https://deepmind.google/research/publications/231466/)       | Treat evaluation as an external, adaptive institutional boundary rather than a stationary feedback object controlled by the optimizing agent. |
+| [RubricEval](https://arxiv.org/abs/2603.25133) and [Who Validates the Validators?](https://arxiv.org/abs/2404.12272)       | Meta-evaluate judges on realistic failures and version criteria rather than treating an LLM judge as ground truth by default.                 |
+| [MLEvolve](https://github.com/InternScience/MLEvolve) and its [paper](https://arxiv.org/abs/2606.06473)                    | Progressive multi-branch search, success/failure hindsight, adaptive exploration, and branch fusion for MLE.                                  |
+| [CORAL](https://arxiv.org/abs/2604.01658)                                                                                  | Persist coordination state and heartbeat-like progress across asynchronous research workers rather than relying on chat memory.               |
+| [AI Scientist v2](https://github.com/SakanaAI/AI-Scientist-v2) and its [paper](https://arxiv.org/abs/2504.08066)           | Multiple independent experimental roots and agentic tree search rather than a single linear attempt.                                          |
+| [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954)                                                                   | Preserve an open-ended archive with lineage; do not collapse self-improvement into one incumbent.                                             |
+| [SkyDiscover](https://github.com/skydiscover-ai/skydiscover)                                                               | Island-style diversity, UCB selection, migration/fusion, staged evaluation, and strategy mutation after stagnation.                           |
+| [GEPA](https://arxiv.org/abs/2507.19457)                                                                                   | Feed detailed evaluator feedback into reflective search rather than optimizing from a scalar alone.                                           |
+| [EvoScientist](https://github.com/EvoScientist/EvoScientist) and its [paper](https://arxiv.org/abs/2603.08127)             | Turn repeated observations into proposed reusable skills; OpenScience adds stricter quarantine and held-out promotion.                        |
+| [ResearchHarness](https://github.com/InternScience/ResearchHarness)                                                        | Keep the benchmark substrate explicit, inspectable, tool-bounded, and traceable while isolating agent workspaces from evaluator state.        |
+| [PhysicsIntern](https://github.com/huggingface/physics-intern-skills)                                                      | Use durable research state, fresh verification contexts, independent derivations/computations, and adversarial critique.                      |
+| [ResearchClawBench](https://arxiv.org/abs/2606.07591)                                                                      | Evaluate end-to-end research against hidden target work and make protocol mismatch, evidence mismatch, and missing scientific core visible.   |
+| [Towards Self-Evolving Benchmarks](https://arxiv.org/abs/2510.00415)                                                       | Require validate-by-reproduce trajectories and multi-level validation before dynamically evolved tasks can enter benchmark evidence.          |
 
 The expanded evaluation frontier is grounded in [PaperBench](https://openai.com/index/paperbench/), [computational reproducibility CORE-Bench](https://arxiv.org/abs/2409.11363), [ScienceAgentBench](https://arxiv.org/abs/2410.05080), [DiscoveryBench](https://arxiv.org/abs/2407.01725), [SciCode](https://arxiv.org/abs/2407.13168), [LABBench2](https://arxiv.org/abs/2604.09554), [SciAgentArena](https://arxiv.org/abs/2606.12736), and [AInsteinBench](https://arxiv.org/abs/2512.21373).
 
@@ -408,7 +457,7 @@ The expanded evaluation frontier is grounded in [PaperBench](https://openai.com/
 
 The harness is ready for benchmark integration, but architecture alone does not establish performance. For each target benchmark:
 
-1. Pin an official repository/evaluator commit, dataset revision, split, hardware class, model, tools, budget, seed policy, and intervention policy.
+1. Pin an official repository/evaluator commit, dataset revision and manifest, task manifest, environment, invocation, baseline artifact/score, split, hardware class, model, tools, budget, seed policy, and intervention policy; pass the complete launch-readiness suite.
 2. Qualify any learned or hybrid evaluator against a separately controlled, committed meta-evaluation suite; retain official deterministic runners as the preferred ground truth where available.
 3. Reproduce the strongest public baseline under exactly that contract.
 4. Run ablations for profile routing, multi-root search, UCB exploration, fidelity screening, hindsight, fusion, strategy divergence, domain packs, evaluator qualification, and learned skills.

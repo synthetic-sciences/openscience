@@ -252,6 +252,7 @@ export namespace HarnessSkill {
       profile: contract.profile,
       orchestration: contract.orchestration,
       audit: contract.audit,
+      launch: contract.launch,
       simulation: contract.simulation,
       evaluatorAudit: contract.evaluatorAudit,
       packs: contract.packs ?? [],

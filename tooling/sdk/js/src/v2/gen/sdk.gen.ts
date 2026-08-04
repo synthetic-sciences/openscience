@@ -119,6 +119,10 @@ import type {
   HarnessJudgeReceiptResponses,
   HarnessJudgeRecordErrors,
   HarnessJudgeRecordResponses,
+  HarnessLaunchReceiptErrors,
+  HarnessLaunchReceiptResponses,
+  HarnessLaunchRecordErrors,
+  HarnessLaunchRecordResponses,
   HarnessOrchestrationCheckpointErrors,
   HarnessOrchestrationCheckpointResponses,
   HarnessOrchestrationStartErrors,
@@ -4043,6 +4047,230 @@ export class Judge extends HeyApiClient {
   }
 }
 
+export class Launch extends HeyApiClient {
+  /**
+   * Record evaluator-authenticated benchmark launch readiness
+   *
+   * Verifies the complete clean-checkout, environment, hidden-boundary, deterministic-replay, artifact, and baseline launch suite against a pinned official protocol.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      schemaVersion?: 1
+      runID?: string
+      sessionID?: string
+      evaluatorToken?: string
+      protocol?: {
+        protocolVersion: "benchmark-launch-v1"
+        runner: {
+          repository: string
+          revision: string
+          entrypoint: string
+          commandSHA256: string
+          environmentSHA256: string
+        }
+        dataset: {
+          name: string
+          source: string
+          revision: string
+          manifestSHA256: string
+        }
+        taskManifestSHA256: string
+        evaluatorSHA256: string
+        baseline: {
+          name: string
+          artifactSHA256: string
+          expectedScore?: number
+          tolerance?: number
+        }
+      }
+      checks?: [
+        {
+          id:
+            | "clean_checkout"
+            | "locked_environment"
+            | "task_manifest_load"
+            | "evaluator_load"
+            | "hidden_boundary"
+            | "deterministic_replay"
+            | "artifact_roundtrip"
+            | "baseline_replay"
+          status: "passed" | "failed"
+          evidence: Array<string>
+        },
+        {
+          id:
+            | "clean_checkout"
+            | "locked_environment"
+            | "task_manifest_load"
+            | "evaluator_load"
+            | "hidden_boundary"
+            | "deterministic_replay"
+            | "artifact_roundtrip"
+            | "baseline_replay"
+          status: "passed" | "failed"
+          evidence: Array<string>
+        },
+        {
+          id:
+            | "clean_checkout"
+            | "locked_environment"
+            | "task_manifest_load"
+            | "evaluator_load"
+            | "hidden_boundary"
+            | "deterministic_replay"
+            | "artifact_roundtrip"
+            | "baseline_replay"
+          status: "passed" | "failed"
+          evidence: Array<string>
+        },
+        {
+          id:
+            | "clean_checkout"
+            | "locked_environment"
+            | "task_manifest_load"
+            | "evaluator_load"
+            | "hidden_boundary"
+            | "deterministic_replay"
+            | "artifact_roundtrip"
+            | "baseline_replay"
+          status: "passed" | "failed"
+          evidence: Array<string>
+        },
+        {
+          id:
+            | "clean_checkout"
+            | "locked_environment"
+            | "task_manifest_load"
+            | "evaluator_load"
+            | "hidden_boundary"
+            | "deterministic_replay"
+            | "artifact_roundtrip"
+            | "baseline_replay"
+          status: "passed" | "failed"
+          evidence: Array<string>
+        },
+        {
+          id:
+            | "clean_checkout"
+            | "locked_environment"
+            | "task_manifest_load"
+            | "evaluator_load"
+            | "hidden_boundary"
+            | "deterministic_replay"
+            | "artifact_roundtrip"
+            | "baseline_replay"
+          status: "passed" | "failed"
+          evidence: Array<string>
+        },
+        {
+          id:
+            | "clean_checkout"
+            | "locked_environment"
+            | "task_manifest_load"
+            | "evaluator_load"
+            | "hidden_boundary"
+            | "deterministic_replay"
+            | "artifact_roundtrip"
+            | "baseline_replay"
+          status: "passed" | "failed"
+          evidence: Array<string>
+        },
+        {
+          id:
+            | "clean_checkout"
+            | "locked_environment"
+            | "task_manifest_load"
+            | "evaluator_load"
+            | "hidden_boundary"
+            | "deterministic_replay"
+            | "artifact_roundtrip"
+            | "baseline_replay"
+          status: "passed" | "failed"
+          evidence: Array<string>
+        },
+      ]
+      baselineScore?: number
+      evidence?: Array<string>
+      evaluatedAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "schemaVersion" },
+            { in: "body", key: "runID" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "protocol" },
+            { in: "body", key: "checks" },
+            { in: "body", key: "baselineScore" },
+            { in: "body", key: "evidence" },
+            { in: "body", key: "evaluatedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessLaunchRecordResponses, HarnessLaunchRecordErrors, ThrowOnError>(
+      {
+        url: "/harness/launches/receipts",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Read a capability-protected benchmark launch receipt
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessLaunchReceiptResponses,
+      HarnessLaunchReceiptErrors,
+      ThrowOnError
+    >({
+      url: "/harness/launches/receipts/{receiptID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Simulation extends HeyApiClient {
   /**
    * Record an evaluator-authenticated simulator validation
@@ -4533,6 +4761,30 @@ export class Harness extends HeyApiClient {
         coverageWeight?: number
         targetFailures?: number
       }
+      launch?: {
+        protocolVersion: "benchmark-launch-v1"
+        runner: {
+          repository: string
+          revision: string
+          entrypoint: string
+          commandSHA256: string
+          environmentSHA256: string
+        }
+        dataset: {
+          name: string
+          source: string
+          revision: string
+          manifestSHA256: string
+        }
+        taskManifestSHA256: string
+        evaluatorSHA256: string
+        baseline: {
+          name: string
+          artifactSHA256: string
+          expectedScore?: number
+          tolerance?: number
+        }
+      }
       simulation?: {
         kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
         engine: {
@@ -4664,6 +4916,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "profile" },
             { in: "body", key: "orchestration" },
             { in: "body", key: "audit" },
+            { in: "body", key: "launch" },
             { in: "body", key: "simulation" },
             { in: "body", key: "evaluatorAudit" },
             { in: "body", key: "extraPacks" },
@@ -4708,6 +4961,7 @@ export class Harness extends HeyApiClient {
       candidateID?: string
       stage?: string
       simulationReceiptID?: string
+      launchReceiptID?: string
       evaluatorAuditReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
@@ -4745,6 +4999,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "candidateID" },
             { in: "body", key: "stage" },
             { in: "body", key: "simulationReceiptID" },
+            { in: "body", key: "launchReceiptID" },
             { in: "body", key: "evaluatorAuditReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
@@ -4921,6 +5176,11 @@ export class Harness extends HeyApiClient {
   private _judge?: Judge
   get judge(): Judge {
     return (this._judge ??= new Judge({ client: this.client }))
+  }
+
+  private _launch?: Launch
+  get launch(): Launch {
+    return (this._launch ??= new Launch({ client: this.client }))
   }
 
   private _simulation?: Simulation

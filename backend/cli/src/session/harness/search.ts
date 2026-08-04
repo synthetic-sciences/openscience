@@ -4,6 +4,7 @@ import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
 import { HarnessContract } from "./contract"
 import { HarnessEvaluation } from "./evaluation"
+import { HarnessLaunch } from "./launch"
 
 export namespace HarnessSearch {
   export const Stop = z.enum(["budget_exhausted", "objective_met", "no_improvement", "user_cancelled", "runtime_error"])
@@ -151,6 +152,7 @@ export namespace HarnessSearch {
   }) {
     const contract = await HarnessContract.read(input.sessionID)
     if (!contract) throw new Error(`No harness contract is bound to session ${input.sessionID}`)
+    await HarnessLaunch.ready(contract)
     if (contract.profile !== "optimize") throw new Error(`Harness search requires the optimize profile`)
     const candidates = input.candidates ?? contract.budget.candidates
     if (!candidates) throw new Error(`The optimize contract must declare a candidate budget`)

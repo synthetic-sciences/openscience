@@ -40,6 +40,7 @@ export namespace HarnessBenchmark {
       profile: Profile,
       profiles: z.array(Profile).min(1),
       packs: z.array(HarnessPack.Id),
+      execution: z.literal("external_runner_required"),
       task: z.string().min(1),
     })
     .strict()
@@ -56,7 +57,8 @@ export namespace HarnessBenchmark {
     })
   export type Manifest = z.infer<typeof Manifest>
 
-  const item = (input: Manifest) => Manifest.parse(input)
+  const item = (input: Omit<Manifest, "execution">) =>
+    Manifest.parse({ ...input, execution: "external_runner_required" })
 
   export const catalog: Record<Id, Manifest> = {
     statistics: item({

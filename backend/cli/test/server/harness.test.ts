@@ -46,7 +46,7 @@ describe("/harness routes", () => {
         benchmark: "stats",
         version: "1",
         taskID: "chi-square-1",
-        split: "held_out",
+        split: "validation",
         evaluator: { name: "route-evaluator", version: "1", source: "benchmark", token },
         objective: "Run and verify a chi-square analysis",
         audit: { mode: "hybrid", budget: 2, minSamples: 2 },
@@ -191,7 +191,7 @@ describe("/harness routes", () => {
         benchmark: "stats",
         version: "1",
         taskID: "adaptive-1",
-        split: "held_out",
+        split: "validation",
         evaluator: { name: "route-evaluator", version: "1", source: "benchmark", token },
         objective: "Evolve a robust statistical method",
         orchestration: {
