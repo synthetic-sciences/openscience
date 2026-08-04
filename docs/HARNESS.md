@@ -14,6 +14,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 6. **Scientific validity is domain-specific.** Benchmark adapters select blocking verification packs for statistics, biology, physics, PDEs, chemistry, ML, and forecasting.
 7. **Learning is quarantined.** A trajectory can propose a skill, but cannot activate it. Promotion requires paired held-out candidate/control evidence across multiple tasks and an unchanged content hash.
 8. **Quality is reported with cost.** Comparable reports include score, pass state, model and intervention metadata, total tokens, wall time, cost, candidate count, and search state.
+9. **Coordination must earn its cost.** The contract can pin a topology, or a deterministic policy can choose direct, centralized, fork/join, tournament, or evolutionary execution from bounded task traits. Tool-heavy sequential work is not automatically expanded into a multi-agent swarm.
 
 ## System boundary
 
@@ -22,6 +23,7 @@ flowchart LR
     O["Benchmark orchestrator\nsecret evaluator capability + hidden tests"]
     C["Immutable run contract"]
     A["OpenScience agent session\nprofile + domain packs"]
+    Q["Conditional scientific coalition\npersisted role DAG + bounded workers"]
     G["Candidate graph\nindependent roots + lineage"]
     E["External evaluator\nstaged checks + score + usage"]
     J["Immutable evaluation journal"]
@@ -32,7 +34,8 @@ flowchart LR
 
     O -->|bind| C
     C --> A
-    A --> G
+    A --> Q
+    Q --> G
     G -->|artifact| E
     O --> E
     E -->|authenticated result| J
@@ -67,6 +70,12 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
     "token": "out-of-band-secret-with-at-least-32-characters"
   },
   "objective": "Maximize the official held-out score",
+  "orchestration": {
+    "topology": "auto",
+    "maxWorkers": 2,
+    "maxRounds": 3,
+    "minIndependentVerifiers": 2
+  },
   "metric": { "name": "score", "direction": "maximize" },
   "fidelities": [
     { "id": "smoke", "final": false, "maxWallTimeMs": 300000 },
@@ -103,7 +112,23 @@ The contract overrides heuristic routing. Unbound interactive sessions use a con
 | `training`  | Fine-tuning and post-training                       | Data/model identity, checkpoints, held-out evaluation, compute     |
 | `forecast`  | Weather and spatiotemporal prediction               | Lead-time portfolio, calibration, leakage, baseline, compute       |
 
-### 3. Search without erasing failures
+### 3. Orchestrate only when justified
+
+`POST /harness/runs/:sessionID/orchestration` freezes a deterministic role graph beside the immutable contract. Its selector considers decomposability, sequentiality, tool intensity, uncertainty, verification risk, novelty, cross-domain structure, and available coordination budget.
+
+| Topology      | Use case                                               | Role structure                                                          |
+| ------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `solo`        | Small-budget, sequential, or low-coordination work     | One direct generation unit                                              |
+| `centralized` | Tool-heavy or high-risk work with limited parallelism  | Generate → reflect → independently verify                               |
+| `fork_join`   | Decomposable analytical and computational work         | Generate ∥ simulate → synthesize → independently verify                 |
+| `tournament`  | Uncertain, verification-sensitive hypothesis selection | Independent generation → cluster → reflect → pairwise rank → verify     |
+| `evolution`   | Novel, open-ended search                               | Generate → cluster → reflect → rank → evolve/diverge, repeated by round |
+
+Every work unit has a content-derived identity, ordered dependencies, a role-specific agent, and a proportional allocation from the contract budget. A role can settle only from a fresh child session after all dependencies complete. Failure cancels transitive descendants without erasing independent roots. Restarts reload the exact graph rather than re-planning it.
+
+Upstream communication is deliberately bounded to summaries plus artifact and evidence references. Internal reflection, ranking, and verification remain provisional; only the evaluator-authenticated journal can establish benchmark performance or scientific support.
+
+### 4. Search without erasing failures
 
 The optimizer is an open candidate graph rather than a single mutable working file.
 
@@ -119,7 +144,7 @@ The optimizer is an open candidate graph rather than a single mutable working fi
 
 This combines breadth, exploitation, fusion, and escape from strategy stagnation without allowing the model to award itself fitness.
 
-### 4. Cascade evaluation
+### 5. Cascade evaluation
 
 Fidelity plans contain two to eight unique stages and exactly one final stage, which must be last. The journal enforces stage order per run or candidate. Every prior stage must pass all blocking checks before the next result can be recorded.
 
@@ -132,7 +157,7 @@ If a stage declares a wall-time or cost cap, the evaluator must report the corre
 - become the quality score in a report; or
 - qualify a learned skill.
 
-### 5. Verify with domain packs
+### 6. Verify with domain packs
 
 Final passing results must contain evidence-backed receipts for every blocking check selected by the adapter.
 
@@ -148,13 +173,13 @@ Final passing results must contain evidence-backed receipts for every blocking c
 
 An adapter can require no universal pack when the benchmark spans incompatible task types; the orchestrator may add task-specific packs at bind time. Pack selection is frozen in the contract and comparison key.
 
-### 6. Reuse only verified hindsight
+### 7. Reuse only verified hindsight
 
 Retrospective entries are scoped by benchmark name, version, task, and evaluator. They contain the exact candidate artifact reference, branch, generation, external outcome, score, metrics, evidence references, evaluator feedback, and evaluation usage.
 
 Retrieval combines query overlap, task affinity, and workflow stage. It deliberately returns a relevant contrasting failure beside a success when possible. Retrieved text is escaped, length-bounded, and explicitly labeled as precedent data rather than instructions.
 
-### 7. Keep claims separate from execution reports
+### 8. Keep claims separate from execution reports
 
 The claim ledger supports descriptive, statistical, causal, mechanistic, theoretical, and performance claims. Status is derived from verified evidence, never assigned by the agent.
 
@@ -165,7 +190,7 @@ The claim ledger supports descriptive, statistical, causal, mechanistic, theoret
 - Clean replay, independent implementation, and independent derivation require a separate verifier session, fresh process, clean workspace, and exact source hash.
 - Independent implementation/derivation additionally withhold the producer's output and require independent code or reasoning.
 
-### 8. Promote skills only after held-out qualification
+### 9. Promote skills only after held-out qualification
 
 `/learn` and RSI distillation write inert proposals under `learned-skill-proposals`; skill discovery reads only promoted content under `learned-skills`.
 
@@ -183,7 +208,7 @@ Before a proposal exists, OpenScience checks its frontmatter, runtime-risk patte
 
 If later evidence introduces a regression before promotion, qualification returns to pending. Promoted content cannot accept more evidence; changes require a new versioned proposal.
 
-### 9. Compare only compatible runs
+### 10. Compare only compatible runs
 
 Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity protocol, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores.
 
@@ -206,19 +231,21 @@ Every adapter is version-agnostic. A real run must still bind an exact benchmark
 
 ## HTTP API
 
-| Method | Route                                  | Purpose                                                       |
-| ------ | -------------------------------------- | ------------------------------------------------------------- |
-| `GET`  | `/harness/benchmarks`                  | List adapter manifests                                        |
-| `POST` | `/harness/runs`                        | Bind the immutable run and hashed evaluator capability        |
-| `POST` | `/harness/evaluations`                 | Record a staged evaluator-authenticated result                |
-| `GET`  | `/harness/runs/:sessionID/contract`    | Inspect the bound protocol                                    |
-| `GET`  | `/harness/runs/:sessionID/evaluations` | Inspect the immutable evaluation journal                      |
-| `GET`  | `/harness/runs/:sessionID/report`      | Build a quality-cost report                                   |
-| `POST` | `/harness/compare`                     | Compare compatible reports and identify Pareto-efficient runs |
-| `GET`  | `/harness/skills`                      | List quarantined skill proposals and qualification state      |
-| `POST` | `/harness/skills`                      | Create an inert, content-addressed proposal                   |
-| `POST` | `/harness/skills/evidence`             | Add paired evaluator-authenticated held-out evidence          |
-| `POST` | `/harness/skills/:name/promotion`      | Promote only a currently qualified, unchanged proposal        |
+| Method | Route                                    | Purpose                                                       |
+| ------ | ---------------------------------------- | ------------------------------------------------------------- |
+| `GET`  | `/harness/benchmarks`                    | List adapter manifests                                        |
+| `POST` | `/harness/runs`                          | Bind the immutable run and hashed evaluator capability        |
+| `POST` | `/harness/runs/:sessionID/orchestration` | Select and initialize a persisted scientific role DAG         |
+| `GET`  | `/harness/runs/:sessionID/orchestration` | Resume the current orchestration state                        |
+| `POST` | `/harness/evaluations`                   | Record a staged evaluator-authenticated result                |
+| `GET`  | `/harness/runs/:sessionID/contract`      | Inspect the bound protocol                                    |
+| `GET`  | `/harness/runs/:sessionID/evaluations`   | Inspect the immutable evaluation journal                      |
+| `GET`  | `/harness/runs/:sessionID/report`        | Build a quality-cost report                                   |
+| `POST` | `/harness/compare`                       | Compare compatible reports and identify Pareto-efficient runs |
+| `GET`  | `/harness/skills`                        | List quarantined skill proposals and qualification state      |
+| `POST` | `/harness/skills`                        | Create an inert, content-addressed proposal                   |
+| `POST` | `/harness/skills/evidence`               | Add paired evaluator-authenticated held-out evidence          |
+| `POST` | `/harness/skills/:name/promotion`        | Promote only a currently qualified, unchanged proposal        |
 
 The generated JavaScript SDK exposes the same API.
 
@@ -230,6 +257,9 @@ The implementation borrows principles, not source code, from the following prima
 | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | [AlphaEvolve](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)   | Programs compete through objective external evaluators and remain in an evolutionary database.                                              |
 | [Google DeepMind Co-Scientist](https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/) | Generate diverse hypotheses, critique/rank them, combine strong ideas, and spend substantial compute on verification.                       |
+| [ProEval](https://deepmind.google/research/publications/238239/)                                                           | Actively discover failure regions and estimate capability from a small, strategically chosen evaluation subset.                             |
+| [Towards a Science of Scaling Agent Systems](https://arxiv.org/abs/2512.08296)                                             | Add agents conditionally: coordination can hurt sequential and tool-heavy work, while centralized structures control error amplification.   |
+| [Gram](https://deepmind.google/research/publications/252981/)                                                              | Audit autonomous agents for sabotage, overeagerness, and hidden side effects with an investigator distinct from the producer.               |
 | [MLEvolve](https://github.com/InternScience/MLEvolve) and its [paper](https://arxiv.org/abs/2606.06473)                    | Progressive multi-branch search, success/failure hindsight, adaptive exploration, and branch fusion for MLE.                                |
 | [AI Scientist v2](https://github.com/SakanaAI/AI-Scientist-v2) and its [paper](https://arxiv.org/abs/2504.08066)           | Multiple independent experimental roots and agentic tree search rather than a single linear attempt.                                        |
 | [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954)                                                                   | Preserve an open-ended archive with lineage; do not collapse self-improvement into one incumbent.                                           |

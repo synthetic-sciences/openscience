@@ -7518,6 +7518,214 @@ export type HarnessBenchmarksResponses = {
 
 export type HarnessBenchmarksResponse = HarnessBenchmarksResponses[keyof HarnessBenchmarksResponses]
 
+export type HarnessOrchestrationStatusData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/runs/{sessionID}/orchestration"
+}
+
+export type HarnessOrchestrationStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessOrchestrationStatusError = HarnessOrchestrationStatusErrors[keyof HarnessOrchestrationStatusErrors]
+
+export type HarnessOrchestrationStatusResponses = {
+  /**
+   * Scientific orchestration state
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "coalition-v1"
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    objective: string
+    selection: {
+      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      source: "contract" | "policy"
+      reasons: Array<string>
+      traits: {
+        decomposability: number
+        sequentiality: number
+        toolIntensity: number
+        uncertainty: number
+        verificationRisk: number
+        novelty: number
+        crossDomain: number
+      }
+    }
+    maxWorkers: number
+    maxRounds: number
+    minIndependentVerifiers: number
+    status: "active" | "completed"
+    work: {
+      [key: string]: {
+        id: string
+        role:
+          | "generation"
+          | "proximity"
+          | "reflection"
+          | "ranking"
+          | "evolution"
+          | "verification"
+          | "investigation"
+          | "simulation"
+          | "synthesis"
+        label: string
+        round: number
+        agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
+        dependencies: Array<string>
+        prompt: string
+        allocation: {
+          steps?: number
+          tokens?: number
+          costUSD?: number
+          wallTimeMs?: number
+        }
+        status: "pending" | "completed" | "failed" | "cancelled"
+        workerSessionID?: string
+        result?: {
+          summary: string
+          artifactRefs?: Array<string>
+          evidenceRefs?: Array<string>
+          usage?: {
+            steps?: number
+            tokens?: number
+            costUSD?: number
+            wallTimeMs?: number
+          }
+          completedAt: number
+        }
+        failure?: string
+      }
+    }
+    order: Array<string>
+    revision: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type HarnessOrchestrationStatusResponse =
+  HarnessOrchestrationStatusResponses[keyof HarnessOrchestrationStatusResponses]
+
+export type HarnessOrchestrationStartData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/runs/{sessionID}/orchestration"
+}
+
+export type HarnessOrchestrationStartErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessOrchestrationStartError = HarnessOrchestrationStartErrors[keyof HarnessOrchestrationStartErrors]
+
+export type HarnessOrchestrationStartResponses = {
+  /**
+   * Scientific orchestration state
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "coalition-v1"
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    objective: string
+    selection: {
+      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      source: "contract" | "policy"
+      reasons: Array<string>
+      traits: {
+        decomposability: number
+        sequentiality: number
+        toolIntensity: number
+        uncertainty: number
+        verificationRisk: number
+        novelty: number
+        crossDomain: number
+      }
+    }
+    maxWorkers: number
+    maxRounds: number
+    minIndependentVerifiers: number
+    status: "active" | "completed"
+    work: {
+      [key: string]: {
+        id: string
+        role:
+          | "generation"
+          | "proximity"
+          | "reflection"
+          | "ranking"
+          | "evolution"
+          | "verification"
+          | "investigation"
+          | "simulation"
+          | "synthesis"
+        label: string
+        round: number
+        agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
+        dependencies: Array<string>
+        prompt: string
+        allocation: {
+          steps?: number
+          tokens?: number
+          costUSD?: number
+          wallTimeMs?: number
+        }
+        status: "pending" | "completed" | "failed" | "cancelled"
+        workerSessionID?: string
+        result?: {
+          summary: string
+          artifactRefs?: Array<string>
+          evidenceRefs?: Array<string>
+          usage?: {
+            steps?: number
+            tokens?: number
+            costUSD?: number
+            wallTimeMs?: number
+          }
+          completedAt: number
+        }
+        failure?: string
+      }
+    }
+    order: Array<string>
+    revision: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type HarnessOrchestrationStartResponse =
+  HarnessOrchestrationStartResponses[keyof HarnessOrchestrationStartResponses]
+
 export type HarnessBindData = {
   body?: {
     schemaVersion: 1
@@ -7535,6 +7743,32 @@ export type HarnessBindData = {
     }
     objective: string
     profile?: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+    orchestration?: {
+      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      traits?: {
+        decomposability: number
+        sequentiality: number
+        toolIntensity: number
+        uncertainty: number
+        verificationRisk: number
+        novelty: number
+        crossDomain: number
+      }
+      maxWorkers: number
+      maxRounds: number
+      roles?: Array<
+        | "generation"
+        | "proximity"
+        | "reflection"
+        | "ranking"
+        | "evolution"
+        | "verification"
+        | "investigation"
+        | "simulation"
+        | "synthesis"
+      >
+      minIndependentVerifiers: number
+    }
     extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     metric?: {
       name?: string
@@ -7620,6 +7854,32 @@ export type HarnessBindResponses = {
       target?: number
     }
     profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+    orchestration?: {
+      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      traits?: {
+        decomposability: number
+        sequentiality: number
+        toolIntensity: number
+        uncertainty: number
+        verificationRisk: number
+        novelty: number
+        crossDomain: number
+      }
+      maxWorkers: number
+      maxRounds: number
+      roles?: Array<
+        | "generation"
+        | "proximity"
+        | "reflection"
+        | "ranking"
+        | "evolution"
+        | "verification"
+        | "investigation"
+        | "simulation"
+        | "synthesis"
+      >
+      minIndependentVerifiers: number
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string
@@ -8035,6 +8295,32 @@ export type HarnessContractResponses = {
       target?: number
     }
     profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+    orchestration?: {
+      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      traits?: {
+        decomposability: number
+        sequentiality: number
+        toolIntensity: number
+        uncertainty: number
+        verificationRisk: number
+        novelty: number
+        crossDomain: number
+      }
+      maxWorkers: number
+      maxRounds: number
+      roles?: Array<
+        | "generation"
+        | "proximity"
+        | "reflection"
+        | "ranking"
+        | "evolution"
+        | "verification"
+        | "investigation"
+        | "simulation"
+        | "synthesis"
+      >
+      minIndependentVerifiers: number
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string

@@ -23,7 +23,7 @@ const context = {
 
 afterEach(async () => {
   await Promise.all(
-    ["contracts", "evaluations", "search"].map((name) =>
+    ["contracts", "evaluations", "search", "orchestration"].map((name) =>
       fs.rm(path.join(Global.Path.data, "harness", name, `${encodeURIComponent(sessionID)}.json`), { force: true }),
     ),
   )
@@ -37,7 +37,7 @@ async function bind() {
     sessionID,
     objective: "Maximize the official score",
     benchmark: {
-      name: "harness-tool-bench",
+      name: "pde",
       version: "1",
       taskID: "task",
       split: "held_out",
@@ -59,6 +59,32 @@ async function bind() {
 }
 
 describe("harness tool", () => {
+  test("exposes persisted provisional coalition work without evaluator authority", async () => {
+    await bind()
+    const tool = await HarnessTool.init()
+    const started = await tool.execute({ action: "coalition_start" }, context)
+    const state = JSON.parse(started.output)
+    expect(state).toMatchObject({ status: "active", minIndependentVerifiers: 1, revision: 0 })
+    expect(state.ready.length).toBeGreaterThan(0)
+    expect(state.ready.length).toBeLessThanOrEqual(state.maxWorkers)
+
+    const work = state.ready[0]
+    const completed = await tool.execute(
+      {
+        action: "coalition_complete",
+        work_id: work.id,
+        worker_session_id: "fresh-child-session",
+        result_summary: "produced a bounded proposal",
+        artifact_refs: ["artifact://proposal"],
+        evidence_refs: ["evidence://trace"],
+      },
+      context,
+    )
+    expect(completed.metadata).toMatchObject({ workID: work.id, provisional: true, revision: 1 })
+    expect(JSON.parse(completed.output).revision).toBe(1)
+    expect(tool.parameters.safeParse({ action: "coalition_verify", work_id: work.id }).success).toBe(false)
+  })
+
   test("exposes resumable candidate control without an agent verification action", async () => {
     await bind()
     const tool = await HarnessTool.init()

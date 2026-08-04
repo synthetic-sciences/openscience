@@ -103,6 +103,10 @@ import type {
   HarnessEvaluateResponses,
   HarnessEvaluationsErrors,
   HarnessEvaluationsResponses,
+  HarnessOrchestrationStartErrors,
+  HarnessOrchestrationStartResponses,
+  HarnessOrchestrationStatusErrors,
+  HarnessOrchestrationStatusResponses,
   HarnessReportErrors,
   HarnessReportResponses,
   HarnessSkillAttestErrors,
@@ -3627,6 +3631,74 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Orchestration extends HeyApiClient {
+  /**
+   * Read scientific orchestration state
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      HarnessOrchestrationStatusResponses,
+      HarnessOrchestrationStatusErrors,
+      ThrowOnError
+    >({
+      url: "/harness/runs/{sessionID}/orchestration",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Initialize contract-bound scientific orchestration
+   *
+   * Selects a bounded topology from immutable contract traits and creates a restart-safe provisional work DAG.
+   */
+  public start<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessOrchestrationStartResponses,
+      HarnessOrchestrationStartErrors,
+      ThrowOnError
+    >({
+      url: "/harness/runs/{sessionID}/orchestration",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Skill extends HeyApiClient {
   /**
    * Create an inactive learned skill proposal
@@ -3808,6 +3880,32 @@ export class Harness extends HeyApiClient {
       }
       objective?: string
       profile?: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+      orchestration?: {
+        topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+        traits?: {
+          decomposability: number
+          sequentiality: number
+          toolIntensity: number
+          uncertainty: number
+          verificationRisk: number
+          novelty: number
+          crossDomain: number
+        }
+        maxWorkers: number
+        maxRounds: number
+        roles?: Array<
+          | "generation"
+          | "proximity"
+          | "reflection"
+          | "ranking"
+          | "evolution"
+          | "verification"
+          | "investigation"
+          | "simulation"
+          | "synthesis"
+        >
+        minIndependentVerifiers: number
+      }
       extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
       metric?: {
         name?: string
@@ -3867,6 +3965,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "evaluator" },
             { in: "body", key: "objective" },
             { in: "body", key: "profile" },
+            { in: "body", key: "orchestration" },
             { in: "body", key: "extraPacks" },
             { in: "body", key: "metric" },
             { in: "body", key: "fidelities" },
@@ -4103,6 +4202,11 @@ export class Harness extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _orchestration?: Orchestration
+  get orchestration(): Orchestration {
+    return (this._orchestration ??= new Orchestration({ client: this.client }))
   }
 
   private _skill?: Skill

@@ -1,11 +1,22 @@
 import z from "zod"
 import { HarnessMemory } from "@/session/harness/memory"
+import { HarnessOrchestrator } from "@/session/harness/orchestrator"
 import { HarnessSearch } from "@/session/harness/search"
 import { Tool } from "./tool"
 import DESCRIPTION from "./harness.txt"
 
 const Parameters = z.object({
-  action: z.enum(["start", "status", "propose", "observe", "hindsight"]),
+  action: z.enum([
+    "start",
+    "status",
+    "propose",
+    "observe",
+    "hindsight",
+    "coalition_start",
+    "coalition_status",
+    "coalition_complete",
+    "coalition_fail",
+  ]),
   stall: z
     .number()
     .int()
@@ -43,6 +54,38 @@ const Parameters = z.object({
   query: z.string().min(1).max(2_000).optional().describe("For hindsight: current problem or failure query"),
   stage: HarnessMemory.Stage.optional().describe("For hindsight: current search stage"),
   limit: z.number().int().min(1).max(6).optional().describe("For hindsight: maximum precedents"),
+  work_id: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional()
+    .describe("For coalition_complete/coalition_fail: orchestration work identity"),
+  worker_session_id: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("For coalition_complete/coalition_fail: fresh Task child session identity"),
+  result_summary: z.string().min(1).max(8_000).optional().describe("For coalition_complete: concise result"),
+  artifact_refs: z
+    .array(z.string().min(1).max(2_048))
+    .max(32)
+    .optional()
+    .describe("For coalition_complete: immutable artifact references"),
+  evidence_refs: z
+    .array(z.string().min(1).max(2_048))
+    .max(32)
+    .optional()
+    .describe("For coalition_complete: observable evidence references"),
+  usage: z
+    .object({
+      steps: z.number().int().nonnegative().optional(),
+      tokens: z.number().int().nonnegative().optional(),
+      costUSD: z.number().nonnegative().optional(),
+      wallTimeMs: z.number().int().nonnegative().optional(),
+    })
+    .strict()
+    .optional()
+    .describe("For coalition_complete: actual resource use"),
+  failure: z.string().min(1).max(4_000).optional().describe("For coalition_fail: failure reason"),
 })
 
 const result = (title: string, output: unknown, metadata: Record<string, unknown> = {}) => ({
@@ -78,10 +121,102 @@ const summary = (state: HarnessSearch.State) => ({
     })),
 })
 
+const coalition = (state: HarnessOrchestrator.State) => ({
+  runID: state.runID,
+  status: state.status,
+  protocolVersion: state.protocolVersion,
+  topology: state.selection.topology,
+  selectionSource: state.selection.source,
+  selectionReasons: state.selection.reasons,
+  traits: state.selection.traits,
+  maxWorkers: state.maxWorkers,
+  maxRounds: state.maxRounds,
+  minIndependentVerifiers: state.minIndependentVerifiers,
+  revision: state.revision,
+  progress: Object.fromEntries(
+    ["pending", "completed", "failed", "cancelled"].map((status) => [
+      status,
+      Object.values(state.work).filter((item) => item.status === status).length,
+    ]),
+  ),
+  ready: HarnessOrchestrator.ready(state)
+    .slice(0, state.maxWorkers)
+    .map((work) => ({
+      id: work.id,
+      role: work.role,
+      label: work.label,
+      round: work.round,
+      agent: work.agent,
+      prompt: work.prompt,
+      allocation: work.allocation,
+      context: work.context,
+    })),
+})
+
 export const HarnessTool = Tool.define("harness", {
   description: DESCRIPTION,
   parameters: Parameters,
   async execute(params, ctx) {
+    if (params.action === "coalition_start") {
+      const state = await HarnessOrchestrator.initialize(ctx.sessionID)
+      return result("Scientific coalition initialized", coalition(state), {
+        runID: state.runID,
+        topology: state.selection.topology,
+        revision: state.revision,
+      })
+    }
+
+    if (params.action === "coalition_status") {
+      const state = await HarnessOrchestrator.read(ctx.sessionID)
+      return result("Scientific coalition checkpoint", coalition(state), {
+        runID: state.runID,
+        topology: state.selection.topology,
+        revision: state.revision,
+      })
+    }
+
+    if (params.action === "coalition_complete") {
+      if (!params.work_id || !params.worker_session_id || !params.result_summary) {
+        return result(
+          "Invalid coalition completion",
+          "coalition_complete requires work_id, worker_session_id, and result_summary",
+        )
+      }
+      const state = await HarnessOrchestrator.complete({
+        sessionID: ctx.sessionID,
+        workID: params.work_id,
+        workerSessionID: params.worker_session_id,
+        result: {
+          summary: params.result_summary,
+          artifactRefs: params.artifact_refs ?? [],
+          evidenceRefs: params.evidence_refs ?? [],
+          usage: params.usage,
+        },
+      })
+      return result("Coalition work completed", coalition(state), {
+        workID: params.work_id,
+        provisional: true,
+        revision: state.revision,
+      })
+    }
+
+    if (params.action === "coalition_fail") {
+      if (!params.work_id || !params.worker_session_id || !params.failure) {
+        return result("Invalid coalition failure", "coalition_fail requires work_id, worker_session_id, and failure")
+      }
+      const state = await HarnessOrchestrator.fail({
+        sessionID: ctx.sessionID,
+        workID: params.work_id,
+        workerSessionID: params.worker_session_id,
+        failure: params.failure,
+      })
+      return result("Coalition work failed", coalition(state), {
+        workID: params.work_id,
+        provisional: true,
+        revision: state.revision,
+      })
+    }
+
     if (params.action === "start") {
       const state = await HarnessSearch.initialize({ sessionID: ctx.sessionID, stall: params.stall })
       return result("Optimization search started", summary(state), { runID: state.runID, revision: state.revision })

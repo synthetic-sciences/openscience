@@ -12,7 +12,7 @@ const skill = "route-harness-skill"
 
 afterEach(async () => {
   await Promise.all(
-    ["bindings", "contracts", "evaluations"].map((name) =>
+    ["bindings", "contracts", "evaluations", "orchestration"].map((name) =>
       fs.rm(path.join(Global.Path.data, "harness", name, `${encodeURIComponent(sessionID)}.json`), { force: true }),
     ),
   )
@@ -56,6 +56,13 @@ describe("/harness routes", () => {
     const contract = (await bound.json()) as { packs: Array<"statistics">; benchmark: { name: string } }
     expect(contract).toMatchObject({ packs: ["statistics"], benchmark: { name: "statistics" } })
     expect(JSON.stringify(contract)).not.toContain(token)
+
+    const started = await app.request(`/runs/${sessionID}/orchestration`, { method: "POST" })
+    expect(started.status).toBe(200)
+    expect(await started.json()).toMatchObject({ protocolVersion: "coalition-v1", revision: 0, status: "active" })
+    const orchestration = await app.request(`/runs/${sessionID}/orchestration`)
+    expect(orchestration.status).toBe(200)
+    expect(await orchestration.json()).toMatchObject({ protocolVersion: "coalition-v1", revision: 0 })
 
     const checks = HarnessDomain.compose(contract.packs).map((check) => ({
       id: check.id,

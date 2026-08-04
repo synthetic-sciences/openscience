@@ -6,6 +6,7 @@ import { HarnessAdapter } from "@/session/harness/adapter"
 import { HarnessBenchmark } from "@/session/harness/benchmark"
 import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
+import { HarnessOrchestrator } from "@/session/harness/orchestrator"
 import { HarnessReport } from "@/session/harness/report"
 import { HarnessSkill } from "@/session/harness/skill"
 import { errors } from "../error"
@@ -34,6 +35,40 @@ export const HarnessRoutes = lazy(() =>
         },
       }),
       (c) => c.json(Object.values(HarnessBenchmark.catalog)),
+    )
+    .post(
+      "/runs/:sessionID/orchestration",
+      describeRoute({
+        summary: "Initialize contract-bound scientific orchestration",
+        description:
+          "Selects a bounded topology from immutable contract traits and creates a restart-safe provisional work DAG.",
+        operationId: "harness.orchestration.start",
+        responses: {
+          200: {
+            description: "Scientific orchestration state",
+            content: { "application/json": { schema: resolver(HarnessOrchestrator.State) } },
+          },
+          ...errors(400, 404, 409),
+        },
+      }),
+      validator("param", SessionID),
+      async (c) => c.json(await HarnessOrchestrator.initialize(c.req.valid("param").sessionID)),
+    )
+    .get(
+      "/runs/:sessionID/orchestration",
+      describeRoute({
+        summary: "Read scientific orchestration state",
+        operationId: "harness.orchestration.status",
+        responses: {
+          200: {
+            description: "Scientific orchestration state",
+            content: { "application/json": { schema: resolver(HarnessOrchestrator.State) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", SessionID),
+      async (c) => c.json(await HarnessOrchestrator.read(c.req.valid("param").sessionID)),
     )
     .post(
       "/runs",

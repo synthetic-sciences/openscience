@@ -14710,6 +14710,849 @@
         ]
       }
     },
+    "/harness/runs/{sessionID}/orchestration": {
+      "post": {
+        "operationId": "harness.orchestration.start",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Initialize contract-bound scientific orchestration",
+        "description": "Selects a bounded topology from immutable contract traits and creates a restart-safe provisional work DAG.",
+        "responses": {
+          "200": {
+            "description": "Scientific orchestration state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "coalition-v1"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "objective": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "selection": {
+                      "type": "object",
+                      "properties": {
+                        "topology": {
+                          "type": "string",
+                          "enum": [
+                            "solo",
+                            "centralized",
+                            "fork_join",
+                            "tournament",
+                            "evolution"
+                          ]
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "contract",
+                            "policy"
+                          ]
+                        },
+                        "reasons": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "traits": {
+                          "type": "object",
+                          "properties": {
+                            "decomposability": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "sequentiality": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "toolIntensity": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "uncertainty": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "verificationRisk": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "novelty": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "crossDomain": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "decomposability",
+                            "sequentiality",
+                            "toolIntensity",
+                            "uncertainty",
+                            "verificationRisk",
+                            "novelty",
+                            "crossDomain"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "topology",
+                        "source",
+                        "reasons",
+                        "traits"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxWorkers": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2
+                    },
+                    "maxRounds": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    },
+                    "minIndependentVerifiers": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "completed"
+                      ]
+                    },
+                    "work": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "generation",
+                              "proximity",
+                              "reflection",
+                              "ranking",
+                              "evolution",
+                              "verification",
+                              "investigation",
+                              "simulation",
+                              "synthesis"
+                            ]
+                          },
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "round": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "agent": {
+                            "type": "string",
+                            "enum": [
+                              "task",
+                              "biology",
+                              "physics",
+                              "ml",
+                              "critique",
+                              "physics-critique",
+                              "reviewer"
+                            ]
+                          },
+                          "dependencies": {
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8000
+                          },
+                          "allocation": {
+                            "type": "object",
+                            "properties": {
+                              "steps": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "tokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "costUSD": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "wallTimeMs": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "completed",
+                              "failed",
+                              "cancelled"
+                            ]
+                          },
+                          "workerSessionID": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "result": {
+                            "type": "object",
+                            "properties": {
+                              "summary": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              },
+                              "artifactRefs": {
+                                "default": [],
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "evidenceRefs": {
+                                "default": [],
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "usage": {
+                                "type": "object",
+                                "properties": {
+                                  "steps": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "tokens": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "costUSD": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "wallTimeMs": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "completedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "summary",
+                              "completedAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "failure": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "role",
+                          "label",
+                          "round",
+                          "agent",
+                          "dependencies",
+                          "prompt",
+                          "allocation",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "updatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "objective",
+                    "selection",
+                    "maxWorkers",
+                    "maxRounds",
+                    "minIndependentVerifiers",
+                    "status",
+                    "work",
+                    "order",
+                    "revision",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.orchestration.start({\n  ...\n})"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "harness.orchestration.status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read scientific orchestration state",
+        "responses": {
+          "200": {
+            "description": "Scientific orchestration state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "coalition-v1"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "objective": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "selection": {
+                      "type": "object",
+                      "properties": {
+                        "topology": {
+                          "type": "string",
+                          "enum": [
+                            "solo",
+                            "centralized",
+                            "fork_join",
+                            "tournament",
+                            "evolution"
+                          ]
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "contract",
+                            "policy"
+                          ]
+                        },
+                        "reasons": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "traits": {
+                          "type": "object",
+                          "properties": {
+                            "decomposability": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "sequentiality": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "toolIntensity": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "uncertainty": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "verificationRisk": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "novelty": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "crossDomain": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "decomposability",
+                            "sequentiality",
+                            "toolIntensity",
+                            "uncertainty",
+                            "verificationRisk",
+                            "novelty",
+                            "crossDomain"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "topology",
+                        "source",
+                        "reasons",
+                        "traits"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxWorkers": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2
+                    },
+                    "maxRounds": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    },
+                    "minIndependentVerifiers": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "completed"
+                      ]
+                    },
+                    "work": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "generation",
+                              "proximity",
+                              "reflection",
+                              "ranking",
+                              "evolution",
+                              "verification",
+                              "investigation",
+                              "simulation",
+                              "synthesis"
+                            ]
+                          },
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "round": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "agent": {
+                            "type": "string",
+                            "enum": [
+                              "task",
+                              "biology",
+                              "physics",
+                              "ml",
+                              "critique",
+                              "physics-critique",
+                              "reviewer"
+                            ]
+                          },
+                          "dependencies": {
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8000
+                          },
+                          "allocation": {
+                            "type": "object",
+                            "properties": {
+                              "steps": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "tokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "costUSD": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "wallTimeMs": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "completed",
+                              "failed",
+                              "cancelled"
+                            ]
+                          },
+                          "workerSessionID": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "result": {
+                            "type": "object",
+                            "properties": {
+                              "summary": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              },
+                              "artifactRefs": {
+                                "default": [],
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "evidenceRefs": {
+                                "default": [],
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "usage": {
+                                "type": "object",
+                                "properties": {
+                                  "steps": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "tokens": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "costUSD": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "wallTimeMs": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "completedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "summary",
+                              "completedAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "failure": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "role",
+                          "label",
+                          "round",
+                          "agent",
+                          "dependencies",
+                          "prompt",
+                          "allocation",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "updatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "objective",
+                    "selection",
+                    "maxWorkers",
+                    "maxRounds",
+                    "minIndependentVerifiers",
+                    "status",
+                    "work",
+                    "order",
+                    "revision",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.orchestration.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/runs": {
       "post": {
         "operationId": "harness.bind",
@@ -14857,6 +15700,113 @@
                         "training",
                         "forecast"
                       ]
+                    },
+                    "orchestration": {
+                      "type": "object",
+                      "properties": {
+                        "topology": {
+                          "type": "string",
+                          "enum": [
+                            "auto",
+                            "solo",
+                            "centralized",
+                            "fork_join",
+                            "tournament",
+                            "evolution"
+                          ]
+                        },
+                        "traits": {
+                          "type": "object",
+                          "properties": {
+                            "decomposability": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "sequentiality": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "toolIntensity": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "uncertainty": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "verificationRisk": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "novelty": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "crossDomain": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "decomposability",
+                            "sequentiality",
+                            "toolIntensity",
+                            "uncertainty",
+                            "verificationRisk",
+                            "novelty",
+                            "crossDomain"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxWorkers": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 2
+                        },
+                        "maxRounds": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8
+                        },
+                        "roles": {
+                          "minItems": 1,
+                          "maxItems": 9,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "generation",
+                              "proximity",
+                              "reflection",
+                              "ranking",
+                              "evolution",
+                              "verification",
+                              "investigation",
+                              "simulation",
+                              "synthesis"
+                            ]
+                          }
+                        },
+                        "minIndependentVerifiers": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 2
+                        }
+                      },
+                      "required": [
+                        "topology",
+                        "maxWorkers",
+                        "maxRounds",
+                        "minIndependentVerifiers"
+                      ],
+                      "additionalProperties": false
                     },
                     "packs": {
                       "maxItems": 7,
@@ -15132,6 +16082,113 @@
                       "training",
                       "forecast"
                     ]
+                  },
+                  "orchestration": {
+                    "type": "object",
+                    "properties": {
+                      "topology": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "solo",
+                          "centralized",
+                          "fork_join",
+                          "tournament",
+                          "evolution"
+                        ]
+                      },
+                      "traits": {
+                        "type": "object",
+                        "properties": {
+                          "decomposability": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "sequentiality": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "toolIntensity": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "uncertainty": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "verificationRisk": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "novelty": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "crossDomain": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          }
+                        },
+                        "required": [
+                          "decomposability",
+                          "sequentiality",
+                          "toolIntensity",
+                          "uncertainty",
+                          "verificationRisk",
+                          "novelty",
+                          "crossDomain"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxWorkers": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2
+                      },
+                      "maxRounds": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 8
+                      },
+                      "roles": {
+                        "minItems": 1,
+                        "maxItems": 9,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "generation",
+                            "proximity",
+                            "reflection",
+                            "ranking",
+                            "evolution",
+                            "verification",
+                            "investigation",
+                            "simulation",
+                            "synthesis"
+                          ]
+                        }
+                      },
+                      "minIndependentVerifiers": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2
+                      }
+                    },
+                    "required": [
+                      "topology",
+                      "maxWorkers",
+                      "maxRounds",
+                      "minIndependentVerifiers"
+                    ],
+                    "additionalProperties": false
                   },
                   "extraPacks": {
                     "default": [],
@@ -16799,6 +17856,113 @@
                             "training",
                             "forecast"
                           ]
+                        },
+                        "orchestration": {
+                          "type": "object",
+                          "properties": {
+                            "topology": {
+                              "type": "string",
+                              "enum": [
+                                "auto",
+                                "solo",
+                                "centralized",
+                                "fork_join",
+                                "tournament",
+                                "evolution"
+                              ]
+                            },
+                            "traits": {
+                              "type": "object",
+                              "properties": {
+                                "decomposability": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "sequentiality": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "toolIntensity": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "uncertainty": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "verificationRisk": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "novelty": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "crossDomain": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                }
+                              },
+                              "required": [
+                                "decomposability",
+                                "sequentiality",
+                                "toolIntensity",
+                                "uncertainty",
+                                "verificationRisk",
+                                "novelty",
+                                "crossDomain"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxWorkers": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2
+                            },
+                            "maxRounds": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 8
+                            },
+                            "roles": {
+                              "minItems": 1,
+                              "maxItems": 9,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "generation",
+                                  "proximity",
+                                  "reflection",
+                                  "ranking",
+                                  "evolution",
+                                  "verification",
+                                  "investigation",
+                                  "simulation",
+                                  "synthesis"
+                                ]
+                              }
+                            },
+                            "minIndependentVerifiers": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2
+                            }
+                          },
+                          "required": [
+                            "topology",
+                            "maxWorkers",
+                            "maxRounds",
+                            "minIndependentVerifiers"
+                          ],
+                          "additionalProperties": false
                         },
                         "packs": {
                           "maxItems": 7,

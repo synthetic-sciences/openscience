@@ -1,0 +1,554 @@
+import path from "path"
+import z from "zod"
+import { Global } from "@/global"
+import { JsonStore } from "@/util/jsonstore"
+import { HarnessBenchmark } from "./benchmark"
+import { HarnessContract } from "./contract"
+
+export namespace HarnessOrchestrator {
+  const Agent = z.enum(["task", "biology", "physics", "ml", "critique", "physics-critique", "reviewer"])
+  const Status = z.enum(["pending", "completed", "failed", "cancelled"])
+
+  const Usage = z
+    .object({
+      steps: z.number().int().nonnegative().optional(),
+      tokens: z.number().int().nonnegative().optional(),
+      costUSD: z.number().nonnegative().optional(),
+      wallTimeMs: z.number().int().nonnegative().optional(),
+    })
+    .strict()
+
+  const Allocation = Usage
+
+  const Submission = z
+    .object({
+      summary: z.string().min(1).max(8_000),
+      artifactRefs: z.array(z.string().min(1).max(2_048)).max(32).default([]),
+      evidenceRefs: z.array(z.string().min(1).max(2_048)).max(32).default([]),
+      usage: Usage.optional(),
+    })
+    .strict()
+
+  export const Result = Submission.extend({
+    completedAt: z.number().int().positive(),
+  }).strict()
+  export type Result = z.infer<typeof Result>
+
+  export const Work = z
+    .object({
+      id: z.string().regex(/^[a-f0-9]{64}$/),
+      role: HarnessContract.Role,
+      label: z.string().min(1).max(160),
+      round: z.number().int().nonnegative(),
+      agent: Agent,
+      dependencies: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .max(16)
+        .refine((items) => new Set(items).size === items.length, "Work dependencies must be unique"),
+      prompt: z.string().min(1).max(8_000),
+      allocation: Allocation,
+      status: Status,
+      workerSessionID: z.string().min(1).optional(),
+      result: Result.optional(),
+      failure: z.string().min(1).max(4_000).optional(),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (value.status === "completed" && !value.result) {
+        ctx.addIssue({ code: "custom", path: ["result"], message: "Completed work requires a result" })
+      }
+      if (value.status === "completed" && !value.workerSessionID) {
+        ctx.addIssue({ code: "custom", path: ["workerSessionID"], message: "Completed work requires a worker session" })
+      }
+      if (value.status === "failed" && !value.failure) {
+        ctx.addIssue({ code: "custom", path: ["failure"], message: "Failed work requires a failure reason" })
+      }
+      if (value.status === "failed" && !value.workerSessionID) {
+        ctx.addIssue({ code: "custom", path: ["workerSessionID"], message: "Failed work requires a worker session" })
+      }
+      if (value.status === "pending" && (value.result || value.failure || value.workerSessionID)) {
+        ctx.addIssue({ code: "custom", message: "Pending work cannot contain settled state" })
+      }
+      if (value.status === "cancelled" && (value.result || value.failure || value.workerSessionID)) {
+        ctx.addIssue({ code: "custom", message: "Cancelled work cannot contain settled state" })
+      }
+      if (value.status === "completed" && value.failure) {
+        ctx.addIssue({ code: "custom", path: ["failure"], message: "Completed work cannot contain a failure" })
+      }
+      if (value.status === "failed" && value.result) {
+        ctx.addIssue({ code: "custom", path: ["result"], message: "Failed work cannot contain a result" })
+      }
+    })
+  export type Work = z.infer<typeof Work>
+
+  export const Selection = z
+    .object({
+      topology: HarnessContract.Topology.exclude(["auto"]),
+      source: z.enum(["contract", "policy"]),
+      reasons: z.array(z.string().min(1)).min(1),
+      traits: HarnessContract.Traits,
+    })
+    .strict()
+  export type Selection = z.infer<typeof Selection>
+
+  export const State = z
+    .object({
+      schemaVersion: z.literal(1),
+      protocolVersion: z.literal("coalition-v1"),
+      runID: z.string().min(1),
+      sessionID: z.string().min(1),
+      contractFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      objective: z.string().min(1),
+      selection: Selection,
+      maxWorkers: z.number().int().min(1).max(2),
+      maxRounds: z.number().int().min(1).max(8),
+      minIndependentVerifiers: z.number().int().min(1).max(2),
+      status: z.enum(["active", "completed"]),
+      work: z.record(z.string(), Work),
+      order: z.array(z.string().regex(/^[a-f0-9]{64}$/)),
+      revision: z.number().int().nonnegative(),
+      createdAt: z.number().int().positive(),
+      updatedAt: z.number().int().positive(),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (new Set(value.order).size !== value.order.length) {
+        ctx.addIssue({ code: "custom", path: ["order"], message: "Orchestration order must be unique" })
+      }
+      if (Object.keys(value.work).length !== value.order.length) {
+        ctx.addIssue({ code: "custom", path: ["work"], message: "Orchestration work must exactly match its order" })
+      }
+      const sessions = Object.values(value.work).flatMap((work) => (work.workerSessionID ? [work.workerSessionID] : []))
+      if (new Set(sessions).size !== sessions.length) {
+        ctx.addIssue({ code: "custom", path: ["work"], message: "Coalition worker sessions must be unique" })
+      }
+      const seen = new Set<string>()
+      for (const id of value.order) {
+        const work = value.work[id]
+        if (!work) {
+          ctx.addIssue({ code: "custom", path: ["work", id], message: "Orchestration work is missing" })
+          continue
+        }
+        if (work.id !== id) {
+          ctx.addIssue({ code: "custom", path: ["work", id, "id"], message: "Orchestration work id drifted" })
+        }
+        for (const dependency of work.dependencies) {
+          if (seen.has(dependency)) continue
+          ctx.addIssue({
+            code: "custom",
+            path: ["work", id, "dependencies"],
+            message: `Dependency ${dependency} must precede ${id}`,
+          })
+        }
+        seen.add(id)
+      }
+    })
+  export type State = z.infer<typeof State>
+
+  export type Ready = Work & {
+    context: Array<{
+      id: string
+      role: HarnessContract.Role
+      summary: string
+      artifactRefs: string[]
+      evidenceRefs: string[]
+    }>
+  }
+
+  const root = path.join(Global.Path.data, "harness", "orchestration")
+  const file = (sessionID: string) => path.join(root, `${encodeURIComponent(sessionID)}.json`)
+  const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
+  const clamp = (value: number) => Math.max(0, Math.min(1, value))
+
+  const required: Record<Exclude<HarnessContract.Topology, "auto">, HarnessContract.Role[]> = {
+    solo: ["generation"],
+    centralized: ["generation", "reflection", "verification"],
+    fork_join: ["generation", "simulation", "synthesis", "verification"],
+    tournament: ["generation", "proximity", "reflection", "ranking", "verification"],
+    evolution: ["generation", "proximity", "reflection", "ranking", "evolution", "investigation", "verification"],
+  }
+
+  function supports(topology: Exclude<HarnessContract.Topology, "auto">, roles?: HarnessContract.Role[]) {
+    if (!roles) return true
+    return required[topology].every((role) => roles.includes(role))
+  }
+
+  export function infer(contract: HarnessContract.Info): HarnessContract.Traits {
+    const benchmark = HarnessBenchmark.resolve(contract.benchmark.name)
+    const text = `${contract.objective} ${benchmark.task}`.toLowerCase()
+    const profile = contract.profile
+    const packs = contract.packs ?? []
+    const decomposability = clamp(
+      (benchmark.family === "generalist" ? 0.78 : 0.48) +
+        (packs.length > 1 ? 0.12 : 0) +
+        (/multi[- ]?step|end[- ]?to[- ]?end|workflow|survey|portfolio/.test(text) ? 0.12 : 0),
+    )
+    const sequentiality = clamp(
+      (profile === "theory" ? 0.82 : profile === "reproduce" ? 0.66 : 0.38) +
+        (/proof|derive|derivation|replay|protocol order/.test(text) ? 0.12 : 0),
+    )
+    const toolIntensity = clamp(
+      Math.max(contract.tools.length / 12, ["numerical", "training", "forecast"].includes(profile) ? 0.72 : 0.35),
+    )
+    const uncertainty = clamp(
+      (["optimize", "reproduce"].includes(profile) ? 0.68 : 0.42) +
+        (/discover|novel|unknown|open[- ]ended|hypothesis/.test(text) ? 0.2 : 0),
+    )
+    const verificationRisk = clamp(
+      (["held_out", "release"].includes(contract.benchmark.split) ? 0.72 : 0.48) +
+        (packs.length ? 0.12 : 0) +
+        (/sota|state.of.the.art|causal|mechanis|safety/.test(text) ? 0.14 : 0),
+    )
+    const novelty = clamp(
+      (profile === "optimize" ? 0.68 : 0.38) + (/discover|novel|evolve|improve|new method/.test(text) ? 0.22 : 0),
+    )
+    const crossDomain = clamp(packs.length / 3 + (benchmark.family === "generalist" ? 0.3 : 0))
+    return HarnessContract.Traits.parse({
+      decomposability,
+      sequentiality,
+      toolIntensity,
+      uncertainty,
+      verificationRisk,
+      novelty,
+      crossDomain,
+    })
+  }
+
+  export function select(contract: HarnessContract.Info): Selection {
+    const config = contract.orchestration
+    const traits = config?.traits ?? infer(contract)
+    const roles = config?.roles
+    if (config?.topology && config.topology !== "auto") {
+      if (!supports(config.topology, roles)) {
+        throw new Error(`Orchestration roles do not permit the contract topology ${config.topology}`)
+      }
+      return Selection.parse({ topology: config.topology, source: "contract", reasons: ["contract-topology"], traits })
+    }
+    const workers = config?.maxWorkers ?? 2
+    const steps = contract.budget.steps ?? Number.POSITIVE_INFINITY
+    const tokens = contract.budget.tokens ?? Number.POSITIVE_INFINITY
+    const candidates = contract.budget.candidates ?? Number.POSITIVE_INFINITY
+    const small = workers === 1 || steps < 24 || tokens < 12_000 || candidates < 2
+    const choose = (topology: Exclude<HarnessContract.Topology, "auto">, reasons: string[]): Selection | undefined =>
+      supports(topology, roles) ? Selection.parse({ topology, source: "policy", reasons, traits }) : undefined
+    if (small) return choose("solo", ["bounded-coordination-budget"]) ?? selectSolo(traits, roles)
+    if (traits.sequentiality >= 0.72 && traits.decomposability < 0.58) {
+      return (
+        (traits.verificationRisk >= 0.62
+          ? choose("centralized", ["sequential-task", "verification-gate"])
+          : choose("solo", ["sequential-task"])) ?? selectSolo(traits, roles)
+      )
+    }
+    if (traits.toolIntensity >= 0.76 && traits.decomposability < 0.64) {
+      return choose("centralized", ["tool-coordination-overhead", "central-control"]) ?? selectSolo(traits, roles)
+    }
+    if (traits.novelty >= 0.7 && traits.uncertainty >= 0.66) {
+      return choose("evolution", ["open-ended-search", "high-uncertainty"]) ?? selectSolo(traits, roles)
+    }
+    if (traits.uncertainty >= 0.62 && traits.verificationRisk >= 0.66) {
+      return choose("tournament", ["independent-hypotheses", "pairwise-critique"]) ?? selectSolo(traits, roles)
+    }
+    if (traits.decomposability >= 0.66 || traits.crossDomain >= 0.64) {
+      return choose("fork_join", ["decomposable-work", "bounded-parallelism"]) ?? selectSolo(traits, roles)
+    }
+    if (traits.verificationRisk >= 0.62) {
+      return choose("centralized", ["verification-gate"]) ?? selectSolo(traits, roles)
+    }
+    return selectSolo(traits, roles)
+  }
+
+  function selectSolo(traits: HarnessContract.Traits, roles?: HarnessContract.Role[]): Selection {
+    if (!supports("solo", roles)) throw new Error(`Orchestration roles must permit generation`)
+    return Selection.parse({ topology: "solo", source: "policy", reasons: ["coordination-not-justified"], traits })
+  }
+
+  function agent(role: HarnessContract.Role, contract: HarnessContract.Info) {
+    if (role === "reflection" || role === "investigation") {
+      return contract.profile === "theory" || contract.profile === "numerical" ? "physics-critique" : "critique"
+    }
+    if (role === "verification") {
+      return contract.profile === "theory" || contract.profile === "numerical" ? "physics-critique" : "reviewer"
+    }
+    if (["proximity", "ranking", "synthesis"].includes(role)) return "task"
+    const family = HarnessBenchmark.resolve(contract.benchmark.name).family
+    if (family === "biology") return "biology"
+    if (family === "physics") return "physics"
+    if (family === "ml" || contract.profile === "training" || contract.profile === "forecast") return "ml"
+    return "task"
+  }
+
+  function instruction(role: HarnessContract.Role) {
+    const lines: Record<HarnessContract.Role, string> = {
+      generation:
+        "Develop one independent, executable solution or hypothesis. State assumptions and produce artifact references.",
+      proximity:
+        "Cluster upstream proposals by mechanism and failure mode. Preserve distinct ideas; do not select a winner.",
+      reflection:
+        "Adversarially test upstream work for correctness, novelty, leakage, and missing controls. Return actionable falsifiers.",
+      ranking:
+        "Run pairwise comparisons using the declared objective and evidence. Emit a provisional ranking with uncertainty.",
+      evolution:
+        "Create a new candidate by combining verified strengths while explicitly avoiding documented failure modes.",
+      verification:
+        "Verify from a fresh session using artifacts and observable evidence only. Do not trust producer conclusions or hidden reasoning.",
+      investigation:
+        "Search for counterexamples, edge cases, sabotage, reward hacking, and distribution-shift failures.",
+      simulation:
+        "Execute the appropriate simulator or numerical check and report configuration, invariants, convergence, and artifacts.",
+      synthesis:
+        "Join upstream outputs without erasing disagreement. Separate supported results, unresolved conflicts, and next tests.",
+    }
+    return lines[role]
+  }
+
+  function plan(contract: HarnessContract.Info, selection: Selection) {
+    const items: Array<Omit<Work, "allocation">> = []
+    const add = (role: HarnessContract.Role, label: string, dependencies: string[] = [], round = 0) => {
+      const id = digest({ runID: contract.runID, role, label, dependencies, round })
+      items.push({
+        id,
+        role,
+        label,
+        round,
+        agent: agent(role, contract),
+        dependencies,
+        prompt: [
+          `<scientific-coalition role="${role}" topology="${selection.topology}" round="${round}">`,
+          `Objective: ${contract.objective}`,
+          instruction(role),
+          "Return a concise result, artifact references, evidence references, and actual resource usage.",
+          "Your output is provisional orchestration state, never benchmark evidence or a final scientific claim.",
+          "</scientific-coalition>",
+        ].join("\n"),
+        status: "pending",
+      })
+      return id
+    }
+    const verify = (dependencies: string[], round: number) =>
+      Array.from({ length: contract.orchestration?.minIndependentVerifiers ?? 1 }, (_, index) =>
+        add("verification", `independent-verification-${index + 1}`, dependencies, round),
+      )
+    if (selection.topology === "solo") add("generation", "direct-solution")
+    if (selection.topology === "centralized") {
+      const generated = add("generation", "central-proposal")
+      const reflected = add("reflection", "central-critique", [generated])
+      verify([generated, reflected], 1)
+    }
+    if (selection.topology === "fork_join") {
+      const generated = add("generation", "analytical-branch")
+      const simulated = add("simulation", "computational-branch")
+      const synthesis = add("synthesis", "evidence-join", [generated, simulated], 1)
+      verify([synthesis], 1)
+    }
+    if (selection.topology === "tournament") {
+      const first = add("generation", "independent-proposal-a")
+      const second = add("generation", "independent-proposal-b")
+      const proximity = add("proximity", "proposal-map", [first, second])
+      const reflection = add("reflection", "tournament-critique", [first, second, proximity])
+      const ranking = add("ranking", "pairwise-ranking", [proximity, reflection], 1)
+      verify([first, second, ranking], 1)
+    }
+    if (selection.topology === "evolution") {
+      const first = add("generation", "seed-a")
+      const second = add("generation", "seed-b")
+      const evolved = Array.from({ length: contract.orchestration?.maxRounds ?? 2 }).reduce(
+        (parents: string[], _, index) => {
+          const round = index + 1
+          const proximity = add("proximity", `mechanism-map-${round}`, parents, round)
+          const reflection = add("reflection", `adversarial-reflection-${round}`, [...parents, proximity], round)
+          const ranking = add("ranking", `pairwise-tournament-${round}`, [proximity, reflection], round)
+          return [
+            add("evolution", `evolved-candidate-${round}`, [ranking, reflection], round),
+            add("evolution", `divergent-candidate-${round}`, [ranking, reflection], round),
+          ]
+        },
+        [first, second],
+      )
+      const investigation = add("investigation", "failure-discovery", evolved, contract.orchestration?.maxRounds ?? 2)
+      verify([...evolved, investigation], (contract.orchestration?.maxRounds ?? 2) + 1)
+    }
+    return items
+  }
+
+  function allocation(contract: HarnessContract.Info, count: number): z.infer<typeof Allocation> {
+    const share = (value: number | undefined) => (value === undefined ? undefined : Math.floor(value / count))
+    return Allocation.parse({
+      steps: share(contract.budget.steps),
+      tokens: share(contract.budget.tokens),
+      costUSD: contract.budget.costUSD === undefined ? undefined : contract.budget.costUSD / count,
+      wallTimeMs: share(contract.budget.wallTimeMs),
+    })
+  }
+
+  export async function initialize(sessionID: string) {
+    const contract = await HarnessContract.read(sessionID)
+    if (!contract) throw new Error(`No harness contract is bound to session ${sessionID}`)
+    const selection = select(contract)
+    const planned = plan(contract, selection)
+    if (!planned.length) throw new Error(`Orchestration policy produced no work`)
+    if (contract.budget.steps !== undefined && contract.budget.steps < planned.length) {
+      throw new Error(`Contract step budget cannot allocate one step to every orchestration unit`)
+    }
+    const budget = allocation(contract, planned.length)
+    const work = Object.fromEntries(planned.map((item) => [item.id, Work.parse({ ...item, allocation: budget })]))
+    const now = Date.now()
+    const state = State.parse({
+      schemaVersion: 1,
+      protocolVersion: "coalition-v1",
+      runID: contract.runID,
+      sessionID,
+      contractFingerprint: HarnessContract.fingerprint(contract),
+      objective: contract.objective,
+      selection,
+      maxWorkers: contract.orchestration?.maxWorkers ?? 2,
+      maxRounds: contract.orchestration?.maxRounds ?? 2,
+      minIndependentVerifiers: contract.orchestration?.minIndependentVerifiers ?? 1,
+      status: "active",
+      work,
+      order: planned.map((item) => item.id),
+      revision: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await JsonStore.update(file(sessionID), (data) => {
+      if (!Object.keys(data).length) return state
+      const current = State.parse(data)
+      if (current.contractFingerprint === state.contractFingerprint) return current
+      throw new Error(`Orchestration state belongs to a different contract`)
+    })
+    return read(sessionID)
+  }
+
+  export async function read(sessionID: string) {
+    return State.parse(await JsonStore.read(file(sessionID)))
+  }
+
+  export function ready(state: State): Ready[] {
+    const current = State.parse(state)
+    return current.order.flatMap((id) => {
+      const work = current.work[id]!
+      if (work.status !== "pending") return []
+      if (!work.dependencies.every((dependency) => current.work[dependency]?.status === "completed")) return []
+      const context = work.dependencies.map((dependency) => {
+        const parent = current.work[dependency]!
+        return {
+          id: parent.id,
+          role: parent.role,
+          summary: parent.result!.summary,
+          artifactRefs: parent.result!.artifactRefs,
+          evidenceRefs: parent.result!.evidenceRefs,
+        }
+      })
+      return [{ ...work, context }]
+    })
+  }
+
+  function within(usage: z.infer<typeof Usage> | undefined, budget: z.infer<typeof Allocation>) {
+    if (!usage) return
+    const checks: Array<[keyof z.infer<typeof Usage>, number | undefined, number | undefined]> = [
+      ["steps", usage.steps, budget.steps],
+      ["tokens", usage.tokens, budget.tokens],
+      ["costUSD", usage.costUSD, budget.costUSD],
+      ["wallTimeMs", usage.wallTimeMs, budget.wallTimeMs],
+    ]
+    const exceeded = checks.find(([, value, limit]) => value !== undefined && limit !== undefined && value > limit)
+    if (exceeded) throw new Error(`Work exceeded its ${exceeded[0]} allocation`)
+  }
+
+  function settle(state: State, now: number): State {
+    const work = Object.fromEntries(
+      state.order.map((id) => {
+        const item = state.work[id]!
+        const blocked = item.dependencies.some((dependency) =>
+          ["failed", "cancelled"].includes(state.work[dependency]?.status ?? "pending"),
+        )
+        return [id, blocked && item.status === "pending" ? { ...item, status: "cancelled" as const } : item]
+      }),
+    )
+    const done = Object.values(work).every((item) => ["completed", "failed", "cancelled"].includes(item.status))
+    return State.parse({ ...state, work, status: done ? "completed" : "active", updatedAt: now })
+  }
+
+  export async function complete(input: {
+    sessionID: string
+    workID: string
+    workerSessionID: string
+    result: z.input<typeof Submission>
+  }) {
+    const submission = Submission.parse(input.result)
+    await JsonStore.update(file(input.sessionID), (data) => {
+      const state = State.parse(data)
+      const work = state.work[input.workID]
+      if (!work) throw new Error(`Unknown orchestration work ${input.workID}`)
+      if (work.status === "completed") {
+        const previous = {
+          summary: work.result!.summary,
+          artifactRefs: work.result!.artifactRefs,
+          evidenceRefs: work.result!.evidenceRefs,
+          usage: work.result!.usage,
+        }
+        if (work.workerSessionID === input.workerSessionID && JSON.stringify(previous) === JSON.stringify(submission)) {
+          return state
+        }
+        throw new Error(`Completed orchestration work is immutable`)
+      }
+      if (work.status !== "pending") throw new Error(`Orchestration work ${input.workID} is not pending`)
+      if (!work.dependencies.every((dependency) => state.work[dependency]?.status === "completed")) {
+        throw new Error(`Orchestration work cannot complete before its dependencies`)
+      }
+      if (Object.values(state.work).some((item) => item.workerSessionID === input.workerSessionID)) {
+        throw new Error(`Each coalition role requires a distinct worker session`)
+      }
+      const now = Date.now()
+      const result = Result.parse({ ...submission, completedAt: now })
+      within(result.usage, work.allocation)
+      const next: State = {
+        ...state,
+        work: {
+          ...state.work,
+          [work.id]: { ...work, status: "completed", workerSessionID: input.workerSessionID, result },
+        },
+        revision: state.revision + 1,
+        updatedAt: now,
+      }
+      return settle(next, now)
+    })
+    return read(input.sessionID)
+  }
+
+  export async function fail(input: { sessionID: string; workID: string; workerSessionID: string; failure: string }) {
+    await JsonStore.update(file(input.sessionID), (data) => {
+      const state = State.parse(data)
+      const work = state.work[input.workID]
+      if (!work) throw new Error(`Unknown orchestration work ${input.workID}`)
+      if (work.status === "failed") {
+        if (work.workerSessionID === input.workerSessionID && work.failure === input.failure) return state
+        throw new Error(`Failed orchestration work is immutable`)
+      }
+      if (work.status !== "pending") throw new Error(`Orchestration work ${input.workID} is not pending`)
+      if (!work.dependencies.every((dependency) => state.work[dependency]?.status === "completed")) {
+        throw new Error(`Orchestration work cannot fail before its dependencies`)
+      }
+      if (Object.values(state.work).some((item) => item.workerSessionID === input.workerSessionID)) {
+        throw new Error(`Each coalition role requires a distinct worker session`)
+      }
+      const now = Date.now()
+      const next: State = {
+        ...state,
+        work: {
+          ...state.work,
+          [work.id]: {
+            ...work,
+            status: "failed",
+            workerSessionID: input.workerSessionID,
+            failure: z.string().min(1).max(4_000).parse(input.failure),
+          },
+        },
+        revision: state.revision + 1,
+        updatedAt: now,
+      }
+      return settle(next, now)
+    })
+    return read(input.sessionID)
+  }
+}

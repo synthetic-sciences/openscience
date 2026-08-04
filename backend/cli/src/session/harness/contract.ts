@@ -8,6 +8,52 @@ export namespace HarnessContract {
   export const Profile = z.enum(["react", "optimize", "reproduce", "theory", "numerical", "training", "forecast"])
   export type Profile = z.infer<typeof Profile>
 
+  export const Topology = z.enum(["auto", "solo", "centralized", "fork_join", "tournament", "evolution"])
+  export type Topology = z.infer<typeof Topology>
+
+  export const Role = z.enum([
+    "generation",
+    "proximity",
+    "reflection",
+    "ranking",
+    "evolution",
+    "verification",
+    "investigation",
+    "simulation",
+    "synthesis",
+  ])
+  export type Role = z.infer<typeof Role>
+
+  export const Traits = z
+    .object({
+      decomposability: z.number().min(0).max(1),
+      sequentiality: z.number().min(0).max(1),
+      toolIntensity: z.number().min(0).max(1),
+      uncertainty: z.number().min(0).max(1),
+      verificationRisk: z.number().min(0).max(1),
+      novelty: z.number().min(0).max(1),
+      crossDomain: z.number().min(0).max(1),
+    })
+    .strict()
+  export type Traits = z.infer<typeof Traits>
+
+  export const Orchestration = z
+    .object({
+      topology: Topology,
+      traits: Traits.optional(),
+      maxWorkers: z.number().int().min(1).max(2),
+      maxRounds: z.number().int().min(1).max(8),
+      roles: z
+        .array(Role)
+        .min(1)
+        .max(Role.options.length)
+        .refine((items) => new Set(items).size === items.length, "Orchestration roles must be unique")
+        .optional(),
+      minIndependentVerifiers: z.number().int().min(1).max(2),
+    })
+    .strict()
+  export type Orchestration = z.infer<typeof Orchestration>
+
   export const Split = z.enum(["development", "validation", "held_out", "release"])
   export type Split = z.infer<typeof Split>
 
@@ -49,6 +95,7 @@ export namespace HarnessContract {
         })
         .strict(),
       profile: Profile,
+      orchestration: Orchestration.optional(),
       packs: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
