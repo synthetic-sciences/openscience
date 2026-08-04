@@ -49,7 +49,8 @@ export namespace KernelHost {
     baseline = fresh
     if (previous && fresh.at - previous.at <= 30_000) {
       const value = busy(previous.times, fresh.times, cores)
-      return value === undefined ? {} : { busy: value }
+      // Warm baseline: if CPU times haven't advanced yet, report zero activity rather than blocking
+      return value === undefined ? { busy: 0 } : { busy: value }
     }
     await Bun.sleep(200)
     const next = mark()
