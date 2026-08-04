@@ -16,6 +16,7 @@ describe("tool registry agent boundaries", () => {
           const ids = tools.map((tool) => tool.id)
 
           expect(ids).toContain("notebook")
+          expect(ids).toContain("artifact")
           expect(ids).not.toContain("query_uniprot")
         }
       },

@@ -14,7 +14,7 @@ import { PermissionNext } from "@/permission/next"
 import { RLMState } from "../session/rlm/state"
 import { HierarchicalSemaphore } from "../util/semaphore"
 
-const ARTIFACT_AGENTS = ["research", "biology", "ml"]
+const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml"]
 const COMPUTE_SUBAGENTS = new Set(["biology", "ml", "physics"])
 export const MAX_CHILD_AGENTS = 2
 const childSlots = new HierarchicalSemaphore(MAX_CHILD_AGENTS)

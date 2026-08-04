@@ -146,7 +146,7 @@ export namespace ToolRegistry {
   }
 
   const ARTIFACT_TOOL_ID = "artifact"
-  const ARTIFACT_AGENTS = ["research", "biology", "ml"]
+  const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml"]
 
   // Memory tool: only user-facing primary agents may read/write persistent
   // memory; subagents (title, compaction, explore, ...) cannot. Plan mode is
