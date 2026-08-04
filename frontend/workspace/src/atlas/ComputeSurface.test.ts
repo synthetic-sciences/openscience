@@ -52,6 +52,7 @@ describe("compute surface", () => {
     const mounted = { kernels: 0, jobs: 0 }
     const host = mount(() =>
       subject.ComputeSurface({
+        strip: () => document.createElement("section"),
         kernels: child("kernels", mounted),
         jobs: child("jobs", mounted),
       }),
@@ -86,6 +87,7 @@ describe("compute surface", () => {
     const mounted = { kernels: 0, jobs: 0 }
     const host = mount(() =>
       subject.ComputeSurface({
+        strip: () => document.createElement("section"),
         kernels: child("kernels", mounted),
         jobs: child("jobs", mounted),
       }),
@@ -123,5 +125,26 @@ describe("compute surface", () => {
     expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*min-height: 32px/s)
     expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*border-radius: 8px/s)
     expect(css).toMatch(/\.compute-surface__tab\[data-active="true"\]\s*\{[^}]*box-shadow: none/s)
+  })
+
+  test("renders the host strip above the tablist", () => {
+    const host = mount(() =>
+      subject.ComputeSurface({
+        strip: () => {
+          const strip = document.createElement("section")
+          strip.dataset.computeChild = "strip"
+          return strip
+        },
+        kernels: child("kernels", { kernels: 0, jobs: 0 }),
+        jobs: child("jobs", { kernels: 0, jobs: 0 }),
+      }),
+    )
+    const surface = host.querySelector(".compute-surface")
+    const children = [...(surface?.children ?? [])]
+    const strip = children.findIndex((element) => element.matches('[data-compute-child="strip"]'))
+    const tabs = children.findIndex((element) => element.matches('[role="tablist"]'))
+
+    expect(strip).toBe(0)
+    expect(tabs).toBeGreaterThan(strip)
   })
 })

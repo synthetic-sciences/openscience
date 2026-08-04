@@ -1,12 +1,14 @@
 import { createSignal, createUniqueId, For, Match, Switch, type Component, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { ComputeJobs } from "@/atlas/ComputeJobs"
+import { HostStrip } from "@/atlas/HostStrip"
 import { KernelPanel } from "@/atlas/KernelPanel"
 import "@/atlas/ComputeSurface.css"
 
 type Tab = "kernels" | "jobs"
 
 type ComputeSurfaceProps = {
+  strip?: Component
   kernels?: Component<{ onEnsureSession?: () => Promise<string | undefined> }>
   jobs?: Component<{ onEnsureSession?: () => Promise<string | undefined> }>
   onEnsureSession?: () => Promise<string | undefined>
@@ -21,6 +23,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
   const [tab, setTab] = createSignal<Tab>("kernels")
   const id = createUniqueId()
   const refs: Partial<Record<Tab, HTMLButtonElement>> = {}
+  const strip = props.strip ?? HostStrip
   const kernels = props.kernels ?? KernelPanel
   const jobs = props.jobs ?? ComputeJobs
 
@@ -48,6 +51,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
 
   return (
     <section class="compute-surface" aria-label="Compute">
+      <Dynamic component={strip} />
       <div
         class="compute-surface__tabs"
         role="tablist"
