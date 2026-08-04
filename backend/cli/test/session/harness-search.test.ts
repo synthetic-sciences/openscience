@@ -22,7 +22,12 @@ afterEach(async () => {
 
 function contract(
   sessionID: string,
-  input?: { profile?: HarnessContract.Profile; direction?: "maximize" | "minimize" },
+  input?: {
+    profile?: HarnessContract.Profile
+    direction?: "maximize" | "minimize"
+    candidates?: number
+    wallTimeMs?: number
+  },
 ) {
   sessions.add(sessionID)
   return HarnessContract.bind({
@@ -43,7 +48,11 @@ function contract(
     model: { provider: "test", name: "model" },
     tools: [],
     skills: [],
-    budget: { steps: 20 },
+    budget: {
+      steps: 20,
+      ...(input?.candidates === undefined ? {} : { candidates: input.candidates }),
+      ...(input?.wallTimeMs === undefined ? {} : { wallTimeMs: input.wallTimeMs }),
+    },
     seed: 7,
     intervention: "autonomous",
     contamination: { policy: "hidden tests stay hidden", hiddenTestsAccessible: false },
@@ -116,6 +125,15 @@ describe("harness candidate graph", () => {
     expect(first.budget).toEqual({ candidates: 4, stall: 2 })
     await expect(HarnessSearch.initialize({ sessionID: "search-init", candidates: 5, stall: 2 })).rejects.toThrow(
       "different contract or budget",
+    )
+  })
+
+  test("uses contract budgets and rejects attempted expansion", async () => {
+    await contract("search-contract-budget", { candidates: 2, wallTimeMs: 1_000 })
+    const state = await HarnessSearch.initialize({ sessionID: "search-contract-budget" })
+    expect(state.budget).toMatchObject({ candidates: 2, wallTimeMs: 1_000 })
+    await expect(HarnessSearch.initialize({ sessionID: "search-contract-budget", candidates: 3 })).rejects.toThrow(
+      "cannot exceed",
     )
   })
 

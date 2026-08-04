@@ -11,7 +11,7 @@ export namespace HarnessSearch {
 
   export const Artifact = z
     .object({
-      uri: z.string().min(1),
+      uri: z.string().min(1).max(2_048),
       sha256: z.string().regex(/^[a-f0-9]{64}$/),
     })
     .strict()
@@ -39,9 +39,9 @@ export namespace HarnessSearch {
         .array(z.string().regex(/^[a-f0-9]{64}$/))
         .max(2)
         .refine((ids) => new Set(ids).size === ids.length, "Candidate parents must be unique"),
-      branch: z.string().min(1),
+      branch: z.string().min(1).max(120),
       generation: z.number().int().nonnegative(),
-      proposal: z.string().min(1),
+      proposal: z.string().min(1).max(4_000),
       artifact: Artifact,
       result: Result.optional(),
       createdAt: z.number().int().positive(),
@@ -136,7 +136,7 @@ export namespace HarnessSearch {
 
   export async function initialize(input: {
     sessionID: string
-    candidates: number
+    candidates?: number
     wallTimeMs?: number
     stall?: number
     target?: number
@@ -144,6 +144,26 @@ export namespace HarnessSearch {
     const contract = await HarnessContract.read(input.sessionID)
     if (!contract) throw new Error(`No harness contract is bound to session ${input.sessionID}`)
     if (contract.profile !== "optimize") throw new Error(`Harness search requires the optimize profile`)
+    const candidates = input.candidates ?? contract.budget.candidates
+    if (!candidates) throw new Error(`The optimize contract must declare a candidate budget`)
+    if (contract.budget.candidates !== undefined && candidates > contract.budget.candidates) {
+      throw new Error(`Harness search cannot exceed the contract candidate budget`)
+    }
+    if (
+      contract.benchmark.target !== undefined &&
+      input.target !== undefined &&
+      contract.benchmark.target !== input.target
+    ) {
+      throw new Error(`Harness search target does not match the benchmark contract`)
+    }
+    const wallTimeMs = input.wallTimeMs ?? contract.budget.wallTimeMs
+    if (
+      contract.budget.wallTimeMs !== undefined &&
+      wallTimeMs !== undefined &&
+      wallTimeMs > contract.budget.wallTimeMs
+    ) {
+      throw new Error(`Harness search cannot exceed the contract wall-time budget`)
+    }
     const now = Date.now()
     const initial: State = {
       schemaVersion: 1,
@@ -153,10 +173,12 @@ export namespace HarnessSearch {
       evaluator: contract.benchmark.evaluator,
       metric: contract.benchmark.metric ?? "status",
       direction: contract.benchmark.direction ?? "pass",
-      ...(input.target === undefined ? {} : { target: input.target }),
+      ...(contract.benchmark.target === undefined && input.target === undefined
+        ? {}
+        : { target: contract.benchmark.target ?? input.target }),
       budget: {
-        candidates: input.candidates,
-        ...(input.wallTimeMs === undefined ? {} : { wallTimeMs: input.wallTimeMs }),
+        candidates,
+        ...(wallTimeMs === undefined ? {} : { wallTimeMs }),
         stall: input.stall ?? 5,
       },
       status: "active",

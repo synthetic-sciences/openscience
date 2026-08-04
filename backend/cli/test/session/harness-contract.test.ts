@@ -71,6 +71,7 @@ describe("harness contract", () => {
     expect(await HarnessContract.read(input.sessionID)).toEqual(input)
     expect(HarnessContract.fingerprint(input)).toHaveLength(64)
     expect(HarnessContract.fingerprint(input)).toBe(HarnessContract.fingerprint(structuredClone(input)))
+    await expect(HarnessContract.bind({ ...input, objective: "changed after binding" })).rejects.toThrow("immutable")
   })
 
   test("rejects a passed evaluation with a failed blocking gate", () => {

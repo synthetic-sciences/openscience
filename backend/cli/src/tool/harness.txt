@@ -1,0 +1,5 @@
+Operate a benchmark-bound optimization search. This tool is available only as a control surface over a harness contract created by the benchmark adapter; it cannot create or change that contract.
+
+Use `start` once to open the persisted candidate graph with the contract's budget. Use `status` after restarts and before proposing work. Use `propose` to register a concrete content-addressed artifact and its verified-parent lineage. Use `observe` for provisional feedback only: observations are explicitly unverified and can never become the best candidate, authorize descendants, or enter retrospective memory. Official verification is intentionally not an action in this tool; only the bound external evaluator can promote a candidate. Use `hindsight` to retrieve bounded evaluator-linked successes and failures for this exact benchmark task.
+
+Keep the direct ReAct path for ordinary tasks. Do not start a candidate search without an optimize contract, a metric, and a finite contract budget.

@@ -1,6 +1,7 @@
 import path from "path"
 import z from "zod"
 import { Global } from "@/global"
+import { JsonStore } from "@/util/jsonstore"
 
 export namespace HarnessContract {
   export const Profile = z.enum(["react", "optimize", "reproduce", "theory", "numerical", "training", "forecast"])
@@ -24,6 +25,7 @@ export namespace HarnessContract {
           evaluator: z.string().min(1),
           metric: z.string().min(1).optional(),
           direction: z.enum(["maximize", "minimize", "pass"]).optional(),
+          target: z.number().finite().optional(),
         })
         .strict(),
       profile: Profile,
@@ -53,6 +55,7 @@ export namespace HarnessContract {
         .object({
           wallTimeMs: z.number().int().positive().optional(),
           steps: z.number().int().positive().optional(),
+          candidates: z.number().int().positive().optional(),
           tokens: z.number().int().positive().optional(),
           costUSD: z.number().nonnegative().optional(),
           cpuHours: z.number().nonnegative().optional(),
@@ -78,7 +81,12 @@ export namespace HarnessContract {
 
   export async function bind(input: Info) {
     const contract = Info.parse(input)
-    await Bun.write(file(contract.sessionID), JSON.stringify(contract, null, 2) + "\n")
+    await JsonStore.update(file(contract.sessionID), (data) => {
+      if (!Object.keys(data).length) return contract
+      const current = Info.parse(data)
+      if (fingerprint(current) === fingerprint(contract)) return current
+      throw new Error(`Harness contract for session ${contract.sessionID} is immutable once bound`)
+    })
     return contract
   }
 

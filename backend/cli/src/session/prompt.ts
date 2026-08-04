@@ -64,6 +64,7 @@ import { Memory } from "@/settings/memory"
 import { OpenScience } from "@/openscience"
 import { assertExternalDirectory } from "@/tool/external-directory"
 import { HarnessProfile } from "./harness/profile"
+import { HarnessMemory } from "./harness/memory"
 import { SessionTraceStore } from "./trace-store"
 
 // @ts-ignore
@@ -828,6 +829,10 @@ export namespace SessionPrompt {
           .flatMap((part) => (part.type === "text" && !part.synthetic && !part.ignored ? [part.text] : []))
           .join("\n") ?? ""
       const profile = await HarnessProfile.resolve({ sessionID, agent: agent.name, text: request })
+      const hindsight =
+        profile.id === "optimize"
+          ? await HarnessMemory.prompt({ sessionID, query: request, stage: "planning" }).catch(() => "")
+          : ""
       await SessionTraceStore.recordProfile({
         sessionID,
         messageID: lastUser.id,
@@ -881,6 +886,7 @@ export namespace SessionPrompt {
         ...(await Memory.recall()),
         ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),
         profile.prompt,
+        ...(hindsight ? [hindsight] : []),
         ...artifactContext,
       ]
 
