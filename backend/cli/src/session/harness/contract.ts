@@ -37,6 +37,18 @@ export namespace HarnessContract {
     .strict()
   export type Traits = z.infer<typeof Traits>
 
+  export const Adaptive = z
+    .object({
+      protocolVersion: z.literal("marginal-utility-v1"),
+      minRounds: z.number().int().min(1).max(8),
+      patience: z.number().int().min(1).max(7),
+      minUtilityGain: z.number().finite().nonnegative().max(1),
+      maxUncertainty: z.number().finite().min(0).max(1),
+      targetUtility: z.number().finite().min(0).max(1).optional(),
+    })
+    .strict()
+  export type Adaptive = z.infer<typeof Adaptive>
+
   export const Orchestration = z
     .object({
       topology: Topology,
@@ -50,8 +62,33 @@ export namespace HarnessContract {
         .refine((items) => new Set(items).size === items.length, "Orchestration roles must be unique")
         .optional(),
       minIndependentVerifiers: z.number().int().min(1).max(2),
+      adaptive: Adaptive.optional(),
     })
     .strict()
+    .superRefine((value, ctx) => {
+      if (!value.adaptive) return
+      if (value.topology !== "evolution") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["topology"],
+          message: "Adaptive marginal-utility control requires an explicit evolution topology",
+        })
+      }
+      if (value.adaptive.minRounds > value.maxRounds) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["adaptive", "minRounds"],
+          message: "Adaptive minimum rounds exceed the orchestration round budget",
+        })
+      }
+      if (Math.max(value.adaptive.minRounds, value.adaptive.patience + 1) > value.maxRounds) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["adaptive", "patience"],
+          message: "Adaptive patience cannot be observed within the orchestration round budget",
+        })
+      }
+    })
   export type Orchestration = z.infer<typeof Orchestration>
 
   export const Audit = z

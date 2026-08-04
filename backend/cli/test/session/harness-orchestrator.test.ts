@@ -107,6 +107,24 @@ const verdict = (decision: HarnessOrchestrator.Verdict["decision"]): HarnessOrch
   ],
 })
 
+const advance = async (sessionID: string, state: HarnessOrchestrator.State): Promise<HarnessOrchestrator.State> => {
+  if (["awaiting_checkpoint", "completed"].includes(state.status)) return state
+  const work = HarnessOrchestrator.ready(state)[0]
+  if (!work) return state
+  const result = {
+    ...done(work.label),
+    evidenceRefs: work.role === "verification" ? [`evidence://${work.label}`] : [],
+    verdict: work.role === "verification" ? verdict("support") : undefined,
+  }
+  const next = await HarnessOrchestrator.complete({
+    sessionID,
+    workID: work.id,
+    workerSessionID: `worker-${sessionID}-${state.revision}`,
+    result,
+  })
+  return advance(sessionID, next)
+}
+
 describe("scientific coalition orchestration", () => {
   test("selects coordination only when task traits justify its overhead", () => {
     expect(HarnessOrchestrator.select(contract("policy-small", { ...config("auto"), maxWorkers: 1 })).topology).toBe(
@@ -137,6 +155,18 @@ describe("scientific coalition orchestration", () => {
         contract("forced-invalid", { ...config("tournament"), roles: ["generation", "verification"] }),
       ),
     ).toThrow("do not permit")
+    expect(() =>
+      HarnessContract.Orchestration.parse({
+        ...config("auto"),
+        adaptive: {
+          protocolVersion: "marginal-utility-v1",
+          minRounds: 1,
+          patience: 1,
+          minUtilityGain: 0.01,
+          maxUncertainty: 0.05,
+        },
+      }),
+    ).toThrow("explicit evolution")
   })
 
   test("persists a restart-safe DAG and unlocks work only after dependencies", async () => {
@@ -314,5 +344,184 @@ describe("scientific coalition orchestration", () => {
     }
     const completed = await advance(await HarnessOrchestrator.initialize("single-consensus"))
     expect(completed.consensus).toMatchObject({ status: "insufficient", verifierCount: 1, support: 1 })
+  })
+
+  test("gates evolution rounds on external marginal utility and preserves final verification after early stop", async () => {
+    const sessionID = "adaptive-stall"
+    const orchestration: HarnessContract.Orchestration = {
+      ...config("evolution"),
+      maxRounds: 3,
+      adaptive: {
+        protocolVersion: "marginal-utility-v1",
+        minRounds: 2,
+        patience: 1,
+        minUtilityGain: 0.05,
+        maxUncertainty: 0.05,
+      },
+    }
+    const bound = await HarnessContract.bind(contract(sessionID, orchestration))
+    const first = await advance(sessionID, await HarnessOrchestrator.initialize(sessionID))
+    expect(first).toMatchObject({ protocolVersion: "coalition-v2", status: "awaiting_checkpoint" })
+    expect(HarnessOrchestrator.ready(first)).toEqual([])
+    await expect(
+      HarnessOrchestrator.checkpoint(
+        {
+          sessionID,
+          round: 2,
+          utility: 0.5,
+          uncertainty: 0.01,
+          evidenceRefs: ["evidence://premature"],
+          evaluatedAt: Date.now(),
+        },
+        bound,
+      ),
+    ).rejects.toThrow("round 1")
+    await expect(
+      HarnessOrchestrator.checkpoint(
+        {
+          sessionID,
+          round: 1,
+          utility: 0.5,
+          uncertainty: 0.01,
+          evidenceRefs: ["evidence://stale"],
+          evaluatedAt: bound.createdAt,
+        },
+        bound,
+      ),
+    ).rejects.toThrow("predates")
+
+    const one = {
+      sessionID,
+      round: 1,
+      utility: 0.5,
+      uncertainty: 0.01,
+      evidenceRefs: ["evidence://round-1"],
+      evaluatedAt: Date.now(),
+    }
+    const resumed = await HarnessOrchestrator.checkpoint(one, bound)
+    expect(resumed).toMatchObject({ status: "active", adaptive: { stalled: 0, phase: "searching" } })
+    expect(await HarnessOrchestrator.checkpoint(one, bound)).toEqual(resumed)
+    await expect(HarnessOrchestrator.checkpoint({ ...one, utility: 0.6 }, bound)).rejects.toThrow("immutable")
+
+    const second = await advance(sessionID, resumed)
+    expect(second).toMatchObject({ status: "awaiting_checkpoint", adaptive: { checkpoints: [{ round: 1 }] } })
+    const stopped = await HarnessOrchestrator.checkpoint(
+      {
+        sessionID,
+        round: 2,
+        utility: 0.51,
+        uncertainty: 0.01,
+        evidenceRefs: ["evidence://round-2"],
+        evaluatedAt: Date.now(),
+      },
+      bound,
+    )
+    expect(stopped).toMatchObject({
+      status: "active",
+      adaptive: { phase: "finalizing", stalled: 1, stopReason: "marginal_utility_exhausted" },
+    })
+    expect(Object.values(stopped.work).filter((item) => item.status === "cancelled").length).toBeGreaterThan(0)
+    expect(HarnessOrchestrator.ready(stopped).map((item) => item.role)).toEqual(["investigation"])
+
+    const completed = await advance(sessionID, stopped)
+    expect(completed).toMatchObject({ status: "completed", consensus: { status: "supported", verifierCount: 2 } })
+  })
+
+  test("does not let uncertain utility stop search and detects checkpoint storage tampering", async () => {
+    const sessionID = "adaptive-uncertain"
+    const orchestration: HarnessContract.Orchestration = {
+      ...config("evolution"),
+      maxRounds: 2,
+      adaptive: {
+        protocolVersion: "marginal-utility-v1",
+        minRounds: 1,
+        patience: 1,
+        minUtilityGain: 0.05,
+        maxUncertainty: 0.05,
+        targetUtility: 0.8,
+      },
+    }
+    const bound = await HarnessContract.bind(contract(sessionID, orchestration))
+    const first = await advance(sessionID, await HarnessOrchestrator.initialize(sessionID))
+    const resumed = await HarnessOrchestrator.checkpoint(
+      {
+        sessionID,
+        round: 1,
+        utility: 0.99,
+        uncertainty: 0.5,
+        evidenceRefs: ["evidence://uncertain"],
+        evaluatedAt: Date.now(),
+      },
+      bound,
+    )
+    expect(resumed).toMatchObject({
+      status: "active",
+      adaptive: { phase: "searching", stalled: 0, checkpoints: [{ qualified: false }] },
+    })
+    const second = await advance(sessionID, resumed)
+    const finalizing = await HarnessOrchestrator.checkpoint(
+      {
+        sessionID,
+        round: 2,
+        utility: 0.99,
+        uncertainty: 0.5,
+        evidenceRefs: ["evidence://still-uncertain"],
+        evaluatedAt: Date.now(),
+      },
+      bound,
+    )
+    expect(finalizing).toMatchObject({ adaptive: { phase: "finalizing", stopReason: "max_rounds" } })
+
+    const file = path.join(Global.Path.data, "harness", "orchestration", `${encodeURIComponent(sessionID)}.json`)
+    const data = await Bun.file(file).json()
+    data.adaptive.checkpoints[0].utility = 0.1
+    await Bun.write(file, JSON.stringify(data))
+    await expect(HarnessOrchestrator.read(sessionID)).rejects.toThrow()
+  })
+
+  test("honors the minimum search depth before a qualified target can stop evolution", async () => {
+    const sessionID = "adaptive-target"
+    const orchestration: HarnessContract.Orchestration = {
+      ...config("evolution"),
+      maxRounds: 3,
+      adaptive: {
+        protocolVersion: "marginal-utility-v1",
+        minRounds: 2,
+        patience: 1,
+        minUtilityGain: 0.05,
+        maxUncertainty: 0.05,
+        targetUtility: 0.8,
+      },
+    }
+    const bound = await HarnessContract.bind(contract(sessionID, orchestration))
+    const first = await advance(sessionID, await HarnessOrchestrator.initialize(sessionID))
+    const resumed = await HarnessOrchestrator.checkpoint(
+      {
+        sessionID,
+        round: 1,
+        utility: 0.9,
+        uncertainty: 0.01,
+        evidenceRefs: ["evidence://target-before-minimum"],
+        evaluatedAt: Date.now(),
+      },
+      bound,
+    )
+    expect(resumed.adaptive).toMatchObject({ phase: "searching" })
+    expect(resumed.adaptive?.stopReason).toBeUndefined()
+
+    const second = await advance(sessionID, resumed)
+    const stopped = await HarnessOrchestrator.checkpoint(
+      {
+        sessionID,
+        round: 2,
+        utility: 0.91,
+        uncertainty: 0.01,
+        evidenceRefs: ["evidence://qualified-target"],
+        evaluatedAt: Date.now(),
+      },
+      bound,
+    )
+    expect(stopped.adaptive).toMatchObject({ phase: "finalizing", stopReason: "target_reached" })
+    expect(HarnessOrchestrator.ready(stopped).map((item) => item.role)).toEqual(["investigation"])
   })
 })

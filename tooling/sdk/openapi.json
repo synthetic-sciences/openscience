@@ -19692,7 +19692,10 @@
                     },
                     "protocolVersion": {
                       "type": "string",
-                      "const": "coalition-v1"
+                      "enum": [
+                        "coalition-v1",
+                        "coalition-v2"
+                      ]
                     },
                     "runID": {
                       "type": "string",
@@ -19816,8 +19819,147 @@
                       "type": "string",
                       "enum": [
                         "active",
+                        "awaiting_checkpoint",
                         "completed"
                       ]
+                    },
+                    "adaptive": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "marginal-utility-v1"
+                        },
+                        "minRounds": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8
+                        },
+                        "patience": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 7
+                        },
+                        "minUtilityGain": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "maxUncertainty": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "targetUtility": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "checkpoints": {
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "round": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 8
+                              },
+                              "utility": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "uncertainty": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "evidenceRefs": {
+                                "minItems": 1,
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "evaluatedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "gain": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "qualified": {
+                                "type": "boolean"
+                              },
+                              "recordedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "round",
+                              "utility",
+                              "uncertainty",
+                              "evidenceRefs",
+                              "evaluatedAt",
+                              "id",
+                              "gain",
+                              "qualified",
+                              "recordedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "stalled": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 8
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "searching",
+                            "finalizing"
+                          ]
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "target_reached",
+                            "marginal_utility_exhausted",
+                            "max_rounds"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "minRounds",
+                        "patience",
+                        "minUtilityGain",
+                        "maxUncertainty",
+                        "checkpoints",
+                        "stalled",
+                        "phase"
+                      ],
+                      "additionalProperties": false
                     },
                     "consensus": {
                       "type": "object",
@@ -20244,7 +20386,10 @@
                     },
                     "protocolVersion": {
                       "type": "string",
-                      "const": "coalition-v1"
+                      "enum": [
+                        "coalition-v1",
+                        "coalition-v2"
+                      ]
                     },
                     "runID": {
                       "type": "string",
@@ -20368,8 +20513,147 @@
                       "type": "string",
                       "enum": [
                         "active",
+                        "awaiting_checkpoint",
                         "completed"
                       ]
+                    },
+                    "adaptive": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "marginal-utility-v1"
+                        },
+                        "minRounds": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8
+                        },
+                        "patience": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 7
+                        },
+                        "minUtilityGain": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "maxUncertainty": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "targetUtility": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "checkpoints": {
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "round": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 8
+                              },
+                              "utility": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "uncertainty": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "evidenceRefs": {
+                                "minItems": 1,
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "evaluatedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "gain": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "qualified": {
+                                "type": "boolean"
+                              },
+                              "recordedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "round",
+                              "utility",
+                              "uncertainty",
+                              "evidenceRefs",
+                              "evaluatedAt",
+                              "id",
+                              "gain",
+                              "qualified",
+                              "recordedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "stalled": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 8
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "searching",
+                            "finalizing"
+                          ]
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "target_reached",
+                            "marginal_utility_exhausted",
+                            "max_rounds"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "minRounds",
+                        "patience",
+                        "minUtilityGain",
+                        "maxUncertainty",
+                        "checkpoints",
+                        "stalled",
+                        "phase"
+                      ],
+                      "additionalProperties": false
                     },
                     "consensus": {
                       "type": "object",
@@ -20762,6 +21046,758 @@
         ]
       }
     },
+    "/harness/runs/{sessionID}/orchestration/checkpoints": {
+      "post": {
+        "operationId": "harness.orchestration.checkpoint",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Record an evaluator-authenticated orchestration utility checkpoint",
+        "description": "Gates the next evolution round and stops low-utility search without allowing worker self-scores to control budget.",
+        "responses": {
+          "200": {
+            "description": "Scientific orchestration state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "enum": [
+                        "coalition-v1",
+                        "coalition-v2"
+                      ]
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "objective": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "selection": {
+                      "type": "object",
+                      "properties": {
+                        "topology": {
+                          "type": "string",
+                          "enum": [
+                            "solo",
+                            "centralized",
+                            "fork_join",
+                            "tournament",
+                            "evolution"
+                          ]
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "contract",
+                            "policy"
+                          ]
+                        },
+                        "reasons": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "traits": {
+                          "type": "object",
+                          "properties": {
+                            "decomposability": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "sequentiality": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "toolIntensity": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "uncertainty": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "verificationRisk": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "novelty": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "crossDomain": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "decomposability",
+                            "sequentiality",
+                            "toolIntensity",
+                            "uncertainty",
+                            "verificationRisk",
+                            "novelty",
+                            "crossDomain"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "topology",
+                        "source",
+                        "reasons",
+                        "traits"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxWorkers": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2
+                    },
+                    "maxRounds": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    },
+                    "minIndependentVerifiers": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "awaiting_checkpoint",
+                        "completed"
+                      ]
+                    },
+                    "adaptive": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "marginal-utility-v1"
+                        },
+                        "minRounds": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8
+                        },
+                        "patience": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 7
+                        },
+                        "minUtilityGain": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "maxUncertainty": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "targetUtility": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "checkpoints": {
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "round": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 8
+                              },
+                              "utility": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "uncertainty": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "evidenceRefs": {
+                                "minItems": 1,
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "evaluatedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "gain": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "qualified": {
+                                "type": "boolean"
+                              },
+                              "recordedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "round",
+                              "utility",
+                              "uncertainty",
+                              "evidenceRefs",
+                              "evaluatedAt",
+                              "id",
+                              "gain",
+                              "qualified",
+                              "recordedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "stalled": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 8
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "searching",
+                            "finalizing"
+                          ]
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "target_reached",
+                            "marginal_utility_exhausted",
+                            "max_rounds"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "minRounds",
+                        "patience",
+                        "minUtilityGain",
+                        "maxUncertainty",
+                        "checkpoints",
+                        "stalled",
+                        "phase"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "consensus": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "rejected",
+                            "disputed",
+                            "insufficient"
+                          ]
+                        },
+                        "verifierCount": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "support": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "reject": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "abstain": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "evidenceRefs": {
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          }
+                        },
+                        "provisional": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "derivedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "verifierCount",
+                        "support",
+                        "reject",
+                        "abstain",
+                        "confidence",
+                        "evidenceRefs",
+                        "provisional",
+                        "derivedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "work": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "generation",
+                              "proximity",
+                              "reflection",
+                              "ranking",
+                              "evolution",
+                              "verification",
+                              "investigation",
+                              "simulation",
+                              "synthesis"
+                            ]
+                          },
+                          "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160
+                          },
+                          "round": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "agent": {
+                            "type": "string",
+                            "enum": [
+                              "task",
+                              "biology",
+                              "physics",
+                              "ml",
+                              "critique",
+                              "physics-critique",
+                              "reviewer"
+                            ]
+                          },
+                          "dependencies": {
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8000
+                          },
+                          "allocation": {
+                            "type": "object",
+                            "properties": {
+                              "steps": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "tokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "costUSD": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "wallTimeMs": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "completed",
+                              "failed",
+                              "cancelled"
+                            ]
+                          },
+                          "workerSessionID": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "result": {
+                            "type": "object",
+                            "properties": {
+                              "summary": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              },
+                              "artifactRefs": {
+                                "default": [],
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "evidenceRefs": {
+                                "default": [],
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "usage": {
+                                "type": "object",
+                                "properties": {
+                                  "steps": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "tokens": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "costUSD": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "wallTimeMs": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "verdict": {
+                                "type": "object",
+                                "properties": {
+                                  "decision": {
+                                    "type": "string",
+                                    "enum": [
+                                      "support",
+                                      "reject",
+                                      "abstain"
+                                    ]
+                                  },
+                                  "confidence": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                  },
+                                  "checks": {
+                                    "minItems": 1,
+                                    "maxItems": 64,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 200
+                                        },
+                                        "status": {
+                                          "type": "string",
+                                          "enum": [
+                                            "passed",
+                                            "failed",
+                                            "inconclusive"
+                                          ]
+                                        },
+                                        "evidenceRefs": {
+                                          "minItems": 1,
+                                          "maxItems": 16,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "status",
+                                        "evidenceRefs"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "decision",
+                                  "confidence",
+                                  "checks"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "completedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "summary",
+                              "completedAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "failure": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "role",
+                          "label",
+                          "round",
+                          "agent",
+                          "dependencies",
+                          "prompt",
+                          "allocation",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "updatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "objective",
+                    "selection",
+                    "maxWorkers",
+                    "maxRounds",
+                    "minIndependentVerifiers",
+                    "status",
+                    "work",
+                    "order",
+                    "revision",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "round": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8
+                  },
+                  "utility": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "uncertainty": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "evidenceRefs": {
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  },
+                  "evaluatedAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "evaluatorToken",
+                  "round",
+                  "utility",
+                  "uncertainty",
+                  "evidenceRefs",
+                  "evaluatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.orchestration.checkpoint({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/runs": {
       "post": {
         "operationId": "harness.bind",
@@ -21007,6 +22043,48 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 2
+                        },
+                        "adaptive": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "marginal-utility-v1"
+                            },
+                            "minRounds": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 8
+                            },
+                            "patience": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 7
+                            },
+                            "minUtilityGain": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "maxUncertainty": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "targetUtility": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "minRounds",
+                            "patience",
+                            "minUtilityGain",
+                            "maxUncertainty"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -21772,6 +22850,48 @@
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 2
+                      },
+                      "adaptive": {
+                        "type": "object",
+                        "properties": {
+                          "protocolVersion": {
+                            "type": "string",
+                            "const": "marginal-utility-v1"
+                          },
+                          "minRounds": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 8
+                          },
+                          "patience": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 7
+                          },
+                          "minUtilityGain": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "maxUncertainty": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "targetUtility": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          }
+                        },
+                        "required": [
+                          "protocolVersion",
+                          "minRounds",
+                          "patience",
+                          "minUtilityGain",
+                          "maxUncertainty"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -23952,6 +25072,48 @@
                               "type": "integer",
                               "minimum": 1,
                               "maximum": 2
+                            },
+                            "adaptive": {
+                              "type": "object",
+                              "properties": {
+                                "protocolVersion": {
+                                  "type": "string",
+                                  "const": "marginal-utility-v1"
+                                },
+                                "minRounds": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 8
+                                },
+                                "patience": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 7
+                                },
+                                "minUtilityGain": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "maxUncertainty": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "targetUtility": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                }
+                              },
+                              "required": [
+                                "protocolVersion",
+                                "minRounds",
+                                "patience",
+                                "minUtilityGain",
+                                "maxUncertainty"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [

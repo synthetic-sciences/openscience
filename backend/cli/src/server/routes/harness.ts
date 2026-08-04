@@ -272,6 +272,42 @@ export const HarnessRoutes = lazy(() =>
       async (c) => c.json(await HarnessOrchestrator.read(c.req.valid("param").sessionID)),
     )
     .post(
+      "/runs/:sessionID/orchestration/checkpoints",
+      describeRoute({
+        summary: "Record an evaluator-authenticated orchestration utility checkpoint",
+        description:
+          "Gates the next evolution round and stops low-utility search without allowing worker self-scores to control budget.",
+        operationId: "harness.orchestration.checkpoint",
+        responses: {
+          200: {
+            description: "Scientific orchestration state",
+            content: { "application/json": { schema: resolver(HarnessOrchestrator.State) } },
+          },
+          ...errors(400, 403, 404, 409),
+        },
+      }),
+      validator("param", SessionID),
+      validator("json", HarnessOrchestrator.CheckpointSubmit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const sessionID = c.req.valid("param").sessionID
+        const contract = await HarnessAdapter.authorize(sessionID, input.evaluatorToken)
+        return c.json(
+          await HarnessOrchestrator.checkpoint(
+            {
+              sessionID,
+              round: input.round,
+              utility: input.utility,
+              uncertainty: input.uncertainty,
+              evidenceRefs: input.evidenceRefs,
+              evaluatedAt: input.evaluatedAt,
+            },
+            contract,
+          ),
+        )
+      },
+    )
+    .post(
       "/runs",
       describeRoute({
         summary: "Bind an immutable benchmark run",

@@ -156,6 +156,7 @@ const coalition = (state: HarnessOrchestrator.State) => ({
   maxWorkers: state.maxWorkers,
   maxRounds: state.maxRounds,
   minIndependentVerifiers: state.minIndependentVerifiers,
+  adaptive: state.adaptive,
   consensus: state.consensus,
   revision: state.revision,
   progress: Object.fromEntries(

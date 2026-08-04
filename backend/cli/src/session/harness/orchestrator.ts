@@ -6,6 +6,7 @@ import { HarnessBenchmark } from "./benchmark"
 import { HarnessContract } from "./contract"
 
 export namespace HarnessOrchestrator {
+  const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
   const Agent = z.enum(["task", "biology", "physics", "ml", "critique", "physics-critique", "reviewer"])
   const Status = z.enum(["pending", "completed", "failed", "cancelled"])
 
@@ -69,6 +70,128 @@ export namespace HarnessOrchestrator {
     completedAt: z.number().int().positive(),
   }).strict()
   export type Result = z.infer<typeof Result>
+
+  export const CheckpointSubmit = z
+    .object({
+      evaluatorToken: z.string().min(32).max(1_024),
+      round: z.number().int().min(1).max(8),
+      utility: z.number().finite().min(0).max(1),
+      uncertainty: z.number().finite().min(0).max(1),
+      evidenceRefs: z
+        .array(z.string().min(1).max(2_048))
+        .min(1)
+        .max(32)
+        .refine((items) => new Set(items).size === items.length, "Checkpoint evidence references must be unique"),
+      evaluatedAt: z.number().int().positive(),
+    })
+    .strict()
+
+  export const Checkpoint = CheckpointSubmit.omit({ evaluatorToken: true })
+    .extend({
+      id: z.string().regex(/^[a-f0-9]{64}$/),
+      gain: z.number().finite().nullable(),
+      qualified: z.boolean(),
+      recordedAt: z.number().int().positive(),
+    })
+    .strict()
+  export type Checkpoint = z.infer<typeof Checkpoint>
+
+  const CheckpointInput = CheckpointSubmit.omit({ evaluatorToken: true })
+    .extend({ sessionID: z.string().min(1) })
+    .strict()
+
+  const checkpointID = (
+    fingerprint: string,
+    sessionID: string,
+    value: Omit<z.infer<typeof Checkpoint>, "id">,
+  ) =>
+    digest({
+      fingerprint,
+      sessionID,
+      round: value.round,
+      utility: value.utility,
+      uncertainty: value.uncertainty,
+      evidenceRefs: value.evidenceRefs,
+      evaluatedAt: value.evaluatedAt,
+      gain: value.gain,
+      qualified: value.qualified,
+      recordedAt: value.recordedAt,
+    })
+
+  function progress(config: HarnessContract.Adaptive, checkpoints: Checkpoint[], maxRounds: number) {
+    return checkpoints.reduce(
+      (state, item, index) => {
+        const previous = checkpoints[index - 1]
+        const gain = previous ? item.utility - previous.utility : null
+        const qualified = item.uncertainty <= config.maxUncertainty
+        const stalled = !qualified
+          ? 0
+          : gain === null
+            ? 0
+            : gain < config.minUtilityGain
+              ? state.stalled + 1
+              : 0
+        const target =
+          qualified &&
+          item.round >= config.minRounds &&
+          config.targetUtility !== undefined &&
+          item.utility >= config.targetUtility
+        const exhausted = qualified && item.round >= config.minRounds && stalled >= config.patience
+        const reason = target
+          ? ("target_reached" as const)
+          : exhausted
+            ? ("marginal_utility_exhausted" as const)
+            : item.round === maxRounds
+              ? ("max_rounds" as const)
+              : undefined
+        return {
+          stalled,
+          expected: [...state.expected, { gain, qualified }],
+          reasons: [...state.reasons, reason],
+        }
+      },
+      {
+        stalled: 0,
+        expected: [] as Array<{ gain: number | null; qualified: boolean }>,
+        reasons: [] as Array<"target_reached" | "marginal_utility_exhausted" | "max_rounds" | undefined>,
+      },
+    )
+  }
+
+  const Adaptive = HarnessContract.Adaptive.extend({
+    checkpoints: z.array(Checkpoint).max(8),
+    stalled: z.number().int().nonnegative().max(8),
+    phase: z.enum(["searching", "finalizing"]),
+    stopReason: z.enum(["target_reached", "marginal_utility_exhausted", "max_rounds"]).optional(),
+  })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (new Set(value.checkpoints.map((item) => item.id)).size !== value.checkpoints.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["checkpoints"],
+          message: "Adaptive checkpoint identities must be unique",
+        })
+      }
+      if (value.checkpoints.some((item, index) => item.round !== index + 1)) {
+        ctx.addIssue({ code: "custom", path: ["checkpoints"], message: "Adaptive checkpoints must be sequential" })
+      }
+      if (value.phase === "searching" && value.stopReason) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["stopReason"],
+          message: "Searching orchestration cannot have a stop reason",
+        })
+      }
+      if (value.phase === "finalizing" && !value.stopReason) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["stopReason"],
+          message: "Finalizing orchestration requires a stop reason",
+        })
+      }
+    })
+  export type Adaptive = z.infer<typeof Adaptive>
 
   export const Work = z
     .object({
@@ -145,7 +268,7 @@ export namespace HarnessOrchestrator {
   export const State = z
     .object({
       schemaVersion: z.literal(1),
-      protocolVersion: z.literal("coalition-v1"),
+      protocolVersion: z.enum(["coalition-v1", "coalition-v2"]),
       runID: z.string().min(1),
       sessionID: z.string().min(1),
       contractFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
@@ -154,7 +277,8 @@ export namespace HarnessOrchestrator {
       maxWorkers: z.number().int().min(1).max(2),
       maxRounds: z.number().int().min(1).max(8),
       minIndependentVerifiers: z.number().int().min(1).max(2),
-      status: z.enum(["active", "completed"]),
+      status: z.enum(["active", "awaiting_checkpoint", "completed"]),
+      adaptive: Adaptive.optional(),
       consensus: Consensus.optional(),
       work: z.record(z.string(), Work),
       order: z.array(z.string().regex(/^[a-f0-9]{64}$/)),
@@ -176,6 +300,49 @@ export namespace HarnessOrchestrator {
       }
       if (value.consensus && value.status !== "completed") {
         ctx.addIssue({ code: "custom", path: ["consensus"], message: "Consensus requires settled orchestration" })
+      }
+      if (value.adaptive && value.protocolVersion !== "coalition-v2") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["protocolVersion"],
+          message: "Adaptive orchestration requires coalition-v2",
+        })
+      }
+      if (value.status === "awaiting_checkpoint" && !value.adaptive) {
+        ctx.addIssue({ code: "custom", path: ["status"], message: "Only adaptive orchestration awaits checkpoints" })
+      }
+      if (value.adaptive?.checkpoints.some((item) => item.round > value.maxRounds)) {
+        ctx.addIssue({ code: "custom", path: ["adaptive", "checkpoints"], message: "Checkpoint exceeds max rounds" })
+      }
+      if (
+        value.adaptive?.checkpoints.some(
+          (item) => item.id !== checkpointID(value.contractFingerprint, value.sessionID, item),
+        )
+      ) {
+        ctx.addIssue({ code: "custom", path: ["adaptive", "checkpoints"], message: "Checkpoint content hash drifted" })
+      }
+      if (value.adaptive) {
+        const derived = progress(value.adaptive, value.adaptive.checkpoints, value.maxRounds)
+        if (
+          value.adaptive.checkpoints.some((item, index) => {
+            const expected = derived.expected[index]!
+            return item.gain !== expected.gain || item.qualified !== expected.qualified
+          })
+        ) {
+          ctx.addIssue({ code: "custom", path: ["adaptive", "checkpoints"], message: "Checkpoint derivation drifted" })
+        }
+        if (derived.reasons.slice(0, -1).some((reason) => reason !== undefined)) {
+          ctx.addIssue({ code: "custom", path: ["adaptive", "checkpoints"], message: "Checkpoints continued after a stop" })
+        }
+        const reason = derived.reasons.at(-1)
+        const phase = reason ? "finalizing" : "searching"
+        if (
+          value.adaptive.stalled !== derived.stalled ||
+          value.adaptive.phase !== phase ||
+          value.adaptive.stopReason !== reason
+        ) {
+          ctx.addIssue({ code: "custom", path: ["adaptive"], message: "Adaptive control state drifted" })
+        }
       }
       if (
         value.consensus &&
@@ -218,8 +385,8 @@ export namespace HarnessOrchestrator {
 
   const root = path.join(Global.Path.data, "harness", "orchestration")
   const file = (sessionID: string) => path.join(root, `${encodeURIComponent(sessionID)}.json`)
-  const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
   const clamp = (value: number) => Math.max(0, Math.min(1, value))
+  const evolving = (role: HarnessContract.Role) => ["proximity", "reflection", "ranking", "evolution"].includes(role)
 
   const required: Record<Exclude<HarnessContract.Topology, "auto">, HarnessContract.Role[]> = {
     solo: ["generation"],
@@ -362,28 +529,40 @@ export namespace HarnessOrchestrator {
     return lines[role]
   }
 
+  function unit(
+    contract: HarnessContract.Info,
+    selection: Selection,
+    role: HarnessContract.Role,
+    label: string,
+    dependencies: string[] = [],
+    round = 0,
+  ): Omit<Work, "allocation"> {
+    const id = digest({ runID: contract.runID, role, label, dependencies, round })
+    return {
+      id,
+      role,
+      label,
+      round,
+      agent: agent(role, contract),
+      dependencies,
+      prompt: [
+        `<scientific-coalition role="${role}" topology="${selection.topology}" round="${round}">`,
+        `Objective: ${contract.objective}`,
+        instruction(role),
+        "Return a concise result, artifact references, evidence references, and actual resource usage.",
+        "Your output is provisional orchestration state, never benchmark evidence or a final scientific claim.",
+        "</scientific-coalition>",
+      ].join("\n"),
+      status: "pending",
+    }
+  }
+
   function plan(contract: HarnessContract.Info, selection: Selection) {
     const items: Array<Omit<Work, "allocation">> = []
     const add = (role: HarnessContract.Role, label: string, dependencies: string[] = [], round = 0) => {
-      const id = digest({ runID: contract.runID, role, label, dependencies, round })
-      items.push({
-        id,
-        role,
-        label,
-        round,
-        agent: agent(role, contract),
-        dependencies,
-        prompt: [
-          `<scientific-coalition role="${role}" topology="${selection.topology}" round="${round}">`,
-          `Objective: ${contract.objective}`,
-          instruction(role),
-          "Return a concise result, artifact references, evidence references, and actual resource usage.",
-          "Your output is provisional orchestration state, never benchmark evidence or a final scientific claim.",
-          "</scientific-coalition>",
-        ].join("\n"),
-        status: "pending",
-      })
-      return id
+      const item = unit(contract, selection, role, label, dependencies, round)
+      items.push(item)
+      return item.id
     }
     const verify = (dependencies: string[], round: number) =>
       Array.from({ length: contract.orchestration?.minIndependentVerifiers ?? 1 }, (_, index) =>
@@ -455,7 +634,7 @@ export namespace HarnessOrchestrator {
     const now = Date.now()
     const state = State.parse({
       schemaVersion: 1,
-      protocolVersion: "coalition-v1",
+      protocolVersion: contract.orchestration?.adaptive ? "coalition-v2" : "coalition-v1",
       runID: contract.runID,
       sessionID,
       contractFingerprint: HarnessContract.fingerprint(contract),
@@ -465,6 +644,14 @@ export namespace HarnessOrchestrator {
       maxRounds: contract.orchestration?.maxRounds ?? 2,
       minIndependentVerifiers: contract.orchestration?.minIndependentVerifiers ?? 1,
       status: "active",
+      adaptive: contract.orchestration?.adaptive
+        ? {
+            ...contract.orchestration.adaptive,
+            checkpoints: [],
+            stalled: 0,
+            phase: "searching",
+          }
+        : undefined,
       work,
       order: planned.map((item) => item.id),
       revision: 0,
@@ -490,6 +677,21 @@ export namespace HarnessOrchestrator {
       const work = current.work[id]!
       if (work.status !== "pending") return []
       if (!work.dependencies.every((dependency) => current.work[dependency]?.status === "completed")) return []
+      if (
+        current.adaptive &&
+        evolving(work.role) &&
+        work.round > 1 &&
+        !current.adaptive.checkpoints.some((item) => item.round === work.round - 1)
+      ) {
+        return []
+      }
+      if (
+        current.adaptive &&
+        work.role === "investigation" &&
+        !current.adaptive.checkpoints.some((item) => item.round === work.round)
+      ) {
+        return []
+      }
       const context = work.dependencies.map((dependency) => {
         const parent = current.work[dependency]!
         return {
@@ -516,6 +718,14 @@ export namespace HarnessOrchestrator {
     if (exceeded) throw new Error(`Work exceeded its ${exceeded[0]} allocation`)
   }
 
+  function due(state: Pick<State, "adaptive" | "order" | "work">) {
+    if (!state.adaptive || state.adaptive.phase !== "searching") return
+    const round = state.adaptive.checkpoints.length + 1
+    const items = state.order.map((id) => state.work[id]!).filter((item) => item.round === round && evolving(item.role))
+    if (!items.length || items.some((item) => item.status !== "completed")) return
+    return round
+  }
+
   function settle(state: State, now: number): State {
     const work = Object.fromEntries(
       state.order.map((id) => {
@@ -527,6 +737,7 @@ export namespace HarnessOrchestrator {
       }),
     )
     const done = Object.values(work).every((item) => ["completed", "failed", "cancelled"].includes(item.status))
+    const checkpoint = due({ ...state, work })
     const verifiers = state.order.map((id) => work[id]!).filter((item) => item.role === "verification")
     const verdicts = verifiers.flatMap((item) => (item.result?.verdict ? [item.result.verdict] : []))
     const consensus = (() => {
@@ -537,9 +748,9 @@ export namespace HarnessOrchestrator {
       const status =
         verdicts.length < 2
           ? "insufficient"
-          : support === verifiers.length
+          : support === verdicts.length
             ? "supported"
-            : reject === verifiers.length
+            : reject === verdicts.length
               ? "rejected"
               : "disputed"
       const evidenceRefs = [
@@ -564,7 +775,158 @@ export namespace HarnessOrchestrator {
         derivedAt: now,
       })
     })()
-    return State.parse({ ...state, work, status: done ? "completed" : "active", consensus, updatedAt: now })
+    const status = done ? "completed" : checkpoint ? "awaiting_checkpoint" : "active"
+    return State.parse({ ...state, work, status, consensus, updatedAt: now })
+  }
+
+  function finale(state: State, contract: HarnessContract.Info, round: number) {
+    const parents = state.order.filter((id) => {
+      const item = state.work[id]!
+      return item.role === "evolution" && item.round === round && item.status === "completed"
+    })
+    if (parents.length < 2)
+      throw new Error(`Adaptive finalization requires two completed candidates from round ${round}`)
+    const probeBudget = state.order
+      .map((id) => state.work[id]!)
+      .find((item) => item.role === "investigation")?.allocation
+    const verifyBudget = state.order
+      .map((id) => state.work[id]!)
+      .find((item) => item.role === "verification")?.allocation
+    if (!probeBudget || !verifyBudget)
+      throw new Error(`Adaptive finalization could not reserve investigation and verification`)
+    const cancelled = Object.fromEntries(
+      state.order.map((id) => {
+        const item = state.work[id]!
+        const stop =
+          item.status === "pending" && (item.round > round || ["investigation", "verification"].includes(item.role))
+        return [id, stop ? { ...item, status: "cancelled" as const } : item]
+      }),
+    )
+    const probe = Work.parse({
+      ...unit(contract, state.selection, "investigation", `adaptive-failure-discovery-${round}`, parents, round),
+      allocation: probeBudget,
+    })
+    const verifiers = Array.from({ length: state.minIndependentVerifiers }, (_, index) =>
+      Work.parse({
+        ...unit(
+          contract,
+          state.selection,
+          "verification",
+          `adaptive-independent-verification-${index + 1}-${round}`,
+          [...parents, probe.id],
+          round + 1,
+        ),
+        allocation: verifyBudget,
+      }),
+    )
+    return State.parse({
+      ...state,
+      work: Object.fromEntries([
+        ...Object.entries(cancelled),
+        [probe.id, probe],
+        ...verifiers.map((item) => [item.id, item] as const),
+      ]),
+      order: [...state.order, probe.id, ...verifiers.map((item) => item.id)],
+    })
+  }
+
+  export async function checkpoint(input: z.input<typeof CheckpointInput>, contract: HarnessContract.Info) {
+    const value = CheckpointInput.parse(input)
+    const bound = HarnessContract.Info.parse(contract)
+    if (bound.sessionID !== value.sessionID) throw new Error(`Utility checkpoint does not match the harness contract`)
+    await JsonStore.update(file(value.sessionID), (data) => {
+      const state = State.parse(data)
+      if (state.contractFingerprint !== HarnessContract.fingerprint(bound)) {
+        throw new Error(`Utility checkpoint does not match the orchestration contract`)
+      }
+      if (!state.adaptive) throw new Error(`Orchestration does not declare adaptive marginal-utility control`)
+      const existing = state.adaptive.checkpoints.find((item) => item.round === value.round)
+      if (existing) {
+        const previous = {
+          round: existing.round,
+          utility: existing.utility,
+          uncertainty: existing.uncertainty,
+          evidenceRefs: existing.evidenceRefs,
+          evaluatedAt: existing.evaluatedAt,
+        }
+        const submitted = {
+          round: value.round,
+          utility: value.utility,
+          uncertainty: value.uncertainty,
+          evidenceRefs: value.evidenceRefs,
+          evaluatedAt: value.evaluatedAt,
+        }
+        if (JSON.stringify(previous) === JSON.stringify(submitted)) return state
+        throw new Error(`Adaptive checkpoint for round ${value.round} is immutable`)
+      }
+      if (state.adaptive.phase !== "searching") throw new Error(`Adaptive search is already finalizing`)
+      const expected = state.adaptive.checkpoints.length + 1
+      if (value.round !== expected) throw new Error(`Expected adaptive checkpoint for round ${expected}`)
+      if (due(state) !== value.round) throw new Error(`Adaptive round ${value.round} has not completed`)
+      const completed = state.order
+        .map((id) => state.work[id]!)
+        .filter((item) => item.round === value.round && evolving(item.role))
+        .map((item) => item.result!.completedAt)
+      const now = Date.now()
+      if (value.evaluatedAt < Math.max(bound.createdAt, ...completed)) {
+        throw new Error(`Adaptive checkpoint predates the completed round`)
+      }
+      if (value.evaluatedAt > now + 300_000) throw new Error(`Adaptive checkpoint timestamp is implausibly far ahead`)
+      const previous = state.adaptive.checkpoints.at(-1)
+      const gain = previous ? value.utility - previous.utility : null
+      const qualified = value.uncertainty <= state.adaptive.maxUncertainty
+      const stalled = !qualified
+        ? 0
+        : gain === null
+          ? 0
+          : gain < state.adaptive.minUtilityGain
+            ? state.adaptive.stalled + 1
+            : 0
+      const target =
+        qualified &&
+        value.round >= state.adaptive.minRounds &&
+        state.adaptive.targetUtility !== undefined &&
+        value.utility >= state.adaptive.targetUtility
+      const exhausted = qualified && value.round >= state.adaptive.minRounds && stalled >= state.adaptive.patience
+      const reason = target
+        ? "target_reached"
+        : exhausted
+          ? "marginal_utility_exhausted"
+          : value.round === state.maxRounds
+            ? "max_rounds"
+            : undefined
+      const record = {
+        round: value.round,
+        utility: value.utility,
+        uncertainty: value.uncertainty,
+        evidenceRefs: value.evidenceRefs,
+        evaluatedAt: value.evaluatedAt,
+        gain,
+        qualified,
+        recordedAt: now,
+      }
+      const checkpoint = Checkpoint.parse({
+        id: checkpointID(state.contractFingerprint, state.sessionID, record),
+        ...record,
+      })
+      const adaptive: Adaptive = {
+        ...state.adaptive,
+        checkpoints: [...state.adaptive.checkpoints, checkpoint],
+        stalled,
+        phase: reason ? "finalizing" : "searching",
+        stopReason: reason,
+      }
+      const updated = State.parse({
+        ...state,
+        adaptive,
+        status: "active",
+        revision: state.revision + 1,
+        updatedAt: now,
+      })
+      const next = reason && value.round < state.maxRounds ? finale(updated, bound, value.round) : updated
+      return settle(next, now)
+    })
+    return read(value.sessionID)
   }
 
   export async function complete(input: {

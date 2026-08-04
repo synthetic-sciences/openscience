@@ -8651,7 +8651,7 @@ export type HarnessOrchestrationStatusResponses = {
    */
   200: {
     schemaVersion: 1
-    protocolVersion: "coalition-v1"
+    protocolVersion: "coalition-v1" | "coalition-v2"
     runID: string
     sessionID: string
     contractFingerprint: string
@@ -8673,7 +8673,29 @@ export type HarnessOrchestrationStatusResponses = {
     maxWorkers: number
     maxRounds: number
     minIndependentVerifiers: number
-    status: "active" | "completed"
+    status: "active" | "awaiting_checkpoint" | "completed"
+    adaptive?: {
+      protocolVersion: "marginal-utility-v1"
+      minRounds: number
+      patience: number
+      minUtilityGain: number
+      maxUncertainty: number
+      targetUtility?: number
+      checkpoints: Array<{
+        round: number
+        utility: number
+        uncertainty: number
+        evidenceRefs: Array<string>
+        evaluatedAt: number
+        id: string
+        gain: number | null
+        qualified: boolean
+        recordedAt: number
+      }>
+      stalled: number
+      phase: "searching" | "finalizing"
+      stopReason?: "target_reached" | "marginal_utility_exhausted" | "max_rounds"
+    }
     consensus?: {
       status: "supported" | "rejected" | "disputed" | "insufficient"
       verifierCount: number
@@ -8775,7 +8797,7 @@ export type HarnessOrchestrationStartResponses = {
    */
   200: {
     schemaVersion: 1
-    protocolVersion: "coalition-v1"
+    protocolVersion: "coalition-v1" | "coalition-v2"
     runID: string
     sessionID: string
     contractFingerprint: string
@@ -8797,7 +8819,29 @@ export type HarnessOrchestrationStartResponses = {
     maxWorkers: number
     maxRounds: number
     minIndependentVerifiers: number
-    status: "active" | "completed"
+    status: "active" | "awaiting_checkpoint" | "completed"
+    adaptive?: {
+      protocolVersion: "marginal-utility-v1"
+      minRounds: number
+      patience: number
+      minUtilityGain: number
+      maxUncertainty: number
+      targetUtility?: number
+      checkpoints: Array<{
+        round: number
+        utility: number
+        uncertainty: number
+        evidenceRefs: Array<string>
+        evaluatedAt: number
+        id: string
+        gain: number | null
+        qualified: boolean
+        recordedAt: number
+      }>
+      stalled: number
+      phase: "searching" | "finalizing"
+      stopReason?: "target_reached" | "marginal_utility_exhausted" | "max_rounds"
+    }
     consensus?: {
       status: "supported" | "rejected" | "disputed" | "insufficient"
       verifierCount: number
@@ -8869,6 +8913,160 @@ export type HarnessOrchestrationStartResponses = {
 export type HarnessOrchestrationStartResponse =
   HarnessOrchestrationStartResponses[keyof HarnessOrchestrationStartResponses]
 
+export type HarnessOrchestrationCheckpointData = {
+  body?: {
+    evaluatorToken: string
+    round: number
+    utility: number
+    uncertainty: number
+    evidenceRefs: Array<string>
+    evaluatedAt: number
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/runs/{sessionID}/orchestration/checkpoints"
+}
+
+export type HarnessOrchestrationCheckpointErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessOrchestrationCheckpointError =
+  HarnessOrchestrationCheckpointErrors[keyof HarnessOrchestrationCheckpointErrors]
+
+export type HarnessOrchestrationCheckpointResponses = {
+  /**
+   * Scientific orchestration state
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "coalition-v1" | "coalition-v2"
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    objective: string
+    selection: {
+      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      source: "contract" | "policy"
+      reasons: Array<string>
+      traits: {
+        decomposability: number
+        sequentiality: number
+        toolIntensity: number
+        uncertainty: number
+        verificationRisk: number
+        novelty: number
+        crossDomain: number
+      }
+    }
+    maxWorkers: number
+    maxRounds: number
+    minIndependentVerifiers: number
+    status: "active" | "awaiting_checkpoint" | "completed"
+    adaptive?: {
+      protocolVersion: "marginal-utility-v1"
+      minRounds: number
+      patience: number
+      minUtilityGain: number
+      maxUncertainty: number
+      targetUtility?: number
+      checkpoints: Array<{
+        round: number
+        utility: number
+        uncertainty: number
+        evidenceRefs: Array<string>
+        evaluatedAt: number
+        id: string
+        gain: number | null
+        qualified: boolean
+        recordedAt: number
+      }>
+      stalled: number
+      phase: "searching" | "finalizing"
+      stopReason?: "target_reached" | "marginal_utility_exhausted" | "max_rounds"
+    }
+    consensus?: {
+      status: "supported" | "rejected" | "disputed" | "insufficient"
+      verifierCount: number
+      support: number
+      reject: number
+      abstain: number
+      confidence: number
+      evidenceRefs: Array<string>
+      provisional: true
+      derivedAt: number
+    }
+    work: {
+      [key: string]: {
+        id: string
+        role:
+          | "generation"
+          | "proximity"
+          | "reflection"
+          | "ranking"
+          | "evolution"
+          | "verification"
+          | "investigation"
+          | "simulation"
+          | "synthesis"
+        label: string
+        round: number
+        agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
+        dependencies: Array<string>
+        prompt: string
+        allocation: {
+          steps?: number
+          tokens?: number
+          costUSD?: number
+          wallTimeMs?: number
+        }
+        status: "pending" | "completed" | "failed" | "cancelled"
+        workerSessionID?: string
+        result?: {
+          summary: string
+          artifactRefs?: Array<string>
+          evidenceRefs?: Array<string>
+          usage?: {
+            steps?: number
+            tokens?: number
+            costUSD?: number
+            wallTimeMs?: number
+          }
+          verdict?: {
+            decision: "support" | "reject" | "abstain"
+            confidence: number
+            checks: Array<{
+              id: string
+              status: "passed" | "failed" | "inconclusive"
+              evidenceRefs: Array<string>
+            }>
+          }
+          completedAt: number
+        }
+        failure?: string
+      }
+    }
+    order: Array<string>
+    revision: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type HarnessOrchestrationCheckpointResponse =
+  HarnessOrchestrationCheckpointResponses[keyof HarnessOrchestrationCheckpointResponses]
+
 export type HarnessBindData = {
   body?: {
     schemaVersion: 1
@@ -8911,6 +9109,14 @@ export type HarnessBindData = {
         | "synthesis"
       >
       minIndependentVerifiers: number
+      adaptive?: {
+        protocolVersion: "marginal-utility-v1"
+        minRounds: number
+        patience: number
+        minUtilityGain: number
+        maxUncertainty: number
+        targetUtility?: number
+      }
     }
     audit?: {
       mode: "performance" | "failure" | "hybrid"
@@ -9107,6 +9313,14 @@ export type HarnessBindResponses = {
         | "synthesis"
       >
       minIndependentVerifiers: number
+      adaptive?: {
+        protocolVersion: "marginal-utility-v1"
+        minRounds: number
+        patience: number
+        minUtilityGain: number
+        maxUncertainty: number
+        targetUtility?: number
+      }
     }
     audit?: {
       mode: "performance" | "failure" | "hybrid"
@@ -9632,6 +9846,14 @@ export type HarnessContractResponses = {
         | "synthesis"
       >
       minIndependentVerifiers: number
+      adaptive?: {
+        protocolVersion: "marginal-utility-v1"
+        minRounds: number
+        patience: number
+        minUtilityGain: number
+        maxUncertainty: number
+        targetUtility?: number
+      }
     }
     audit?: {
       mode: "performance" | "failure" | "hybrid"

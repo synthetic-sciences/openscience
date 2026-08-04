@@ -4,6 +4,7 @@ import path from "path"
 import { Global } from "../../src/global"
 import { HarnessBenchmark } from "../../src/session/harness/benchmark"
 import { HarnessDomain } from "../../src/session/harness/domain"
+import { HarnessOrchestrator } from "../../src/session/harness/orchestrator"
 import { HarnessRoutes } from "../../src/server/routes/harness"
 
 const sessionID = "route-harness-adapter"
@@ -176,5 +177,87 @@ describe("/harness routes", () => {
     const listed = await app.request("/skills")
     expect(listed.status).toBe(200)
     expect(await listed.json()).toContainEqual(expect.objectContaining({ name: skill, status: "pending" }))
+  })
+
+  test("authenticates external marginal-utility checkpoints before unlocking evolution", async () => {
+    const app = HarnessRoutes()
+    const bound = await app.request("/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        runID: "route-adaptive-run",
+        sessionID,
+        benchmark: "stats",
+        version: "1",
+        taskID: "adaptive-1",
+        split: "held_out",
+        evaluator: { name: "route-evaluator", version: "1", source: "benchmark", token },
+        objective: "Evolve a robust statistical method",
+        orchestration: {
+          topology: "evolution",
+          maxWorkers: 2,
+          maxRounds: 2,
+          minIndependentVerifiers: 2,
+          adaptive: {
+            protocolVersion: "marginal-utility-v1",
+            minRounds: 1,
+            patience: 1,
+            minUtilityGain: 0.05,
+            maxUncertainty: 0.05,
+          },
+        },
+        metric: { name: "score", direction: "maximize" },
+        model: { provider: "test", name: "model" },
+        budget: { steps: 100 },
+        seed: 4,
+        intervention: "autonomous",
+        contamination: { policy: "hidden", hiddenTestsAccessible: false },
+        createdAt: Date.now(),
+      }),
+    })
+    expect(bound.status).toBe(200)
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    const advance = async (state: HarnessOrchestrator.State): Promise<HarnessOrchestrator.State> => {
+      if (state.status === "awaiting_checkpoint") return state
+      const work = HarnessOrchestrator.ready(state)[0]!
+      const next = await HarnessOrchestrator.complete({
+        sessionID,
+        workID: work.id,
+        workerSessionID: `route-worker-${state.revision}`,
+        result: {
+          summary: work.label,
+          artifactRefs: [`artifact://${work.label}`],
+          evidenceRefs: [`evidence://${work.label}`],
+          usage: { steps: 1 },
+        },
+      })
+      return advance(next)
+    }
+    const waiting = await advance(initial)
+    expect(waiting.status).toBe("awaiting_checkpoint")
+
+    const request = (evaluatorToken: string) =>
+      app.request(`/runs/${sessionID}/orchestration/checkpoints`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          evaluatorToken,
+          round: 1,
+          utility: 0.5,
+          uncertainty: 0.01,
+          evidenceRefs: ["evidence://official-round-1"],
+          evaluatedAt: Date.now(),
+        }),
+      })
+    expect((await request("wrong-evaluator-capability-token-0000000000000000000")).status).not.toBe(200)
+    const checkpoint = await request(token)
+    expect(checkpoint.status).toBe(200)
+    const state = await checkpoint.json()
+    expect(state).toMatchObject({
+      status: "active",
+      adaptive: { phase: "searching", checkpoints: [{ round: 1, qualified: true }] },
+    })
+    expect(JSON.stringify(state)).not.toContain(token)
   })
 })

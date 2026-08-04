@@ -119,6 +119,8 @@ import type {
   HarnessJudgeReceiptResponses,
   HarnessJudgeRecordErrors,
   HarnessJudgeRecordResponses,
+  HarnessOrchestrationCheckpointErrors,
+  HarnessOrchestrationCheckpointResponses,
   HarnessOrchestrationStartErrors,
   HarnessOrchestrationStartResponses,
   HarnessOrchestrationStatusErrors,
@@ -4248,6 +4250,57 @@ export class Orchestration extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Record an evaluator-authenticated orchestration utility checkpoint
+   *
+   * Gates the next evolution round and stops low-utility search without allowing worker self-scores to control budget.
+   */
+  public checkpoint<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      evaluatorToken?: string
+      round?: number
+      utility?: number
+      uncertainty?: number
+      evidenceRefs?: Array<string>
+      evaluatedAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "round" },
+            { in: "body", key: "utility" },
+            { in: "body", key: "uncertainty" },
+            { in: "body", key: "evidenceRefs" },
+            { in: "body", key: "evaluatedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessOrchestrationCheckpointResponses,
+      HarnessOrchestrationCheckpointErrors,
+      ThrowOnError
+    >({
+      url: "/harness/runs/{sessionID}/orchestration/checkpoints",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
 }
 
 export class Skill extends HeyApiClient {
@@ -4456,6 +4509,14 @@ export class Harness extends HeyApiClient {
           | "synthesis"
         >
         minIndependentVerifiers: number
+        adaptive?: {
+          protocolVersion: "marginal-utility-v1"
+          minRounds: number
+          patience: number
+          minUtilityGain: number
+          maxUncertainty: number
+          targetUtility?: number
+        }
       }
       audit?: {
         mode: "performance" | "failure" | "hybrid"

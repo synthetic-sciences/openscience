@@ -19,6 +19,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 11. **Numerical validation is authenticated and recomputed.** A simulation claim pins the engine, effective problem, reference, convergence order, residual/invariant tolerances, and stress tests. A final pass must cite a passing evaluator receipt for the exact artifact.
 12. **Feature attribution is predeclared and paired.** Harness architecture claims require at least three evaluator-authenticated, same-seed baseline/arm pairs frozen before any result exists. Exactly one declared contract factor may differ.
 13. **The evaluator must earn trust.** An optional independent auditor capability scores the bound evaluator on a committed hidden suite of clean and realistically faulty outputs. Final passes require a content-addressed qualification receipt whose discrimination, calibration, and per-fault recall clear the frozen thresholds.
+14. **Overthinking must earn another round.** Adaptive evolution advances only after a sequential, evaluator-authenticated utility checkpoint. Uncertain measurements cannot stop search, and a target hit or exhausted marginal gain preserves investigation and independent verification instead of declaring success.
 
 ## System boundary
 
@@ -83,10 +84,18 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
   },
   "objective": "Maximize the official held-out score",
   "orchestration": {
-    "topology": "auto",
+    "topology": "evolution",
     "maxWorkers": 2,
     "maxRounds": 3,
-    "minIndependentVerifiers": 2
+    "minIndependentVerifiers": 2,
+    "adaptive": {
+      "protocolVersion": "marginal-utility-v1",
+      "minRounds": 2,
+      "patience": 1,
+      "minUtilityGain": 0.02,
+      "maxUncertainty": 0.05,
+      "targetUtility": 0.95
+    }
   },
   "audit": {
     "mode": "hybrid",
@@ -172,6 +181,8 @@ The contract overrides heuristic routing. Unbound interactive sessions use a con
 Every work unit has a content-derived identity, ordered dependencies, a role-specific agent, and a proportional allocation from the contract budget. A role can settle only from a fresh child session after all dependencies complete. Failure cancels transitive descendants without erasing independent roots. Restarts reload the exact graph rather than re-planning it.
 
 Upstream communication is deliberately bounded to summaries plus artifact and evidence references. Verifiers run in distinct child sessions, cannot see each other's verdicts, and must return `support`, `reject`, or `abstain` with calibrated confidence and evidence-backed checks. The harness aggregates only after the whole panel settles: one verdict is `insufficient`, unanimous support/rejection is preserved, and any split or abstaining panel is `disputed`. Internal reflection, ranking, verification, and consensus remain provisional; only the evaluator-authenticated journal can establish benchmark performance or scientific support.
+
+Evolution may additionally bind `adaptive.protocolVersion = marginal-utility-v1`, a minimum round count, patience, minimum normalized utility gain, maximum uncertainty, and optional target utility. Every round then ends in `awaiting_checkpoint`: the next round remains locked until the out-of-band evaluator submits an evidence-backed checkpoint with its bearer capability. Checkpoints are sequential, immutable, server-timestamped, and cannot predate the completed work they assess. High-uncertainty measurements cannot trigger early stopping. A qualified target hit or a predeclared sequence of low marginal gains cancels unused future search, then dynamically reconnects the latest two candidates to failure investigation and the full blinded verification panel. The agent-facing tool cannot submit these checkpoints or award itself more budget.
 
 ### 4. Search without erasing failures
 
@@ -337,31 +348,32 @@ Every adapter is version-agnostic. A real run must still bind an exact benchmark
 
 ## HTTP API
 
-| Method | Route                                    | Purpose                                                       |
-| ------ | ---------------------------------------- | ------------------------------------------------------------- |
-| `GET`  | `/harness/benchmarks`                    | List adapter manifests                                        |
-| `POST` | `/harness/runs`                          | Bind the immutable run and hashed evaluator capability        |
-| `POST` | `/harness/runs/:sessionID/orchestration` | Select and initialize a persisted scientific role DAG         |
-| `GET`  | `/harness/runs/:sessionID/orchestration` | Resume the current orchestration state                        |
-| `POST` | `/harness/audits`                        | Commit an evaluator-owned opaque active-audit pool            |
-| `POST` | `/harness/audits/:auditID/status`        | Read capability-protected posterior and stopping state        |
-| `POST` | `/harness/audits/:auditID/selection`     | Select the next opaque probe commitment                       |
-| `POST` | `/harness/audits/:auditID/observations`  | Record an immutable evaluator-authenticated probe outcome     |
-| `POST` | `/harness/ablations`                     | Freeze a same-seed, one-factor matched ablation               |
-| `POST` | `/harness/ablations/:planID/assessment`  | Derive an immutable paired-effect assessment                  |
-| `POST` | `/harness/evaluators/qualifications`     | Audit a judge on a committed hidden fault suite               |
-| `POST` | `/harness/evaluators/qualifications/:id` | Read a qualification with the independent auditor capability  |
-| `POST` | `/harness/simulations/receipts`          | Recompute and record a simulator validation receipt           |
-| `POST` | `/harness/simulations/receipts/:id`      | Read a capability-protected simulator validation receipt      |
-| `POST` | `/harness/evaluations`                   | Record a staged evaluator-authenticated result                |
-| `GET`  | `/harness/runs/:sessionID/contract`      | Inspect the bound protocol                                    |
-| `GET`  | `/harness/runs/:sessionID/evaluations`   | Inspect the immutable evaluation journal                      |
-| `GET`  | `/harness/runs/:sessionID/report`        | Build a quality-cost report                                   |
-| `POST` | `/harness/compare`                       | Compare compatible reports and identify Pareto-efficient runs |
-| `GET`  | `/harness/skills`                        | List quarantined skill proposals and qualification state      |
-| `POST` | `/harness/skills`                        | Create an inert, content-addressed proposal                   |
-| `POST` | `/harness/skills/evidence`               | Add paired evaluator-authenticated held-out evidence          |
-| `POST` | `/harness/skills/:name/promotion`        | Promote only a currently qualified, unchanged proposal        |
+| Method | Route                                                | Purpose                                                       |
+| ------ | ---------------------------------------------------- | ------------------------------------------------------------- |
+| `GET`  | `/harness/benchmarks`                                | List adapter manifests                                        |
+| `POST` | `/harness/runs`                                      | Bind the immutable run and hashed evaluator capability        |
+| `POST` | `/harness/runs/:sessionID/orchestration`             | Select and initialize a persisted scientific role DAG         |
+| `GET`  | `/harness/runs/:sessionID/orchestration`             | Resume the current orchestration state                        |
+| `POST` | `/harness/runs/:sessionID/orchestration/checkpoints` | Gate evolution using evaluator-authenticated marginal utility |
+| `POST` | `/harness/audits`                                    | Commit an evaluator-owned opaque active-audit pool            |
+| `POST` | `/harness/audits/:auditID/status`                    | Read capability-protected posterior and stopping state        |
+| `POST` | `/harness/audits/:auditID/selection`                 | Select the next opaque probe commitment                       |
+| `POST` | `/harness/audits/:auditID/observations`              | Record an immutable evaluator-authenticated probe outcome     |
+| `POST` | `/harness/ablations`                                 | Freeze a same-seed, one-factor matched ablation               |
+| `POST` | `/harness/ablations/:planID/assessment`              | Derive an immutable paired-effect assessment                  |
+| `POST` | `/harness/evaluators/qualifications`                 | Audit a judge on a committed hidden fault suite               |
+| `POST` | `/harness/evaluators/qualifications/:id`             | Read a qualification with the independent auditor capability  |
+| `POST` | `/harness/simulations/receipts`                      | Recompute and record a simulator validation receipt           |
+| `POST` | `/harness/simulations/receipts/:id`                  | Read a capability-protected simulator validation receipt      |
+| `POST` | `/harness/evaluations`                               | Record a staged evaluator-authenticated result                |
+| `GET`  | `/harness/runs/:sessionID/contract`                  | Inspect the bound protocol                                    |
+| `GET`  | `/harness/runs/:sessionID/evaluations`               | Inspect the immutable evaluation journal                      |
+| `GET`  | `/harness/runs/:sessionID/report`                    | Build a quality-cost report                                   |
+| `POST` | `/harness/compare`                                   | Compare compatible reports and identify Pareto-efficient runs |
+| `GET`  | `/harness/skills`                                    | List quarantined skill proposals and qualification state      |
+| `POST` | `/harness/skills`                                    | Create an inert, content-addressed proposal                   |
+| `POST` | `/harness/skills/evidence`                           | Add paired evaluator-authenticated held-out evidence          |
+| `POST` | `/harness/skills/:name/promotion`                    | Promote only a currently qualified, unchanged proposal        |
 
 The generated JavaScript SDK exposes the same API.
 
@@ -374,11 +386,13 @@ The implementation borrows principles, not source code, from the following prima
 | [AlphaEvolve](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)   | Programs compete through objective external evaluators and remain in an evolutionary database.                                              |
 | [Google DeepMind Co-Scientist](https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/) | Generate diverse hypotheses, critique/rank them, combine strong ideas, and spend substantial compute on verification.                       |
 | [ProEval](https://deepmind.google/research/publications/238239/)                                                           | Actively discover failure regions and estimate capability from a small, strategically chosen evaluation subset.                             |
+| [TRACE: Towards Structural Understanding of LLM Overthinking](https://deepmind.google/research/publications/203490/)       | Detect verification and exploration that continue after their marginal utility has collapsed; stop against a predeclared control rule.      |
 | [Towards a Science of Scaling Agent Systems](https://arxiv.org/abs/2512.08296)                                             | Add agents conditionally: coordination can hurt sequential and tool-heavy work, while centralized structures control error amplification.   |
 | [Gram](https://deepmind.google/research/publications/252981/)                                                              | Audit autonomous agents for sabotage, overeagerness, and hidden side effects with an investigator distinct from the producer.               |
 | [Realistic honeypot evaluations](https://deepmind.google/research/publications/253391/)                                    | Include evaluation-awareness and realistic deployment-context failures instead of relying only on artificial judge tests.                   |
 | [RubricEval](https://arxiv.org/abs/2603.25133) and [Who Validates the Validators?](https://arxiv.org/abs/2404.12272)       | Meta-evaluate judges on realistic failures and version criteria rather than treating an LLM judge as ground truth by default.               |
 | [MLEvolve](https://github.com/InternScience/MLEvolve) and its [paper](https://arxiv.org/abs/2606.06473)                    | Progressive multi-branch search, success/failure hindsight, adaptive exploration, and branch fusion for MLE.                                |
+| [CORAL](https://arxiv.org/abs/2604.01658)                                                                                  | Persist coordination state and heartbeat-like progress across asynchronous research workers rather than relying on chat memory.             |
 | [AI Scientist v2](https://github.com/SakanaAI/AI-Scientist-v2) and its [paper](https://arxiv.org/abs/2504.08066)           | Multiple independent experimental roots and agentic tree search rather than a single linear attempt.                                        |
 | [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954)                                                                   | Preserve an open-ended archive with lineage; do not collapse self-improvement into one incumbent.                                           |
 | [SkyDiscover](https://github.com/skydiscover-ai/skydiscover)                                                               | Island-style diversity, UCB selection, migration/fusion, staged evaluation, and strategy mutation after stagnation.                         |
