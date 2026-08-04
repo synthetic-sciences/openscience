@@ -141,15 +141,14 @@ export const NotebookRoutes = lazy(() =>
             KernelRuntime.ensure(primary(session.id))
           }
         }
-        const kernels = await Promise.all(
-          KernelRuntime.list(query.sessionID)
-            .filter((kernel) => owners.has(kernel.sessionID))
-            .map(async (kernel) => {
-              if (!kernel.active || kernel.process_id === null) return kernel
-              const resources = await KernelMetrics.sample(kernel.process_id)
-              return Object.keys(resources).length ? { ...kernel, resources } : kernel
-            }),
+        const live = KernelRuntime.list(query.sessionID).filter((kernel) => owners.has(kernel.sessionID))
+        const samples = await KernelMetrics.sampleAll(
+          live.flatMap((kernel) => (kernel.active && kernel.process_id !== null ? [kernel.process_id] : [])),
         )
+        const kernels = live.map((kernel) => {
+          const resources = kernel.process_id === null ? undefined : samples.get(kernel.process_id)
+          return resources && Object.keys(resources).length ? { ...kernel, resources } : kernel
+        })
         return c.json({ kernels })
       },
     )
