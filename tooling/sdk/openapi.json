@@ -16422,7 +16422,6 @@
                     "minLength": 1
                   },
                   "createdAt": {
-                    "default": 1785857727648,
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
@@ -16573,7 +16572,6 @@
                     "additionalProperties": false
                   },
                   "recordedAt": {
-                    "default": 1785857727648,
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991

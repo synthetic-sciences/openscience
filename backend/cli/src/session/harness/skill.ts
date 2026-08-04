@@ -20,11 +20,7 @@ export namespace HarnessSkill {
       origin: z.enum(["conversation", "rsi"]),
       sessionID: z.string().min(1).optional(),
       runID: z.string().min(1).optional(),
-      createdAt: z
-        .number()
-        .int()
-        .positive()
-        .default(() => Date.now()),
+      createdAt: z.number().int().positive().optional(),
     })
     .strict()
   export type ProposalInput = z.input<typeof ProposalInput>
@@ -130,11 +126,7 @@ export namespace HarnessSkill {
       candidate: z.object({ sessionID: z.string().min(1), evaluatorToken: z.string().min(32).max(1_024) }).strict(),
       control: z.object({ sessionID: z.string().min(1), evaluatorToken: z.string().min(32).max(1_024) }).strict(),
       trigger: Trigger,
-      recordedAt: z
-        .number()
-        .int()
-        .positive()
-        .default(() => Date.now()),
+      recordedAt: z.number().int().positive().optional(),
     })
     .strict()
   export type Attestation = z.input<typeof Attestation>
@@ -192,7 +184,7 @@ export namespace HarnessSkill {
       status: "pending",
       evidence: [],
       criteria: { tasks: 3, improvements: 2, triggerPrecision: 0.8, triggerRecall: 0.8 },
-      createdAt: value.createdAt,
+      createdAt: value.createdAt ?? now,
       updatedAt: now,
     })
     await fs.mkdir(dir(value.name), { recursive: true })
@@ -341,7 +333,7 @@ export namespace HarnessSkill {
       improved,
       trigger: { ...trigger, precision, recall },
       evaluator: { name: candidateEvaluation.evaluator.name, version: candidateEvaluation.evaluator.version },
-      recordedAt: value.recordedAt,
+      recordedAt: value.recordedAt ?? Date.now(),
     })
     await JsonStore.update(manifest(value.name), (data) => {
       const current = Manifest.parse(data)
