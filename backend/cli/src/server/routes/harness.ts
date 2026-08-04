@@ -3,6 +3,7 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { lazy } from "@/util/lazy"
 import { HarnessAdapter } from "@/session/harness/adapter"
+import { HarnessAudit } from "@/session/harness/audit"
 import { HarnessBenchmark } from "@/session/harness/benchmark"
 import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
@@ -35,6 +36,73 @@ export const HarnessRoutes = lazy(() =>
         },
       }),
       (c) => c.json(Object.values(HarnessBenchmark.catalog)),
+    )
+    .post(
+      "/audits",
+      describeRoute({
+        summary: "Initialize an evaluator-owned active audit",
+        description:
+          "Commits an opaque probe pool and binds uncertainty-aware selection to the evaluator capability and audited artifact.",
+        operationId: "harness.audit.initialize",
+        responses: {
+          200: {
+            description: "Active audit state",
+            content: { "application/json": { schema: resolver(HarnessAudit.State) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessAudit.Initialize),
+      async (c) => c.json(await HarnessAudit.initialize(c.req.valid("json"))),
+    )
+    .post(
+      "/audits/:auditID/status",
+      describeRoute({
+        summary: "Read a capability-protected active audit",
+        operationId: "harness.audit.status",
+        responses: {
+          200: {
+            description: "Active audit state",
+            content: { "application/json": { schema: resolver(HarnessAudit.State) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ auditID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessAudit.Access),
+      async (c) => c.json(await HarnessAudit.status(c.req.valid("param").auditID, c.req.valid("json"))),
+    )
+    .post(
+      "/audits/:auditID/selection",
+      describeRoute({
+        summary: "Select the next opaque active-audit probe",
+        description:
+          "Combines weighted integral-variance reduction, failure UCB, failure-region diversity, and stratum coverage.",
+        operationId: "harness.audit.select",
+        responses: { 200: { description: "Selected opaque probe commitment" }, ...errors(400, 403, 404, 409) },
+      }),
+      validator("param", z.object({ auditID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessAudit.Access),
+      async (c) => c.json(await HarnessAudit.select(c.req.valid("param").auditID, c.req.valid("json"))),
+    )
+    .post(
+      "/audits/:auditID/observations",
+      describeRoute({
+        summary: "Record an evaluator-authenticated probe outcome",
+        description:
+          "Updates the GP posterior and stopping rule without promoting the audit estimate into benchmark evidence.",
+        operationId: "harness.audit.observe",
+        responses: {
+          200: {
+            description: "Updated active audit state",
+            content: { "application/json": { schema: resolver(HarnessAudit.State) } },
+          },
+          ...errors(400, 403, 404, 409),
+        },
+      }),
+      validator("param", z.object({ auditID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessAudit.Observe),
+      async (c) => c.json(await HarnessAudit.observe(c.req.valid("param").auditID, c.req.valid("json"))),
     )
     .post(
       "/runs/:sessionID/orchestration",

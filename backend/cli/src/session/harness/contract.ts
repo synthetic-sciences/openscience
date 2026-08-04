@@ -54,6 +54,36 @@ export namespace HarnessContract {
     .strict()
   export type Orchestration = z.infer<typeof Orchestration>
 
+  export const Audit = z
+    .object({
+      mode: z.enum(["performance", "failure", "hybrid"]),
+      budget: z.number().int().min(2).max(512),
+      minSamples: z.number().int().min(2).max(512),
+      noiseVariance: z.number().positive().max(2).default(0.05),
+      lengthscale: z.number().positive().max(100).default(1),
+      beta: z.number().nonnegative().max(10).default(1.96),
+      failureThreshold: z.number().min(0).max(1).default(0.5),
+      tolerance: z.number().positive().max(1).default(0.02),
+      maxUncertainty: z.number().positive().max(1).default(0.05),
+      estimationWeight: z.number().min(0).max(1).default(0.5),
+      diversityWeight: z.number().min(0).max(0.5).default(0.2),
+      coverageWeight: z.number().min(0).max(0.5).default(0.2),
+      targetFailures: z.number().int().positive().max(512).optional(),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (value.minSamples > value.budget) {
+        ctx.addIssue({ code: "custom", path: ["minSamples"], message: "Audit minimum samples exceed its budget" })
+      }
+      if (value.diversityWeight + value.coverageWeight > 1) {
+        ctx.addIssue({ code: "custom", message: "Audit diversity and coverage weights cannot exceed one" })
+      }
+      if (value.targetFailures !== undefined && value.targetFailures > value.budget) {
+        ctx.addIssue({ code: "custom", path: ["targetFailures"], message: "Audit failure target exceeds its budget" })
+      }
+    })
+  export type Audit = z.infer<typeof Audit>
+
   export const Split = z.enum(["development", "validation", "held_out", "release"])
   export type Split = z.infer<typeof Split>
 
@@ -96,6 +126,7 @@ export namespace HarnessContract {
         .strict(),
       profile: Profile,
       orchestration: Orchestration.optional(),
+      audit: Audit.optional(),
       packs: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)

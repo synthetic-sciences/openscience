@@ -33,6 +33,7 @@ export namespace HarnessAdapter {
       objective: z.string().min(1).max(4_000),
       profile: HarnessContract.Profile.optional(),
       orchestration: HarnessContract.Orchestration.optional(),
+      audit: HarnessContract.Audit.optional(),
       extraPacks: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -198,6 +199,7 @@ export namespace HarnessAdapter {
       },
       profile,
       orchestration: task.orchestration,
+      audit: task.audit,
       packs,
       model: task.model,
       tools: task.tools,

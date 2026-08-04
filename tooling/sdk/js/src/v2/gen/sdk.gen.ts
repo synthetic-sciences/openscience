@@ -92,6 +92,14 @@ import type {
   GlobalProjectCreateErrors,
   GlobalProjectCreateResponses,
   GlobalSyncResponses,
+  HarnessAuditInitializeErrors,
+  HarnessAuditInitializeResponses,
+  HarnessAuditObserveErrors,
+  HarnessAuditObserveResponses,
+  HarnessAuditSelectErrors,
+  HarnessAuditSelectResponses,
+  HarnessAuditStatusErrors,
+  HarnessAuditStatusResponses,
   HarnessBenchmarksResponses,
   HarnessBindErrors,
   HarnessBindResponses,
@@ -3631,6 +3639,191 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Audit extends HeyApiClient {
+  /**
+   * Initialize an evaluator-owned active audit
+   *
+   * Commits an opaque probe pool and binds uncertainty-aware selection to the evaluator capability and audited artifact.
+   */
+  public initialize<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+      subject?: {
+        type: "run" | "candidate"
+        id: string
+        artifactSHA256: string
+      }
+      probes?: Array<{
+        id: string
+        commitment: string
+        features: Array<number>
+        stratum: string
+        weight?: number
+        priorLoss?: number
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "probes" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessAuditInitializeResponses,
+      HarnessAuditInitializeErrors,
+      ThrowOnError
+    >({
+      url: "/harness/audits",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected active audit
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      auditID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "auditID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessAuditStatusResponses, HarnessAuditStatusErrors, ThrowOnError>({
+      url: "/harness/audits/{auditID}/status",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Select the next opaque active-audit probe
+   *
+   * Combines weighted integral-variance reduction, failure UCB, failure-region diversity, and stratum coverage.
+   */
+  public select<ThrowOnError extends boolean = false>(
+    parameters: {
+      auditID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "auditID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessAuditSelectResponses, HarnessAuditSelectErrors, ThrowOnError>({
+      url: "/harness/audits/{auditID}/selection",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Record an evaluator-authenticated probe outcome
+   *
+   * Updates the GP posterior and stopping rule without promoting the audit estimate into benchmark evidence.
+   */
+  public observe<ThrowOnError extends boolean = false>(
+    parameters: {
+      auditID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+      probeID?: string
+      loss?: number
+      failure?: boolean
+      evidence?: Array<string>
+      note?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "auditID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "probeID" },
+            { in: "body", key: "loss" },
+            { in: "body", key: "failure" },
+            { in: "body", key: "evidence" },
+            { in: "body", key: "note" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessAuditObserveResponses, HarnessAuditObserveErrors, ThrowOnError>(
+      {
+        url: "/harness/audits/{auditID}/observations",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+}
+
 export class Orchestration extends HeyApiClient {
   /**
    * Read scientific orchestration state
@@ -3906,6 +4099,21 @@ export class Harness extends HeyApiClient {
         >
         minIndependentVerifiers: number
       }
+      audit?: {
+        mode: "performance" | "failure" | "hybrid"
+        budget: number
+        minSamples: number
+        noiseVariance?: number
+        lengthscale?: number
+        beta?: number
+        failureThreshold?: number
+        tolerance?: number
+        maxUncertainty?: number
+        estimationWeight?: number
+        diversityWeight?: number
+        coverageWeight?: number
+        targetFailures?: number
+      }
       extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
       metric?: {
         name?: string
@@ -3966,6 +4174,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "objective" },
             { in: "body", key: "profile" },
             { in: "body", key: "orchestration" },
+            { in: "body", key: "audit" },
             { in: "body", key: "extraPacks" },
             { in: "body", key: "metric" },
             { in: "body", key: "fidelities" },
@@ -4202,6 +4411,11 @@ export class Harness extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _audit?: Audit
+  get audit(): Audit {
+    return (this._audit ??= new Audit({ client: this.client }))
   }
 
   private _orchestration?: Orchestration

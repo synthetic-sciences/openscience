@@ -7518,6 +7518,388 @@ export type HarnessBenchmarksResponses = {
 
 export type HarnessBenchmarksResponse = HarnessBenchmarksResponses[keyof HarnessBenchmarksResponses]
 
+export type HarnessAuditInitializeData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifactSHA256: string
+    }
+    probes: Array<{
+      id: string
+      commitment: string
+      features: Array<number>
+      stratum: string
+      weight?: number
+      priorLoss?: number
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/audits"
+}
+
+export type HarnessAuditInitializeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessAuditInitializeError = HarnessAuditInitializeErrors[keyof HarnessAuditInitializeErrors]
+
+export type HarnessAuditInitializeResponses = {
+  /**
+   * Active audit state
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "active-audit-v1"
+    auditID: string
+    runID: string
+    sessionID: string
+    evaluator: string
+    contractFingerprint: string
+    poolFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifactSHA256: string
+    }
+    config: {
+      mode: "performance" | "failure" | "hybrid"
+      budget: number
+      minSamples: number
+      noiseVariance?: number
+      lengthscale?: number
+      beta?: number
+      failureThreshold?: number
+      tolerance?: number
+      maxUncertainty?: number
+      estimationWeight?: number
+      diversityWeight?: number
+      coverageWeight?: number
+      targetFailures?: number
+    }
+    status: "active" | "completed"
+    stopReason?: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
+    pool: {
+      [key: string]: {
+        id: string
+        commitment: string
+        features: Array<number>
+        stratum: string
+        weight?: number
+        priorLoss?: number
+        selection?: {
+          round: number
+          selectedAt: number
+          acquisition: {
+            posteriorLoss: number
+            posteriorStd: number
+            failureUCB: number
+            varianceReduction: number
+            diversity: number
+            coverage: number
+            score: number
+          }
+        }
+        observation?: {
+          loss: number
+          failure: boolean
+          evidence: Array<string>
+          note?: string
+          evaluatedAt: number
+        }
+      }
+    }
+    order: Array<string>
+    estimate: {
+      observed: number
+      failures: number
+      meanLoss: number
+      standardDeviation: number
+      lower95: number
+      upper95: number
+      abstain: boolean
+      effectivePoolSize: number
+      stratumCoverage: number
+    }
+    revision: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type HarnessAuditInitializeResponse = HarnessAuditInitializeResponses[keyof HarnessAuditInitializeResponses]
+
+export type HarnessAuditStatusData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    auditID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/audits/{auditID}/status"
+}
+
+export type HarnessAuditStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessAuditStatusError = HarnessAuditStatusErrors[keyof HarnessAuditStatusErrors]
+
+export type HarnessAuditStatusResponses = {
+  /**
+   * Active audit state
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "active-audit-v1"
+    auditID: string
+    runID: string
+    sessionID: string
+    evaluator: string
+    contractFingerprint: string
+    poolFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifactSHA256: string
+    }
+    config: {
+      mode: "performance" | "failure" | "hybrid"
+      budget: number
+      minSamples: number
+      noiseVariance?: number
+      lengthscale?: number
+      beta?: number
+      failureThreshold?: number
+      tolerance?: number
+      maxUncertainty?: number
+      estimationWeight?: number
+      diversityWeight?: number
+      coverageWeight?: number
+      targetFailures?: number
+    }
+    status: "active" | "completed"
+    stopReason?: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
+    pool: {
+      [key: string]: {
+        id: string
+        commitment: string
+        features: Array<number>
+        stratum: string
+        weight?: number
+        priorLoss?: number
+        selection?: {
+          round: number
+          selectedAt: number
+          acquisition: {
+            posteriorLoss: number
+            posteriorStd: number
+            failureUCB: number
+            varianceReduction: number
+            diversity: number
+            coverage: number
+            score: number
+          }
+        }
+        observation?: {
+          loss: number
+          failure: boolean
+          evidence: Array<string>
+          note?: string
+          evaluatedAt: number
+        }
+      }
+    }
+    order: Array<string>
+    estimate: {
+      observed: number
+      failures: number
+      meanLoss: number
+      standardDeviation: number
+      lower95: number
+      upper95: number
+      abstain: boolean
+      effectivePoolSize: number
+      stratumCoverage: number
+    }
+    revision: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type HarnessAuditStatusResponse = HarnessAuditStatusResponses[keyof HarnessAuditStatusResponses]
+
+export type HarnessAuditSelectData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    auditID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/audits/{auditID}/selection"
+}
+
+export type HarnessAuditSelectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessAuditSelectError = HarnessAuditSelectErrors[keyof HarnessAuditSelectErrors]
+
+export type HarnessAuditSelectResponses = {
+  /**
+   * Selected opaque probe commitment
+   */
+  200: unknown
+}
+
+export type HarnessAuditObserveData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+    probeID: string
+    loss: number
+    failure: boolean
+    evidence: Array<string>
+    note?: string
+  }
+  path: {
+    auditID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/audits/{auditID}/observations"
+}
+
+export type HarnessAuditObserveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessAuditObserveError = HarnessAuditObserveErrors[keyof HarnessAuditObserveErrors]
+
+export type HarnessAuditObserveResponses = {
+  /**
+   * Updated active audit state
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "active-audit-v1"
+    auditID: string
+    runID: string
+    sessionID: string
+    evaluator: string
+    contractFingerprint: string
+    poolFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifactSHA256: string
+    }
+    config: {
+      mode: "performance" | "failure" | "hybrid"
+      budget: number
+      minSamples: number
+      noiseVariance?: number
+      lengthscale?: number
+      beta?: number
+      failureThreshold?: number
+      tolerance?: number
+      maxUncertainty?: number
+      estimationWeight?: number
+      diversityWeight?: number
+      coverageWeight?: number
+      targetFailures?: number
+    }
+    status: "active" | "completed"
+    stopReason?: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
+    pool: {
+      [key: string]: {
+        id: string
+        commitment: string
+        features: Array<number>
+        stratum: string
+        weight?: number
+        priorLoss?: number
+        selection?: {
+          round: number
+          selectedAt: number
+          acquisition: {
+            posteriorLoss: number
+            posteriorStd: number
+            failureUCB: number
+            varianceReduction: number
+            diversity: number
+            coverage: number
+            score: number
+          }
+        }
+        observation?: {
+          loss: number
+          failure: boolean
+          evidence: Array<string>
+          note?: string
+          evaluatedAt: number
+        }
+      }
+    }
+    order: Array<string>
+    estimate: {
+      observed: number
+      failures: number
+      meanLoss: number
+      standardDeviation: number
+      lower95: number
+      upper95: number
+      abstain: boolean
+      effectivePoolSize: number
+      stratumCoverage: number
+    }
+    revision: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type HarnessAuditObserveResponse = HarnessAuditObserveResponses[keyof HarnessAuditObserveResponses]
+
 export type HarnessOrchestrationStatusData = {
   body?: never
   path: {
@@ -7769,6 +8151,21 @@ export type HarnessBindData = {
       >
       minIndependentVerifiers: number
     }
+    audit?: {
+      mode: "performance" | "failure" | "hybrid"
+      budget: number
+      minSamples: number
+      noiseVariance?: number
+      lengthscale?: number
+      beta?: number
+      failureThreshold?: number
+      tolerance?: number
+      maxUncertainty?: number
+      estimationWeight?: number
+      diversityWeight?: number
+      coverageWeight?: number
+      targetFailures?: number
+    }
     extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     metric?: {
       name?: string
@@ -7879,6 +8276,21 @@ export type HarnessBindResponses = {
         | "synthesis"
       >
       minIndependentVerifiers: number
+    }
+    audit?: {
+      mode: "performance" | "failure" | "hybrid"
+      budget: number
+      minSamples: number
+      noiseVariance?: number
+      lengthscale?: number
+      beta?: number
+      failureThreshold?: number
+      tolerance?: number
+      maxUncertainty?: number
+      estimationWeight?: number
+      diversityWeight?: number
+      coverageWeight?: number
+      targetFailures?: number
     }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
@@ -8320,6 +8732,21 @@ export type HarnessContractResponses = {
         | "synthesis"
       >
       minIndependentVerifiers: number
+    }
+    audit?: {
+      mode: "performance" | "failure" | "hybrid"
+      budget: number
+      minSamples: number
+      noiseVariance?: number
+      lengthscale?: number
+      beta?: number
+      failureThreshold?: number
+      tolerance?: number
+      maxUncertainty?: number
+      estimationWeight?: number
+      diversityWeight?: number
+      coverageWeight?: number
+      targetFailures?: number
     }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {

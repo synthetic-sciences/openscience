@@ -9,6 +9,7 @@ import { HarnessRoutes } from "../../src/server/routes/harness"
 const sessionID = "route-harness-adapter"
 const token = "route-evaluator-capability-token-000000000000000000"
 const skill = "route-harness-skill"
+const hash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
 
 afterEach(async () => {
   await Promise.all(
@@ -16,6 +17,10 @@ afterEach(async () => {
       fs.rm(path.join(Global.Path.data, "harness", name, `${encodeURIComponent(sessionID)}.json`), { force: true }),
     ),
   )
+  await fs.rm(path.join(Global.Path.data, "harness", "audits", encodeURIComponent(sessionID)), {
+    recursive: true,
+    force: true,
+  })
   await Promise.all(
     ["learned-skill-proposals", "learned-skills"].map((name) =>
       fs.rm(path.join(Global.Path.data, name, skill), { recursive: true, force: true }),
@@ -43,6 +48,7 @@ describe("/harness routes", () => {
         split: "held_out",
         evaluator: { name: "route-evaluator", version: "1", source: "benchmark", token },
         objective: "Run and verify a chi-square analysis",
+        audit: { mode: "hybrid", budget: 2, minSamples: 2 },
         metric: { name: "score", direction: "maximize" },
         model: { provider: "test", name: "model" },
         budget: { steps: 10 },
@@ -53,7 +59,11 @@ describe("/harness routes", () => {
       }),
     })
     expect(bound.status).toBe(200)
-    const contract = (await bound.json()) as { packs: Array<"statistics">; benchmark: { name: string } }
+    const contract = (await bound.json()) as {
+      runID: string
+      packs: Array<"statistics">
+      benchmark: { name: string }
+    }
     expect(contract).toMatchObject({ packs: ["statistics"], benchmark: { name: "statistics" } })
     expect(JSON.stringify(contract)).not.toContain(token)
 
@@ -63,6 +73,57 @@ describe("/harness routes", () => {
     const orchestration = await app.request(`/runs/${sessionID}/orchestration`)
     expect(orchestration.status).toBe(200)
     expect(await orchestration.json()).toMatchObject({ protocolVersion: "coalition-v1", revision: 0 })
+
+    const audit = await app.request("/audits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionID,
+        evaluatorToken: token,
+        subject: { type: "run", id: contract.runID, artifactSHA256: hash("route-artifact") },
+        probes: [
+          {
+            id: "probe-a",
+            commitment: hash("hidden-a"),
+            features: [0],
+            stratum: "a",
+            weight: 1,
+            priorLoss: 0.5,
+          },
+          {
+            id: "probe-b",
+            commitment: hash("hidden-b"),
+            features: [1],
+            stratum: "b",
+            weight: 1,
+            priorLoss: 0.5,
+          },
+        ],
+      }),
+    })
+    expect(audit.status).toBe(200)
+    const auditState = (await audit.json()) as { auditID: string }
+    const selected = await app.request(`/audits/${auditState.auditID}/selection`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionID, evaluatorToken: token }),
+    })
+    expect(selected.status).toBe(200)
+    const probe = (await selected.json()) as { probeID: string }
+    const observed = await app.request(`/audits/${auditState.auditID}/observations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionID,
+        evaluatorToken: token,
+        probeID: probe.probeID,
+        loss: 0.2,
+        failure: false,
+        evidence: ["route:probe-receipt"],
+      }),
+    })
+    expect(observed.status).toBe(200)
+    expect(await observed.json()).toMatchObject({ estimate: { observed: 1 }, revision: 2 })
 
     const checks = HarnessDomain.compose(contract.packs).map((check) => ({
       id: check.id,
