@@ -8,6 +8,11 @@ export namespace KernelHost {
     total: number
   }
 
+  export interface Mark {
+    times: Times
+    at: number
+  }
+
   // os.freemem() reports MemFree on Linux, which excludes reclaimable page
   // cache — a healthy 16 GB desktop reads as ~1.4 GB free. MemAvailable is the
   // kernel's own estimate of what a new workload could claim without swapping.
@@ -36,7 +41,16 @@ export namespace KernelHost {
     return Math.min(cores, (active / total) * cores)
   }
 
-  const mark = () => ({ times: times(os.cpus()), at: Date.now() })
+  // The baseline advances only when the window produced a reading; a failed
+  // window keeps the older mark so the next call measures across a span that
+  // has actually advanced. Pure, so the rule is testable without wall clock.
+  export function advance(previous: Mark, fresh: Mark, cores: number) {
+    const value = busy(previous.times, fresh.times, cores)
+    if (value === undefined) return { baseline: previous, reading: {} }
+    return { baseline: fresh, reading: { busy: value } }
+  }
+
+  const mark = (): Mark => ({ times: times(os.cpus()), at: Date.now() })
 
   // Rolling baseline: a 2.5s poll compares against the previous poll and pays
   // nothing. A cold call, or one whose baseline is too old to average
@@ -47,15 +61,9 @@ export namespace KernelHost {
     const previous = baseline
     const fresh = mark()
     if (previous && fresh.at - previous.at <= 30_000) {
-      const value = busy(previous.times, fresh.times, cores)
-      // Advance the baseline ONLY when the window produced a reading. Two
-      // calls inside one ~10ms scheduler tick read identical os.cpus() times;
-      // overwriting the baseline there would reset the window every poll and
-      // starve the measurement forever. Keeping the older mark lets the next
-      // call measure across a span that has actually advanced.
-      if (value === undefined) return {}
-      baseline = fresh
-      return { busy: value }
+      const result = advance(previous, fresh, cores)
+      baseline = result.baseline
+      return result.reading
     }
     await Bun.sleep(200)
     const next = mark()
