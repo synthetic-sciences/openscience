@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createProjectRequest } from "@/utils/openscience-fetch"
-import { createComputeJobsAPI, stableJobs, type Job } from "./ComputeJobsAPI"
+import { createComputeJobsAPI, serial, stableJobs, type Job } from "./ComputeJobsAPI"
 
 const source = await Bun.file(new URL("./ComputeJobs.tsx", import.meta.url)).text()
 const apiSource = await Bun.file(new URL("./ComputeJobsAPI.ts", import.meta.url)).text()
@@ -25,6 +25,24 @@ describe("compute jobs surface", () => {
     expect(unchanged[0]).toBe(job)
     expect(finished).not.toBe(previous)
     expect(finished[0]).not.toBe(job)
+  })
+
+  test("coalesces a busy stream read into one final read", async () => {
+    const gate = Promise.withResolvers<void>()
+    const calls: string[] = []
+    const streams = serial(async (id: string) => {
+      calls.push(id)
+      if (calls.length === 1) await gate.promise
+    })
+
+    const first = streams("running")
+    await Promise.resolve()
+    await streams("terminal")
+    await streams("terminal")
+    gate.resolve()
+    await first
+
+    expect(calls).toEqual(["running", "terminal"])
   })
 
   test("binds every job operation to the active opaque project capability", async () => {
@@ -138,6 +156,7 @@ describe("compute jobs surface", () => {
     expect(source).toContain("job().checkpoint")
     expect(source).toContain("job().reproducibility")
     expect(source).toContain("job().capture_error")
+    expect(source).toContain("job().cleanup_error")
   })
 
   test("shows Modal lifecycle logs above command output", () => {
@@ -152,6 +171,12 @@ describe("compute jobs surface", () => {
     expect(source).toContain('"Run cancelled."')
     expect(source).not.toContain('events.loading ? "Syncing…"')
     expect(source).not.toContain('output.loading ? "Syncing…"')
+  })
+
+  test("does not drop the final streams when a job becomes terminal", () => {
+    expect(source).toContain("const streams = serial(")
+    expect(source).toContain("const status = current()?.status")
+    expect(source).toContain("terminal.has(status)")
   })
 
   test("uses backend authority and an exact approval plan for Modal dispatch", () => {
@@ -193,7 +218,7 @@ describe("compute jobs surface", () => {
     expect(interval).not.toContain("eventsApi.refetch")
     expect(interval).toContain("void refresh()")
     expect(interval).toContain("void streams")
-    expect(source).toContain("if (outputBusy() || eventsBusy()) return")
+    expect(apiSource).toContain("if (state.active)")
     expect(source).toContain(".finally(() =>")
     expect(source).not.toContain("Save the session before starting")
   })

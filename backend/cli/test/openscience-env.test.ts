@@ -30,7 +30,7 @@ test("subprocess env filtering still passes BYOK OpenRouter keys", () => {
   expect(filtered.OPENROUTER_API_KEY).toBe("sk-or-user-owned")
 })
 
-test("subprocess env filtering never exposes compute control-plane credentials", () => {
+test("subprocess env filtering keeps legacy skill credentials but never exposes Modal tokens", () => {
   const filtered = OpenScience.filterEnvForSubprocess({
     PATH: "/usr/bin",
     MODAL_TOKEN_ID: "ak-user-owned",
@@ -39,7 +39,11 @@ test("subprocess env filtering never exposes compute control-plane credentials",
     RUNPOD_API_KEY: "runpod-user-owned",
   })
 
-  expect(filtered).toEqual({ PATH: "/usr/bin" })
+  expect(filtered).toEqual({
+    PATH: "/usr/bin",
+    LAMBDA_API_KEY: "lambda-user-owned",
+    RUNPOD_API_KEY: "runpod-user-owned",
+  })
 })
 
 test("kernel env filtering keeps runtime configuration but drops credentials", () => {

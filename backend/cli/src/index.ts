@@ -101,6 +101,10 @@ const cli = yargs(hideBin(process.argv))
     // keeps the credential route module out of every command's static graph.
     await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
 
+    // Legacy skill-based compute providers still consume their enabled keys
+    // from subprocess environments. Modal remains adapter-only.
+    await import("./server/routes/settings/compute").then((m) => m.ComputeSettings.applyComputeEnv()).catch(() => {})
+
     // Retry any failed usage reports from previous sessions
     OpenScience.flushPendingUsage().catch(() => {})
   })

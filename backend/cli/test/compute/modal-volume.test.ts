@@ -67,10 +67,16 @@ async function fixture() {
     command: [python, "-I", "-c", run, root, await ModalVolume.driverPath()],
     env: { ...process.env, FAKE_MODAL_ROOT: volume },
   }
-  return { context, staging }
+  return { context, root, staging }
 }
 
 describe("ModalVolume", () => {
+  test("shares one complete driver path across concurrent callers", async () => {
+    const paths = await Promise.all(Array.from({ length: 20 }, () => ModalVolume.driverPath()))
+    expect(new Set(paths).size).toBe(1)
+    expect((await fs.stat(paths[0]!)).isFile()).toBe(true)
+  })
+
   test("accepts a system Python only when the pinned SDK is available in isolated mode", async () => {
     const python = Bun.which("python3") ?? Bun.which("python")
     if (!python) throw new Error("Python is required for the Modal Volume driver test")
@@ -123,10 +129,40 @@ describe("ModalVolume", () => {
     expect(await Bun.file(path.join(item.staging, "outputs", "model.bin")).text()).toBe("weights")
   })
 
+  test("waits for a durable marker inside one driver process", async () => {
+    const item = await fixture()
+    const marker = path.join(item.root, "volume", ".openscience-exit-code")
+    await fs.rm(marker)
+    const write = Bun.sleep(100).then(() => Bun.write(marker, "0\n"))
+
+    const entries = await ModalVolume.wait(item.context, "job-volume", ".openscience-exit-code", 20, 20)
+    await write
+
+    expect(entries.some((entry) => entry.path === ".openscience-exit-code")).toBe(true)
+  })
+
   test("rejects requested paths outside its staging directory", async () => {
     const item = await fixture()
     await expect(ModalVolume.download(item.context, "job-volume", ["../secret"], item.staging)).rejects.toThrow(
       /unsafe path/,
     )
+  })
+
+  test("accepts downloads when a staging parent is reached through a symlink", async () => {
+    const item = await fixture()
+    const real = path.join(item.root, "real")
+    const alias = path.join(item.root, "alias")
+    await fs.mkdir(real)
+    await fs.symlink(real, alias)
+
+    const downloaded = await ModalVolume.download(
+      item.context,
+      "job-volume",
+      ["outputs/model.bin"],
+      path.join(alias, "staging"),
+    )
+
+    expect(downloaded[0]?.staging).toBe(path.join(real, "staging", "outputs", "model.bin"))
+    expect(await Bun.file(downloaded[0]!.staging).text()).toBe("weights")
   })
 })

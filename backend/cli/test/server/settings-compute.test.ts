@@ -222,10 +222,49 @@ test("re-saving a key updates the value resolved by the control plane", async ()
   await connect("runpod", "rpa_first")
   await ComputeSettings.setProviderEnabled("runpod", true)
   expect(await ComputeSettings.providerEnv("runpod")).toEqual({ RUNPOD_API_KEY: "rpa_first" })
+  expect(process.env["RUNPOD_API_KEY"]).toBe("rpa_first")
   await connect("runpod", "rpa_second")
   expect(await ComputeSettings.providerEnv("runpod")).toEqual({ RUNPOD_API_KEY: "rpa_second" })
+  expect(process.env["RUNPOD_API_KEY"]).toBe("rpa_second")
   await ComputeSettingsRoutes().request("/provider/runpod", { method: "DELETE" })
+  expect(process.env["RUNPOD_API_KEY"]).toBeUndefined()
   await expect(ComputeSettings.providerEnv("runpod")).rejects.toThrow("disabled")
+})
+
+test("does not reclaim a provider variable replaced by the shell", async () => {
+  await connect("prime", "prime_stored_first")
+  await ComputeSettings.setProviderEnabled("prime", true)
+  expect(process.env["PRIME_API_KEY"]).toBe("prime_stored_first")
+  process.env["PRIME_API_KEY"] = "prime_from_shell"
+
+  await connect("prime", "prime_stored_second")
+  expect(process.env["PRIME_API_KEY"]).toBe("prime_from_shell")
+  await ComputeSettings.disconnectProvider("prime")
+  expect(process.env["PRIME_API_KEY"]).toBe("prime_from_shell")
+  delete process.env["PRIME_API_KEY"]
+})
+
+test("preserves a provider variable replaced while a project instance is active", async () => {
+  await using tmp = await tmpdir()
+  delete process.env["VAST_API_KEY"]
+  await ComputeSettings.disconnectProvider("vast")
+  await Instance.provide({
+    directory: tmp.path,
+    init: InstanceBootstrap,
+    fn: async () => {
+      await connect("vast", "vast_owned_first")
+      await ComputeSettings.setProviderEnabled("vast", true)
+      expect(process.env["VAST_API_KEY"]).toBe("vast_owned_first")
+      process.env["VAST_API_KEY"] = "vast_from_shell"
+
+      await connect("vast", "vast_owned_second")
+      expect(process.env["VAST_API_KEY"]).toBe("vast_from_shell")
+      await ComputeSettings.disconnectProvider("vast")
+      expect(process.env["VAST_API_KEY"]).toBe("vast_from_shell")
+      await Instance.dispose()
+    },
+  })
+  delete process.env["VAST_API_KEY"]
 })
 
 test("compute job routes execute a real local command and expose its log", async () => {

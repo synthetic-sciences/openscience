@@ -68,7 +68,21 @@ export namespace ModalPlan {
     return segments.some((part) => DENY.has(part)) || SECRET.test(file)
   }
 
-  async function ignored(root: string) {
+  async function ignored(root: string, files: string[]) {
+    const git = Bun.which("git")
+    const repository = await fs.stat(path.join(root, ".git")).then(
+      () => true,
+      () => false,
+    )
+    if (git && repository && files.length) {
+      const proc = Bun.spawn([git, "-C", root, "check-ignore", "--no-index", "-z", "--stdin"], {
+        stdin: new Blob([`${files.join("\0")}\0`]),
+        stdout: "pipe",
+        stderr: "ignore",
+      })
+      const [output, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
+      if (code === 0 || code === 1) return new Set(output.split("\0").filter(Boolean))
+    }
     const [project, local] = await Promise.all([
       Bun.file(path.join(root, ".gitignore"))
         .text()
@@ -78,36 +92,39 @@ export namespace ModalPlan {
         .catch(() => ""),
     ])
     const matcher = ignore().add(project).add(local)
-    return (file: string) => matcher.ignores(file)
+    return new Set(files.filter((file) => matcher.ignores(file)))
   }
 
   async function inputs(root: string, patterns: string[]) {
     const files = new Map<string, ModalAdapter.File>()
-    const excludes = await ignored(root)
+    const found = new Set<string>()
     for (const pattern of patterns) {
       if (path.isAbsolute(pattern) || pattern.split(/[\\/]/).includes("..")) {
         throw new Error(`Modal upload pattern must stay inside the project: ${pattern}`)
       }
       const scan = new Bun.Glob(pattern).scan({ cwd: root, dot: true, onlyFiles: true, followSymlinks: true })
-      for await (const found of scan) {
-        const relative = posix(found)
-        if (excludes(relative)) continue
-        if (forbidden(relative)) throw new Error(`Modal upload policy denied: ${relative}`)
-        const canonical = await Filesystem.canonical(path.resolve(root, found))
-        if (!canonical || !Filesystem.contains(root, canonical)) {
-          throw new Error(`Modal upload escaped the project: ${relative}`)
-        }
-        const resolved = posix(path.relative(root, canonical))
-        if (excludes(resolved)) continue
-        if (forbidden(resolved)) throw new Error(`Modal upload policy denied: ${relative}`)
-        const info = await fs.stat(canonical)
-        files.set(canonical, {
-          path: resolved,
-          canonical,
-          size: info.size,
-          sha256: await hash(canonical),
-        })
+      for await (const file of scan) found.add(posix(file))
+    }
+    const excludes = await ignored(root, [...found])
+    for (const relative of found) {
+      if (excludes.has(relative)) continue
+      if (forbidden(relative)) throw new Error(`Modal upload policy denied: ${relative}`)
+      const canonical = await Filesystem.canonical(path.resolve(root, relative))
+      if (!canonical || !Filesystem.contains(root, canonical)) {
+        throw new Error(`Modal upload escaped the project: ${relative}`)
       }
+      const resolved = posix(path.relative(root, canonical))
+      const canonicalIgnored =
+        resolved === relative ? excludes.has(resolved) : (await ignored(root, [resolved])).has(resolved)
+      if (canonicalIgnored) continue
+      if (forbidden(resolved)) throw new Error(`Modal upload policy denied: ${relative}`)
+      const info = await fs.stat(canonical)
+      files.set(canonical, {
+        path: resolved,
+        canonical,
+        size: info.size,
+        sha256: await hash(canonical),
+      })
     }
     const result = [...files.values()].toSorted((a, b) => a.path.localeCompare(b.path))
     const bytes = result.reduce((sum, file) => sum + file.size, 0)

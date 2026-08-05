@@ -11,6 +11,7 @@ import hashlib
 import os
 import posixpath
 import sys
+import time
 
 
 def fail(message):
@@ -57,6 +58,21 @@ def timestamp(entry):
     return value
 
 
+def entries(target, root, recursive):
+    rows = []
+    for entry in target.listdir(root, recursive=recursive):
+        path = str(entry.path).lstrip("/")
+        rows.append(
+            {
+                "path": path,
+                "type": kind(entry),
+                "size": int(getattr(entry, "size", 0) or 0),
+                "mtime": timestamp(entry),
+            }
+        )
+    return rows
+
+
 def main():
     try:
         spec = json.load(sys.stdin)
@@ -65,7 +81,7 @@ def main():
     if not isinstance(spec, dict):
         fail("request must be an object")
     action = spec.get("action")
-    if action not in ("check", "volumes", "list", "download"):
+    if action not in ("check", "volumes", "list", "wait", "download"):
         fail("unsupported action")
 
     try:
@@ -86,24 +102,30 @@ def main():
         return
 
     target = volume(modal, spec)
-    if action == "list":
+    if action in ("list", "wait"):
         root = spec.get("path", "/")
         if not isinstance(root, str):
             fail("path must be a string")
         recursive = spec.get("recursive", False)
         if not isinstance(recursive, bool):
             fail("recursive must be a boolean")
+        if action == "list":
+            print(json.dumps(entries(target, root, recursive)))
+            return
+        marker = relative(spec.get("marker"))
+        attempts = spec.get("attempts")
+        interval = spec.get("interval_ms")
+        if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 1 or attempts > 120:
+            fail("attempts must be an integer from 1 to 120")
+        if not isinstance(interval, int) or isinstance(interval, bool) or interval < 0 or interval > 5000:
+            fail("interval_ms must be an integer from 0 to 5000")
         rows = []
-        for entry in target.listdir(root, recursive=recursive):
-            path = str(entry.path).lstrip("/")
-            rows.append(
-                {
-                    "path": path,
-                    "type": kind(entry),
-                    "size": int(getattr(entry, "size", 0) or 0),
-                    "mtime": timestamp(entry),
-                }
-            )
+        for attempt in range(attempts):
+            rows = entries(target, root, recursive)
+            if any(item["type"] == "file" and item["path"] == marker for item in rows):
+                break
+            if attempt + 1 < attempts:
+                time.sleep(interval / 1000)
         print(json.dumps(rows))
         return
 

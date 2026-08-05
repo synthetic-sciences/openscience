@@ -165,6 +165,9 @@ export namespace ComputeJobs {
     reproducibility: Reproducibility.optional(),
     provenance: ProvenanceEnvelope.Schema.optional(),
     capture_error: z.string().optional(),
+    cleanup_error: z.string().optional(),
+    recovery_attempts: z.number().int().nonnegative().optional(),
+    recovery_retry_at: z.string().optional(),
     session_id: z.string().startsWith("ses_").optional(),
     authority: ExecutionAuthority.Decision.optional(),
     scope: z
@@ -247,8 +250,11 @@ export namespace ComputeJobs {
 
   const active = new Map<string, Runtime>()
   const slots = new Map<string, string>()
+  const claims = new Set<string>()
   const locks = new Map<string, Promise<void>>()
   const terminal = new Set<Status>(["succeeded", "failed", "cancelled", "interrupted"])
+  const recoveryLimit = 3
+  const recoveryDelay = 15_000
 
   function move(job: Job, event: ComputeLifecycle.Event, value: Partial<Job> = {}): Job {
     const lifecycle = ComputeLifecycle.transition(job.lifecycle ?? ComputeLifecycle.from(job.status), event)
@@ -325,6 +331,23 @@ export namespace ComputeJobs {
     await fs.appendFile(eventsOf(root, id), `[${new Date().toISOString()}] ${message}\n`, { mode: 0o600 })
   }
 
+  async function recovery(root: string, job: Job) {
+    if (job.recovery_attempts !== undefined) {
+      const retry = Date.parse(job.recovery_retry_at ?? "")
+      return { attempt: job.recovery_attempts, retry: Number.isFinite(retry) ? retry : 0 }
+    }
+    const text = await fs.readFile(eventsOf(root, job.id), "utf8").catch(() => "")
+    const records = text.split("\n").flatMap((line) => {
+      const match = line.match(/^\[([^\]]+)\] Modal recovery attempt (\d+)\/\d+ deferred/)
+      if (!match) return []
+      const time = Date.parse(match[1]!)
+      const attempt = Number.parseInt(match[2]!, 10)
+      if (!Number.isFinite(time) || !Number.isSafeInteger(attempt)) return []
+      return [{ attempt, retry: time + recoveryDelay }]
+    })
+    return records.at(-1) ?? { attempt: 0, retry: 0 }
+  }
+
   async function snapshot(filepath: string, value: string) {
     const temp = `${filepath}.${process.pid}.${crypto.randomUUID()}.tmp`
     await fs.mkdir(path.dirname(filepath), { recursive: true })
@@ -386,34 +409,81 @@ export namespace ComputeJobs {
         jobs.map(
           async (job): Promise<{ id: string; event: ComputeLifecycle.Event; value: Partial<Job> } | undefined> => {
             const lifecycle = job.lifecycle ?? ComputeLifecycle.from(job.status)
+            const key = keyOf(root, job.id)
             const settled =
               terminal.has(job.status) &&
-              (lifecycle.recoverable || (lifecycle.delivery !== "pending" && lifecycle.resource === "closed"))
-            if (settled || active.has(keyOf(root, job.id))) return
+              (job.target.kind !== "modal" ||
+                lifecycle.recoverable ||
+                (lifecycle.delivery !== "pending" && lifecycle.resource === "closed"))
+            if (settled || active.has(key) || claims.has(key)) return
             if (job.status === "queued" && Date.now() - Date.parse(job.created_at) < 5_000) return
             if (job.target.kind === "modal") {
-              const credentials = options.credentials ?? (await options.resolveCredentials?.().catch(() => undefined))
-              if (!credentials || !job.authority) return
-              const key = keyOf(root, job.id)
-              active.set(key, {
-                detached: false,
-                authority: job.authority,
-                root,
-                workspace: scope.workspace,
-                id: job.id,
-                modal: credentials,
-                provider: options.provider,
-              })
-              const task =
-                terminal.has(job.status) && lifecycle.delivery !== "pending"
-                  ? cleanupModal(job, scope, credentials, options.provider ?? ModalAdapter)
-                  : recoverModal(job, scope, credentials, options.provider ?? ModalAdapter)
-              void task
-                .catch(async (error) => {
-                  const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
-                  await event(root, job.id, `Modal recovery failed: ${message}`)
+              claims.add(key)
+              try {
+                const prior = await recovery(root, job)
+                if (prior.retry > Date.now()) return
+                const credentials = options.credentials ?? (await options.resolveCredentials?.().catch(() => undefined))
+                if (!credentials || !job.authority) return
+                const provider = options.provider ?? ModalAdapter
+                active.set(key, {
+                  detached: false,
+                  authority: job.authority,
+                  root,
+                  workspace: scope.workspace,
+                  id: job.id,
+                  modal: credentials,
+                  provider: options.provider,
                 })
-                .finally(() => active.delete(key))
+                const cleanup = terminal.has(job.status) && lifecycle.delivery !== "pending"
+                const ready = Promise.withResolvers<void>()
+                const task = cleanup
+                  ? cleanupModal(job, scope, credentials, provider)
+                  : recoverModal(job, scope, credentials, provider, ready.resolve)
+                const managed = task
+                  .catch(async (error) => {
+                    const current = await get(job.id, { root, workspace: scope.workspace })
+                    if (error instanceof ModalAdapter.HarvestError && current && !terminal.has(current.status)) {
+                      await deferModal(job, scope, error)
+                      return
+                    }
+                    if (current && terminal.has(current.status) && current.lifecycle?.delivery === "pending") {
+                      await failModal(current, scope, credentials, error, provider)
+                      return
+                    }
+                    if (!current || terminal.has(current.status)) return
+                    const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
+                    const attempt = prior.attempt + 1
+                    if (attempt >= recoveryLimit) {
+                      await event(root, job.id, `Modal recovery failed after ${attempt} attempts: ${message}`)
+                      await failModal(current, scope, credentials, error, provider)
+                      return
+                    }
+                    await change(root, (jobs) => {
+                      const stored = jobs.find((item) => item.id === job.id)
+                      if (!stored) return
+                      stored.recovery_attempts = attempt
+                      stored.recovery_retry_at = new Date(Date.now() + recoveryDelay).toISOString()
+                    })
+                    await event(
+                      root,
+                      job.id,
+                      `Modal recovery attempt ${attempt}/${recoveryLimit} deferred for ${recoveryDelay / 1000} seconds: ${message}`,
+                    )
+                  })
+                  .finally(() => active.delete(key))
+                void managed.catch(() => undefined)
+                if (!cleanup)
+                  await Promise.race([
+                    ready.promise,
+                    Bun.sleep(250),
+                    managed.then(
+                      () => undefined,
+                      () => undefined,
+                    ),
+                  ])
+              } finally {
+                claims.delete(key)
+              }
               return
             }
             const marker = await Bun.file(exitOf(root, job.id))
@@ -798,8 +868,14 @@ export namespace ComputeJobs {
     }
   }
 
-  async function deliver(root: string, found: ModalAdapter.Result["outputs"], expected: string[]): Promise<void> {
+  async function deliver(
+    root: string,
+    found: ModalAdapter.Result["outputs"],
+    expected: string[],
+    required: boolean,
+  ): Promise<void> {
     const missing = expected.filter((pattern) => {
+      if (!required) return false
       const glob = new Bun.Glob(pattern.split(path.sep).join("/"))
       return !found.some((file) => glob.match(file.path.split(path.sep).join("/")))
     })
@@ -942,6 +1018,25 @@ export namespace ComputeJobs {
     ])
     return {
       artifacts: found,
+      checkpoint,
+    }
+  }
+
+  async function captureModal(
+    job: Job,
+    files: ModalAdapter.Result["outputs"],
+  ): Promise<Pick<Job, "artifacts" | "checkpoint">> {
+    const cwd = path.resolve(job.cwd ?? process.cwd())
+    const patterns = (job.artifact_patterns ?? []).map((pattern) => new Bun.Glob(pattern.split(path.sep).join("/")))
+    const captured = await Promise.all(
+      [...new Set(files.map((file) => file.path))].map((file) => fingerprint(cwd, file)),
+    )
+    const found = captured.filter((item): item is Artifact => !!item)
+    const checkpoint = job.checkpoint_path
+      ? found.find((item) => item.path === job.checkpoint_path!.split(path.sep).join("/"))
+      : undefined
+    return {
+      artifacts: found.filter((item) => patterns.some((pattern) => pattern.match(item.path))),
       checkpoint,
     }
   }
@@ -1120,8 +1215,8 @@ export namespace ComputeJobs {
     if (!finished) return
     if (job.artifact_patterns?.length || job.checkpoint_path) {
       const expected = [...(job.artifact_patterns ?? []), ...(job.checkpoint_path ? [job.checkpoint_path] : [])]
-      const received = await deliver(job.cwd!, result.outputs, expected)
-        .then(() => capture(job))
+      const received = await deliver(job.cwd!, result.outputs, expected, result.code === 0)
+        .then(() => captureModal(job, result.outputs))
         .then((captured) => ({ ok: true as const, captured }))
         .catch((error) => ({ ok: false as const, error }))
       if (!received.ok) {
@@ -1170,7 +1265,7 @@ export namespace ComputeJobs {
       const ended = released.ok ? move(jobs[index]!, { type: "close" }) : move(jobs[index]!, { type: "lose" })
       const updated = Job.parse({
         ...ended,
-        error: warning ?? jobs[index]!.error,
+        cleanup_error: warning,
         provenance: provenance(ended),
       })
       jobs[index] = updated
@@ -1225,6 +1320,7 @@ export namespace ComputeJobs {
     scope: Scope,
     context: ModalAdapter.Context,
     provider: ModalProvider,
+    attached?: () => void,
   ): Promise<void> {
     const log = path.join(logsOf(scope.root), `${job.id}.log`)
     await fs.mkdir(logsOf(scope.root), { recursive: true })
@@ -1247,6 +1343,7 @@ export namespace ComputeJobs {
         jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
       })
     }
+    attached?.()
     const result = await provider.recover(context, spec, id, {
       log: async (value) => {
         await event(scope.root, job.id, value)
@@ -1283,7 +1380,7 @@ export namespace ComputeJobs {
       const index = jobs.findIndex((item) => item.id === job.id)
       if (index < 0 || jobs[index]!.lifecycle?.resource === "closed") return
       const ended = released.ok ? move(jobs[index]!, { type: "close" }) : move(jobs[index]!, { type: "lose" })
-      jobs[index] = Job.parse({ ...ended, error: message ?? jobs[index]!.error, provenance: provenance(ended) })
+      jobs[index] = Job.parse({ ...ended, cleanup_error: message, provenance: provenance(ended) })
     })
     if (released.ok) await fs.rm(path.join(logsOf(scope.root), `${job.id}.modal`), { recursive: true, force: true })
   }
@@ -1316,13 +1413,8 @@ export namespace ComputeJobs {
       })
       return
     }
-    const closed =
-      current.remote_id && current.cwd
-        ? await provider.close(context, current.remote_id, job.id, current.cwd).then(
-            () => true,
-            () => false,
-          )
-        : !current.remote_id
+    if (current.remote_id && current.cwd)
+      await provider.close(context, current.remote_id, job.id, current.cwd).catch(() => undefined)
     await change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === job.id)
       if (index < 0 || terminal.has(jobs[index]!.status)) return
@@ -1331,8 +1423,7 @@ export namespace ComputeJobs {
         { type: "finish", outcome: "failed", message },
         { completed_at: new Date().toISOString(), exit_code: null, error: message },
       )
-      const ended =
-        closed && !jobs[index]!.modal?.volume ? move(draft, { type: "close" }) : move(draft, { type: "lose" })
+      const ended = move(draft, { type: "lose" })
       jobs[index] = Job.parse({ ...ended, provenance: provenance(ended) })
     })
   }
@@ -1455,6 +1546,7 @@ export namespace ComputeJobs {
       sessionID: parsed.sessionID,
       capability: host || parsed.target.kind === "modal" ? "remote_job" : "local_job",
     })
+    if (scope.workspace !== authority.workspace) throw new Error("Compute project does not match the session workspace")
     const requested = parsed.cwd ? path.resolve(authority.workspace, parsed.cwd) : authority.workspace
     const cwd = host ? parsed.cwd || host.workdir : await Filesystem.canonical(requested)
     const info = !host && cwd ? await fs.stat(cwd).catch(() => undefined) : undefined
@@ -1748,8 +1840,16 @@ export namespace ComputeJobs {
         job.target.kind === "modal" && !modalClosed
           ? "Cancellation was recorded, but Modal did not confirm that the sandbox and durable volume stopped. It may still be billing; retry cancellation or check Modal."
           : undefined
-      const result = Job.parse({ ...closed, error: warning, provenance: provenance(closed) })
-      jobs[index] = result
+      const legacy =
+        !current.cleanup_error &&
+        (current.error?.startsWith("Cancellation was recorded") || current.error?.startsWith("Modal cleanup failed"))
+      const updated = Job.parse({
+        ...closed,
+        error: legacy ? undefined : current.error,
+        cleanup_error: warning,
+        provenance: provenance(closed),
+      })
+      jobs[index] = updated
       return jobs[index]!
     })
   }

@@ -687,12 +687,14 @@ describe("ComputeJobs Modal governance", () => {
 
     expect(cancelled.status).toBe("cancelled")
     expect(cancelled.lifecycle?.resource).toBe("unknown")
-    expect(cancelled.error).toContain("may still be billing")
+    expect(cancelled.cleanup_error).toContain("may still be billing")
+    expect(cancelled.error).toBeUndefined()
     expect(await ComputeJobs.events(job.id, { root, workspace: tmp.path })).toContain("may still be billing")
     expect(await ComputeJobs.clear({ root, workspace: tmp.path })).toBe(0)
 
     const released = await ComputeJobs.cancel(job.id, { root, workspace: tmp.path, credentials, provider })
     expect(released.lifecycle?.resource).toBe("closed")
+    expect(released.cleanup_error).toBeUndefined()
     expect(released.error).toBeUndefined()
     expect(await ComputeJobs.clear({ root, workspace: tmp.path })).toBe(1)
   })
@@ -740,12 +742,14 @@ describe("ComputeJobs Modal governance", () => {
 
     expect(finished?.status).toBe("succeeded")
     expect(finished?.lifecycle?.resource).toBe("unknown")
-    expect(finished?.error).toContain("may still be billing")
+    expect(finished?.cleanup_error).toContain("may still be billing")
+    expect(finished?.error).toBeUndefined()
     expect(await ComputeJobs.clear({ root, workspace: tmp.path })).toBe(0)
 
     const released = await ComputeJobs.cancel(job.id, { root, workspace: tmp.path, credentials, provider })
     expect(released.status).toBe("succeeded")
     expect(released.lifecycle?.resource).toBe("closed")
+    expect(released.cleanup_error).toBeUndefined()
     expect(released.error).toBeUndefined()
   })
 
@@ -964,6 +968,99 @@ describe("ComputeJobs Modal governance", () => {
     }
   })
 
+  test("retains the Volume when a successful command misses a declared glob", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const calls = { release: 0 }
+    const provider = modalProvider({
+      run: async (_context, spec, hooks) => {
+        await hooks.created(`sandbox-${spec.id}`)
+        return { code: 0, outputs: [] }
+      },
+      release: async () => {
+        calls.release++
+      },
+    })
+    const request = {
+      name: "missing glob output",
+      command: "true",
+      target: { kind: "modal" as const },
+      gpu: "none",
+      artifacts: ["outputs/*.json"],
+    }
+    const prepared = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const plan = await ComputeJobs.plan({ ...request, sessionID: session.id }, { root, workspace: tmp.path, modal })
+        return { session, plan }
+      },
+    })
+    const job = await Instance.provide({
+      directory: tmp.path,
+      fn: () =>
+        ComputeJobs.start(
+          { ...request, sessionID: prepared.session.id, approval: prepared.plan.digest },
+          { root, workspace: tmp.path, modal, credentials, provider },
+        ),
+    })
+
+    const finished = await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })
+
+    expect(finished.status).toBe("succeeded")
+    expect(finished.lifecycle).toMatchObject({ delivery: "failed", resource: "unknown", recoverable: true })
+    expect(finished.capture_error).toContain("outputs/*.json")
+    expect(calls.release).toBe(0)
+  })
+
+  test("does not require declared outputs from a failed Modal command", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const calls = { release: 0 }
+    const provider = modalProvider({
+      run: async (_context, spec, hooks) => {
+        await hooks.created(`sandbox-${spec.id}`)
+        return { code: 1, outputs: [] }
+      },
+      release: async () => {
+        calls.release++
+      },
+    })
+    const request = {
+      name: "failed without checkpoint",
+      command: "exit 1",
+      target: { kind: "modal" as const },
+      gpu: "none",
+      checkpoint: "checkpoint.pt",
+    }
+    await Bun.write(path.join(tmp.path, "checkpoint.pt"), "stale local checkpoint")
+    const prepared = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const plan = await ComputeJobs.plan({ ...request, sessionID: session.id }, { root, workspace: tmp.path, modal })
+        return { session, plan }
+      },
+    })
+    const job = await Instance.provide({
+      directory: tmp.path,
+      fn: () =>
+        ComputeJobs.start(
+          { ...request, sessionID: prepared.session.id, approval: prepared.plan.digest },
+          { root, workspace: tmp.path, modal, credentials, provider },
+        ),
+    })
+
+    const finished = await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })
+
+    expect(finished.status).toBe("failed")
+    expect(finished.lifecycle).toMatchObject({ delivery: "complete", resource: "closed", recoverable: false })
+    expect(finished.checkpoint).toBeUndefined()
+    expect(calls.release).toBe(1)
+  })
+
   test("resumes terminal pending delivery after an OpenScience restart", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
@@ -1028,13 +1125,19 @@ describe("ComputeJobs Modal governance", () => {
     await fs.mkdir(root, { recursive: true })
     await Bun.write(path.join(root, "jobs.json"), JSON.stringify([job]))
 
+    const resolve = async () => {
+      calls.credentials++
+      await Bun.sleep(30)
+      return credentials
+    }
+    await Promise.all([
+      ComputeJobs.list({ root, workspace: tmp.path, resolveCredentials: resolve, provider }),
+      ComputeJobs.list({ root, workspace: tmp.path, resolveCredentials: resolve, provider }),
+    ])
     const finished = await ComputeJobs.wait(id, {
       root,
       workspace: tmp.path,
-      resolveCredentials: async () => {
-        calls.credentials++
-        return credentials
-      },
+      resolveCredentials: resolve,
       provider,
       timeout: 5_000,
     })
@@ -1052,9 +1155,364 @@ describe("ComputeJobs Modal governance", () => {
     expect(await Bun.file(path.join(tmp.path, "result.txt")).text()).toBe("recovered")
     expect(calls).toEqual({ credentials: 1, recover: 1, release: 1 })
   })
+
+  test("returns the attached Modal status on the first list after restart", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const id = "queued-restart"
+    const gate = Promise.withResolvers<void>()
+    const provider = modalProvider({
+      find: async () => "sandbox-queued-restart",
+      recover: async () => {
+        await gate.promise
+        return { code: 0, outputs: [] }
+      },
+    })
+    const authority = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        return ExecutionAuthority.require({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          capability: "remote_job",
+        })
+      },
+    })
+    const job = ComputeJobs.Job.parse({
+      id,
+      name: "queued restart",
+      command: "true",
+      cwd: tmp.path,
+      target: { kind: "modal" },
+      target_label: "Modal",
+      scheduler: "none",
+      status: "queued",
+      created_at: new Date(Date.now() - 10_000).toISOString(),
+      authority,
+      lifecycle: { execution: "queued", delivery: "none", resource: "none", recoverable: false },
+      modal: {
+        app: modal.app,
+        image: modal.image,
+        packages: [],
+        gpu: "none",
+        network: modal.network,
+        timeout_minutes: modal.timeoutMinutes,
+        uploads: [],
+        upload_bytes: 0,
+        approval: "a".repeat(64),
+        sdk: ModalAdapter.VERSION,
+        volume: provider.volume(tmp.path, id),
+      },
+    })
+    await fs.mkdir(root, { recursive: true })
+    await Bun.write(path.join(root, "jobs.json"), JSON.stringify([job]))
+
+    const first = await ComputeJobs.list({ root, workspace: tmp.path, credentials, provider })
+
+    expect(first[0]?.status).toBe("running")
+    expect(first[0]?.remote_id).toBe("sandbox-queued-restart")
+    gate.resolve()
+    expect((await ComputeJobs.wait(id, { root, workspace: tmp.path, timeout: 5_000 })).status).toBe("succeeded")
+  })
+
+  test("does not block job listing on a slow Modal lookup after restart", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const id = "slow-restart"
+    const gate = Promise.withResolvers<void>()
+    const provider = modalProvider({
+      find: async () => {
+        await gate.promise
+        return "sandbox-slow-restart"
+      },
+    })
+    const authority = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        return ExecutionAuthority.require({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          capability: "remote_job",
+        })
+      },
+    })
+    const job = ComputeJobs.Job.parse({
+      id,
+      name: "slow restart",
+      command: "true",
+      cwd: tmp.path,
+      target: { kind: "modal" },
+      target_label: "Modal",
+      scheduler: "none",
+      status: "queued",
+      created_at: new Date(Date.now() - 10_000).toISOString(),
+      authority,
+      lifecycle: { execution: "queued", delivery: "none", resource: "none", recoverable: false },
+      modal: {
+        app: modal.app,
+        image: modal.image,
+        packages: [],
+        gpu: "none",
+        network: modal.network,
+        timeout_minutes: modal.timeoutMinutes,
+        uploads: [],
+        upload_bytes: 0,
+        approval: "a".repeat(64),
+        sdk: ModalAdapter.VERSION,
+        volume: provider.volume(tmp.path, id),
+      },
+    })
+    await fs.mkdir(root, { recursive: true })
+    await Bun.write(path.join(root, "jobs.json"), JSON.stringify([job]))
+
+    const listed = await Promise.race([
+      ComputeJobs.list({ root, workspace: tmp.path, credentials, provider }),
+      Bun.sleep(1_000).then(() => Promise.reject(new Error("job listing blocked on Modal lookup"))),
+    ])
+
+    expect(listed[0]?.status).toBe("queued")
+    gate.resolve()
+    expect((await ComputeJobs.wait(id, { root, workspace: tmp.path, timeout: 5_000 })).status).toBe("succeeded")
+  })
+
+  test("fails a running job after the third plain recovery error", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const id = "exhausted-recovery"
+    const calls = { recover: 0, close: 0 }
+    const provider = modalProvider({
+      recover: async () => {
+        calls.recover++
+        throw new Error("sandbox and volume unavailable")
+      },
+      close: async () => {
+        calls.close++
+      },
+    })
+    const authority = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        return ExecutionAuthority.require({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          capability: "remote_job",
+        })
+      },
+    })
+    const job = ComputeJobs.Job.parse({
+      id,
+      name: "exhausted recovery",
+      command: "true",
+      cwd: tmp.path,
+      target: { kind: "modal" },
+      target_label: "Modal",
+      scheduler: "none",
+      status: "running",
+      created_at: new Date(Date.now() - 60_000).toISOString(),
+      started_at: new Date(Date.now() - 59_000).toISOString(),
+      remote_id: "sandbox-exhausted-recovery",
+      authority,
+      lifecycle: { execution: "running", delivery: "none", resource: "active", recoverable: false },
+      recovery_attempts: 2,
+      recovery_retry_at: "2020-01-01T00:00:31.000Z",
+      modal: {
+        app: modal.app,
+        image: modal.image,
+        packages: [],
+        gpu: "none",
+        network: modal.network,
+        timeout_minutes: modal.timeoutMinutes,
+        uploads: [],
+        upload_bytes: 0,
+        approval: "a".repeat(64),
+        sdk: ModalAdapter.VERSION,
+        volume: provider.volume(tmp.path, id),
+      },
+    })
+    await fs.mkdir(path.join(root, "jobs"), { recursive: true })
+    await Promise.all([
+      Bun.write(path.join(root, "jobs.json"), JSON.stringify([job])),
+      Bun.write(
+        path.join(root, "jobs", `${id}.events.log`),
+        [
+          "[2020-01-01T00:00:00.000Z] Recovery was unavailable",
+          "[2020-01-01T00:00:16.000Z] Recovery remained unavailable",
+          "",
+        ].join("\n"),
+      ),
+    ])
+
+    await ComputeJobs.list({ root, workspace: tmp.path, credentials, provider })
+    const failed = await (async function poll(attempts = 100): Promise<ComputeJobs.Job> {
+      const current = await ComputeJobs.get(id, { root, workspace: tmp.path })
+      if (current?.status === "failed") return current
+      if (!attempts) throw new Error("Timed out waiting for exhausted Modal recovery")
+      await Bun.sleep(20)
+      return poll(attempts - 1)
+    })()
+
+    expect(failed.status).toBe("failed")
+    expect(failed.error).toContain("sandbox and volume unavailable")
+    expect(calls).toEqual({ recover: 1, close: 1 })
+  })
+
+  test("turns a rejected terminal recovery into one recoverable delivery failure", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const id = "terminal-recovery-failure"
+    const calls = { recover: 0 }
+    const provider = modalProvider({
+      recover: async () => {
+        calls.recover++
+        throw new Error("control plane unavailable")
+      },
+    })
+    const authority = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        return ExecutionAuthority.require({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          capability: "remote_job",
+        })
+      },
+    })
+    const job = ComputeJobs.Job.parse({
+      id,
+      name: "failed restart delivery",
+      command: "true",
+      cwd: tmp.path,
+      target: { kind: "modal" },
+      target_label: "Modal",
+      scheduler: "none",
+      status: "succeeded",
+      created_at: new Date(Date.now() - 10_000).toISOString(),
+      completed_at: new Date().toISOString(),
+      exit_code: 0,
+      artifact_patterns: ["result.txt"],
+      authority,
+      lifecycle: { execution: "succeeded", delivery: "pending", resource: "active", recoverable: false },
+      remote_id: "sandbox-terminal-recovery-failure",
+      modal: {
+        app: modal.app,
+        image: modal.image,
+        packages: [],
+        gpu: "none",
+        network: modal.network,
+        timeout_minutes: modal.timeoutMinutes,
+        uploads: [],
+        upload_bytes: 0,
+        approval: "a".repeat(64),
+        sdk: ModalAdapter.VERSION,
+        volume: provider.volume(tmp.path, id),
+      },
+    })
+    await fs.mkdir(root, { recursive: true })
+    await Bun.write(path.join(root, "jobs.json"), JSON.stringify([job]))
+
+    await ComputeJobs.list({ root, workspace: tmp.path, credentials, provider })
+    const failed = await (async function poll(attempts = 100): Promise<ComputeJobs.Job> {
+      const current = await ComputeJobs.get(id, { root, workspace: tmp.path })
+      if (current?.lifecycle?.delivery === "failed") return current
+      if (!attempts) throw new Error("Timed out waiting for failed recovery")
+      await Bun.sleep(20)
+      return poll(attempts - 1)
+    })()
+    await ComputeJobs.list({ root, workspace: tmp.path, credentials, provider })
+    await Bun.sleep(20)
+
+    expect(failed.status).toBe("succeeded")
+    expect(failed.lifecycle).toMatchObject({ delivery: "failed", resource: "unknown", recoverable: true })
+    expect(calls.recover).toBe(1)
+  })
+
+  test("successful cleanup preserves an existing execution error", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const id = "failed-cleanup"
+    const provider = modalProvider()
+    const job = ComputeJobs.Job.parse({
+      id,
+      name: "failed job",
+      command: "exit 1",
+      cwd: tmp.path,
+      target: { kind: "modal" },
+      target_label: "Modal",
+      scheduler: "none",
+      status: "failed",
+      created_at: new Date(Date.now() - 10_000).toISOString(),
+      completed_at: new Date().toISOString(),
+      exit_code: 1,
+      error: "training failed",
+      lifecycle: { execution: "failed", delivery: "none", resource: "unknown", recoverable: false },
+      modal: {
+        app: modal.app,
+        image: modal.image,
+        packages: [],
+        gpu: "none",
+        network: modal.network,
+        timeout_minutes: modal.timeoutMinutes,
+        uploads: [],
+        upload_bytes: 0,
+        approval: "a".repeat(64),
+        sdk: ModalAdapter.VERSION,
+        volume: provider.volume(tmp.path, id),
+      },
+    })
+    await fs.mkdir(root, { recursive: true })
+    await Bun.write(path.join(root, "jobs.json"), JSON.stringify([job]))
+
+    const cleaned = await ComputeJobs.cancel(id, { root, workspace: tmp.path, credentials, provider })
+
+    expect(cleaned.lifecycle?.resource).toBe("closed")
+    expect(cleaned.cleanup_error).toBeUndefined()
+    expect(cleaned.error).toBe("training failed")
+  })
 })
 
 describe("ComputeJobs project boundaries", () => {
+  test("start rejects a project scope that differs from the approved session workspace", async () => {
+    await using tmp = await tmpdir()
+    const first = path.join(tmp.path, "first")
+    const second = path.join(tmp.path, "second")
+    const root = path.join(tmp.path, "state")
+    await Promise.all([fs.mkdir(first), fs.mkdir(second)])
+    const request = {
+      name: "wrong project",
+      command: "true",
+      target: { kind: "modal" as const },
+      gpu: "none",
+    }
+    const prepared = await Instance.provide({
+      directory: first,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const plan = await ComputeJobs.plan({ ...request, sessionID: session.id }, { root, workspace: first, modal })
+        return { session, plan }
+      },
+    })
+
+    await Instance.provide({
+      directory: first,
+      fn: () =>
+        expect(
+          ComputeJobs.start(
+            { ...request, sessionID: prepared.session.id, approval: prepared.plan.digest },
+            { root, workspace: second, modal, credentials, provider: modalProvider() },
+          ),
+        ).rejects.toThrow("Compute project does not match the session workspace"),
+    })
+  })
+
   test("isolates state and every job operation by canonical workspace", async () => {
     await using tmp = await tmpdir()
     const data = path.join(tmp.path, "data")

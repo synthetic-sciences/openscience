@@ -2,8 +2,6 @@ import z from "zod"
 import { Tool } from "./tool"
 import { ComputeJobs } from "@/compute/jobs"
 
-const terminal = new Set<ComputeJobs.Status>(["succeeded", "failed", "cancelled", "interrupted"])
-
 export const ModalTool = Tool.define("modal", {
   description: [
     "Plan and dispatch a governed job through OpenScience's Modal control-plane adapter.",
@@ -97,11 +95,12 @@ export const ModalTool = Tool.define("modal", {
       timeout: plan.timeout_minutes * 60_000 + 10 * 60_000,
     })
     const log = await ComputeJobs.log(job.id)
-    const state = terminal.has(finished.status) ? finished.status : job.status
     return {
       title: `Modal job: ${input.name}`,
       metadata: { ...metadata, job: finished },
-      output: [`Modal job ${finished.id}: ${state} (exit ${finished.exit_code ?? "unknown"})`, "", log].join("\n"),
+      output: [`Modal job ${finished.id}: ${finished.status} (exit ${finished.exit_code ?? "unknown"})`, "", log].join(
+        "\n",
+      ),
     }
   },
 })

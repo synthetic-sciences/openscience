@@ -59,6 +59,7 @@ export interface Job {
   checkpoint?: Artifact
   reproducibility?: Reproducibility
   capture_error?: string
+  cleanup_error?: string
   remote_id?: string
   lifecycle?: {
     execution: string
@@ -125,6 +126,24 @@ export function stableJobs(previous: Job[] | undefined, next: Job[]) {
   })
   if (previous.length === jobs.length && previous.every((job, position) => job === jobs[position])) return previous
   return jobs
+}
+
+export function serial<T>(run: (value: T) => Promise<void>) {
+  const state: { active: boolean; pending?: T } = { active: false }
+  const next = async (value: T): Promise<void> => {
+    if (state.active) {
+      state.pending = value
+      return
+    }
+    state.active = true
+    return run(value).finally(async () => {
+      state.active = false
+      const pending = state.pending
+      state.pending = undefined
+      if (pending !== undefined) await next(pending)
+    })
+  }
+  return next
 }
 
 export function createComputeJobsAPI(request: ProjectRequest) {

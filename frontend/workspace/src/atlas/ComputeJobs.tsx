@@ -13,6 +13,7 @@ import {
   type Plan,
   type Resources,
   type Status,
+  serial,
   stableJobs,
 } from "@/atlas/ComputeJobsAPI"
 import { useExecutionAuthority } from "@/atlas/use-execution-authority"
@@ -34,7 +35,12 @@ import {
 
 const terminal = new Set<Status>(["succeeded", "failed", "cancelled", "interrupted"])
 
-export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | undefined> } = {}): JSX.Element {
+export function ComputeJobs(
+  props: {
+    onEnsureSession?: () => Promise<string | undefined>
+    onActiveChange?: (count: number) => void
+  } = {},
+): JSX.Element {
   const sdk = useSDK()
   const params = useParams()
   const api = createComputeJobsAPI(sdk.request)
@@ -140,6 +146,8 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
   const current = createMemo(() => jobs()?.find((job) => job.id === selected()))
   const active = createMemo(() => jobs()?.filter((job) => !terminal.has(job.status)).length ?? 0)
 
+  createEffect(() => props.onActiveChange?.(active()))
+
   const refresh = async (report = false) => {
     if (!cache.value) {
       await jobsApi.refetch()
@@ -156,8 +164,7 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
     jobsApi.mutate(value)
   }
 
-  const streams = async (id: string) => {
-    if (outputBusy() || eventsBusy()) return
+  const streams = serial(async (id: string) => {
     setOutputBusy(true)
     setEventsBusy(true)
     await Promise.all([
@@ -179,7 +186,7 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
         setOutputBusy(false)
         setEventsBusy(false)
       })
-  }
+  })
 
   createEffect(() => {
     const list = jobs()
@@ -199,6 +206,12 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
     setOutput("")
     setEvents("")
     if (id) void streams(id)
+  })
+
+  createEffect(() => {
+    const id = selected()
+    const status = current()?.status
+    if (id && status && terminal.has(status)) void streams(id)
   })
 
   createEffect(() => {
@@ -1058,6 +1071,9 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
                           </pre>
                           <Show when={job().error}>
                             <div style={errorBox}>{job().error}</div>
+                          </Show>
+                          <Show when={job().cleanup_error}>
+                            <div style={errorBox}>{job().cleanup_error}</div>
                           </Show>
                           <Show when={job().capture_error}>
                             <div style={errorBox}>

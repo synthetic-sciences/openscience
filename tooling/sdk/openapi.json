@@ -5223,6 +5223,17 @@
                       "capture_error": {
                         "type": "string"
                       },
+                      "cleanup_error": {
+                        "type": "string"
+                      },
+                      "recovery_attempts": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "recovery_retry_at": {
+                        "type": "string"
+                      },
                       "session_id": {
                         "type": "string",
                         "pattern": "^ses_.*"
@@ -7277,6 +7288,17 @@
                       ]
                     },
                     "capture_error": {
+                      "type": "string"
+                    },
+                    "cleanup_error": {
+                      "type": "string"
+                    },
+                    "recovery_attempts": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recovery_retry_at": {
                       "type": "string"
                     },
                     "session_id": {
@@ -10006,6 +10028,17 @@
                     "capture_error": {
                       "type": "string"
                     },
+                    "cleanup_error": {
+                      "type": "string"
+                    },
+                    "recovery_attempts": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recovery_retry_at": {
+                      "type": "string"
+                    },
                     "session_id": {
                       "type": "string",
                       "pattern": "^ses_.*"
@@ -12089,6 +12122,17 @@
                       ]
                     },
                     "capture_error": {
+                      "type": "string"
+                    },
+                    "cleanup_error": {
+                      "type": "string"
+                    },
+                    "recovery_attempts": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recovery_retry_at": {
                       "type": "string"
                     },
                     "session_id": {

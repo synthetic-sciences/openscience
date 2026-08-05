@@ -90,4 +90,16 @@ describe("ModalPlan", () => {
 
     expect(prepared.plan.uploads.map((file) => file.path)).toEqual(["src/train.py"])
   })
+
+  test("honors nested gitignore files", async () => {
+    const root = await project()
+    const git = Bun.spawn(["git", "init", "-q"], { cwd: root, stdout: "ignore", stderr: "pipe" })
+    if ((await git.exited) !== 0) throw new Error(await new Response(git.stderr).text())
+    await fs.writeFile(path.join(root, "src", ".gitignore"), "private.py\n")
+    await fs.writeFile(path.join(root, "src", "private.py"), "TOKEN = 'private'\n")
+
+    const prepared = await ModalPlan.prepare({ ...input(root), uploads: ["src/**/*.py"] })
+
+    expect(prepared.plan.uploads.map((file) => file.path)).toEqual(["src/train.py"])
+  })
 })

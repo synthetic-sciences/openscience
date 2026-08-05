@@ -20,6 +20,7 @@ import { OpenScience } from "../../../openscience"
 import { ModalAdapter } from "../../../compute/modal/adapter"
 import { ModalPlan } from "../../../compute/modal/plan"
 import { ModalVolume } from "../../../compute/modal/volume"
+import { Env } from "../../../env"
 
 const Directory = z.object({
   directory: z.string().trim().min(1).optional(),
@@ -64,9 +65,9 @@ async function project<T>(context: Context, fn: () => T): Promise<T> {
 //   • Legacy SSH host profiles retained for migration. Public dispatch stays
 //     unavailable until the full remote lifecycle is verified end to end.
 //
-// Stored credentials are inert. Only a trusted provider adapter may resolve a
-// credential, and only while that provider is enabled. Generic agent shells
-// never receive these values.
+// Modal credentials are inert and resolve only inside its trusted adapter.
+// Providers that still run through shipped CLI skills retain their legacy
+// environment bridge until they gain equivalent control-plane adapters.
 
 export namespace ComputeSettings {
   const storePath = path.join(Global.Path.data, "settings-compute.json")
@@ -268,6 +269,7 @@ export namespace ComputeSettings {
     vast: ["VAST_API_KEY"],
     runpod: ["RUNPOD_API_KEY"],
   }
+  const owned = new Map<string, string>()
 
   /** Map one provider's decrypted key to the canonical env var names its real
    *  consumers read. Modal's combined "token_id : token_secret" key is split;
@@ -324,6 +326,41 @@ export namespace ComputeSettings {
     return env
   }
 
+  /** Keep legacy skill-based providers working without exposing Modal tokens.
+   *  Explicit shell exports win over values owned by this settings store. */
+  export async function applyComputeEnv(): Promise<void> {
+    const stored = await read()
+    const env: Record<string, string> = {}
+    const secrets: string[] = []
+    for (const [target, entry] of Object.entries(stored.providers)) {
+      if (target === "modal" || !entry.enabled || !entry.key) continue
+      const key = await decrypt(entry.key).catch(() => undefined)
+      if (!key) continue
+      for (const [name, value] of Object.entries(mapProviderEnv(target, key))) {
+        env[name] = value
+        secrets.push(value)
+      }
+    }
+    for (const [name, value] of owned) {
+      if (name in env) continue
+      if (process.env[name] === value) delete process.env[name]
+      owned.delete(name)
+    }
+    for (const [name, value] of Object.entries(env)) {
+      const previous = owned.get(name)
+      if (process.env[name] && process.env[name] !== previous) {
+        owned.delete(name)
+        continue
+      }
+      process.env[name] = value
+      await Promise.resolve()
+        .then(() => Env.set(name, value))
+        .catch(() => undefined)
+      owned.set(name, value)
+    }
+    OpenScience.registerSecretValues(secrets)
+  }
+
   // Build the client-facing view — never includes the encrypted key.
   async function view(stored: Stored, file = modalFile()): Promise<Info> {
     const providers = CATALOG.map((spec) => {
@@ -363,6 +400,7 @@ export namespace ComputeSettings {
         last_used: existing?.last_used ?? null,
       }
     })
+    await applyComputeEnv()
     return view(stored)
   }
 
@@ -389,6 +427,7 @@ export namespace ComputeSettings {
     const stored = await update((current) => {
       delete current.providers[target]
     })
+    await applyComputeEnv()
     return view(stored)
   }
 
@@ -398,6 +437,7 @@ export namespace ComputeSettings {
       if (!entry) throw new Error(`Compute provider ${target} is not connected`)
       entry.enabled = enabled
     })
+    await applyComputeEnv()
     return view(stored)
   }
 

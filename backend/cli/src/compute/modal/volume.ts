@@ -38,6 +38,16 @@ export namespace ModalVolume {
     | { action: "check" }
     | { action: "volumes"; environment?: string }
     | { action: "list"; volume: string; environment?: string; path: string; recursive: boolean }
+    | {
+        action: "wait"
+        volume: string
+        environment?: string
+        path: string
+        recursive: boolean
+        marker: string
+        attempts: number
+        interval_ms: number
+      }
     | { action: "download"; volume: string; environment?: string; paths: string[]; staging: string }
 
   const LIST_TIMEOUT = 60_000
@@ -51,16 +61,31 @@ export namespace ModalVolume {
     return result
   }
 
-  const cache: { path?: string } = {}
+  const cache: { path?: Promise<string> } = {}
 
   export async function driverPath() {
     if (cache.path) return cache.path
-    const source = Bun.file(driver)
-    const target = path.join(Global.Path.data, "runtime", `modal-volume-${Bun.hash(await source.text())}.py`)
-    await fs.mkdir(path.dirname(target), { recursive: true })
-    await Bun.write(target, source)
-    cache.path = target
-    return target
+    const pending = Promise.resolve().then(async () => {
+      const source = Bun.file(driver)
+      const bytes = Buffer.from(await source.arrayBuffer())
+      const target = path.join(Global.Path.data, "runtime", `modal-volume-${Bun.hash(bytes)}.py`)
+      const temp = `${target}.${process.pid}.${crypto.randomUUID()}.tmp`
+      await fs.mkdir(path.dirname(target), { recursive: true })
+      const installed = Bun.file(target)
+      if ((await installed.exists()) && Bun.hash(await installed.arrayBuffer()) === Bun.hash(bytes)) return target
+      await fs.writeFile(temp, bytes, { mode: 0o600, flag: "wx" })
+      await fs.rename(temp, target).catch(async (error) => {
+        await fs.unlink(temp).catch(() => undefined)
+        if (await Bun.file(target).exists()) return
+        throw error
+      })
+      return target
+    })
+    cache.path = pending.catch((error) => {
+      cache.path = undefined
+      throw error
+    })
+    return cache.path
   }
 
   export async function command(context: Context) {
@@ -187,17 +212,46 @@ export namespace ModalVolume {
       context,
       LIST_TIMEOUT,
     )
-    if (!Array.isArray(result)) throw new Error("Modal Volume list did not return an array")
+    return entries(result, "list")
+  }
+
+  export async function wait(
+    context: Context,
+    volume: string,
+    marker: string,
+    attempts = 20,
+    interval = 500,
+  ): Promise<Entry[]> {
+    const target = safe(marker)
+    const result = await invoke(
+      {
+        action: "wait",
+        volume,
+        environment: context.environment,
+        path: "/",
+        recursive: true,
+        marker: target,
+        attempts,
+        interval_ms: interval,
+      },
+      context,
+      LIST_TIMEOUT,
+    )
+    return entries(result, "wait")
+  }
+
+  function entries(result: unknown, action: "list" | "wait"): Entry[] {
+    if (!Array.isArray(result)) throw new Error(`Modal Volume ${action} did not return an array`)
     return result.map((entry) => {
-      if (!entry || typeof entry !== "object") throw new Error("Modal Volume list returned an invalid entry")
+      if (!entry || typeof entry !== "object") throw new Error(`Modal Volume ${action} returned an invalid entry`)
       if (!("path" in entry) || typeof entry.path !== "string") {
-        throw new Error("Modal Volume list returned an entry without a path")
+        throw new Error(`Modal Volume ${action} returned an entry without a path`)
       }
       if (!("type" in entry) || typeof entry.type !== "string") {
-        throw new Error(`Modal Volume list returned an invalid type for ${entry.path}`)
+        throw new Error(`Modal Volume ${action} returned an invalid type for ${entry.path}`)
       }
       if (!("size" in entry) || typeof entry.size !== "number" || !Number.isSafeInteger(entry.size) || entry.size < 0) {
-        throw new Error(`Modal Volume list returned an invalid size for ${entry.path}`)
+        throw new Error(`Modal Volume ${action} returned an invalid size for ${entry.path}`)
       }
       const mtime = "mtime" in entry && typeof entry.mtime === "number" ? entry.mtime : undefined
       return { path: safe(entry.path), type: entry.type, size: entry.size, ...(mtime === undefined ? {} : { mtime }) }
@@ -219,26 +273,35 @@ export namespace ModalVolume {
       DOWNLOAD_TIMEOUT,
     )
     if (!Array.isArray(result)) throw new Error("Modal Volume download did not return an array")
-    return result.map((entry) => {
-      if (!entry || typeof entry !== "object") throw new Error("Modal Volume download returned an invalid entry")
-      if (!("path" in entry) || typeof entry.path !== "string") {
-        throw new Error("Modal Volume download returned an entry without a path")
-      }
-      if (!("staging" in entry) || typeof entry.staging !== "string") {
-        throw new Error(`Modal Volume download returned no local path for ${entry.path}`)
-      }
-      if (!("size" in entry) || typeof entry.size !== "number" || !Number.isSafeInteger(entry.size) || entry.size < 0) {
-        throw new Error(`Modal Volume download returned an invalid size for ${entry.path}`)
-      }
-      if (!("sha256" in entry) || typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
-        throw new Error(`Modal Volume download returned an invalid checksum for ${entry.path}`)
-      }
-      const relative = safe(entry.path)
-      const expected = path.resolve(staging, ...relative.split("/"))
-      if (path.resolve(entry.staging) !== expected) {
-        throw new Error(`Modal Volume download escaped its staging directory: ${entry.path}`)
-      }
-      return { path: relative, staging: expected, size: entry.size, sha256: entry.sha256 }
-    })
+    const root = await fs.realpath(staging)
+    return Promise.all(
+      result.map(async (entry) => {
+        if (!entry || typeof entry !== "object") throw new Error("Modal Volume download returned an invalid entry")
+        if (!("path" in entry) || typeof entry.path !== "string") {
+          throw new Error("Modal Volume download returned an entry without a path")
+        }
+        if (!("staging" in entry) || typeof entry.staging !== "string") {
+          throw new Error(`Modal Volume download returned no local path for ${entry.path}`)
+        }
+        if (
+          !("size" in entry) ||
+          typeof entry.size !== "number" ||
+          !Number.isSafeInteger(entry.size) ||
+          entry.size < 0
+        ) {
+          throw new Error(`Modal Volume download returned an invalid size for ${entry.path}`)
+        }
+        if (!("sha256" in entry) || typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
+          throw new Error(`Modal Volume download returned an invalid checksum for ${entry.path}`)
+        }
+        const relative = safe(entry.path)
+        const expected = path.resolve(root, ...relative.split("/"))
+        const actual = await fs.realpath(entry.staging).catch(() => undefined)
+        if (actual !== expected) {
+          throw new Error(`Modal Volume download escaped its staging directory: ${entry.path}`)
+        }
+        return { path: relative, staging: expected, size: entry.size, sha256: entry.sha256 }
+      }),
+    )
   }
 }

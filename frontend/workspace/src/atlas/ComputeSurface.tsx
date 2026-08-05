@@ -1,16 +1,37 @@
-import { createSignal, createUniqueId, For, Match, Switch, type Component, type JSX } from "solid-js"
+import {
+  createEffect,
+  createSignal,
+  createUniqueId,
+  For,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  type Component,
+  type JSX,
+} from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { ComputeJobs } from "@/atlas/ComputeJobs"
+import { createComputeJobsAPI, type Status } from "@/atlas/ComputeJobsAPI"
 import { KernelPanel } from "@/atlas/KernelPanel"
+import { useSDK } from "@/context/sdk"
+import type { ProjectRequest } from "@/utils/openscience-fetch"
 import "@/atlas/ComputeSurface.css"
 
 type Tab = "kernels" | "jobs"
 
 type ComputeSurfaceProps = {
   kernels?: Component<{ onEnsureSession?: () => Promise<string | undefined> }>
-  jobs?: Component<{ onEnsureSession?: () => Promise<string | undefined> }>
+  jobs?: Component<{
+    onEnsureSession?: () => Promise<string | undefined>
+    onActiveChange?: (count: number) => void
+  }>
   onEnsureSession?: () => Promise<string | undefined>
+  request?: ProjectRequest
 }
+
+const terminal = new Set<Status>(["succeeded", "failed", "cancelled", "interrupted"])
+const inactiveRefresh = 15_000
 
 const tabs = [
   { id: "kernels", label: "Kernels" },
@@ -19,10 +40,26 @@ const tabs = [
 
 export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
   const [tab, setTab] = createSignal<Tab>("kernels")
+  const [active, setActive] = createSignal(0)
   const id = createUniqueId()
   const refs: Partial<Record<Tab, HTMLButtonElement>> = {}
   const kernels = props.kernels ?? KernelPanel
   const jobs = props.jobs ?? ComputeJobs
+  const api = createComputeJobsAPI(props.request ?? useSDK().request)
+
+  const refresh = async () => {
+    const list = await api.list().catch(() => undefined)
+    if (list) setActive(list.filter((job) => !terminal.has(job.status)).length)
+  }
+
+  createEffect(() => {
+    if (tab() === "kernels") void refresh()
+  })
+
+  const timer = setInterval(() => {
+    if (tab() === "kernels") void refresh()
+  }, inactiveRefresh)
+  onCleanup(() => clearInterval(timer))
 
   const select = (next: Tab, focus = false) => {
     setTab(next)
@@ -70,7 +107,12 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
               tabindex={tab() === item.id ? 0 : -1}
               onClick={() => select(item.id)}
             >
-              {item.label}
+              <span>{item.label}</span>
+              <Show when={item.id === "jobs" && active() > 0}>
+                <span class="compute-surface__badge" aria-label={`${active()} active job${active() === 1 ? "" : "s"}`}>
+                  {active()}
+                </span>
+              </Show>
             </button>
           )}
         </For>
@@ -96,7 +138,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
             aria-labelledby={`${id}-jobs-tab`}
             tabindex={0}
           >
-            <Dynamic component={jobs} onEnsureSession={props.onEnsureSession} />
+            <Dynamic component={jobs} onEnsureSession={props.onEnsureSession} onActiveChange={setActive} />
           </div>
         </Match>
       </Switch>

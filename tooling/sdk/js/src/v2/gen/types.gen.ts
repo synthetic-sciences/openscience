@@ -4108,6 +4108,9 @@ export type SettingsComputeJobsListResponses = {
       }
     }
     capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
     session_id?: string
     authority?: {
       allowed: boolean
@@ -4758,6 +4761,9 @@ export type SettingsComputeJobsStartResponses = {
       }
     }
     capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
     session_id?: string
     authority?: {
       allowed: boolean
@@ -5551,6 +5557,9 @@ export type SettingsComputeJobsRetryResponses = {
       }
     }
     capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
     session_id?: string
     authority?: {
       allowed: boolean
@@ -6172,6 +6181,9 @@ export type SettingsComputeJobsCancelResponses = {
       }
     }
     capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
     session_id?: string
     authority?: {
       allowed: boolean

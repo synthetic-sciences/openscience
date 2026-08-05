@@ -131,21 +131,9 @@ const SAFE_SYNCED_KEYS = new Set([
   "OPENSCIENCE_RUNTIME",
 ])
 
-// Infrastructure credentials belong to trusted compute adapters. They must
-// never enter agent-controlled shells, even when they came from an explicit
-// shell export rather than the encrypted settings store.
-const CONTROL_PLANE_ENV_KEYS = new Set([
-  "MODAL_TOKEN_ID",
-  "MODAL_TOKEN_SECRET",
-  "LAMBDA_API_KEY",
-  "LAMBDA_LABS_API_KEY",
-  "RUNPOD_API_KEY",
-  "PRIME_API_KEY",
-  "PRIME_INTELLECT_API_KEY",
-  "TENSORPOOL_KEY",
-  "TENSORPOOL_API_KEY",
-  "VAST_API_KEY",
-])
+// Modal credentials belong to its trusted adapter and never enter
+// agent-controlled shells, including when supplied by an explicit export.
+const CONTROL_PLANE_ENV_KEYS = new Set(["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"])
 
 /**
  * Persistent CLI auth session.

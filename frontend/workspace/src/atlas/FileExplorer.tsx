@@ -63,6 +63,10 @@ interface ModalVolume {
   name: string
 }
 
+interface ComputeInfo {
+  providers: { id: string; connected: boolean; enabled: boolean }[]
+}
+
 interface ConnectInput {
   path: string
   access: FilesystemAccess
@@ -73,7 +77,10 @@ interface FilesSourceListProps {
   artifacts: StoredArtifact[]
   trash: StoredArtifact[]
   grants: FilesystemGrant[]
+  modalAvailable?: boolean
   volumes?: ModalVolume[]
+  volumesLoading?: boolean
+  volumesError?: string
   projectRoot: string
   sessionReady: boolean
   busy?: boolean
@@ -85,6 +92,7 @@ interface FilesSourceListProps {
   onRestoreArtifact: (artifact: StoredArtifact) => void
   onOpenGrant: (grant: FilesystemGrant) => void
   onOpenVolume?: (volume: ModalVolume) => void
+  onLoadVolumes?: () => void
   onRevoke: (grant: FilesystemGrant) => void
   onConnect: (input: ConnectInput) => void
   onChoose?: (kind: "folder" | "file") => Promise<string | undefined>
@@ -337,35 +345,74 @@ export function FilesSourceList(props: FilesSourceListProps): JSX.Element {
         </Show>
       </section>
 
-      <Show when={props.volumes?.length}>
+      <Show when={props.modalAvailable}>
         <section aria-labelledby="modal-volumes-heading" style={group()}>
           <GroupHeading
             id="modal-volumes-heading"
             title="Modal Volumes"
-            detail={`${props.volumes?.length ?? 0} available`}
+            detail={props.volumes ? `${props.volumes.length} available` : "Load on demand"}
           />
-          <div role="list" aria-label="Modal Volumes" style={rows()}>
-            <For each={props.volumes}>
-              {(volume) => (
-                <button
-                  type="button"
-                  role="listitem"
-                  aria-label={`Open Modal Volume ${volume.name}`}
-                  onClick={() => props.onOpenVolume?.(volume)}
-                  style={sourceRow()}
-                >
-                  <span style={sourceIcon()}>
-                    <IconFolder size={18} strokeWidth={1.5} />
+          <Show
+            when={props.volumes}
+            fallback={
+              <button
+                type="button"
+                aria-label="Browse Modal cloud files"
+                onClick={() => props.onLoadVolumes?.()}
+                style={sourceRow()}
+              >
+                <span style={sourceIcon()}>
+                  <IconFolder size={18} strokeWidth={1.5} />
+                </span>
+                <span style={sourceCopy()}>
+                  <strong style={sourceTitle()}>Modal</strong>
+                  <span style={sourceDetail()}>
+                    {props.volumesLoading
+                      ? "Loading Volumes…"
+                      : props.volumesError
+                        ? "Could not load Volumes — select to retry"
+                        : "Browse cloud files"}
                   </span>
-                  <span style={sourceCopy()}>
-                    <strong style={sourceTitle()}>{volume.name}</strong>
-                    <span style={sourceDetail()}>Durable cloud files</span>
-                  </span>
-                  <IconChevronRight size={16} strokeWidth={1.5} />
-                </button>
-              )}
-            </For>
-          </div>
+                </span>
+                <IconChevronRight size={16} strokeWidth={1.5} />
+              </button>
+            }
+          >
+            <Show
+              when={props.volumes?.length}
+              fallback={<p style={empty()}>No Modal Volumes found in the configured account.</p>}
+            >
+              <div role="list" aria-label="Modal Volumes" style={rows()}>
+                <For each={props.volumes}>
+                  {(volume) => (
+                    <button
+                      type="button"
+                      role="listitem"
+                      aria-label={`Open Modal Volume ${volume.name}`}
+                      onClick={() => props.onOpenVolume?.(volume)}
+                      style={sourceRow()}
+                    >
+                      <span style={sourceIcon()}>
+                        <IconFolder size={18} strokeWidth={1.5} />
+                      </span>
+                      <span style={sourceCopy()}>
+                        <strong style={sourceTitle()}>{volume.name}</strong>
+                        <span style={sourceDetail()}>Durable cloud files</span>
+                      </span>
+                      <IconChevronRight size={16} strokeWidth={1.5} />
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </Show>
+          <Show when={props.volumesError}>
+            {(message) => (
+              <p role="alert" style={alert()}>
+                {message()}
+              </p>
+            )}
+          </Show>
         </section>
       </Show>
 
@@ -540,6 +587,7 @@ export function FileExplorer(): JSX.Element {
     cwd: "",
     filter: "",
     refresh: 0,
+    modal: false,
     busy: false,
     error: undefined as string | undefined,
   })
@@ -571,14 +619,21 @@ export function FileExplorer(): JSX.Element {
         ),
       ).then(([active, trash]) => ({ active, trash })),
   )
-  const [volumes] = createResource(
+  const [compute] = createResource(
     () => sdk.directory,
+    () => sdk.request("/settings/compute").then(json) as Promise<ComputeInfo>,
+  )
+  const modalAvailable = createMemo(() => {
+    const modal = compute.latest?.providers.find((provider) => provider.id === "modal")
+    return Boolean(modal?.connected && modal.enabled)
+  })
+  const [volumes, { refetch: refetchVolumes }] = createResource(
+    () => (view.modal ? sdk.directory : undefined),
     () =>
       sdk
         .request("/settings/compute/modal/volumes")
         .then(json)
-        .then((value) => (Array.isArray(value) ? (value as ModalVolume[]) : []))
-        .catch(() => []),
+        .then((value) => (Array.isArray(value) ? (value as ModalVolume[]) : [])),
   )
   onMount(() => {
     const refresh = () => void refetchArtifacts()
@@ -891,7 +946,10 @@ export function FileExplorer(): JSX.Element {
           artifacts={artifacts.latest?.active ?? []}
           trash={artifacts.latest?.trash ?? []}
           grants={grants()}
-          volumes={volumes.latest ?? []}
+          modalAvailable={modalAvailable()}
+          volumes={volumes.latest}
+          volumesLoading={volumes.loading}
+          volumesError={volumes.error ? errorMessage(volumes.error) : undefined}
           projectRoot={projectRoot()}
           sessionReady={Boolean(snapshot.latest)}
           busy={view.busy}
@@ -911,6 +969,7 @@ export function FileExplorer(): JSX.Element {
           onRestoreArtifact={restore}
           onOpenGrant={openGrant}
           onOpenVolume={(volume) => open({ root: "/", name: volume.name, kind: "modal" })}
+          onLoadVolumes={() => (view.modal ? void refetchVolumes() : setView("modal", true))}
           onRevoke={revoke}
           onConnect={connect}
           onChoose={choose}

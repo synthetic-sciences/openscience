@@ -147,17 +147,13 @@ export namespace ModalAdapter {
   async function harvest(
     context: Context,
     spec: Spec,
-    fallback?: number,
-    attempts = 20,
+    fallback?: { code: number; log: string },
   ): Promise<Result & { log: string }> {
-    const entries = await ModalVolume.list(context, spec.volume, "/", true)
+    if (fallback && !spec.outputs.length) return { code: fallback.code, outputs: [], log: fallback.log }
     const codePath = path.posix.basename(EXIT_CODE)
     const logPath = path.posix.basename(RUN_LOG)
+    const entries = await ModalVolume.wait(context, spec.volume, codePath)
     const complete = entries.some((entry) => entry.type === "file" && entry.path === codePath)
-    if (!complete && attempts > 0) {
-      await Bun.sleep(500)
-      return harvest(context, spec, fallback, attempts - 1)
-    }
     if (!complete && fallback === undefined) throw new Error("Modal output Volume has no completed command result")
     const patterns = spec.outputs.map((pattern) => new Bun.Glob(pattern))
     const selected = entries.filter(
@@ -178,7 +174,9 @@ export namespace ModalAdapter {
     if (!logged || (!saved && fallback === undefined)) {
       throw new Error("Modal output Volume is missing its result metadata")
     }
-    const code = saved ? Number.parseInt((await Bun.file(saved.staging).text()).trim(), 10) : (fallback ?? Number.NaN)
+    const code = saved
+      ? Number.parseInt((await Bun.file(saved.staging).text()).trim(), 10)
+      : (fallback?.code ?? Number.NaN)
     if (!Number.isInteger(code)) throw new Error("Modal output Volume has an invalid command result")
     const outputs = selected.map((entry) => {
       const file = files.get(clean(entry.path))
@@ -280,11 +278,11 @@ export namespace ModalAdapter {
         await hooks.log(`Running command: ${spec.command}`)
         const settled = await outcome(sandbox, hooks.output)
         await hooks.log(`Command exited with code ${settled.code}; GPU sandbox released`)
-        const recovered = await harvest(context, spec, settled.code).catch((error) => {
+        const recovered = await harvest(context, spec, settled).catch((error) => {
           throw new HarvestError(settled.code, error)
         })
         if (recovered.log !== settled.log) await hooks.output(recovered.log)
-        if (recovered.code !== settled.code) {
+        if (settled.code === 124 && recovered.code !== settled.code) {
           await hooks.log(`Sandbox exit ${settled.code} overrides durable command marker ${recovered.code}`)
         }
         const result = reconcile(settled.code, recovered)
@@ -323,9 +321,11 @@ export namespace ModalAdapter {
         await own(sandbox, spec.id, spec.project)
         await hooks.log(`Reattached to sandbox ${sandboxId}`)
         const settled = await outcome(sandbox, hooks.output)
-        const recovered = await harvest(context, spec, settled.code)
+        const recovered = await harvest(context, spec, settled).catch((error) => {
+          throw new HarvestError(settled.code, error)
+        })
         if (recovered.log !== settled.log) await hooks.output(recovered.log)
-        if (recovered.code !== settled.code) {
+        if (settled.code === 124 && recovered.code !== settled.code) {
           await hooks.log(`Sandbox exit ${settled.code} overrides durable command marker ${recovered.code}`)
         }
         const result = reconcile(settled.code, recovered)
