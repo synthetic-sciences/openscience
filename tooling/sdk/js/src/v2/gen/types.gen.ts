@@ -7551,6 +7551,12 @@ export type HarnessBenchmarksResponses = {
           reason: string
         }
       | {
+          status: "blocked_upstream"
+          reason: string
+          anchor: string
+          checkedAt: string
+        }
+      | {
           status: "not_applicable"
           reason: string
         }
@@ -7628,7 +7634,7 @@ export type HarnessBenchmarkRecipeResponses = {
       [key: string]: string
     }
     environment: {
-      manager: "uv" | "pip" | "hatch" | "setuptools"
+      manager: "uv" | "pip" | "hatch" | "setuptools" | "conda"
       python: string
       files: Array<string>
     }
@@ -7658,13 +7664,23 @@ export type HarnessBenchmarkRecipeResponses = {
       environment: Array<string>
     }>
     launchStage: string
-    artifacts: Array<{
-      id: string
-      path: string
-      format: "json" | "jsonl" | "csv" | "pickle" | "directory"
-      producedBy: string
-      owner: "runner" | "evaluator"
-    }>
+    artifacts: Array<
+      | {
+          id: string
+          producedBy: string
+          owner: "runner" | "evaluator"
+          kind: "file"
+          path: string
+          format: "json" | "jsonl" | "csv" | "text" | "pickle" | "directory"
+        }
+      | {
+          id: string
+          producedBy: string
+          owner: "runner" | "evaluator"
+          kind: "return"
+          format: "json"
+        }
+    >
     metrics: Array<{
       name: string
       artifact: string
@@ -10631,7 +10647,7 @@ export type HarnessBindResponses = {
         [key: string]: string
       }
       environment: {
-        manager: "uv" | "pip" | "hatch" | "setuptools"
+        manager: "uv" | "pip" | "hatch" | "setuptools" | "conda"
         python: string
         files: Array<string>
       }
@@ -10661,13 +10677,23 @@ export type HarnessBindResponses = {
         environment: Array<string>
       }>
       launchStage: string
-      artifacts: Array<{
-        id: string
-        path: string
-        format: "json" | "jsonl" | "csv" | "pickle" | "directory"
-        producedBy: string
-        owner: "runner" | "evaluator"
-      }>
+      artifacts: Array<
+        | {
+            id: string
+            producedBy: string
+            owner: "runner" | "evaluator"
+            kind: "file"
+            path: string
+            format: "json" | "jsonl" | "csv" | "text" | "pickle" | "directory"
+          }
+        | {
+            id: string
+            producedBy: string
+            owner: "runner" | "evaluator"
+            kind: "return"
+            format: "json"
+          }
+      >
       metrics: Array<{
         name: string
         artifact: string
@@ -11314,7 +11340,7 @@ export type HarnessContractResponses = {
         [key: string]: string
       }
       environment: {
-        manager: "uv" | "pip" | "hatch" | "setuptools"
+        manager: "uv" | "pip" | "hatch" | "setuptools" | "conda"
         python: string
         files: Array<string>
       }
@@ -11344,13 +11370,23 @@ export type HarnessContractResponses = {
         environment: Array<string>
       }>
       launchStage: string
-      artifacts: Array<{
-        id: string
-        path: string
-        format: "json" | "jsonl" | "csv" | "pickle" | "directory"
-        producedBy: string
-        owner: "runner" | "evaluator"
-      }>
+      artifacts: Array<
+        | {
+            id: string
+            producedBy: string
+            owner: "runner" | "evaluator"
+            kind: "file"
+            path: string
+            format: "json" | "jsonl" | "csv" | "text" | "pickle" | "directory"
+          }
+        | {
+            id: string
+            producedBy: string
+            owner: "runner" | "evaluator"
+            kind: "return"
+            format: "json"
+          }
+      >
       metrics: Array<{
         name: string
         artifact: string

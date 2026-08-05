@@ -100,6 +100,14 @@ export namespace HarnessBenchmark {
       .strict(),
     z
       .object({
+        status: z.literal("blocked_upstream"),
+        reason: z.string().min(1).max(1_000),
+        anchor: z.string().min(1).max(500),
+        checkedAt: Date,
+      })
+      .strict(),
+    z
+      .object({
         status: z.literal("not_applicable"),
         reason: z.string().min(1).max(1_000),
       })
@@ -132,31 +140,62 @@ export namespace HarnessBenchmark {
       if (new Set(value.packs).size !== value.packs.length) {
         ctx.addIssue({ code: "custom", path: ["packs"], message: "Required packs must be unique" })
       }
+      if (
+        value.recipe.status === "blocked_upstream" &&
+        value.source.status !== "methodology_only" &&
+        !value.source.requiredPaths.includes(value.recipe.anchor)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["recipe", "anchor"],
+          message: "An upstream recipe blocker must cite a required source path",
+        })
+      }
     })
   export type Manifest = z.infer<typeof Manifest>
 
   const checkedAt = "2026-08-05"
   const recipes = {
     bixbench: "bixbench-official-v1",
+    biomni: "biomni-official-v1",
     pde: "pdebench-official-v1",
     chembench: "chembench-official-v1",
+    matscibench: "matscibench-official-v1",
     mle: "mlebench-official-v1",
+    ale: "alebench-official-v1",
     researchclaw: "researchclawbench-official-v1",
+    paperbench: "paperbench-official-v1",
+    scicode: "scicode-official-v1",
+  } as const
+  const blockers = {
+    posttrain: {
+      reason:
+        "The official repository currently supports only its internal HTCondor launcher and describes portable Harbor execution as future work.",
+      anchor: "README.md",
+    },
+    weather: {
+      reason:
+        "The current official evaluation script declares output_dir but marks the nonexistent output_path flag as required, so its published entrypoint cannot launch unchanged.",
+      anchor: "scripts/evaluate.py",
+    },
   } as const
   const item = (input: Omit<Manifest, "execution" | "recipe">) => {
     const id = input.id as keyof typeof recipes
+    const blocked = blockers[input.id as keyof typeof blockers]
     const recipe = recipes[id]
       ? { status: "source_verified" as const, id: recipes[id], schemaVersion: 1 as const, checkedAt }
-      : input.source.status === "methodology_only"
-        ? {
-            status: "not_applicable" as const,
-            reason: "This methodology adapter has no single official external runner.",
-          }
-        : {
-            status: "pending_source_verification" as const,
-            reason:
-              "The official source is pinned, but its native driver and score-artifact recipe are not yet verified.",
-          }
+      : blocked
+        ? { status: "blocked_upstream" as const, ...blocked, checkedAt }
+        : input.source.status === "methodology_only"
+          ? {
+              status: "not_applicable" as const,
+              reason: "This methodology adapter has no single official external runner.",
+            }
+          : {
+              status: "pending_source_verification" as const,
+              reason:
+                "The official source is pinned, but its native driver and score-artifact recipe are not yet verified.",
+            }
     return Manifest.parse({ ...input, execution: "external_runner_required", recipe })
   }
 
@@ -246,7 +285,7 @@ export namespace HarnessBenchmark {
         "https://github.com/snap-stanford/Biomni",
         "400c1f366b96a35ca253e13c9b06c5076af41d65",
         "https://biomni.stanford.edu/",
-        ["biomni/eval/biomni_eval1.py"],
+        ["README.md", "pyproject.toml", "biomni/eval/__init__.py", "biomni/eval/biomni_eval1.py"],
         "https://huggingface.co/datasets/biomni/Eval1",
       ),
       task: "General biomedical agent work with source, method, and biological validity checks.",
@@ -313,7 +352,15 @@ export namespace HarnessBenchmark {
         "https://github.com/Jun-Kai-Zhang/MatSciBench",
         "042be2852ea6005a021d03f6501b0a56349bbda0",
         "https://arxiv.org/abs/2510.12171",
-        ["evaluation/eval.py"],
+        [
+          "README.md",
+          "environment.yml",
+          "evaluation/eval.py",
+          "evaluation/auto_judge.py",
+          "evaluation/model_registry.py",
+          "evaluation/rule_judge.py",
+          "utils/eval_data.py",
+        ],
         "https://huggingface.co/datasets/JunkaiZ/MatSciBench",
       ),
       task: "Materials-science reasoning or prediction with structural and physical validity checks.",
@@ -353,7 +400,7 @@ export namespace HarnessBenchmark {
         "https://github.com/aisa-group/PostTrainBench",
         "d3496fa7d5788a007d6cd143167471ccdfc688d0",
         "https://posttrainbench.com/",
-        ["src/eval/tasks", "src/baselines/run_baseline.sh"],
+        ["README.md", "src/run_task.sh", "src/eval/tasks", "src/baselines/run_baseline.sh"],
       ),
       task: "Model post-training with fixed data, model identity, held-out evaluation, and compute accounting.",
     }),
@@ -369,7 +416,14 @@ export namespace HarnessBenchmark {
         "https://github.com/SakanaAI/ALE-Bench",
         "f7d927906dc1dcd860ee086e4560d576438b1354",
         "https://arxiv.org/abs/2506.09050",
-        ["src/ale_bench_eval/evaluate.py", "scripts/run_eval.sh"],
+        [
+          "pyproject.toml",
+          "uv.lock",
+          "src/ale_bench_eval/__main__.py",
+          "src/ale_bench_eval/evaluate.py",
+          "src/ale_bench_eval/logger.py",
+          "scripts/run_eval.sh",
+        ],
         "https://huggingface.co/datasets/SakanaAI/ALE-Bench",
       ),
       task: "Long-horizon score-based algorithm engineering under fixed contest, compute, and feedback budgets.",
@@ -425,7 +479,14 @@ export namespace HarnessBenchmark {
         "https://github.com/openai/frontier-evals",
         "51052cede8cc608f95bb00346635e03759013e5a",
         "https://openai.com/index/paperbench/",
-        ["project/paperbench/paperbench/grade.py"],
+        [
+          "project/paperbench/README.md",
+          "project/paperbench/pyproject.toml",
+          "project/paperbench/uv.lock",
+          "project/paperbench/paperbench/grade.py",
+          "project/paperbench/paperbench/paper_registry.py",
+          "project/paperbench/paperbench/scripts/run_judge.py",
+        ],
       ),
       task: "End-to-end machine-learning paper replication with immutable artifacts, rubric grading, and compute accounting.",
     }),
@@ -490,7 +551,14 @@ export namespace HarnessBenchmark {
         "https://github.com/scicode-bench/SciCode",
         "e3158ea011d4235245a547460d3688d7ccbf9900",
         "https://scicode-bench.github.io/docs/",
-        ["eval/inspect_ai/scicode.py", "eval/scripts/test_generated_code.py"],
+        [
+          "README.md",
+          "pyproject.toml",
+          "src/scicode/parse/parse.py",
+          "eval/inspect_ai/scicode.py",
+          "eval/scripts/README.md",
+          "eval/scripts/test_generated_code.py",
+        ],
       ),
       task: "Solve scientist-curated research coding problems and their decomposed subproblems against executable tests.",
     }),

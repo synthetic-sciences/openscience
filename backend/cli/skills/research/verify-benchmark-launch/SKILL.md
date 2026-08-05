@@ -92,7 +92,7 @@ Create JSON matching this shape. Paths are relative to the manifest unless they 
 
 Derive command and environment hashes with canonical JSON: UTF-8, sorted object keys, and separators `,` and `:`. The validator reports the observed hashes on mismatch; never weaken the manifest to make a failed checkout pass.
 
-For adapters whose `/harness/benchmarks` manifest reports `recipe.status: source_verified`, materialize the recipe through `POST /harness/benchmarks/:benchmark/recipe`, save the exact response outside the candidate workspace, and include the optional `runner.recipe` block above. The validator independently checks the response bytes, native launch-stage driver digest, recipe commitment, and entrypoint. Omit the block only for adapters that explicitly report a pending or not-applicable recipe; held-out/release runs for a source-verified adapter will reject that omission.
+For adapters whose `/harness/benchmarks` manifest reports `recipe.status: source_verified`, materialize the recipe through `POST /harness/benchmarks/:benchmark/recipe`, save the exact response outside the candidate workspace, and include the optional `runner.recipe` block above. The validator independently checks the response bytes, native launch-stage driver digest, recipe commitment, and entrypoint. Omit the block only for adapters that explicitly report a pending, upstream-blocked, or not-applicable recipe; held-out/release runs for a source-verified adapter will reject that omission. An upstream-blocked adapter is not runnable merely because its recipe block may be omitted: the launch must remain blocked until a newer inspected pin or an evaluator-owned, separately committed repair is declared in the protocol.
 
 ## Validate and bind
 

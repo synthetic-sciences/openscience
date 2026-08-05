@@ -8,15 +8,28 @@ export const harnessHash = (value: string) => new Bun.CryptoHasher("sha256").upd
 export function recipeSelection(key: HarnessRecipe.Verified): HarnessRecipe.Selection {
   const bindings = {
     bixbench: {},
+    biomni: {},
     pde: { dataRoot: "data", datasetStem: "1D_Advection_Sols_beta0.1" },
     chembench: { runID: "fixture-run" },
+    matscibench: { outputDir: "fixtures/matsci-results" },
     mle: {
       competitionList: "fixtures/competitions.txt",
       dataDir: "fixtures/data",
       submissionManifest: "fixtures/submissions.jsonl",
       outputDir: "fixtures/results",
     },
+    ale: { configName: "gpt-5", rootPath: "fixtures/ale-results" },
     researchclaw: { config: "eval_configs/fixture.yaml" },
+    paperbench: {
+      submissionDir: "fixtures/paperbench/submission",
+      paperID: "adaptive-pruning",
+      outputDir: "fixtures/paperbench/judge",
+    },
+    scicode: {
+      codeDir: "fixtures/scicode/code",
+      logDir: "fixtures/scicode/logs",
+      outputDir: "fixtures/scicode/results",
+    },
   } satisfies Record<HarnessRecipe.Verified, Record<string, string>>
   return HarnessRecipe.Selection.parse({ recipeID: HarnessRecipe.catalog[key].id, bindings: bindings[key] })
 }

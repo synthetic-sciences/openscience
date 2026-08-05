@@ -5,7 +5,18 @@ import { recipeSelection } from "../fixture/harness"
 
 describe("source-verified benchmark recipes", () => {
   test("materializes one native execution contract per representative benchmark family", () => {
-    const ids: HarnessRecipe.Verified[] = ["bixbench", "pde", "chembench", "mle", "researchclaw"]
+    const ids: HarnessRecipe.Verified[] = [
+      "bixbench",
+      "biomni",
+      "pde",
+      "chembench",
+      "matscibench",
+      "mle",
+      "ale",
+      "researchclaw",
+      "paperbench",
+      "scicode",
+    ]
     const families = new Set<string>()
     for (const id of ids) {
       const recipe = HarnessRecipe.resolve(id)
@@ -29,6 +40,15 @@ describe("source-verified benchmark recipes", () => {
       )
     }
     expect([...families].toSorted()).toEqual(["biology", "chemistry", "generalist", "ml", "physics"])
+    expect(HarnessRecipe.materialize("biomni", recipeSelection("biomni")).artifacts).toEqual([
+      {
+        id: "rewards",
+        kind: "return",
+        format: "json",
+        producedBy: "evaluate",
+        owner: "evaluator",
+      },
+    ])
   })
 
   test("rejects undeclared, missing, unsafe, out-of-range, and substituted bindings", () => {
@@ -68,11 +88,56 @@ describe("source-verified benchmark recipes", () => {
     expect(() =>
       HarnessRecipe.materialize("pde", { ...pde, bindings: { ...pde.bindings, datasetStem: "2D_rdb_NA_NA" } }),
     ).toThrow("allowed choice")
+    const matsci = recipeSelection("matscibench")
+    expect(() =>
+      HarnessRecipe.materialize("matscibench", {
+        ...matsci,
+        bindings: { ...matsci.bindings, method: "majority-vote" },
+      }),
+    ).toThrow("allowed choice")
+    const paper = recipeSelection("paperbench")
+    expect(() =>
+      HarnessRecipe.materialize("paperbench", {
+        ...paper,
+        bindings: { ...paper.bindings, paperID: "unregistered-paper" },
+      }),
+    ).toThrow("allowed choice")
+    const ale = recipeSelection("ale")
+    expect(() =>
+      HarnessRecipe.materialize("ale", {
+        ...ale,
+        bindings: { ...ale.bindings, judgeVersion: "209901" },
+      }),
+    ).toThrow("allowed choice")
+    const bix = HarnessRecipe.resolve("bixbench")
+    expect(() =>
+      HarnessRecipe.Recipe.parse({
+        ...bix,
+        artifacts: [
+          {
+            id: "evaluations",
+            kind: "return",
+            format: "json",
+            producedBy: "postprocess",
+            owner: "evaluator",
+          },
+        ],
+      }),
+    ).toThrow("must come from a Python API stage")
   })
 
-  test("keeps unsupported adapters explicitly pending instead of inventing a generic recipe", () => {
-    expect(HarnessBenchmark.catalog.paperbench.recipe.status).toBe("pending_source_verification")
+  test("distinguishes pending and upstream-blocked adapters instead of inventing a generic recipe", () => {
+    expect(HarnessBenchmark.catalog.corebench.recipe.status).toBe("pending_source_verification")
     expect(HarnessBenchmark.catalog.statistics.recipe.status).toBe("not_applicable")
-    expect(() => HarnessRecipe.resolve("paperbench")).toThrow("No source-verified execution recipe")
+    expect(HarnessBenchmark.catalog.posttrain.recipe).toMatchObject({
+      status: "blocked_upstream",
+      anchor: "README.md",
+    })
+    expect(HarnessBenchmark.catalog.weather.recipe).toMatchObject({
+      status: "blocked_upstream",
+      anchor: "scripts/evaluate.py",
+    })
+    expect(() => HarnessRecipe.resolve("posttrain")).toThrow("No source-verified execution recipe")
+    expect(() => HarnessRecipe.resolve("weather")).toThrow("No source-verified execution recipe")
   })
 })

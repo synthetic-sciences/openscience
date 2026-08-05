@@ -91,10 +91,11 @@ describe("benchmark adapters", () => {
     const paths = Object.values(HarnessBenchmark.catalog).flatMap((manifest) =>
       manifest.source.status === "methodology_only" ? [] : manifest.source.requiredPaths,
     )
-    expect(paths).toHaveLength(53)
+    expect(paths).toHaveLength(77)
     const recipes = Object.values(HarnessBenchmark.catalog).map((manifest) => manifest.recipe.status)
-    expect(recipes.filter((status) => status === "source_verified")).toHaveLength(5)
-    expect(recipes.filter((status) => status === "pending_source_verification")).toHaveLength(15)
+    expect(recipes.filter((status) => status === "source_verified")).toHaveLength(10)
+    expect(recipes.filter((status) => status === "pending_source_verification")).toHaveLength(8)
+    expect(recipes.filter((status) => status === "blocked_upstream")).toHaveLength(2)
     expect(recipes.filter((status) => status === "not_applicable")).toHaveLength(3)
   })
 
@@ -158,6 +159,23 @@ describe("benchmark adapters", () => {
         launch: launchProtocol("genebench"),
       }),
     ).rejects.toThrow("cannot represent the 129-task hidden benchmark")
+  })
+
+  test("blocks official launches whose pinned upstream entrypoint is not runnable", async () => {
+    await expect(
+      HarnessAdapter.bind({
+        ...task("weather", "weather-blocked"),
+        split: "held_out",
+        launch: launchProtocol("weather"),
+      }),
+    ).rejects.toThrow("blocked at scripts/evaluate.py")
+    await expect(
+      HarnessAdapter.bind({
+        ...task("posttrain", "posttrain-blocked"),
+        split: "release",
+        launch: launchProtocol("posttrain"),
+      }),
+    ).rejects.toThrow("blocked at README.md")
   })
 
   test("binds the exact native recipe driver and rejects recipe or entrypoint substitution", async () => {

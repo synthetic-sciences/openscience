@@ -100,15 +100,28 @@ export namespace HarnessRecipe {
     })
     .strict()
 
-  export const Artifact = z
-    .object({
-      id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-      path: Template,
-      format: z.enum(["json", "jsonl", "csv", "pickle", "directory"]),
-      producedBy: z.string().regex(/^[a-z][a-z0-9-]*$/),
-      owner: z.enum(["runner", "evaluator"]),
-    })
-    .strict()
+  const ArtifactBase = {
+    id: z.string().regex(/^[a-z][a-z0-9-]*$/),
+    producedBy: z.string().regex(/^[a-z][a-z0-9-]*$/),
+    owner: z.enum(["runner", "evaluator"]),
+  }
+  export const Artifact = z.discriminatedUnion("kind", [
+    z
+      .object({
+        ...ArtifactBase,
+        kind: z.literal("file"),
+        path: Template,
+        format: z.enum(["json", "jsonl", "csv", "text", "pickle", "directory"]),
+      })
+      .strict(),
+    z
+      .object({
+        ...ArtifactBase,
+        kind: z.literal("return"),
+        format: z.literal("json"),
+      })
+      .strict(),
+  ])
 
   export const Metric = z
     .object({
@@ -128,7 +141,7 @@ export namespace HarnessRecipe {
       maturity: z.literal("source_verified"),
       environment: z
         .object({
-          manager: z.enum(["uv", "pip", "hatch", "setuptools"]),
+          manager: z.enum(["uv", "pip", "hatch", "setuptools", "conda"]),
           python: z.string().min(1).max(100),
           files: z.array(Rel).min(1).max(16),
         })
@@ -153,7 +166,7 @@ export namespace HarnessRecipe {
           ...stage.inputs,
           ...stage.outputs,
         ])
-        .concat(value.artifacts.map((item) => item.path))
+        .concat(value.artifacts.flatMap((item) => (item.kind === "file" ? [item.path] : [])))
       const used = fields.flatMap((field) => [...field.matchAll(/\{([a-z][a-zA-Z0-9]*)\}/g)].map((match) => match[1]!))
       if (new Set(names).size !== names.length) {
         ctx.addIssue({ code: "custom", path: ["bindings"], message: "Recipe bindings must be unique" })
@@ -168,8 +181,18 @@ export namespace HarnessRecipe {
         ctx.addIssue({ code: "custom", path: ["artifacts"], message: "Recipe artifacts must be unique" })
       }
       for (const item of value.artifacts) {
-        if (stages.includes(item.producedBy)) continue
-        ctx.addIssue({ code: "custom", path: ["artifacts"], message: `Artifact ${item.id} has no producer stage` })
+        const index = stages.indexOf(item.producedBy)
+        if (index < 0) {
+          ctx.addIssue({ code: "custom", path: ["artifacts"], message: `Artifact ${item.id} has no producer stage` })
+          continue
+        }
+        if (item.kind === "return" && value.stages[index]?.driver.kind !== "python_api") {
+          ctx.addIssue({
+            code: "custom",
+            path: ["artifacts"],
+            message: `Return artifact ${item.id} must come from a Python API stage`,
+          })
+        }
       }
       for (const item of value.metrics) {
         if (artifacts.includes(item.artifact)) continue
@@ -295,7 +318,14 @@ export namespace HarnessRecipe {
       ],
       launchStage: "generate",
       artifacts: [
-        { id: "evaluations", path: "{evalArtifact}", format: "csv", producedBy: "postprocess", owner: "evaluator" },
+        {
+          id: "evaluations",
+          kind: "file",
+          path: "{evalArtifact}",
+          format: "csv",
+          producedBy: "postprocess",
+          owner: "evaluator",
+        },
       ],
       metrics: [
         {
@@ -309,6 +339,71 @@ export namespace HarnessRecipe {
       limitations: [
         "The upstream batch shell script uses an inclusive replica loop; this recipe binds one explicit replica per launch.",
         "Open-answer grading can invoke a configured grading model and must remain evaluator-owned.",
+      ],
+    }),
+    biomni: recipe({
+      schemaVersion: 1,
+      id: "biomni-official-v1",
+      benchmark: "biomni",
+      maturity: "source_verified",
+      environment: { manager: "setuptools", python: ">=3.11", files: ["pyproject.toml"] },
+      anchors: ["README.md", "pyproject.toml", "biomni/eval/biomni_eval1.py"],
+      bindings: [],
+      stages: [
+        {
+          id: "load",
+          role: "prepare",
+          driver: {
+            kind: "python_api",
+            entrypoint: "biomni/eval/biomni_eval1.py",
+            module: "biomni.eval",
+            symbol: "BiomniEval1",
+            kwargs: {},
+            runtimeInputs: [],
+          },
+          inputs: [],
+          outputs: [],
+          environment: [],
+        },
+        {
+          id: "evaluate",
+          role: "evaluate",
+          driver: {
+            kind: "python_api",
+            entrypoint: "biomni/eval/biomni_eval1.py",
+            module: "biomni.eval",
+            symbol: "BiomniEval1.batch_evaluate",
+            kwargs: {},
+            runtimeInputs: ["evaluator", "evaluations"],
+          },
+          inputs: [],
+          outputs: [],
+          environment: [],
+        },
+      ],
+      launchStage: "evaluate",
+      artifacts: [
+        {
+          id: "rewards",
+          kind: "return",
+          format: "json",
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
+      ],
+      metrics: [
+        {
+          name: "mean-reward",
+          artifact: "rewards",
+          selector: "$[*]",
+          direction: "maximize",
+          aggregation: "mean",
+        },
+      ],
+      limitations: [
+        "Biomni-Eval1 returns a list of rewards instead of writing a score file; the evaluator must canonically serialize the return value before hashing its receipt.",
+        "The pinned pyproject omits pandas and a parquet engine used by the evaluator, so launch readiness must bind a tested environment extension instead of assuming installation is complete.",
+        "The public Hugging Face parquet contains reference answers, so held-out claims require evaluator-only dataset access despite the official loader's public default.",
       ],
     }),
     pde: recipe({
@@ -368,6 +463,7 @@ export namespace HarnessRecipe {
       artifacts: [
         {
           id: "errors",
+          kind: "file",
           path: "pdebench/models/{datasetStem}_FNO.pickle",
           format: "pickle",
           producedBy: "evaluate",
@@ -496,6 +592,7 @@ export namespace HarnessRecipe {
       artifacts: [
         {
           id: "submission",
+          kind: "file",
           path: "{reportDir}/submission_results.json",
           format: "json",
           producedBy: "submit",
@@ -514,6 +611,109 @@ export namespace HarnessRecipe {
       limitations: [
         "ChemBench exposes a Python API, not a benchmark grading CLI; callers must preserve the declared runtime object inputs.",
         "Leaderboard submission remains a separate manual action and is never performed by the harness recipe.",
+      ],
+    }),
+    matscibench: recipe({
+      schemaVersion: 1,
+      id: "matscibench-official-v1",
+      benchmark: "matscibench",
+      maturity: "source_verified",
+      environment: { manager: "conda", python: "3.12.9", files: ["environment.yml"] },
+      anchors: [
+        "environment.yml",
+        "evaluation/eval.py",
+        "evaluation/auto_judge.py",
+        "evaluation/model_registry.py",
+        "evaluation/rule_judge.py",
+        "utils/eval_data.py",
+      ],
+      bindings: [
+        {
+          name: "method",
+          kind: "choice",
+          description: "Official MatSciBench prompting method",
+          required: false,
+          default: "base",
+          choices: ["base", "tool", "correction", "consistency"],
+        },
+        { name: "outputDir", kind: "path", description: "Evaluator-owned CSV output directory" },
+        {
+          name: "workers",
+          kind: "integer",
+          description: "Parallel model request count",
+          required: false,
+          default: "8",
+          minimum: 1,
+          maximum: 128,
+        },
+        {
+          name: "maxTokens",
+          kind: "integer",
+          description: "Maximum generated tokens per question",
+          required: false,
+          default: "8192",
+          minimum: 1,
+          maximum: 131072,
+        },
+      ],
+      stages: [
+        {
+          id: "evaluate",
+          role: "evaluate",
+          driver: {
+            kind: "argv",
+            entrypoint: "evaluation/eval.py",
+            cwd: ".",
+            argv: [
+              "python",
+              "evaluation/eval.py",
+              "--model",
+              "gemini-2.5-flash",
+              "--method",
+              "{method}",
+              "--max_tokens",
+              "{maxTokens}",
+              "--num_workers",
+              "{workers}",
+              "--output_dir",
+              "{outputDir}",
+            ],
+          },
+          inputs: [],
+          outputs: ["{outputDir}/gemini-2.5-flash_{method}_*.csv"],
+          environment: ["GEMINI_API_KEY"],
+        },
+      ],
+      launchStage: "evaluate",
+      artifacts: [
+        {
+          id: "decisions",
+          kind: "file",
+          path: "{outputDir}/gemini-2.5-flash_{method}_*.csv",
+          format: "csv",
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
+      ],
+      metrics: [
+        {
+          name: "accuracy",
+          artifact: "decisions",
+          selector: "column:is_correct",
+          direction: "maximize",
+          aggregation: "mean",
+        },
+        {
+          name: "rule-accuracy",
+          artifact: "decisions",
+          selector: "column:rule_is_correct",
+          direction: "maximize",
+          aggregation: "mean",
+        },
+      ],
+      limitations: [
+        "This verified slice fixes the registry key to the official default gemini-2.5-flash so its required secret and output filename are deterministic.",
+        "The timestamped output glob must resolve to exactly one newly created CSV, and the model/judge calls require evaluator-owned network credentials.",
       ],
     }),
     mle: recipe({
@@ -575,6 +775,7 @@ export namespace HarnessRecipe {
       artifacts: [
         {
           id: "grading-report",
+          kind: "file",
           path: "{outputDir}/*_grading_report.json",
           format: "json",
           producedBy: "grade",
@@ -607,6 +808,102 @@ export namespace HarnessRecipe {
       limitations: [
         "Preparing all competitions requires Kaggle access and can take multiple days; task lists and data bytes must be frozen before launch.",
         "The primary report counts medals and above-median submissions; cross-seed confidence intervals require the official aggregation script.",
+      ],
+    }),
+    ale: recipe({
+      schemaVersion: 1,
+      id: "alebench-official-v1",
+      benchmark: "ale",
+      maturity: "source_verified",
+      environment: { manager: "uv", python: ">=3.10,<3.15", files: ["pyproject.toml", "uv.lock"] },
+      anchors: [
+        "pyproject.toml",
+        "uv.lock",
+        "src/ale_bench_eval/__main__.py",
+        "src/ale_bench_eval/evaluate.py",
+        "src/ale_bench_eval/logger.py",
+        "scripts/run_eval.sh",
+      ],
+      bindings: [
+        { name: "configName", kind: "identifier", description: "Model configuration basename in llm_configs" },
+        { name: "rootPath", kind: "path", description: "Evaluator-owned deterministic result root" },
+        {
+          name: "judgeVersion",
+          kind: "choice",
+          description: "Official AtCoder judge version",
+          required: false,
+          default: "202301",
+          choices: ["201907", "202301", "202510"],
+        },
+      ],
+      stages: [
+        {
+          id: "evaluate",
+          role: "evaluate",
+          driver: {
+            kind: "argv",
+            entrypoint: "scripts/run_eval.sh",
+            cwd: ".",
+            argv: [
+              "bash",
+              "scripts/run_eval.sh",
+              "--root_path",
+              "{rootPath}",
+              "--judge_version",
+              "{judgeVersion}",
+              "{configName}",
+            ],
+          },
+          inputs: ["llm_configs/{configName}.json"],
+          outputs: ["{rootPath}/*/results/final_results.json", "{rootPath}/*/results/total_cost.json"],
+          environment: [],
+        },
+      ],
+      launchStage: "evaluate",
+      artifacts: [
+        {
+          id: "results",
+          kind: "file",
+          path: "{rootPath}/*/results/final_results.json",
+          format: "json",
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
+        {
+          id: "costs",
+          kind: "file",
+          path: "{rootPath}/*/results/total_cost.json",
+          format: "json",
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
+      ],
+      metrics: [
+        {
+          name: "performance",
+          artifact: "results",
+          selector: "$.self_refine_16.performance",
+          direction: "maximize",
+          aggregation: "mean",
+        },
+        {
+          name: "rank",
+          artifact: "results",
+          selector: "$.self_refine_16.rank",
+          direction: "minimize",
+          aggregation: "mean",
+        },
+        {
+          name: "total-cost",
+          artifact: "costs",
+          selector: "$.self_refine_16.total_cost",
+          direction: "minimize",
+          aggregation: "sum",
+        },
+      ],
+      limitations: [
+        "The official shell fixes repeated sampling to 15, self-refinement to 16, public cases to 50, and median selection; those benchmark semantics are not exposed as mutable bindings.",
+        "The model config selects its provider credential and ALE private evaluation requires Docker; both remain evaluator-owned launch inputs.",
       ],
     }),
     researchclaw: recipe({
@@ -679,6 +976,7 @@ export namespace HarnessRecipe {
       artifacts: [
         {
           id: "score",
+          kind: "file",
           path: "workspaces/cli_runs/cli_*/*/_score.json",
           format: "json",
           producedBy: "score",
@@ -697,6 +995,222 @@ export namespace HarnessRecipe {
       limitations: [
         "The official score is a multimodal judge output; judge identity, prompt, and evaluator qualification must remain contract-bound.",
         "Agent and judge credentials are distinct runtime secrets and are never included in recipe bindings or digests.",
+      ],
+    }),
+    paperbench: recipe({
+      schemaVersion: 1,
+      id: "paperbench-official-v1",
+      benchmark: "paperbench",
+      maturity: "source_verified",
+      environment: {
+        manager: "uv",
+        python: ">=3.11",
+        files: ["project/paperbench/pyproject.toml", "project/paperbench/uv.lock"],
+      },
+      anchors: [
+        "project/paperbench/README.md",
+        "project/paperbench/paperbench/grade.py",
+        "project/paperbench/paperbench/paper_registry.py",
+        "project/paperbench/paperbench/scripts/run_judge.py",
+      ],
+      bindings: [
+        { name: "submissionDir", kind: "path", description: "Executed submission directory" },
+        {
+          name: "paperID",
+          kind: "choice",
+          description: "PaperBench paper identifier",
+          choices: [
+            "adaptive-pruning",
+            "all-in-one",
+            "bam",
+            "bbox",
+            "bridging-data-gaps",
+            "fre",
+            "ftrl",
+            "lbcs",
+            "lca-on-the-line",
+            "mechanistic-understanding",
+            "pinn",
+            "rice",
+            "robust-clip",
+            "sample-specific-masks",
+            "sapg",
+            "self-composing-policies",
+            "self-expansion",
+            "semantic-self-consistency",
+            "sequential-neural-score-estimation",
+            "stay-on-topic-with-classifier-free-guidance",
+            "stochastic-interpolants",
+            "test-time-model-adaptation",
+            "what-will-my-model-forget",
+          ],
+        },
+        { name: "outputDir", kind: "path", description: "Evaluator-owned judge output directory" },
+        {
+          name: "judgeModel",
+          kind: "identifier",
+          description: "SimpleJudge completion model identifier",
+          required: false,
+          default: "gpt-4.1-mini",
+        },
+        {
+          name: "maxDepth",
+          kind: "integer",
+          description: "Maximum rubric-tree grading depth",
+          required: false,
+          default: "999",
+          minimum: 1,
+          maximum: 999,
+        },
+      ],
+      stages: [
+        {
+          id: "grade",
+          role: "evaluate",
+          driver: {
+            kind: "argv",
+            entrypoint: "project/paperbench/paperbench/scripts/run_judge.py",
+            cwd: "project/paperbench",
+            argv: [
+              "uv",
+              "run",
+              "python",
+              "-m",
+              "paperbench.scripts.run_judge",
+              "submission-path={submissionDir}",
+              "paper-id={paperID}",
+              "judge=simple",
+              "max-depth={maxDepth}",
+              "out-dir={outputDir}",
+              "completer-config=preparedness_turn_completer.oai_completions_turn_completer:OpenAICompletionsTurnCompleter.Config",
+              "completer-config.model={judgeModel}",
+            ],
+          },
+          inputs: ["project/paperbench/{submissionDir}", "project/paperbench/data/papers/{paperID}/rubric.json"],
+          outputs: ["project/paperbench/{outputDir}/grader_output.json"],
+          environment: ["GRADER_OPENAI_API_KEY"],
+        },
+      ],
+      launchStage: "grade",
+      artifacts: [
+        {
+          id: "grade",
+          kind: "file",
+          path: "project/paperbench/{outputDir}/grader_output.json",
+          format: "json",
+          producedBy: "grade",
+          owner: "evaluator",
+        },
+      ],
+      metrics: [
+        { name: "score", artifact: "grade", selector: "$.score", direction: "maximize", aggregation: "identity" },
+        {
+          name: "invalid-leaves",
+          artifact: "grade",
+          selector: "$.num_invalid_leaf_nodes",
+          direction: "minimize",
+          aggregation: "identity",
+        },
+      ],
+      limitations: [
+        "This recipe covers the official rubric-grading stage for an already executed submission; PaperBench rollout and GPU reproduction remain separately contract-bound stages.",
+        "SimpleJudge requires an evaluator-owned completion model and key, and its validity must be established with the official JudgeEval suite.",
+      ],
+    }),
+    scicode: recipe({
+      schemaVersion: 1,
+      id: "scicode-official-v1",
+      benchmark: "scicode",
+      maturity: "source_verified",
+      environment: { manager: "setuptools", python: ">=3.10", files: ["pyproject.toml"] },
+      anchors: [
+        "pyproject.toml",
+        "src/scicode/parse/parse.py",
+        "eval/scripts/README.md",
+        "eval/scripts/test_generated_code.py",
+      ],
+      bindings: [
+        { name: "codeDir", kind: "path", description: "Parent directory containing generated code" },
+        { name: "logDir", kind: "path", description: "Evaluator-owned per-step log directory" },
+        { name: "outputDir", kind: "path", description: "Evaluator-owned aggregate output directory" },
+        {
+          name: "split",
+          kind: "choice",
+          description: "Official SciCode dataset split",
+          required: false,
+          default: "test",
+          choices: ["validation", "test"],
+        },
+      ],
+      stages: [
+        {
+          id: "evaluate",
+          role: "evaluate",
+          driver: {
+            kind: "argv",
+            entrypoint: "eval/scripts/test_generated_code.py",
+            cwd: ".",
+            argv: [
+              "python",
+              "eval/scripts/test_generated_code.py",
+              "--model",
+              "openscience",
+              "--split",
+              "{split}",
+              "--code-dir",
+              "{codeDir}",
+              "--log-dir",
+              "{logDir}",
+              "--output-dir",
+              "{outputDir}",
+            ],
+          },
+          inputs: ["{codeDir}/openscience/without_background", "eval/data/test_data.h5"],
+          outputs: [
+            "{outputDir}/openscience_without_background.txt",
+            "{outputDir}/openscience_without_background.json",
+          ],
+          environment: [],
+        },
+      ],
+      launchStage: "evaluate",
+      artifacts: [
+        {
+          id: "summary",
+          kind: "file",
+          path: "{outputDir}/openscience_without_background.txt",
+          format: "text",
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
+        {
+          id: "steps",
+          kind: "file",
+          path: "{outputDir}/openscience_without_background.json",
+          format: "json",
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
+      ],
+      metrics: [
+        {
+          name: "problem-pass-rate",
+          artifact: "summary",
+          selector: "line:correct problems",
+          direction: "maximize",
+          aggregation: "identity",
+        },
+        {
+          name: "step-pass-rate",
+          artifact: "summary",
+          selector: "line:correct steps",
+          direction: "maximize",
+          aggregation: "identity",
+        },
+      ],
+      limitations: [
+        "The official evaluator requires the separately distributed eval/data/test_data.h5 numeric targets and downloads task metadata from SciCode1/SciCode.",
+        "The fixed openscience label is only a directory key; measured model identity must come from the runtime-integrity receipt rather than this filename.",
       ],
     }),
   } satisfies Partial<Record<HarnessBenchmark.Id, Recipe>>
@@ -792,7 +1306,9 @@ export namespace HarnessRecipe {
       anchors: source.anchors,
       stages,
       launchStage: source.launchStage,
-      artifacts: source.artifacts.map((item) => Artifact.parse({ ...item, path: replace(item.path, bindings) })),
+      artifacts: source.artifacts.map((item) =>
+        Artifact.parse(item.kind === "file" ? { ...item, path: replace(item.path, bindings) } : item),
+      ),
       metrics: source.metrics,
       limitations: source.limitations,
     })

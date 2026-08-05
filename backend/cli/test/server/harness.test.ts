@@ -52,6 +52,10 @@ describe("/harness routes", () => {
       publicTasks: 10,
       totalTasks: 129,
     })
+    expect(catalog.find((item) => item.id === "weather")?.recipe).toMatchObject({
+      status: "blocked_upstream",
+      anchor: "scripts/evaluate.py",
+    })
 
     const recipe = await app.request("/benchmarks/mle/recipe", {
       method: "POST",
@@ -72,6 +76,19 @@ describe("/harness routes", () => {
       recipeID: "mlebench-official-v1",
       entrypoint: "mlebench/cli.py",
       stages: [{ id: "prepare" }, { id: "grade" }],
+    })
+
+    const biomni = await app.request("/benchmarks/biomni/recipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipeID: "biomni-official-v1", bindings: {} }),
+    })
+    expect(biomni.status).toBe(200)
+    expect(await biomni.json()).toMatchObject({
+      benchmark: "biomni",
+      recipeID: "biomni-official-v1",
+      entrypoint: "biomni/eval/biomni_eval1.py",
+      artifacts: [{ id: "rewards", kind: "return", producedBy: "evaluate" }],
     })
 
     const bound = await app.request("/runs", {

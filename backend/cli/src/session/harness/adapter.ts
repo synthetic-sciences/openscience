@@ -268,6 +268,12 @@ export namespace HarnessAdapter {
       )
     }
     if (
+      benchmark.recipe.status === "blocked_upstream" &&
+      (task.split === "held_out" || task.split === "release" || task.launch)
+    ) {
+      throw new Error(`${benchmark.title} is blocked at ${benchmark.recipe.anchor}: ${benchmark.recipe.reason}`)
+    }
+    if (
       benchmark.recipe.status === "source_verified" &&
       (task.split === "held_out" || task.split === "release") &&
       !recipe
