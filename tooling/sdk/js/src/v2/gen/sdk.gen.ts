@@ -5179,6 +5179,10 @@ export class Harness extends HeyApiClient {
         direction: "maximize" | "minimize" | "pass"
         target?: number
       }
+      objectives?: Array<{
+        metric: string
+        direction: "maximize" | "minimize"
+      }>
       fidelities?: Array<{
         id: string
         final: boolean
@@ -5241,6 +5245,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "evaluatorAudit" },
             { in: "body", key: "extraPacks" },
             { in: "body", key: "metric" },
+            { in: "body", key: "objectives" },
             { in: "body", key: "fidelities" },
             { in: "body", key: "model" },
             { in: "body", key: "tools" },

@@ -9,6 +9,23 @@ export namespace HarnessContract {
   export const Profile = z.enum(["react", "optimize", "reproduce", "theory", "numerical", "training", "forecast"])
   export type Profile = z.infer<typeof Profile>
 
+  export const Objective = z
+    .object({
+      metric: z.string().min(1).max(200),
+      direction: z.enum(["maximize", "minimize"]),
+    })
+    .strict()
+  export type Objective = z.infer<typeof Objective>
+
+  export const Objectives = z
+    .array(Objective)
+    .max(8)
+    .refine(
+      (items) => new Set(items.map((item) => item.metric)).size === items.length,
+      "Objective metrics must be unique",
+    )
+  export type Objectives = z.infer<typeof Objectives>
+
   export const Topology = z.enum(["auto", "solo", "centralized", "fork_join", "tournament", "evolution"])
   export type Topology = z.infer<typeof Topology>
 
@@ -398,6 +415,7 @@ export namespace HarnessContract {
           metric: z.string().min(1).optional(),
           direction: z.enum(["maximize", "minimize", "pass"]).optional(),
           target: z.number().finite().optional(),
+          objectives: Objectives.optional(),
         })
         .strict(),
       profile: Profile,
@@ -459,6 +477,30 @@ export namespace HarnessContract {
     })
     .strict()
     .superRefine((value, ctx) => {
+      if (
+        value.benchmark.objectives?.length &&
+        (!value.benchmark.metric || !["maximize", "minimize"].includes(value.benchmark.direction ?? ""))
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "objectives"],
+          message: "Secondary objectives require a numeric primary benchmark metric",
+        })
+      }
+      if (value.benchmark.objectives?.some((item) => item.metric === value.benchmark.metric)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "objectives"],
+          message: "A secondary objective cannot duplicate the primary benchmark metric",
+        })
+      }
+      if (value.benchmark.objectives?.length && value.profile !== "optimize") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "objectives"],
+          message: "Secondary objectives require the optimize profile",
+        })
+      }
       if (
         (value.launch || value.integrity || value.simulation || value.evaluatorAudit) &&
         !value.benchmark.evaluatorVersion

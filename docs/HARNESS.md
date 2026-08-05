@@ -336,13 +336,15 @@ The optimizer is an open candidate graph rather than a single mutable working fi
 - The graph admits multiple independent roots early, bounded by `min(4, max(2, ceil(sqrt(candidate budget))))`.
 - A root must use a distinct branch while another live root with that branch exists.
 - Descendants require final, evaluator-verified passing parents. A cheap screening pass is insufficient.
+- A numeric contract may predeclare up to eight unique secondary evaluator metrics and their directions. Every passing final candidate must supply the complete vector.
+- The search persists the non-dominated primary-plus-secondary Pareto archive. Auxiliary metrics preserve complementary candidates, but never change the official primary-score `bestID`, target, or SOTA claim.
 - Early selection opens independent roots and then applies branch-level UCB-style exploration with minimum-visit protection.
 - After half the candidate budget, selection exploits the strongest verified branch.
-- At the configured stall threshold it fuses two strong, distinct branches. At twice that threshold it recommends a strategy-level mutation while preserving the best parent.
+- At the configured stall threshold it fuses the primary winner with a complementary Pareto-prioritized branch. At twice that threshold it recommends a strategy-level mutation while preserving the best parent.
 - Self-reported observations remain visible for debugging but cannot enter elite state or lineage.
 - Passing, failing, and inconclusive final evaluations are immutable and retained as hindsight.
 
-This combines breadth, exploitation, fusion, and escape from strategy stagnation without allowing the model to award itself fitness.
+This combines breadth, multi-metric diversity, exploitation, fusion, and escape from strategy stagnation without allowing the model to award itself fitness. Quality-cost reports separately expose the archive size and objective contract, so an auxiliary evaluator metric cannot be confused with the benchmark's official score.
 
 ### 5. Cascade evaluation
 
@@ -536,7 +538,7 @@ The implementation borrows principles, not source code, from the following prima
 
 | Source                                                                                                                     | Principle reflected here                                                                                                                                               |
 | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [AlphaEvolve](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)   | Programs compete through objective external evaluators and remain in an evolutionary database.                                                                         |
+| [AlphaEvolve paper](https://arxiv.org/abs/2506.13131)                                                                     | Programs receive multiple objective evaluator scores; a MAP-Elites/island-inspired database preserves diverse high performers for later evolution.                     |
 | [Google DeepMind Co-Scientist](https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/) | Generate diverse hypotheses, critique/rank them, combine strong ideas, and spend substantial compute on verification.                                                  |
 | [ProEval](https://deepmind.google/research/publications/238239/)                                                           | Actively discover failure regions and estimate capability from a small, strategically chosen evaluation subset.                                                        |
 | [TRACE: Towards Structural Understanding of LLM Overthinking](https://deepmind.google/research/publications/203490/)       | Detect verification and exploration that continue after their marginal utility has collapsed; stop against a predeclared control rule.                                 |

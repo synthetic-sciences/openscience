@@ -114,6 +114,25 @@ describe("harness quality-cost reports", () => {
     expect(() => HarnessReport.compare([a, b], "one")).toThrow("only comparable")
   })
 
+  test("keeps different secondary-objective contracts out of one comparison", () => {
+    const base = contract("objective-base")
+    const multi = HarnessContract.Info.parse({
+      ...contract("objective-multi"),
+      benchmark: {
+        ...contract("objective-multi").benchmark,
+        objectives: [{ metric: "robustness", direction: "maximize" }],
+      },
+    })
+    const first = HarnessReport.compile({ contract: base, evaluations: [evaluation(base, 0.8)], generatedAt: 3 })
+    const result = HarnessEvaluation.Info.parse({
+      ...evaluation(multi, 0.8),
+      metrics: { score: 0.8, robustness: 0.7 },
+    })
+    const second = HarnessReport.compile({ contract: multi, evaluations: [result], generatedAt: 3 })
+    expect(first.comparisonKey).not.toBe(second.comparisonKey)
+    expect(() => HarnessReport.compare([first, second], "objective-base")).toThrow("only comparable")
+  })
+
   test("refuses comparisons across different simulator protocols", () => {
     const base = contract("simulation-one")
     const simulation = HarnessContract.Simulation.parse({

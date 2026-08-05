@@ -27,6 +27,7 @@ function contract(
     direction?: "maximize" | "minimize"
     candidates?: number
     wallTimeMs?: number
+    objectives?: HarnessContract.Objectives
   },
 ) {
   sessions.add(sessionID)
@@ -43,6 +44,7 @@ function contract(
       evaluator: "official-evaluator",
       metric: "score",
       direction: input?.direction ?? "maximize",
+      objectives: input?.objectives,
     },
     profile: input?.profile ?? "optimize",
     model: { provider: "test", name: "model" },
@@ -64,9 +66,15 @@ const artifact = (name: string) => ({ uri: `candidate://${name}`, sha256: hash(n
 
 async function setup(
   sessionID: string,
-  input?: { candidates?: number; stall?: number; target?: number; direction?: "maximize" | "minimize" },
+  input?: {
+    candidates?: number
+    stall?: number
+    target?: number
+    direction?: "maximize" | "minimize"
+    objectives?: HarnessContract.Objectives
+  },
 ) {
-  await contract(sessionID, { direction: input?.direction })
+  await contract(sessionID, { direction: input?.direction, objectives: input?.objectives })
   return HarnessSearch.initialize({
     sessionID,
     candidates: input?.candidates ?? 8,
@@ -90,6 +98,7 @@ async function evaluate(
   candidateID: string,
   score: number | undefined,
   status: HarnessEvaluation.Status = "passed",
+  metrics: Record<string, number> = {},
 ) {
   await HarnessEvaluation.record({
     schemaVersion: 1,
@@ -99,7 +108,7 @@ async function evaluate(
     evaluator: { name: "official-evaluator", version: "1", source: "benchmark" },
     status,
     ...(score === undefined ? {} : { score }),
-    metrics: score === undefined ? {} : { score },
+    metrics: score === undefined ? metrics : { score, ...metrics },
     checks: [{ id: "gate", status, blocking: true, evidence: [`candidate:${candidateID}`] }],
     evidence: [`report:${candidateID}`],
     evaluatedAt: Date.now(),
@@ -216,6 +225,91 @@ describe("harness candidate graph", () => {
     const state = await evaluate("search-rank", child.id, 0.8)
     expect(state.bestID).toBe(child.id)
     expect(state.stalled).toBe(0)
+  })
+
+  test("preserves evaluator-declared Pareto alternatives without changing the primary winner", async () => {
+    await setup("search-pareto", {
+      candidates: 8,
+      stall: 1,
+      objectives: [
+        { metric: "robustness", direction: "maximize" },
+        { metric: "latency", direction: "minimize" },
+      ],
+    })
+    const seed = await add("search-pareto", "seed", [], "accurate")
+    await evaluate("search-pareto", seed.id, 0.9, "passed", { robustness: 0.2, latency: 20 })
+    const alternate = await add("search-pareto", "alternate", [seed.id], "robust")
+    const diverse = await evaluate("search-pareto", alternate.id, 0.8, "passed", { robustness: 0.9, latency: 10 })
+    expect(diverse.bestID).toBe(seed.id)
+    expect(diverse.archiveIDs).toEqual([seed.id, alternate.id])
+    expect(HarnessSearch.frontier(diverse).map((item) => item.id)).toEqual([seed.id, alternate.id])
+    expect(HarnessSearch.recommend(diverse)).toMatchObject({
+      strategy: "fuse",
+      parentIDs: [seed.id, alternate.id],
+      reasons: ["stalled:1", "cross-branch-fusion", "pareto-frontier:2", "multi-metric-complementarity"],
+    })
+
+    const dominated = await add("search-pareto", "dominated", [seed.id], "weak")
+    const state = await evaluate("search-pareto", dominated.id, 0.7, "passed", { robustness: 0.1, latency: 30 })
+    expect(state.bestID).toBe(seed.id)
+    expect(state.archiveIDs).toEqual([seed.id, alternate.id])
+  })
+
+  test("rejects incomplete or primary-duplicating objective contracts", async () => {
+    await expect(
+      contract("search-objective-duplicate", {
+        objectives: [{ metric: "score", direction: "maximize" }],
+      }),
+    ).rejects.toThrow("cannot duplicate the primary")
+
+    await setup("search-objective-missing", {
+      objectives: [{ metric: "robustness", direction: "maximize" }],
+    })
+    const seed = await add("search-objective-missing", "seed")
+    await HarnessEvaluation.record({
+      schemaVersion: 1,
+      runID: "run-search-objective-missing",
+      sessionID: "search-objective-missing",
+      subject: { type: "candidate", id: seed.id },
+      evaluator: { name: "official-evaluator", version: "1", source: "benchmark" },
+      status: "passed",
+      score: 0.9,
+      metrics: { score: 0.9 },
+      checks: [{ id: "gate", status: "passed", blocking: true, evidence: [`candidate:${seed.id}`] }],
+      evidence: [`report:${seed.id}`],
+      evaluatedAt: Date.now(),
+    })
+    await expect(HarnessSearch.verify({ sessionID: "search-objective-missing", candidateID: seed.id })).rejects.toThrow(
+      "missing declared objective metric robustness",
+    )
+  })
+
+  test("fails closed when the persisted Pareto archive is edited", async () => {
+    await setup("search-pareto-tamper", {
+      objectives: [{ metric: "robustness", direction: "maximize" }],
+    })
+    const seed = await add("search-pareto-tamper", "seed")
+    await evaluate("search-pareto-tamper", seed.id, 0.9, "passed", { robustness: 0.8 })
+    const file = path.join(Global.Path.data, "harness", "search", "search-pareto-tamper.json")
+    const state = JSON.parse(await fs.readFile(file, "utf8"))
+    state.archiveIDs = []
+    await fs.writeFile(file, JSON.stringify(state))
+    await expect(HarnessSearch.read("search-pareto-tamper")).rejects.toThrow("Pareto archive does not match")
+  })
+
+  test("migrates legacy single-metric search state without changing its frontier", async () => {
+    await setup("search-pareto-legacy")
+    const seed = await add("search-pareto-legacy", "seed")
+    await evaluate("search-pareto-legacy", seed.id, 0.9)
+    const file = path.join(Global.Path.data, "harness", "search", "search-pareto-legacy.json")
+    const legacy = JSON.parse(await fs.readFile(file, "utf8"))
+    delete legacy.objectives
+    delete legacy.archiveIDs
+    await fs.writeFile(file, JSON.stringify(legacy))
+    const state = await HarnessSearch.read("search-pareto-legacy")
+    expect(state.objectives).toEqual([])
+    expect(state.archiveIDs).toEqual([seed.id])
+    expect(state.bestID).toBe(seed.id)
   })
 
   test("preserves branch diversity during early exploration", async () => {

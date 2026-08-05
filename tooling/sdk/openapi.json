@@ -25679,6 +25679,32 @@
                         },
                         "target": {
                           "type": "number"
+                        },
+                        "objectives": {
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "metric": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "direction": {
+                                "type": "string",
+                                "enum": [
+                                  "maximize",
+                                  "minimize"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "metric",
+                              "direction"
+                            ],
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -28307,6 +28333,32 @@
                     ],
                     "additionalProperties": false
                   },
+                  "objectives": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "metric": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "maximize",
+                            "minimize"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "metric",
+                        "direction"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
                   "fidelities": {
                     "minItems": 2,
                     "maxItems": 8,
@@ -29922,6 +29974,32 @@
                             },
                             "target": {
                               "type": "number"
+                            },
+                            "objectives": {
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "metric": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "direction": {
+                                    "type": "string",
+                                    "enum": [
+                                      "maximize",
+                                      "minimize"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "metric",
+                                  "direction"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -32228,6 +32306,37 @@
                           "type": "integer",
                           "minimum": 0,
                           "maximum": 9007199254740991
+                        },
+                        "objectives": {
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "metric": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "direction": {
+                                "type": "string",
+                                "enum": [
+                                  "maximize",
+                                  "minimize"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "metric",
+                              "direction"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "archive": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
@@ -32235,7 +32344,9 @@
                         "candidates",
                         "verified",
                         "generations",
-                        "stalled"
+                        "stalled",
+                        "objectives",
+                        "archive"
                       ],
                       "additionalProperties": false
                     },

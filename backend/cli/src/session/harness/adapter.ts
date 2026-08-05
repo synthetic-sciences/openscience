@@ -59,6 +59,7 @@ export namespace HarnessAdapter {
         })
         .strict()
         .default({ direction: "pass" }),
+      objectives: HarnessContract.Objectives.optional(),
       fidelities: HarnessContract.FidelityPlan.optional(),
       model: z
         .object({
@@ -320,6 +321,7 @@ export namespace HarnessAdapter {
         metric: task.metric.name,
         direction: task.metric.direction,
         target: task.metric.target,
+        objectives: task.objectives,
       },
       profile,
       orchestration: task.orchestration,
@@ -413,6 +415,10 @@ export namespace HarnessAdapter {
     }
     if (metric !== undefined && value.score !== undefined && value.metrics[metric] !== value.score) {
       throw new Error(`Evaluation score does not match the bound ${metric} metric`)
+    }
+    if (value.status === "passed" && fidelity?.final !== false) {
+      const missing = contract.benchmark.objectives?.find((item) => value.metrics[item.metric] === undefined)
+      if (missing) throw new Error(`Passing evaluation is missing declared objective metric ${missing.metric}`)
     }
     if (value.candidateID) {
       const search = await HarnessSearch.read(value.sessionID)

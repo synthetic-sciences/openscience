@@ -131,6 +131,49 @@ describe("benchmark adapters", () => {
     await expect(HarnessAdapter.bind(input)).rejects.toThrow("candidate budget")
   })
 
+  test("binds evaluator-declared secondary objectives without changing the primary metric", async () => {
+    await expect(
+      HarnessAdapter.bind({
+        ...task("statistics", "adapter-objectives-profile"),
+        profile: "reproduce",
+        objectives: [{ metric: "robustness", direction: "maximize" }],
+      }),
+    ).rejects.toThrow("optimize profile")
+    const contract = await HarnessAdapter.bind({
+      ...task("mle", "adapter-objectives"),
+      profile: "optimize",
+      objectives: [
+        { metric: "robustness", direction: "maximize" },
+        { metric: "latency", direction: "minimize" },
+      ],
+    })
+    expect(contract.benchmark).toMatchObject({
+      metric: "score",
+      direction: "maximize",
+      objectives: [
+        { metric: "robustness", direction: "maximize" },
+        { metric: "latency", direction: "minimize" },
+      ],
+    })
+    await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 3 })
+    const candidate = await HarnessSearch.add({
+      sessionID: contract.sessionID,
+      parentIDs: [],
+      branch: "multi-metric",
+      proposal: "Preserve an evaluator-verified tradeoff",
+      artifact: { uri: "artifact:multi-metric", sha256: "3".repeat(64) },
+    })
+    await expect(HarnessAdapter.ingest(evaluation(contract, candidate.id))).rejects.toThrow(
+      "missing declared objective metric robustness",
+    )
+    expect(await HarnessEvaluation.list(contract.sessionID)).toEqual([])
+    const complete = evaluation(contract, candidate.id)
+    complete.metrics = { score: 0.8, robustness: 0.7, latency: 10 }
+    const result = await HarnessAdapter.ingest(complete)
+    expect(result.search?.archiveIDs).toEqual([candidate.id])
+    expect(result.search?.bestID).toBe(candidate.id)
+  })
+
   test("rejects substituted official sources and public subsets posing as hidden benchmarks", async () => {
     const official = await HarnessAdapter.bind({
       ...task("mle", "adapter-official-source"),

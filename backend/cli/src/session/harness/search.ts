@@ -68,6 +68,7 @@ export namespace HarnessSearch {
       metric: z.string().min(1),
       direction: z.enum(["maximize", "minimize", "pass"]),
       target: z.number().finite().optional(),
+      objectives: HarnessContract.Objectives.default([]),
       budget: z
         .object({
           candidates: z.number().int().positive(),
@@ -82,6 +83,10 @@ export namespace HarnessSearch {
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
+      archiveIDs: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .refine((items) => new Set(items).size === items.length, "Pareto archive candidates must be unique")
+        .default([]),
       stalled: z.number().int().nonnegative(),
       revision: z.number().int().nonnegative(),
       startedAt: z.number().int().positive(),
@@ -120,6 +125,37 @@ export namespace HarnessSearch {
       .filter(verified)
       .toSorted((a, b) => order(state, a, b))
 
+  const values = (state: State, candidate: Candidate) => {
+    if (state.direction === "pass") return []
+    return [
+      { direction: state.direction, value: candidate.result?.score },
+      ...state.objectives.map((item) => ({ ...item, value: candidate.result?.metrics[item.metric] })),
+    ]
+  }
+
+  const dominates = (state: State, left: Candidate, right: Candidate) => {
+    const a = values(state, left)
+    const b = values(state, right)
+    if (!a.length || a.some((item) => item.value === undefined) || b.some((item) => item.value === undefined)) {
+      return false
+    }
+    const deltas = a.map((item, index) => {
+      const other = b[index]!
+      if (item.direction !== other.direction) throw new Error(`Pareto objective directions are inconsistent`)
+      return item.direction === "maximize" ? item.value! - other.value! : other.value! - item.value!
+    })
+    return deltas.every((delta) => delta >= 0) && deltas.some((delta) => delta > 0)
+  }
+
+  const archive = (state: State) => {
+    const pool = ranked(state)
+    return pool.filter(
+      (candidate) => !pool.some((other) => other.id !== candidate.id && dominates(state, other, candidate)),
+    )
+  }
+
+  export const frontier = (input: State) => archive(State.parse(input))
+
   const reached = (state: State, candidate: Candidate) => {
     if (!verified(candidate)) return false
     if (state.direction === "pass") return true
@@ -140,7 +176,13 @@ export namespace HarnessSearch {
   })
 
   function parse(data: Record<string, unknown>) {
-    return State.parse(data)
+    const state = State.parse(data)
+    const expected = archive(state).map((item) => item.id)
+    if (!("archiveIDs" in data)) return State.parse({ ...state, archiveIDs: expected })
+    if (JSON.stringify(state.archiveIDs) !== JSON.stringify(expected)) {
+      throw new Error(`Persisted Pareto archive does not match verified candidate results`)
+    }
+    return state
   }
 
   export async function initialize(input: {
@@ -183,6 +225,7 @@ export namespace HarnessSearch {
       evaluator: contract.benchmark.evaluator,
       metric: contract.benchmark.metric ?? "status",
       direction: contract.benchmark.direction ?? "pass",
+      objectives: contract.benchmark.objectives ?? [],
       ...(contract.benchmark.target === undefined && input.target === undefined
         ? {}
         : { target: contract.benchmark.target ?? input.target }),
@@ -193,6 +236,7 @@ export namespace HarnessSearch {
       },
       status: "active",
       candidates: {},
+      archiveIDs: [],
       stalled: 0,
       revision: 0,
       startedAt: now,
@@ -210,6 +254,7 @@ export namespace HarnessSearch {
         "metric",
         "direction",
         "target",
+        "objectives",
         "budget",
       ] as const
       if (stable.every((key) => JSON.stringify(state[key]) === JSON.stringify(expected[key]))) return state
@@ -349,6 +394,10 @@ export namespace HarnessSearch {
       if (state.direction !== "pass" && evaluation.status === "passed" && evaluation.score === undefined) {
         throw new Error(`A ${state.direction} search requires a numeric evaluator score`)
       }
+      if (evaluation.status === "passed") {
+        const missing = state.objectives.find((item) => evaluation.metrics[item.metric] === undefined)
+        if (missing) throw new Error(`Passing evaluation is missing declared objective metric ${missing.metric}`)
+      }
       const now = Date.now()
       const before = state.bestID
       const result = Result.parse({
@@ -372,10 +421,12 @@ export namespace HarnessSearch {
       const pool = { ...state.candidates, [candidate.id]: updated }
       const provisional = { ...state, candidates: pool }
       const best = ranked(provisional)[0]
+      const archiveIDs = archive(provisional).map((item) => item.id)
       const improved = best?.id === candidate.id && before !== candidate.id
       const next: State = {
         ...provisional,
         bestID: best?.id,
+        archiveIDs,
         stalled: improved ? 0 : state.stalled + 1,
         revision: state.revision + 1,
         updatedAt: now,
@@ -454,8 +505,10 @@ export namespace HarnessSearch {
   export function recommend(state: State): Recommendation {
     const pool = ranked(state)
     if (!pool.length) return { strategy: "seed", parentIDs: [], reasons: ["no-verified-candidate"] }
-    const distinct = pool.filter(
-      (candidate, index) => pool.findIndex((item) => item.branch === candidate.branch) === index,
+    const pareto = archive(state)
+    const prioritized = [...pareto, ...pool.filter((candidate) => !pareto.some((item) => item.id === candidate.id))]
+    const distinct = prioritized.filter(
+      (candidate, index) => prioritized.findIndex((item) => item.branch === candidate.branch) === index,
     )
     if (state.stalled >= state.budget.stall * 2) {
       return {
@@ -465,10 +518,16 @@ export namespace HarnessSearch {
       }
     }
     if (state.stalled >= state.budget.stall && distinct.length >= 2) {
+      const best = pool[0]!
+      const complement = prioritized.find((candidate) => candidate.branch !== best.branch)!
       return {
         strategy: "fuse",
-        parentIDs: distinct.slice(0, 2).map((candidate) => candidate.id),
-        reasons: [`stalled:${state.stalled}`, "cross-branch-fusion"],
+        parentIDs: [best.id, complement.id],
+        reasons: [
+          `stalled:${state.stalled}`,
+          "cross-branch-fusion",
+          ...(state.objectives.length ? [`pareto-frontier:${pareto.length}`, "multi-metric-complementarity"] : []),
+        ],
       }
     }
     const progress = candidates(state).length / state.budget.candidates
@@ -514,6 +573,7 @@ export namespace HarnessSearch {
         `budget-progress:${progress.toFixed(2)}`,
         `branch-visits:${least}`,
         warmup.length < distinct.length ? "ucb-minimum-visits" : "ucb-quality-exploration",
+        ...(state.objectives.length ? [`pareto-frontier:${pareto.length}`] : []),
       ],
     }
   }

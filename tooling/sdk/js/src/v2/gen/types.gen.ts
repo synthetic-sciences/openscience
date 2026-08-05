@@ -10494,6 +10494,10 @@ export type HarnessBindData = {
       direction: "maximize" | "minimize" | "pass"
       target?: number
     }
+    objectives?: Array<{
+      metric: string
+      direction: "maximize" | "minimize"
+    }>
     fidelities?: Array<{
       id: string
       final: boolean
@@ -10571,6 +10575,10 @@ export type HarnessBindResponses = {
       metric?: string
       direction?: "maximize" | "minimize" | "pass"
       target?: number
+      objectives?: Array<{
+        metric: string
+        direction: "maximize" | "minimize"
+      }>
     }
     profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
     orchestration?: {
@@ -11300,6 +11308,10 @@ export type HarnessContractResponses = {
       metric?: string
       direction?: "maximize" | "minimize" | "pass"
       target?: number
+      objectives?: Array<{
+        metric: string
+        direction: "maximize" | "minimize"
+      }>
     }
     profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
     orchestration?: {
@@ -11835,6 +11847,11 @@ export type HarnessReportResponses = {
       verified: number
       generations: number
       stalled: number
+      objectives: Array<{
+        metric: string
+        direction: "maximize" | "minimize"
+      }>
+      archive: number
     }
     generatedAt: number
   }
