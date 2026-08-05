@@ -11,6 +11,7 @@ import { TrashList } from "@/atlas/files/TrashList"
 import { buildSources, type PaneSource } from "@/atlas/files/sources"
 import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/resource"
 import type { StoredArtifact } from "@/artifacts/store"
+import { FileView } from "@/atlas/FilePreview"
 import { FolderPicker } from "@/atlas/FolderPicker"
 import {
   connectedFilesystemGrants,
@@ -24,6 +25,12 @@ import {
 import "@/atlas/files/FilesPane.css"
 
 export type Transport = (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
+
+/** An open tab: the name the strip shows, and the handle FileView reads. */
+export interface PaneFile {
+  name: string
+  path: string
+}
 
 async function json(response: Response): Promise<unknown> {
   if (response.ok) return response.json()
@@ -86,7 +93,12 @@ async function revokeAccess(transport: Transport, identity: FilesystemIdentity, 
 }
 
 export function FilesPane(
-  props: { request?: Transport; session?: string; directory?: string } = {},
+  props: {
+    request?: Transport
+    session?: string
+    directory?: string
+    view?: (file: PaneFile) => JSX.Element
+  } = {},
 ): JSX.Element {
   // The `request` prop is a standalone test seam (see FilesPane.test.ts) that
   // mounts with no providers at all. Key the context reads off the prop
@@ -135,7 +147,7 @@ export function FilesPane(
   const [path, setPath] = createSignal<string[]>([])
   const [filter, setFilter] = createSignal("")
   const [error, setError] = createSignal("")
-  const [tabs, setTabs] = createSignal<string[]>([])
+  const [tabs, setTabs] = createSignal<PaneFile[]>([])
   const [active, setActive] = createSignal("files")
   const [busy, setBusy] = createSignal(false)
   const [connect, setConnect] = createStore({
@@ -194,10 +206,22 @@ export function FilesPane(
     return query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
   })
 
-  const open = (name: string) => {
-    if (!tabs().includes(name)) setTabs([...tabs(), name])
-    setActive(name)
+  // Tabs are keyed by name because that is what the strip shows. Re-opening a
+  // name from a different folder re-points the existing tab rather than
+  // stacking a second, indistinguishable one.
+  const open = (row: FileRow) => {
+    const file = { name: row.name, path: row.path ?? [where(), row.name].filter(Boolean).join("/") }
+    const known = tabs().some((tab) => tab.name === file.name)
+    setTabs(known ? tabs().map((tab) => (tab.name === file.name ? file : tab)) : [...tabs(), file])
+    setActive(file.name)
   }
+
+  const closeTab = (name: string) => {
+    setTabs(tabs().filter((tab) => tab.name !== name))
+    if (active() === name) setActive("files")
+  }
+
+  const selected = createMemo(() => tabs().find((tab) => tab.name === active()))
 
   // The picker walks the real filesystem and hands back an absolute path. It
   // needs the dialog host, so outside a provider the typed path stays the
@@ -277,18 +301,8 @@ export function FilesPane(
       })
   }
 
-  return (
-    <section class="files-pane" aria-label="Files">
-      <FileTabs
-        open={tabs()}
-        active={active()}
-        onSelect={setActive}
-        onClose={(name) => {
-          setTabs(tabs().filter((tab) => tab !== name))
-          if (active() === name) setActive("files")
-        }}
-      />
-
+  const browser = () => (
+    <>
       <div class="files-source-row">
         <SourceMenu
           sources={sources()}
@@ -391,12 +405,37 @@ export function FilesPane(
                 setFilter("")
                 return
               }
-              open(row.name)
+              open(row)
             }}
           />
         }
       >
         <TrashList rows={trash()} busy={busy()} onRestore={restore} />
+      </Show>
+    </>
+  )
+
+  return (
+    <section class="files-pane" aria-label="Files">
+      <FileTabs open={tabs().map((tab) => tab.name)} active={active()} onSelect={setActive} onClose={closeTab} />
+
+      <Show when={selected()} keyed fallback={browser()}>
+        {(file) =>
+          // FileView reads the SDK, sync and router contexts, so a standalone
+          // mount cannot render it; `view` lets that harness substitute a stub
+          // exactly as `request` substitutes the transport. Production never
+          // passes it and always gets the real viewer.
+          props.view?.(file) ?? (
+            <FileView
+              directory={projectRoot()}
+              path={file.path}
+              subtitle={current().name}
+              active
+              writable={current().readonly ? false : undefined}
+              onClose={() => closeTab(file.name)}
+            />
+          )
+        }
       </Show>
     </section>
   )

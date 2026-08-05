@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import type { JSX } from "solid-js"
 import { createServer } from "vite"
@@ -263,5 +264,53 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
 
     expect(host.querySelector('[data-source-item="fsg_9"]')?.textContent).toContain("pdebench")
+  })
+
+  test("opening a file swaps the browser for the file itself and closing swaps it back", async () => {
+    const host = mount(() =>
+      subject.FilesPane({
+        directory: DIRECTORY,
+        request: async () => listing([{ name: "train_lr.py", type: "file", size: 10, path: "src/train_lr.py" }]),
+        view: (file) => {
+          const node = document.createElement("p")
+          node.dataset.stubView = file.path
+          return node
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector(".files-table")).not.toBeNull()
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="train_lr.py"]')?.click()
+
+    // The tab is not just added — it becomes the pane's content.
+    expect(host.querySelector('[data-tab="train_lr.py"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(host.querySelector("[data-stub-view]")?.getAttribute("data-stub-view")).toBe("src/train_lr.py")
+    expect(host.querySelector(".files-table")).toBeNull()
+    expect(host.querySelector("[data-source-button]")).toBeNull()
+
+    host.querySelector<HTMLButtonElement>('[data-tab="files"]')?.click()
+
+    expect(host.querySelector("[data-stub-view]")).toBeNull()
+    expect(host.querySelector(".files-table")).not.toBeNull()
+
+    host.querySelector<HTMLButtonElement>('[data-tab="train_lr.py"]')?.click()
+    host.querySelector<HTMLElement>('[data-tab-close="train_lr.py"]')?.click()
+
+    expect(host.querySelector('[data-tab="train_lr.py"]')).toBeNull()
+    expect(host.querySelector(".files-table")).not.toBeNull()
+  })
+
+  test("mounts the real FileView for the active tab when nothing overrides it", () => {
+    // The `view` seam above can only prove the switch, not what production
+    // renders through it. This guards the default the seam falls back to.
+    const source = readFileSync(fileURLToPath(new URL("./FilesPane.tsx", import.meta.url)), "utf8")
+
+    expect(source).toContain('import { FileView } from "@/atlas/FilePreview"')
+    expect(source).toContain("props.view?.(file) ?? (")
+    expect(source).toContain("<FileView")
+    expect(source).toContain("path={file.path}")
+    expect(source).toContain("onClose={() => closeTab(file.name)}")
   })
 })

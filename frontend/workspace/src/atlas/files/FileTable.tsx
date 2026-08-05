@@ -5,6 +5,12 @@ export interface FileRow {
   type: "file" | "directory"
   size?: number
   ignored?: boolean
+  /**
+   * The server's own handle for the row (File.list, backend/cli/src/file/index.ts:522):
+   * relative to the listing root when the folder sits inside it, absolute when
+   * it does not. The table never shows it — opening a row does.
+   */
+  path?: string
 }
 
 // Binary units, one decimal below 10 of the unit: matches attachmentSize in
