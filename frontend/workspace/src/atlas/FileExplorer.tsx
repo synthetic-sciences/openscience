@@ -43,10 +43,7 @@ const errorMessage = (value: unknown) => {
   return String(value || "Request failed")
 }
 
-const sessionUrl = (sessionID: string, grantID?: string) => {
-  const grant = grantID ? `/${encodeURIComponent(grantID)}` : ""
-  return `/session/${encodeURIComponent(sessionID)}/filesystem${grant}`
-}
+const sessionUrl = (sessionID: string) => `/session/${encodeURIComponent(sessionID)}/filesystem`
 
 async function json(response: Response) {
   if (response.ok) return response.json() as Promise<unknown>
@@ -66,12 +63,6 @@ async function grantAccess(request: ProjectRequest, identity: FilesystemIdentity
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
-  }).then(json)
-}
-
-async function revokeAccess(request: ProjectRequest, identity: FilesystemIdentity, grantID: string) {
-  return request(sessionUrl(identity.sessionID, grantID), {
-    method: "DELETE",
   }).then(json)
 }
 
