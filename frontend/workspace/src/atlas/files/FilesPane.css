@@ -49,3 +49,34 @@
 }
 .files-menu__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-muted); }
 .files-menu__sep { height: 1px; margin: 7px 8px; background: var(--color-border-weak-base); }
+
+.files-table { flex: 1; overflow-y: auto; border-top: 1px solid var(--color-border-weak-base); }
+
+.files-row {
+  display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px; border: 0; border-bottom: 1px solid var(--color-border-weak-base);
+  background: none; color: var(--color-text); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.files-row:hover { background: var(--color-bg-subtle); }
+.files-row:focus-visible { outline: 1px solid var(--color-text); outline-offset: -2px; }
+.files-row__glyph { color: var(--color-text-faint); font-size: 13px; }
+.files-row__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-row__size {
+  min-width: 52px; text-align: right; font-family: var(--font-code); font-size: 11.5px;
+  color: var(--color-text-faint); font-variant-numeric: tabular-nums;
+}
+.files-row--up .files-row__name { color: var(--color-text-muted); }
+.files-row--ignored .files-row__name { color: var(--color-text-faint); }
+.files-empty { padding: 30px 16px; color: var(--color-text-faint); font-size: 12.5px; line-height: 1.6; }
+
+/* Hairline scrollbars: the thumb only earns contrast while its list is hovered. */
+.files-pane *, .files-pane { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.files-pane *:hover { scrollbar-color: color-mix(in srgb, var(--color-text) 20%, transparent) transparent; }
+.files-pane ::-webkit-scrollbar { width: 6px; height: 6px; }
+.files-pane ::-webkit-scrollbar-track, .files-pane ::-webkit-scrollbar-corner { background: transparent; }
+.files-pane ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.files-pane ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent; background-clip: content-box; background-color: transparent; border-radius: 999px;
+}
+.files-pane *:hover::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, var(--color-text) 18%, transparent); }
+.files-pane ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--color-text) 32%, transparent); }
