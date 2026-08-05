@@ -57,6 +57,13 @@ export namespace HarnessAdapter {
         .strict()
         .optional(),
       replication: HarnessContract.Replication.optional(),
+      confirmation: z
+        .object({
+          protocol: HarnessContract.Confirmation,
+          token: Token,
+        })
+        .strict()
+        .optional(),
       extraPacks: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -149,6 +156,27 @@ export namespace HarnessAdapter {
           code: "custom",
           path: ["semanticAudit", "token"],
           message: "Evaluator auditor and semantic reviewer capabilities must differ",
+        })
+      }
+      if (value.confirmation && value.confirmation.token === value.evaluator.token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["confirmation", "token"],
+          message: "Optimization and claim evaluator capabilities must differ",
+        })
+      }
+      if (value.confirmation && value.evaluatorAudit && value.confirmation.token === value.evaluatorAudit.token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["confirmation", "token"],
+          message: "Claim evaluator and independent auditor capabilities must differ",
+        })
+      }
+      if (value.confirmation && value.semanticAudit && value.confirmation.token === value.semanticAudit.token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["confirmation", "token"],
+          message: "Claim evaluator and semantic reviewer capabilities must differ",
         })
       }
       if (Boolean(value.objectives?.length) !== Boolean(value.objectiveAudit)) {
@@ -252,6 +280,15 @@ export namespace HarnessAdapter {
         })
         .strict()
         .optional(),
+      confirmation: z
+        .object({
+          name: z.string().min(1),
+          version: z.string().min(1),
+          source: z.enum(["benchmark", "gate", "external"]),
+          tokenSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+        })
+        .strict()
+        .optional(),
       createdAt: z.number().int().positive(),
     })
     .strict()
@@ -330,6 +367,29 @@ export namespace HarnessAdapter {
     return contract
   }
 
+  export async function authorizeConfirmation(sessionID: string, token: string) {
+    const [contract, binding] = await Promise.all([HarnessContract.read(sessionID), credential(sessionID)])
+    if (!contract?.confirmation || !binding.confirmation) {
+      throw new Error(`No sealed claim evaluator is bound to session ${sessionID}`)
+    }
+    if (binding.contractFingerprint !== HarnessContract.fingerprint(contract)) {
+      throw new Error(`Claim evaluator capability does not match the bound harness contract`)
+    }
+    if (!timingSafeEqual(binding.confirmation.tokenSHA256, digest(Token.parse(token)))) {
+      throw new Error(`Claim evaluator capability was rejected`)
+    }
+    if (
+      JSON.stringify(binding.confirmation) !==
+      JSON.stringify({
+        ...contract.confirmation.claim.evaluator,
+        tokenSHA256: binding.confirmation.tokenSHA256,
+      })
+    ) {
+      throw new Error(`Claim evaluator identity does not match the bound harness contract`)
+    }
+    return contract
+  }
+
   export async function bind(input: Task) {
     const task = Task.parse(input)
     const benchmark = HarnessBenchmark.resolve(task.benchmark)
@@ -347,16 +407,32 @@ export namespace HarnessAdapter {
     if (task.search && profile !== "optimize") {
       throw new Error(`A search policy selection requires the optimize profile`)
     }
-    if (benchmark.source.status === "official_subset" && (task.split === "held_out" || task.split === "release")) {
+    if (
+      benchmark.source.status === "official_subset" &&
+      (task.split === "held_out" || task.split === "release" || task.confirmation)
+    ) {
       throw new Error(
         `${benchmark.title} exposes only ${benchmark.source.publicTasks} public tasks and cannot represent the ${benchmark.source.totalTasks}-task hidden benchmark`,
       )
     }
     if (
       benchmark.recipe.status === "blocked_upstream" &&
-      (task.split === "held_out" || task.split === "release" || task.launch)
+      (task.split === "held_out" || task.split === "release" || task.launch || task.confirmation)
     ) {
       throw new Error(`${benchmark.title} is blocked at ${benchmark.recipe.anchor}: ${benchmark.recipe.reason}`)
+    }
+    if (task.confirmation && benchmark.source.status === "official_open") {
+      if (benchmark.recipe.status !== "source_verified") {
+        throw new Error(`Sealed confirmation for ${benchmark.title} requires a source-verified official recipe`)
+      }
+      const source = task.confirmation.protocol.claim.source
+      if (
+        !source ||
+        repository(source.repository) !== repository(benchmark.source.repository) ||
+        source.revision !== benchmark.source.revision
+      ) {
+        throw new Error(`Sealed confirmation does not match the catalog-pinned official source revision`)
+      }
     }
     if (
       benchmark.recipe.status === "source_verified" &&
@@ -424,6 +500,7 @@ export namespace HarnessAdapter {
       evaluatorAudit: task.evaluatorAudit?.protocol,
       semanticAudit: task.semanticAudit?.protocol,
       replication: task.replication,
+      confirmation: task.confirmation?.protocol,
       packs,
       model: task.model,
       tools: task.tools,
@@ -456,6 +533,12 @@ export namespace HarnessAdapter {
         ? {
             ...task.semanticAudit.protocol.reviewer,
             tokenSHA256: digest(task.semanticAudit.token),
+          }
+        : undefined,
+      confirmation: task.confirmation
+        ? {
+            ...task.confirmation.protocol.claim.evaluator,
+            tokenSHA256: digest(task.confirmation.token),
           }
         : undefined,
       createdAt: task.createdAt,

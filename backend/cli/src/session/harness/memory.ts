@@ -64,6 +64,10 @@ export namespace HarnessMemory {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          confirmationSHA256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
         })
         .strict(),
       entries: z.record(z.string(), Entry),
@@ -80,11 +84,15 @@ export namespace HarnessMemory {
     contract.semanticAudit ? digest(JSON.stringify(contract.semanticAudit)) : undefined
   const replication = (contract: HarnessContract.Info) =>
     contract.replication ? digest(JSON.stringify(contract.replication)) : undefined
+  const confirmation = (contract: HarnessContract.Info) =>
+    contract.confirmation ? digest(JSON.stringify(contract.confirmation)) : undefined
   const key = (contract: HarnessContract.Info) => {
     const base = `${contract.benchmark.name}\0${contract.benchmark.version}\0${contract.benchmark.taskID}\0${contract.benchmark.evaluator}`
     const scope = semantic(contract)
     const repeat = replication(contract)
-    return digest(repeat ? `${base}\0${scope ?? "no-semantic-audit"}\0${repeat}` : scope ? `${base}\0${scope}` : base)
+    const prior = repeat ? `${base}\0${scope ?? "no-semantic-audit"}\0${repeat}` : scope ? `${base}\0${scope}` : base
+    const sealed = confirmation(contract)
+    return digest(sealed ? `${prior}\0${sealed}` : prior)
   }
   const file = (contract: HarnessContract.Info) => path.join(root, `${key(contract)}.json`)
   const clip = (value: string, max = 1_000) =>
@@ -106,6 +114,7 @@ export namespace HarnessMemory {
   function empty(contract: HarnessContract.Info): State {
     const scope = semantic(contract)
     const repeat = replication(contract)
+    const sealed = confirmation(contract)
     return {
       schemaVersion: 1,
       scope: {
@@ -115,6 +124,7 @@ export namespace HarnessMemory {
         evaluator: contract.benchmark.evaluator,
         ...(scope ? { semanticAuditSHA256: scope } : {}),
         ...(repeat ? { replicationSHA256: repeat } : {}),
+        ...(sealed ? { confirmationSHA256: sealed } : {}),
       },
       entries: {},
       revision: 0,

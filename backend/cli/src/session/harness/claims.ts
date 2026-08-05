@@ -3,6 +3,7 @@ import path from "path"
 import z from "zod"
 import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
+import { HarnessConfirmation } from "./confirmation"
 import { HarnessContract } from "./contract"
 import { HarnessEvaluation } from "./evaluation"
 
@@ -97,6 +98,10 @@ export namespace HarnessClaims {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          confirmationReceiptID: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
         })
         .strict(),
       checks: z.array(HarnessEvaluation.Check).max(64),
@@ -154,6 +159,10 @@ export namespace HarnessClaims {
           uri: z.string().min(1).max(2_048),
           evaluator: z.string().min(1).max(200).optional(),
           sha256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+          confirmationReceiptID: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
@@ -396,6 +405,34 @@ export namespace HarnessClaims {
       .toSorted((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
   }
 
+  async function heldout(parsed: VerificationInfo) {
+    if (parsed.mode !== "heldout_evaluator") return
+    const contract = await HarnessContract.read(parsed.sessionID)
+    const evaluator = contract?.confirmation?.claim.evaluator.name ?? contract?.benchmark.evaluator
+    if (!contract || parsed.source.evaluator !== evaluator) {
+      throw new Error(`Held-out verification does not match the bound benchmark evaluator`)
+    }
+    if (contract.confirmation) {
+      if (!parsed.source.confirmationReceiptID) {
+        throw new Error(`Confirmation-enabled held-out verification requires its canonical claim receipt`)
+      }
+      const receipt = await HarnessConfirmation.assert(contract, parsed.source.confirmationReceiptID)
+      if (parsed.source.sha256 !== receipt.selection.candidateArtifact.sha256) {
+        throw new Error(`Held-out verification does not bind the confirmed candidate artifact`)
+      }
+      if (
+        parsed.status !== receipt.status ||
+        parsed.metrics[contract.confirmation.claim.metric] !== receipt.score ||
+        parsed.evaluatedAt < receipt.recordedAt
+      ) {
+        throw new Error(`Held-out verification does not match the sealed claim result`)
+      }
+    }
+    if (!contract.confirmation && parsed.source.confirmationReceiptID) {
+      throw new Error(`Legacy held-out verification cannot cite a sealed confirmation receipt`)
+    }
+  }
+
   export async function stage(input: VerificationInfo) {
     const parsed = VerificationInfo.parse(input)
     const state = await read(input.sessionID)
@@ -407,12 +444,7 @@ export namespace HarnessClaims {
     if (parsed.producer.actor !== claim.createdBy.actor || parsed.producer.sessionID !== claim.createdBy.sessionID) {
       throw new Error(`Verification does not identify the claim producer`)
     }
-    if (parsed.mode === "heldout_evaluator") {
-      const contract = await HarnessContract.read(input.sessionID)
-      if (!contract || parsed.source.evaluator !== contract.benchmark.evaluator) {
-        throw new Error(`Held-out verification does not match the bound benchmark evaluator`)
-      }
-    }
+    await heldout(parsed)
     const id = digest(parsed)
     const verification = Verification.parse({ ...parsed, id })
     await JsonStore.update(path.join(folder(input.sessionID), `${id}.json`), (data) => {
@@ -442,6 +474,12 @@ export namespace HarnessClaims {
             .then((value) => Verification.parse(value)),
         ),
     )
+    for (const record of records) {
+      const body = structuredClone(record) as Record<string, unknown>
+      delete body.id
+      if (digest(body) !== record.id) throw new Error(`Verification ${record.id} is not content-addressed`)
+      await heldout(record)
+    }
     await JsonStore.update(file(sessionID), (data) => {
       const state = Object.keys(data).length ? State.parse(data) : empty()
       const additions = records.flatMap((record) => {
@@ -479,6 +517,7 @@ export namespace HarnessClaims {
               runID: record.runID,
               mode: record.mode,
               independenceKey: digest({ actor: record.verifier.actor, sessionID: record.verifier.sessionID }),
+              confirmationReceiptID: record.source.confirmationReceiptID,
             },
             checks: record.checks,
             evidence: record.evidence,

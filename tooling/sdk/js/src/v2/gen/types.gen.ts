@@ -9626,6 +9626,290 @@ export type HarnessReplicationReceiptResponses = {
 export type HarnessReplicationReceiptResponse =
   HarnessReplicationReceiptResponses[keyof HarnessReplicationReceiptResponses]
 
+export type HarnessConfirmationSelectionData = {
+  body?: {
+    sessionID: string
+    confirmationToken: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/confirmations/selection"
+}
+
+export type HarnessConfirmationSelectionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessConfirmationSelectionError =
+  HarnessConfirmationSelectionErrors[keyof HarnessConfirmationSelectionErrors]
+
+export type HarnessConfirmationSelectionResponses = {
+  /**
+   * Immutable terminal winner selection
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "terminal-verified-best-selection-v1"
+    selectionID: string
+    contractSHA256: string
+    protocolSHA256: string
+    sourceSessionID: string
+    runID: string
+    searchRevision: number
+    stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
+    candidateID: string
+    candidateArtifact: {
+      uri: string
+      sha256: string
+    }
+    candidateCreatedAt: number
+    optimizationResultSHA256: string
+    optimizationEvaluationSHA256: string
+    selectedAt: number
+  }
+}
+
+export type HarnessConfirmationSelectionResponse =
+  HarnessConfirmationSelectionResponses[keyof HarnessConfirmationSelectionResponses]
+
+export type HarnessConfirmationRecordData = {
+  body?: {
+    schemaVersion: 1
+    sessionID: string
+    confirmationToken: string
+    candidateSHA256: string
+    manifestSHA256: string
+    validatorSHA256: string
+    environmentSHA256: string
+    outcome: "completed" | "failed" | "inconclusive"
+    score?: number
+    metrics?: {
+      [key: string]: number
+    }
+    checks: Array<{
+      id: string
+      status: "passed" | "failed" | "inconclusive"
+      blocking: boolean
+      score?: number
+      evidence?: Array<string>
+      note?: string
+    }>
+    evidence: Array<string>
+    usage?: {
+      wallTimeMs?: number
+      costUSD?: number
+    }
+    outputSHA256: string
+    evaluatedAt: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/confirmations/receipts"
+}
+
+export type HarnessConfirmationRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessConfirmationRecordError = HarnessConfirmationRecordErrors[keyof HarnessConfirmationRecordErrors]
+
+export type HarnessConfirmationRecordResponses = {
+  /**
+   * Immutable sealed confirmation receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "sealed-confirmation-receipt-v1"
+    receiptID: string
+    contractSHA256: string
+    protocolSHA256: string
+    sourceSessionID: string
+    runID: string
+    selection: {
+      schemaVersion: 1
+      protocolVersion: "terminal-verified-best-selection-v1"
+      selectionID: string
+      contractSHA256: string
+      protocolSHA256: string
+      sourceSessionID: string
+      runID: string
+      searchRevision: number
+      stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
+      candidateID: string
+      candidateArtifact: {
+        uri: string
+        sha256: string
+      }
+      candidateCreatedAt: number
+      optimizationResultSHA256: string
+      optimizationEvaluationSHA256: string
+      selectedAt: number
+    }
+    claim: {
+      taskID: string
+      split: "held_out" | "release"
+      manifestSHA256: string
+      validatorSHA256: string
+      environmentSHA256: string
+      evaluator: {
+        name: string
+        version: string
+        source: "benchmark" | "gate" | "external"
+      }
+      source?: {
+        repository: string
+        revision: string
+      }
+      metric: string
+      direction: "maximize" | "minimize"
+      target: number
+    }
+    outcome: "completed" | "failed" | "inconclusive"
+    status: "passed" | "failed" | "inconclusive"
+    score?: number
+    metrics: {
+      [key: string]: number
+    }
+    checks: Array<{
+      id: string
+      status: "passed" | "failed" | "inconclusive"
+      blocking: boolean
+      score?: number
+      evidence?: Array<string>
+      note?: string
+    }>
+    failures: Array<string>
+    evidence: Array<string>
+    usage?: {
+      wallTimeMs?: number
+      costUSD?: number
+    }
+    outputSHA256: string
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessConfirmationRecordResponse =
+  HarnessConfirmationRecordResponses[keyof HarnessConfirmationRecordResponses]
+
+export type HarnessConfirmationReceiptData = {
+  body?: {
+    sessionID: string
+    confirmationToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/confirmations/receipts/{receiptID}"
+}
+
+export type HarnessConfirmationReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessConfirmationReceiptError = HarnessConfirmationReceiptErrors[keyof HarnessConfirmationReceiptErrors]
+
+export type HarnessConfirmationReceiptResponses = {
+  /**
+   * Canonical sealed confirmation receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "sealed-confirmation-receipt-v1"
+    receiptID: string
+    contractSHA256: string
+    protocolSHA256: string
+    sourceSessionID: string
+    runID: string
+    selection: {
+      schemaVersion: 1
+      protocolVersion: "terminal-verified-best-selection-v1"
+      selectionID: string
+      contractSHA256: string
+      protocolSHA256: string
+      sourceSessionID: string
+      runID: string
+      searchRevision: number
+      stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
+      candidateID: string
+      candidateArtifact: {
+        uri: string
+        sha256: string
+      }
+      candidateCreatedAt: number
+      optimizationResultSHA256: string
+      optimizationEvaluationSHA256: string
+      selectedAt: number
+    }
+    claim: {
+      taskID: string
+      split: "held_out" | "release"
+      manifestSHA256: string
+      validatorSHA256: string
+      environmentSHA256: string
+      evaluator: {
+        name: string
+        version: string
+        source: "benchmark" | "gate" | "external"
+      }
+      source?: {
+        repository: string
+        revision: string
+      }
+      metric: string
+      direction: "maximize" | "minimize"
+      target: number
+    }
+    outcome: "completed" | "failed" | "inconclusive"
+    status: "passed" | "failed" | "inconclusive"
+    score?: number
+    metrics: {
+      [key: string]: number
+    }
+    checks: Array<{
+      id: string
+      status: "passed" | "failed" | "inconclusive"
+      blocking: boolean
+      score?: number
+      evidence?: Array<string>
+      note?: string
+    }>
+    failures: Array<string>
+    evidence: Array<string>
+    usage?: {
+      wallTimeMs?: number
+      costUSD?: number
+    }
+    outputSHA256: string
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessConfirmationReceiptResponse =
+  HarnessConfirmationReceiptResponses[keyof HarnessConfirmationReceiptResponses]
+
 export type HarnessSemanticRecordData = {
   body?: {
     sessionID: string
@@ -12311,6 +12595,45 @@ export type HarnessBindData = {
       }
       failurePolicy: "fail-closed"
     }
+    confirmation?: {
+      protocol: {
+        protocolVersion: "sealed-confirmation-v1"
+        optimization: {
+          split: "development" | "validation"
+          manifestSHA256: string
+        }
+        claim: {
+          taskID: string
+          split: "held_out" | "release"
+          manifestSHA256: string
+          validatorSHA256: string
+          environmentSHA256: string
+          evaluator: {
+            name: string
+            version: string
+            source: "benchmark" | "gate" | "external"
+          }
+          source?: {
+            repository: string
+            revision: string
+          }
+          metric: string
+          direction: "maximize" | "minimize"
+          target: number
+        }
+        selection: {
+          rule: "terminal-verified-best-v1"
+          subjects: 1
+        }
+        exposure: {
+          policy: "terminal-receipt-only"
+          searchFeedback: false
+          memoryCapture: false
+        }
+        failurePolicy: "fail-closed"
+      }
+      token: string
+    }
     extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     metric?: {
       name?: string
@@ -12863,6 +13186,42 @@ export type HarnessBindResponses = {
         direction: "maximize" | "minimize" | "pass"
         target: number
         maxIntervalWidth?: number
+      }
+      failurePolicy: "fail-closed"
+    }
+    confirmation?: {
+      protocolVersion: "sealed-confirmation-v1"
+      optimization: {
+        split: "development" | "validation"
+        manifestSHA256: string
+      }
+      claim: {
+        taskID: string
+        split: "held_out" | "release"
+        manifestSHA256: string
+        validatorSHA256: string
+        environmentSHA256: string
+        evaluator: {
+          name: string
+          version: string
+          source: "benchmark" | "gate" | "external"
+        }
+        source?: {
+          repository: string
+          revision: string
+        }
+        metric: string
+        direction: "maximize" | "minimize"
+        target: number
+      }
+      selection: {
+        rule: "terminal-verified-best-v1"
+        subjects: 1
+      }
+      exposure: {
+        policy: "terminal-receipt-only"
+        searchFeedback: false
+        memoryCapture: false
       }
       failurePolicy: "fail-closed"
     }
@@ -13748,6 +14107,42 @@ export type HarnessContractResponses = {
       }
       failurePolicy: "fail-closed"
     }
+    confirmation?: {
+      protocolVersion: "sealed-confirmation-v1"
+      optimization: {
+        split: "development" | "validation"
+        manifestSHA256: string
+      }
+      claim: {
+        taskID: string
+        split: "held_out" | "release"
+        manifestSHA256: string
+        validatorSHA256: string
+        environmentSHA256: string
+        evaluator: {
+          name: string
+          version: string
+          source: "benchmark" | "gate" | "external"
+        }
+        source?: {
+          repository: string
+          revision: string
+        }
+        metric: string
+        direction: "maximize" | "minimize"
+        target: number
+      }
+      selection: {
+        rule: "terminal-verified-best-v1"
+        subjects: 1
+      }
+      exposure: {
+        policy: "terminal-receipt-only"
+        searchFeedback: false
+        memoryCapture: false
+      }
+      failurePolicy: "fail-closed"
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string
@@ -13933,6 +14328,8 @@ export type HarnessReportResponses = {
       seed: number
     }
     quality: {
+      source: "optimization" | "sealed_confirmation"
+      provisional: boolean
       status?: "passed" | "failed" | "inconclusive"
       metric?: string
       direction: "maximize" | "minimize" | "pass"
@@ -13949,6 +14346,7 @@ export type HarnessReportResponses = {
       evaluatorAuditReceiptID?: string
       semanticReceiptID?: string
       replicationReceiptID?: string
+      confirmationReceiptID?: string
       evaluations: number
     }
     efficiency: {

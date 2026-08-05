@@ -6,6 +6,7 @@ import { HarnessAblation } from "@/session/harness/ablation"
 import { HarnessAdapter } from "@/session/harness/adapter"
 import { HarnessAudit } from "@/session/harness/audit"
 import { HarnessBenchmark } from "@/session/harness/benchmark"
+import { HarnessConfirmation } from "@/session/harness/confirmation"
 import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
 import { HarnessEvolution } from "@/session/harness/evolution"
@@ -363,6 +364,71 @@ export const HarnessRoutes = lazy(() =>
             requirePassed: false,
           }),
         )
+      },
+    )
+    .post(
+      "/confirmations/selection",
+      describeRoute({
+        summary: "Resolve the sealed post-search confirmation subject",
+        description:
+          "Returns exactly one backend-selected verified winner only after adaptive search is terminal. The endpoint is isolated behind the claim evaluator capability.",
+        operationId: "harness.confirmation.selection",
+        responses: {
+          200: {
+            description: "Immutable terminal winner selection",
+            content: { "application/json": { schema: resolver(HarnessConfirmation.Selection) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessConfirmation.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorizeConfirmation(input.sessionID, input.confirmationToken)
+        return c.json(await HarnessConfirmation.select(contract))
+      },
+    )
+    .post(
+      "/confirmations/receipts",
+      describeRoute({
+        summary: "Record a one-shot sealed claim evaluation",
+        description:
+          "Freezes the claim result for the server-selected terminal winner without feeding the result into search, adaptive control, hindsight memory, or skill learning.",
+        operationId: "harness.confirmation.record",
+        responses: {
+          200: {
+            description: "Immutable sealed confirmation receipt",
+            content: { "application/json": { schema: resolver(HarnessConfirmation.Receipt) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessConfirmation.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorizeConfirmation(input.sessionID, input.confirmationToken)
+        return c.json(await HarnessConfirmation.record(input, contract))
+      },
+    )
+    .post(
+      "/confirmations/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected sealed confirmation receipt",
+        operationId: "harness.confirmation.receipt",
+        responses: {
+          200: {
+            description: "Canonical sealed confirmation receipt",
+            content: { "application/json": { schema: resolver(HarnessConfirmation.Receipt) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessConfirmation.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorizeConfirmation(input.sessionID, input.confirmationToken)
+        return c.json(await HarnessConfirmation.assert(contract, c.req.valid("param").receiptID))
       },
     )
     .post(

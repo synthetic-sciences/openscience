@@ -248,6 +248,64 @@ describe("verified retrospective memory", () => {
     ).toEqual([])
   })
 
+  test("does not reuse ordinary optimization hindsight across a sealed confirmation scope", async () => {
+    await candidate({
+      sessionID: "memory-confirmation-source",
+      scope: "confirmation",
+      proposal: "ordinary adaptive holdout method",
+      score: 0.99,
+    })
+    const sessionID = "memory-confirmation-query"
+    sessions.add(sessionID)
+    await HarnessContract.bind({
+      schemaVersion: 1,
+      runID: `run-${sessionID}`,
+      sessionID,
+      objective: "Improve spectral PDE accuracy",
+      benchmark: {
+        name: "memory-confirmation",
+        version: "1",
+        taskID: "task-1",
+        split: "validation",
+        evaluator: "official-evaluator",
+        evaluatorVersion: "1",
+        evaluatorSource: "benchmark",
+        metric: "score",
+        direction: "maximize",
+        target: 0.8,
+      },
+      profile: "optimize",
+      search: HarnessContract.adaptiveSearch,
+      confirmation: {
+        protocolVersion: "sealed-confirmation-v1",
+        optimization: { split: "validation", manifestSHA256: hash("memory-optimization-manifest") },
+        claim: {
+          taskID: "hidden-task-1",
+          split: "held_out",
+          manifestSHA256: hash("memory-claim-manifest"),
+          validatorSHA256: hash("memory-claim-validator"),
+          environmentSHA256: hash("memory-claim-environment"),
+          evaluator: { name: "memory-claim-evaluator", version: "1", source: "benchmark" },
+          metric: "score",
+          direction: "maximize",
+          target: 0.8,
+        },
+        selection: { rule: "terminal-verified-best-v1", subjects: 1 },
+        exposure: { policy: "terminal-receipt-only", searchFeedback: false, memoryCapture: false },
+        failurePolicy: "fail-closed",
+      },
+      model: { provider: "test", name: "model" },
+      tools: [],
+      skills: [],
+      budget: { steps: 10, candidates: 2 },
+      seed: 1,
+      intervention: "autonomous",
+      contamination: { policy: "claim data stays hidden", hiddenTestsAccessible: false },
+      createdAt: Date.now(),
+    })
+    expect(await HarnessMemory.retrieve({ sessionID, query: "ordinary adaptive holdout method" })).toEqual([])
+  })
+
   test("ranks lexical and stage-relevant precedents ahead of generic ones", async () => {
     await candidate({
       sessionID: "memory-rank-spectral",

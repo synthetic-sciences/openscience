@@ -3,6 +3,7 @@ import z from "zod"
 import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
 import { HarnessBenchmark } from "./benchmark"
+import { HarnessConfirmation } from "./confirmation"
 import { HarnessContract } from "./contract"
 import { HarnessLaunch } from "./launch"
 import { HarnessSemantic } from "./semantic"
@@ -1037,6 +1038,7 @@ export namespace HarnessOrchestrator {
         `Objective: ${contract.objective}`,
         ...(contract.semanticAudit ? [HarnessSemantic.prompt(contract)] : []),
         ...(contract.replication ? [HarnessReplication.prompt(contract)] : []),
+        ...(contract.confirmation ? [HarnessConfirmation.prompt(contract)] : []),
         instruction(role),
         ...(lane
           ? [

@@ -254,6 +254,7 @@ export namespace HarnessAblation {
       ...(factor.kind === "evaluator_audit" ? {} : { evaluatorAudit: contract.evaluatorAudit }),
       ...(factor.kind === "semantic_audit" ? {} : { semanticAudit: contract.semanticAudit }),
       ...(factor.kind === "replication" ? {} : { replication: contract.replication }),
+      confirmation: contract.confirmation,
       packs: (contract.packs ?? []).toSorted(),
       model: contract.model,
       tools: contract.tools.filter((item) => factor.kind !== "tool" || item !== factor.name).toSorted(),

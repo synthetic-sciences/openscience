@@ -111,6 +111,12 @@ import type {
   HarnessBindResponses,
   HarnessCompareErrors,
   HarnessCompareResponses,
+  HarnessConfirmationReceiptErrors,
+  HarnessConfirmationReceiptResponses,
+  HarnessConfirmationRecordErrors,
+  HarnessConfirmationRecordResponses,
+  HarnessConfirmationSelectionErrors,
+  HarnessConfirmationSelectionResponses,
   HarnessContractErrors,
   HarnessContractResponses,
   HarnessEvaluateErrors,
@@ -4533,6 +4539,169 @@ export class Replication extends HeyApiClient {
   }
 }
 
+export class Confirmation extends HeyApiClient {
+  /**
+   * Resolve the sealed post-search confirmation subject
+   *
+   * Returns exactly one backend-selected verified winner only after adaptive search is terminal. The endpoint is isolated behind the claim evaluator capability.
+   */
+  public selection<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      confirmationToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "confirmationToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessConfirmationSelectionResponses,
+      HarnessConfirmationSelectionErrors,
+      ThrowOnError
+    >({
+      url: "/harness/confirmations/selection",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Record a one-shot sealed claim evaluation
+   *
+   * Freezes the claim result for the server-selected terminal winner without feeding the result into search, adaptive control, hindsight memory, or skill learning.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      schemaVersion?: 1
+      sessionID?: string
+      confirmationToken?: string
+      candidateSHA256?: string
+      manifestSHA256?: string
+      validatorSHA256?: string
+      environmentSHA256?: string
+      outcome?: "completed" | "failed" | "inconclusive"
+      score?: number
+      metrics?: {
+        [key: string]: number
+      }
+      checks?: Array<{
+        id: string
+        status: "passed" | "failed" | "inconclusive"
+        blocking: boolean
+        score?: number
+        evidence?: Array<string>
+        note?: string
+      }>
+      evidence?: Array<string>
+      usage?: {
+        wallTimeMs?: number
+        costUSD?: number
+      }
+      outputSHA256?: string
+      evaluatedAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "schemaVersion" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "confirmationToken" },
+            { in: "body", key: "candidateSHA256" },
+            { in: "body", key: "manifestSHA256" },
+            { in: "body", key: "validatorSHA256" },
+            { in: "body", key: "environmentSHA256" },
+            { in: "body", key: "outcome" },
+            { in: "body", key: "score" },
+            { in: "body", key: "metrics" },
+            { in: "body", key: "checks" },
+            { in: "body", key: "evidence" },
+            { in: "body", key: "usage" },
+            { in: "body", key: "outputSHA256" },
+            { in: "body", key: "evaluatedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessConfirmationRecordResponses,
+      HarnessConfirmationRecordErrors,
+      ThrowOnError
+    >({
+      url: "/harness/confirmations/receipts",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected sealed confirmation receipt
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      confirmationToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "confirmationToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessConfirmationReceiptResponses,
+      HarnessConfirmationReceiptErrors,
+      ThrowOnError
+    >({
+      url: "/harness/confirmations/receipts/{receiptID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Semantic extends HeyApiClient {
   /**
    * Record an independent semantic audit
@@ -5991,6 +6160,45 @@ export class Harness extends HeyApiClient {
         }
         failurePolicy: "fail-closed"
       }
+      confirmation?: {
+        protocol: {
+          protocolVersion: "sealed-confirmation-v1"
+          optimization: {
+            split: "development" | "validation"
+            manifestSHA256: string
+          }
+          claim: {
+            taskID: string
+            split: "held_out" | "release"
+            manifestSHA256: string
+            validatorSHA256: string
+            environmentSHA256: string
+            evaluator: {
+              name: string
+              version: string
+              source: "benchmark" | "gate" | "external"
+            }
+            source?: {
+              repository: string
+              revision: string
+            }
+            metric: string
+            direction: "maximize" | "minimize"
+            target: number
+          }
+          selection: {
+            rule: "terminal-verified-best-v1"
+            subjects: 1
+          }
+          exposure: {
+            policy: "terminal-receipt-only"
+            searchFeedback: false
+            memoryCapture: false
+          }
+          failurePolicy: "fail-closed"
+        }
+        token: string
+      }
       extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
       metric?: {
         name?: string
@@ -6073,6 +6281,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "evaluatorAudit" },
             { in: "body", key: "semanticAudit" },
             { in: "body", key: "replication" },
+            { in: "body", key: "confirmation" },
             { in: "body", key: "extraPacks" },
             { in: "body", key: "metric" },
             { in: "body", key: "objectives" },
@@ -6357,6 +6566,11 @@ export class Harness extends HeyApiClient {
   private _replication?: Replication
   get replication(): Replication {
     return (this._replication ??= new Replication({ client: this.client }))
+  }
+
+  private _confirmation?: Confirmation
+  get confirmation(): Confirmation {
+    return (this._confirmation ??= new Confirmation({ client: this.client }))
   }
 
   private _semantic?: Semantic

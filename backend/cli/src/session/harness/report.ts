@@ -3,6 +3,7 @@ import z from "zod"
 import { Global } from "@/global"
 import { HarnessAdaptation } from "./adaptation"
 import { HarnessBenchmark } from "./benchmark"
+import { HarnessConfirmation } from "./confirmation"
 import { HarnessContract } from "./contract"
 import { HarnessEvaluation } from "./evaluation"
 import { HarnessSearch } from "./search"
@@ -50,6 +51,8 @@ export namespace HarnessReport {
         .strict(),
       quality: z
         .object({
+          source: z.enum(["optimization", "sealed_confirmation"]),
+          provisional: z.boolean(),
           status: HarnessEvaluation.Status.optional(),
           metric: z.string().optional(),
           direction: z.enum(["maximize", "minimize", "pass"]),
@@ -87,6 +90,10 @@ export namespace HarnessReport {
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
           replicationReceiptID: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+          confirmationReceiptID: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
@@ -147,12 +154,12 @@ export namespace HarnessReport {
   const file = (sessionID: string) => path.join(root, `${encodeURIComponent(sessionID)}.json`)
   const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
 
-  const reached = (contract: HarnessContract.Info, evaluation?: HarnessEvaluation.Info) => {
-    if (evaluation?.status !== "passed") return false
+  const reached = (contract: HarnessContract.Info, result?: { status: HarnessEvaluation.Status; score?: number }) => {
+    if (result?.status !== "passed") return false
     if (contract.benchmark.direction === "pass" || contract.benchmark.direction === undefined) return true
-    if (evaluation.score === undefined || contract.benchmark.target === undefined) return false
-    if (contract.benchmark.direction === "maximize") return evaluation.score >= contract.benchmark.target
-    return evaluation.score <= contract.benchmark.target
+    if (result.score === undefined || contract.benchmark.target === undefined) return false
+    if (contract.benchmark.direction === "maximize") return result.score >= contract.benchmark.target
+    return result.score <= contract.benchmark.target
   }
 
   export function compile(input: {
@@ -160,6 +167,7 @@ export namespace HarnessReport {
     evaluations: HarnessEvaluation.Info[]
     trace?: Trace
     search?: HarnessSearch.State
+    confirmation?: HarnessConfirmation.Receipt
     generatedAt?: number
   }) {
     const contract = HarnessContract.Info.parse(input.contract)
@@ -177,6 +185,12 @@ export namespace HarnessReport {
       best ??
       evaluations.findLast((item) => !item.subject && HarnessEvaluation.final(item)) ??
       evaluations.findLast(HarnessEvaluation.final)
+    const confirmation = input.confirmation ? HarnessConfirmation.binds(contract, input.confirmation) : undefined
+    if (confirmation && !contract.confirmation) {
+      throw new Error(`A legacy harness report cannot cite sealed confirmation evidence`)
+    }
+    const provisional = Boolean(contract.confirmation && !confirmation)
+    const result = contract.confirmation ? confirmation : evaluation
     const direction = contract.benchmark.direction ?? "pass"
     const comparisonKey = digest({
       benchmark: benchmark.id,
@@ -202,6 +216,7 @@ export namespace HarnessReport {
       evaluatorAudit: contract.evaluatorAudit,
       semanticAudit: contract.semanticAudit,
       replication: contract.replication,
+      confirmation: contract.confirmation,
       contamination: contract.contamination,
     })
     const tokens = input.trace
@@ -220,8 +235,14 @@ export namespace HarnessReport {
         }
       : undefined
     const candidates = input.search ? Object.values(input.search.candidates) : []
-    const costs = evaluations.flatMap((item) => (item.usage?.costUSD === undefined ? [] : [item.usage.costUSD]))
-    const walls = evaluations.flatMap((item) => (item.usage?.wallTimeMs === undefined ? [] : [item.usage.wallTimeMs]))
+    const costs = [
+      ...evaluations.flatMap((item) => (item.usage?.costUSD === undefined ? [] : [item.usage.costUSD])),
+      ...(confirmation?.usage?.costUSD === undefined ? [] : [confirmation.usage.costUSD]),
+    ]
+    const walls = [
+      ...evaluations.flatMap((item) => (item.usage?.wallTimeMs === undefined ? [] : [item.usage.wallTimeMs])),
+      ...(confirmation?.usage?.wallTimeMs === undefined ? [] : [confirmation.usage.wallTimeMs]),
+    ]
     const evaluatorCostUSD = costs.length ? costs.reduce((sum, value) => sum + value, 0) : undefined
     const evaluatorWallTimeMs = walls.length ? walls.reduce((sum, value) => sum + value, 0) : undefined
     const costUSD =
@@ -256,22 +277,25 @@ export namespace HarnessReport {
         seed: contract.seed,
       },
       quality: {
-        status: evaluation?.status,
+        source: contract.confirmation ? "sealed_confirmation" : "optimization",
+        provisional,
+        status: result?.status,
         metric: contract.benchmark.metric,
         direction,
-        score: evaluation?.score,
+        score: result?.score,
         target: contract.benchmark.target,
-        targetReached: reached(contract, evaluation),
-        evaluator: contract.benchmark.evaluator,
-        evaluatorVersion: contract.benchmark.evaluatorVersion,
-        simulationReceiptID: evaluation?.simulationReceiptID,
-        launchReceiptID: evaluation?.launchReceiptID,
-        integrityReceiptID: evaluation?.integrityReceiptID,
-        evolutionReceiptID: evaluation?.evolutionReceiptID,
-        interventionReceiptID: evaluation?.interventionReceiptID,
-        evaluatorAuditReceiptID: evaluation?.evaluatorAuditReceiptID,
-        semanticReceiptID: evaluation?.semanticReceiptID,
-        replicationReceiptID: evaluation?.replicationReceiptID,
+        targetReached: reached(contract, result),
+        evaluator: contract.confirmation?.claim.evaluator.name ?? contract.benchmark.evaluator,
+        evaluatorVersion: contract.confirmation?.claim.evaluator.version ?? contract.benchmark.evaluatorVersion,
+        simulationReceiptID: contract.confirmation ? undefined : evaluation?.simulationReceiptID,
+        launchReceiptID: contract.confirmation ? undefined : evaluation?.launchReceiptID,
+        integrityReceiptID: contract.confirmation ? undefined : evaluation?.integrityReceiptID,
+        evolutionReceiptID: contract.confirmation ? undefined : evaluation?.evolutionReceiptID,
+        interventionReceiptID: contract.confirmation ? undefined : evaluation?.interventionReceiptID,
+        evaluatorAuditReceiptID: contract.confirmation ? undefined : evaluation?.evaluatorAuditReceiptID,
+        semanticReceiptID: contract.confirmation ? undefined : evaluation?.semanticReceiptID,
+        replicationReceiptID: contract.confirmation ? undefined : evaluation?.replicationReceiptID,
+        confirmationReceiptID: confirmation?.receiptID,
         evaluations: evaluations.length,
       },
       efficiency: {
@@ -312,12 +336,19 @@ export namespace HarnessReport {
   export async function build(sessionID: string) {
     const contract = await HarnessContract.read(sessionID)
     if (!contract) throw new Error(`No harness contract is bound to session ${sessionID}`)
-    const [evaluations, trace, search] = await Promise.all([
+    const [evaluations, trace, search, confirmation] = await Promise.all([
       HarnessEvaluation.list(sessionID),
       SessionTrace.build(sessionID),
       HarnessSearch.read(sessionID).catch(() => undefined),
+      HarnessConfirmation.current(contract),
     ])
-    const report = compile({ contract, evaluations, trace: trace.summary, search })
+    const report = compile({
+      contract,
+      evaluations,
+      trace: trace.summary,
+      search,
+      confirmation: confirmation ?? undefined,
+    })
     await Bun.write(file(sessionID), JSON.stringify(report, null, 2) + "\n")
     return report
   }
@@ -335,6 +366,7 @@ export namespace HarnessReport {
     const a = Info.parse(left)
     const b = Info.parse(right)
     if (a.comparisonKey !== b.comparisonKey) return false
+    if (a.quality.provisional || b.quality.provisional) return false
     if (a.quality.status !== "passed") return false
     const quality = score(a, b)
     if (quality < 0) return false
@@ -349,13 +381,19 @@ export namespace HarnessReport {
 
   export function frontier(input: Info[]) {
     const reports = input.map((item) => Info.parse(item))
-    return reports.filter((item) => !reports.some((other) => other.runID !== item.runID && dominates(other, item)))
+    return reports.filter(
+      (item) =>
+        !item.quality.provisional && !reports.some((other) => other.runID !== item.runID && dominates(other, item)),
+    )
   }
 
   export function compare(input: Info[], baselineRunID: string) {
     const reports = input.map((item) => Info.parse(item))
     const baseline = reports.find((item) => item.runID === baselineRunID)
     if (!baseline) throw new Error(`Unknown baseline run ${baselineRunID}`)
+    if (reports.some((item) => item.quality.provisional)) {
+      throw new Error(`Provisional optimization results cannot enter final quality-cost comparison`)
+    }
     if (reports.some((item) => item.comparisonKey !== baseline.comparisonKey)) {
       throw new Error(`Quality-cost reports are only comparable under the same benchmark contract key`)
     }

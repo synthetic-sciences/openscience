@@ -1130,6 +1130,117 @@ test("run-replicated-evaluation preflights the exact frozen independent-unit gri
   }
 })
 
+test("run-sealed-confirmation preflights one token-free terminal claim result", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-sealed-confirmation-"))
+  const script = "research/run-sealed-confirmation/scripts/preflight.py"
+  const protocolFile = path.join(dir, "protocol.json")
+  const selectionFile = path.join(dir, "selection.json")
+  const resultFile = path.join(dir, "result.json")
+  const outputFile = path.join(dir, "payload.json")
+  const protocol = {
+    protocolVersion: "sealed-confirmation-v1",
+    optimization: { split: "validation", manifestSHA256: hash("optimization-manifest") },
+    claim: {
+      taskID: "official-hidden",
+      split: "held_out",
+      manifestSHA256: hash("claim-manifest"),
+      validatorSHA256: hash("claim-validator"),
+      environmentSHA256: hash("claim-environment"),
+      evaluator: { name: "claim-evaluator", version: "2", source: "benchmark" },
+      metric: "score",
+      direction: "maximize",
+      target: 0.8,
+    },
+    selection: { rule: "terminal-verified-best-v1", subjects: 1 },
+    exposure: { policy: "terminal-receipt-only", searchFeedback: false, memoryCapture: false },
+    failurePolicy: "fail-closed",
+  }
+  const stable = {
+    schemaVersion: 1,
+    protocolVersion: "terminal-verified-best-selection-v1",
+    contractSHA256: hash("contract"),
+    protocolSHA256: hash(JSON.stringify(protocol)),
+    sourceSessionID: "confirmation-session",
+    runID: "confirmation-run",
+    searchRevision: 4,
+    stopReason: "objective_met",
+    candidateID: hash("candidate-id"),
+    candidateArtifact: { uri: "candidate://winner", sha256: hash("candidate-artifact") },
+    candidateCreatedAt: 100,
+    optimizationResultSHA256: hash("optimization-result"),
+    optimizationEvaluationSHA256: hash("optimization-evaluation"),
+    selectedAt: 200,
+  }
+  const selection = { ...stable, selectionID: hash(JSON.stringify(stable)) }
+  const result = {
+    candidateSHA256: selection.candidateArtifact.sha256,
+    manifestSHA256: protocol.claim.manifestSHA256,
+    validatorSHA256: protocol.claim.validatorSHA256,
+    environmentSHA256: protocol.claim.environmentSHA256,
+    outcome: "completed",
+    score: 0.85,
+    metrics: { score: 0.85 },
+    checks: [{ id: "official-gate", status: "passed", blocking: true, evidence: ["claim:gate.json"] }],
+    evidence: ["claim:result.json"],
+    outputSHA256: hash("claim-output"),
+    evaluatedAt: 201,
+  }
+  try {
+    await Promise.all([
+      Bun.write(protocolFile, JSON.stringify(protocol)),
+      Bun.write(selectionFile, JSON.stringify(selection)),
+      Bun.write(resultFile, JSON.stringify(result)),
+    ])
+    const valid = await run(script, [
+      "--protocol",
+      protocolFile,
+      "--selection",
+      selectionFile,
+      "--result",
+      resultFile,
+      "--out",
+      outputFile,
+    ])
+    expect(valid.code).toBe(0)
+    expect(JSON.parse(valid.stdout)).toMatchObject({ valid: true, tokenFree: true, derivedTargetReached: true })
+    expect(JSON.parse(await Bun.file(outputFile).text())).toEqual({
+      schemaVersion: 1,
+      sessionID: selection.sourceSessionID,
+      ...result,
+    })
+
+    await Bun.write(resultFile, JSON.stringify({ ...result, candidateSHA256: hash("alternate") }))
+    const changed = await run(script, [
+      "--protocol",
+      protocolFile,
+      "--selection",
+      selectionFile,
+      "--result",
+      resultFile,
+      "--out",
+      outputFile,
+    ])
+    expect(changed.code).toBe(1)
+    expect(changed.stderr).toContain("candidate substitution")
+
+    await Bun.write(resultFile, JSON.stringify({ ...result, confirmationToken: "must-not-touch-disk" }))
+    const token = await run(script, [
+      "--protocol",
+      protocolFile,
+      "--selection",
+      selectionFile,
+      "--result",
+      resultFile,
+      "--out",
+      outputFile,
+    ])
+    expect(token.code).toBe(1)
+    expect(token.stderr).toContain("secret field")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("design-replay-interventions freezes exact one-difference evaluator pairs", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-interventions-"))
   const script = "research/design-replay-interventions/scripts/design_interventions.py"

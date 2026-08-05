@@ -819,6 +819,65 @@ export namespace HarnessContract {
   export const Split = z.enum(["development", "validation", "held_out", "release"])
   export type Split = z.infer<typeof Split>
 
+  export const ConfirmationClaim = z
+    .object({
+      taskID: z.string().min(1).max(500),
+      split: z.enum(["held_out", "release"]),
+      manifestSHA256: Hash,
+      validatorSHA256: Hash,
+      environmentSHA256: Hash,
+      evaluator: z
+        .object({
+          name: z.string().min(1).max(200),
+          version: z.string().min(1).max(200),
+          source: z.enum(["benchmark", "gate", "external"]),
+        })
+        .strict(),
+      source: z
+        .object({
+          repository: z.string().url(),
+          revision: z.string().regex(/^[a-f0-9]{40}$/),
+        })
+        .strict()
+        .optional(),
+      metric: z.string().min(1).max(200),
+      direction: z.enum(["maximize", "minimize"]),
+      target: z.number().finite(),
+    })
+    .strict()
+
+  export const Confirmation = z
+    .object({
+      protocolVersion: z.literal("sealed-confirmation-v1"),
+      optimization: z
+        .object({
+          split: z.enum(["development", "validation"]),
+          manifestSHA256: Hash,
+        })
+        .strict(),
+      claim: ConfirmationClaim,
+      selection: z
+        .object({
+          rule: z.literal("terminal-verified-best-v1"),
+          subjects: z.literal(1),
+        })
+        .strict(),
+      exposure: z
+        .object({
+          policy: z.literal("terminal-receipt-only"),
+          searchFeedback: z.literal(false),
+          memoryCapture: z.literal(false),
+        })
+        .strict(),
+      failurePolicy: z.literal("fail-closed"),
+    })
+    .strict()
+    .refine(
+      (value) => value.optimization.manifestSHA256 !== value.claim.manifestSHA256,
+      "Optimization and claim manifests must be distinct",
+    )
+  export type Confirmation = z.infer<typeof Confirmation>
+
   export const Fidelity = z
     .object({
       id: z.string().min(1).max(100),
@@ -871,6 +930,7 @@ export namespace HarnessContract {
       evaluatorAudit: EvaluatorAudit.optional(),
       semanticAudit: SemanticAudit.optional(),
       replication: Replication.optional(),
+      confirmation: Confirmation.optional(),
       packs: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -978,7 +1038,8 @@ export namespace HarnessContract {
           value.simulation ||
           value.evaluatorAudit ||
           value.semanticAudit ||
-          value.replication) &&
+          value.replication ||
+          value.confirmation) &&
         !value.benchmark.evaluatorVersion
       ) {
         ctx.addIssue({
@@ -995,7 +1056,8 @@ export namespace HarnessContract {
           value.simulation ||
           value.evaluatorAudit ||
           value.semanticAudit ||
-          value.replication) &&
+          value.replication ||
+          value.confirmation) &&
         !value.benchmark.evaluatorSource
       ) {
         ctx.addIssue({
@@ -1195,6 +1257,51 @@ export namespace HarnessContract {
           code: "custom",
           path: ["benchmark", "evaluatorSource"],
           message: "Replicated evaluation requires a capability-authenticated evaluator source",
+        })
+      }
+      if (value.confirmation && value.profile !== "optimize") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["confirmation"],
+          message: "Sealed confirmation requires the optimize profile",
+        })
+      }
+      if (value.confirmation && !value.search) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["confirmation"],
+          message: "Sealed confirmation requires backend-managed adaptive search",
+        })
+      }
+      if (value.confirmation && value.confirmation.optimization.split !== value.benchmark.split) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["confirmation", "optimization", "split"],
+          message: "The confirmation optimization split must match the bound benchmark split",
+        })
+      }
+      if (
+        value.confirmation &&
+        (value.confirmation.claim.metric !== value.benchmark.metric ||
+          value.confirmation.claim.direction !== value.benchmark.direction ||
+          value.confirmation.claim.target !== value.benchmark.target)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["confirmation", "claim"],
+          message: "The sealed claim metric, direction, and target must match the optimization objective",
+        })
+      }
+      if (
+        value.confirmation &&
+        value.confirmation.claim.evaluator.name === value.benchmark.evaluator &&
+        value.confirmation.claim.evaluator.version === value.benchmark.evaluatorVersion &&
+        value.confirmation.claim.evaluator.source === value.benchmark.evaluatorSource
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["confirmation", "claim", "evaluator"],
+          message: "Sealed confirmation requires an evaluator identity distinct from optimization",
         })
       }
     })

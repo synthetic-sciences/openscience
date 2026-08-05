@@ -23972,6 +23972,1252 @@
         ]
       }
     },
+    "/harness/confirmations/selection": {
+      "post": {
+        "operationId": "harness.confirmation.selection",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Resolve the sealed post-search confirmation subject",
+        "description": "Returns exactly one backend-selected verified winner only after adaptive search is terminal. The endpoint is isolated behind the claim evaluator capability.",
+        "responses": {
+          "200": {
+            "description": "Immutable terminal winner selection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "terminal-verified-best-selection-v1"
+                    },
+                    "selectionID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "contractSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "searchRevision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "stopReason": {
+                      "type": "string",
+                      "enum": [
+                        "budget_exhausted",
+                        "objective_met",
+                        "no_improvement",
+                        "user_cancelled",
+                        "runtime_error"
+                      ]
+                    },
+                    "candidateID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "candidateArtifact": {
+                      "type": "object",
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "uri",
+                        "sha256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "candidateCreatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "optimizationResultSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "optimizationEvaluationSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "selectedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "selectionID",
+                    "contractSHA256",
+                    "protocolSHA256",
+                    "sourceSessionID",
+                    "runID",
+                    "searchRevision",
+                    "stopReason",
+                    "candidateID",
+                    "candidateArtifact",
+                    "candidateCreatedAt",
+                    "optimizationResultSHA256",
+                    "optimizationEvaluationSHA256",
+                    "selectedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "confirmationToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "confirmationToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.confirmation.selection({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/confirmations/receipts": {
+      "post": {
+        "operationId": "harness.confirmation.record",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Record a one-shot sealed claim evaluation",
+        "description": "Freezes the claim result for the server-selected terminal winner without feeding the result into search, adaptive control, hindsight memory, or skill learning.",
+        "responses": {
+          "200": {
+            "description": "Immutable sealed confirmation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "sealed-confirmation-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "contractSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "selection": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "terminal-verified-best-selection-v1"
+                        },
+                        "selectionID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "contractSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "protocolSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "sourceSessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "searchRevision": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "budget_exhausted",
+                            "objective_met",
+                            "no_improvement",
+                            "user_cancelled",
+                            "runtime_error"
+                          ]
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "candidateArtifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "candidateCreatedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "optimizationResultSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "optimizationEvaluationSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "selectedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "protocolVersion",
+                        "selectionID",
+                        "contractSHA256",
+                        "protocolSHA256",
+                        "sourceSessionID",
+                        "runID",
+                        "searchRevision",
+                        "stopReason",
+                        "candidateID",
+                        "candidateArtifact",
+                        "candidateCreatedAt",
+                        "optimizationResultSHA256",
+                        "optimizationEvaluationSHA256",
+                        "selectedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "claim": {
+                      "type": "object",
+                      "properties": {
+                        "taskID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "split": {
+                          "type": "string",
+                          "enum": [
+                            "held_out",
+                            "release"
+                          ]
+                        },
+                        "manifestSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "environmentSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "evaluator": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "benchmark",
+                                "gate",
+                                "external"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "source"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "repository": {
+                              "type": "string",
+                              "format": "uri"
+                            },
+                            "revision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{40}$"
+                            }
+                          },
+                          "required": [
+                            "repository",
+                            "revision"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "metric": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "maximize",
+                            "minimize"
+                          ]
+                        },
+                        "target": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "taskID",
+                        "split",
+                        "manifestSHA256",
+                        "validatorSHA256",
+                        "environmentSHA256",
+                        "evaluator",
+                        "metric",
+                        "direction",
+                        "target"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "completed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "score": {
+                      "type": "number"
+                    },
+                    "metrics": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    },
+                    "checks": {
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "passed",
+                              "failed",
+                              "inconclusive"
+                            ]
+                          },
+                          "blocking": {
+                            "type": "boolean"
+                          },
+                          "score": {
+                            "type": "number"
+                          },
+                          "evidence": {
+                            "default": [],
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "note": {
+                            "type": "string",
+                            "maxLength": 4000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "blocking"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "failures": {
+                      "maxItems": 256,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 4224,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "wallTimeMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "costUSD": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "outputSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "contractSHA256",
+                    "protocolSHA256",
+                    "sourceSessionID",
+                    "runID",
+                    "selection",
+                    "claim",
+                    "outcome",
+                    "status",
+                    "metrics",
+                    "checks",
+                    "failures",
+                    "evidence",
+                    "outputSHA256",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "confirmationToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "candidateSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "manifestSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "validatorSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "environmentSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "completed",
+                      "failed",
+                      "inconclusive"
+                    ]
+                  },
+                  "score": {
+                    "type": "number"
+                  },
+                  "metrics": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "additionalProperties": {
+                      "type": "number"
+                    }
+                  },
+                  "checks": {
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed",
+                            "inconclusive"
+                          ]
+                        },
+                        "blocking": {
+                          "type": "boolean"
+                        },
+                        "score": {
+                          "type": "number"
+                        },
+                        "evidence": {
+                          "default": [],
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 4000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status",
+                        "blocking"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "evidence": {
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "usage": {
+                    "type": "object",
+                    "properties": {
+                      "wallTimeMs": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "costUSD": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "outputSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "evaluatedAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "sessionID",
+                  "confirmationToken",
+                  "candidateSHA256",
+                  "manifestSHA256",
+                  "validatorSHA256",
+                  "environmentSHA256",
+                  "outcome",
+                  "checks",
+                  "evidence",
+                  "outputSHA256",
+                  "evaluatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.confirmation.record({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/confirmations/receipts/{receiptID}": {
+      "post": {
+        "operationId": "harness.confirmation.receipt",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receiptID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a capability-protected sealed confirmation receipt",
+        "responses": {
+          "200": {
+            "description": "Canonical sealed confirmation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "sealed-confirmation-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "contractSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "selection": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "terminal-verified-best-selection-v1"
+                        },
+                        "selectionID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "contractSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "protocolSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "sourceSessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "searchRevision": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "budget_exhausted",
+                            "objective_met",
+                            "no_improvement",
+                            "user_cancelled",
+                            "runtime_error"
+                          ]
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "candidateArtifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "candidateCreatedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "optimizationResultSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "optimizationEvaluationSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "selectedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "protocolVersion",
+                        "selectionID",
+                        "contractSHA256",
+                        "protocolSHA256",
+                        "sourceSessionID",
+                        "runID",
+                        "searchRevision",
+                        "stopReason",
+                        "candidateID",
+                        "candidateArtifact",
+                        "candidateCreatedAt",
+                        "optimizationResultSHA256",
+                        "optimizationEvaluationSHA256",
+                        "selectedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "claim": {
+                      "type": "object",
+                      "properties": {
+                        "taskID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "split": {
+                          "type": "string",
+                          "enum": [
+                            "held_out",
+                            "release"
+                          ]
+                        },
+                        "manifestSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "environmentSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "evaluator": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "benchmark",
+                                "gate",
+                                "external"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "source"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "repository": {
+                              "type": "string",
+                              "format": "uri"
+                            },
+                            "revision": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{40}$"
+                            }
+                          },
+                          "required": [
+                            "repository",
+                            "revision"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "metric": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "maximize",
+                            "minimize"
+                          ]
+                        },
+                        "target": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "taskID",
+                        "split",
+                        "manifestSHA256",
+                        "validatorSHA256",
+                        "environmentSHA256",
+                        "evaluator",
+                        "metric",
+                        "direction",
+                        "target"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "completed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "score": {
+                      "type": "number"
+                    },
+                    "metrics": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    },
+                    "checks": {
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "passed",
+                              "failed",
+                              "inconclusive"
+                            ]
+                          },
+                          "blocking": {
+                            "type": "boolean"
+                          },
+                          "score": {
+                            "type": "number"
+                          },
+                          "evidence": {
+                            "default": [],
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "note": {
+                            "type": "string",
+                            "maxLength": 4000
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "blocking"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "failures": {
+                      "maxItems": 256,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 4224,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "wallTimeMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "costUSD": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "outputSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "contractSHA256",
+                    "protocolSHA256",
+                    "sourceSessionID",
+                    "runID",
+                    "selection",
+                    "claim",
+                    "outcome",
+                    "status",
+                    "metrics",
+                    "checks",
+                    "failures",
+                    "evidence",
+                    "outputSHA256",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "confirmationToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "confirmationToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.confirmation.receipt({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/semantics/receipts": {
       "post": {
         "operationId": "harness.semantic.record",
@@ -35911,6 +37157,193 @@
                       ],
                       "additionalProperties": false
                     },
+                    "confirmation": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "sealed-confirmation-v1"
+                        },
+                        "optimization": {
+                          "type": "object",
+                          "properties": {
+                            "split": {
+                              "type": "string",
+                              "enum": [
+                                "development",
+                                "validation"
+                              ]
+                            },
+                            "manifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "split",
+                            "manifestSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "claim": {
+                          "type": "object",
+                          "properties": {
+                            "taskID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "split": {
+                              "type": "string",
+                              "enum": [
+                                "held_out",
+                                "release"
+                              ]
+                            },
+                            "manifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "environmentSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "evaluator": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "benchmark",
+                                    "gate",
+                                    "external"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "source"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "source": {
+                              "type": "object",
+                              "properties": {
+                                "repository": {
+                                  "type": "string",
+                                  "format": "uri"
+                                },
+                                "revision": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{40}$"
+                                }
+                              },
+                              "required": [
+                                "repository",
+                                "revision"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "metric": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": [
+                                "maximize",
+                                "minimize"
+                              ]
+                            },
+                            "target": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "taskID",
+                            "split",
+                            "manifestSHA256",
+                            "validatorSHA256",
+                            "environmentSHA256",
+                            "evaluator",
+                            "metric",
+                            "direction",
+                            "target"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "selection": {
+                          "type": "object",
+                          "properties": {
+                            "rule": {
+                              "type": "string",
+                              "const": "terminal-verified-best-v1"
+                            },
+                            "subjects": {
+                              "type": "number",
+                              "const": 1
+                            }
+                          },
+                          "required": [
+                            "rule",
+                            "subjects"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "exposure": {
+                          "type": "object",
+                          "properties": {
+                            "policy": {
+                              "type": "string",
+                              "const": "terminal-receipt-only"
+                            },
+                            "searchFeedback": {
+                              "type": "boolean",
+                              "const": false
+                            },
+                            "memoryCapture": {
+                              "type": "boolean",
+                              "const": false
+                            }
+                          },
+                          "required": [
+                            "policy",
+                            "searchFeedback",
+                            "memoryCapture"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "failurePolicy": {
+                          "type": "string",
+                          "const": "fail-closed"
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "optimization",
+                        "claim",
+                        "selection",
+                        "exposure",
+                        "failurePolicy"
+                      ],
+                      "additionalProperties": false
+                    },
                     "packs": {
                       "maxItems": 7,
                       "type": "array",
@@ -37666,6 +39099,208 @@
                       "interval",
                       "decision",
                       "failurePolicy"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "confirmation": {
+                    "type": "object",
+                    "properties": {
+                      "protocol": {
+                        "type": "object",
+                        "properties": {
+                          "protocolVersion": {
+                            "type": "string",
+                            "const": "sealed-confirmation-v1"
+                          },
+                          "optimization": {
+                            "type": "object",
+                            "properties": {
+                              "split": {
+                                "type": "string",
+                                "enum": [
+                                  "development",
+                                  "validation"
+                                ]
+                              },
+                              "manifestSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "split",
+                              "manifestSHA256"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "claim": {
+                            "type": "object",
+                            "properties": {
+                              "taskID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              },
+                              "split": {
+                                "type": "string",
+                                "enum": [
+                                  "held_out",
+                                  "release"
+                                ]
+                              },
+                              "manifestSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "validatorSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "environmentSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "evaluator": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "source": {
+                                    "type": "string",
+                                    "enum": [
+                                      "benchmark",
+                                      "gate",
+                                      "external"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "version",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "source": {
+                                "type": "object",
+                                "properties": {
+                                  "repository": {
+                                    "type": "string",
+                                    "format": "uri"
+                                  },
+                                  "revision": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{40}$"
+                                  }
+                                },
+                                "required": [
+                                  "repository",
+                                  "revision"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "metric": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "direction": {
+                                "type": "string",
+                                "enum": [
+                                  "maximize",
+                                  "minimize"
+                                ]
+                              },
+                              "target": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "taskID",
+                              "split",
+                              "manifestSHA256",
+                              "validatorSHA256",
+                              "environmentSHA256",
+                              "evaluator",
+                              "metric",
+                              "direction",
+                              "target"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "selection": {
+                            "type": "object",
+                            "properties": {
+                              "rule": {
+                                "type": "string",
+                                "const": "terminal-verified-best-v1"
+                              },
+                              "subjects": {
+                                "type": "number",
+                                "const": 1
+                              }
+                            },
+                            "required": [
+                              "rule",
+                              "subjects"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "exposure": {
+                            "type": "object",
+                            "properties": {
+                              "policy": {
+                                "type": "string",
+                                "const": "terminal-receipt-only"
+                              },
+                              "searchFeedback": {
+                                "type": "boolean",
+                                "const": false
+                              },
+                              "memoryCapture": {
+                                "type": "boolean",
+                                "const": false
+                              }
+                            },
+                            "required": [
+                              "policy",
+                              "searchFeedback",
+                              "memoryCapture"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "failurePolicy": {
+                            "type": "string",
+                            "const": "fail-closed"
+                          }
+                        },
+                        "required": [
+                          "protocolVersion",
+                          "optimization",
+                          "claim",
+                          "selection",
+                          "exposure",
+                          "failurePolicy"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "token": {
+                        "type": "string",
+                        "minLength": 32,
+                        "maxLength": 1024
+                      }
+                    },
+                    "required": [
+                      "protocol",
+                      "token"
                     ],
                     "additionalProperties": false
                   },
@@ -41642,6 +43277,193 @@
                           ],
                           "additionalProperties": false
                         },
+                        "confirmation": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "sealed-confirmation-v1"
+                            },
+                            "optimization": {
+                              "type": "object",
+                              "properties": {
+                                "split": {
+                                  "type": "string",
+                                  "enum": [
+                                    "development",
+                                    "validation"
+                                  ]
+                                },
+                                "manifestSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "split",
+                                "manifestSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "claim": {
+                              "type": "object",
+                              "properties": {
+                                "taskID": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500
+                                },
+                                "split": {
+                                  "type": "string",
+                                  "enum": [
+                                    "held_out",
+                                    "release"
+                                  ]
+                                },
+                                "manifestSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "validatorSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "environmentSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "evaluator": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "source": {
+                                      "type": "string",
+                                      "enum": [
+                                        "benchmark",
+                                        "gate",
+                                        "external"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "version",
+                                    "source"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "source": {
+                                  "type": "object",
+                                  "properties": {
+                                    "repository": {
+                                      "type": "string",
+                                      "format": "uri"
+                                    },
+                                    "revision": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{40}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "repository",
+                                    "revision"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "metric": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": [
+                                    "maximize",
+                                    "minimize"
+                                  ]
+                                },
+                                "target": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "taskID",
+                                "split",
+                                "manifestSHA256",
+                                "validatorSHA256",
+                                "environmentSHA256",
+                                "evaluator",
+                                "metric",
+                                "direction",
+                                "target"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "selection": {
+                              "type": "object",
+                              "properties": {
+                                "rule": {
+                                  "type": "string",
+                                  "const": "terminal-verified-best-v1"
+                                },
+                                "subjects": {
+                                  "type": "number",
+                                  "const": 1
+                                }
+                              },
+                              "required": [
+                                "rule",
+                                "subjects"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "exposure": {
+                              "type": "object",
+                              "properties": {
+                                "policy": {
+                                  "type": "string",
+                                  "const": "terminal-receipt-only"
+                                },
+                                "searchFeedback": {
+                                  "type": "boolean",
+                                  "const": false
+                                },
+                                "memoryCapture": {
+                                  "type": "boolean",
+                                  "const": false
+                                }
+                              },
+                              "required": [
+                                "policy",
+                                "searchFeedback",
+                                "memoryCapture"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "failurePolicy": {
+                              "type": "string",
+                              "const": "fail-closed"
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "optimization",
+                            "claim",
+                            "selection",
+                            "exposure",
+                            "failurePolicy"
+                          ],
+                          "additionalProperties": false
+                        },
                         "packs": {
                           "maxItems": 7,
                           "type": "array",
@@ -42307,6 +44129,16 @@
                     "quality": {
                       "type": "object",
                       "properties": {
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "optimization",
+                            "sealed_confirmation"
+                          ]
+                        },
+                        "provisional": {
+                          "type": "boolean"
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -42374,6 +44206,10 @@
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },
+                        "confirmationReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
                         "evaluations": {
                           "type": "integer",
                           "minimum": 0,
@@ -42381,6 +44217,8 @@
                         }
                       },
                       "required": [
+                        "source",
+                        "provisional",
                         "direction",
                         "targetReached",
                         "evaluator",
