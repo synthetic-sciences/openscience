@@ -266,6 +266,30 @@ describe("files pane", () => {
     expect(host.querySelector('[data-source-item="fsg_9"]')?.textContent).toContain("pdebench")
   })
 
+  test("drops the stale listing error when the source changes to one it does not describe", async () => {
+    // The folder listing fails; the artifact store answers normally. Switching
+    // to Trash must not leave "this folder could not be read" over a good list.
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          if (path === "/file") return new Response("nope", { status: 503 })
+          if (path.startsWith("/file/artifact-store?state=trash")) return listing([trashed("art_2", "run.ipynb")])
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector(".files-notice")?.textContent).toContain("could not be read")
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>('[data-source-item="trash"]')?.click()
+    await settle()
+
+    expect(host.querySelector('[data-trash-row="art_2"]')).not.toBeNull()
+    expect(host.querySelector(".files-notice")).toBeNull()
+  })
+
   test("says why a folder cannot be connected before a session exists, instead of doing nothing", async () => {
     // The landing route (/:dir/session) reaches this pane with a project but no
     // session id, and a grant is minted against a session.

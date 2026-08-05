@@ -186,7 +186,13 @@ export function FilesPane(
       // artifacts. Every other kind always carries a real root once a live
       // project context exists, so gate on the source kind rather than on
       // target emptiness.
-      if (kind === "artifacts" || kind === "trash") return Promise.resolve([] as FileRow[])
+      if (kind === "artifacts" || kind === "trash") {
+        // No listing is attempted, so the previous listing's failure no longer
+        // describes anything on screen — leaving it up puts "this folder could
+        // not be read" over a perfectly good trash list.
+        setError("")
+        return Promise.resolve([] as FileRow[])
+      }
       const query: Record<string, string> = { path: target }
       if (session) query.sessionID = session
       return transport("/file", undefined, query)
@@ -330,6 +336,8 @@ export function FilesPane(
             setSource(next)
             setPath([])
             setFilter("")
+            // The notice describes the source being left, not the one arriving.
+            setError("")
           }}
           onRevoke={revoke}
           onAdd={() => setConnect({ open: true, path: "", access: "read", scope: "session" })}
