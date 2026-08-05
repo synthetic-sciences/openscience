@@ -74,6 +74,21 @@ describe("kernel metrics delta arithmetic", () => {
     expect(KernelMetrics.derive({ cpu_seconds: 10, at: 7_000 }, { cpu_seconds: 12.5 }, 6_000)).toEqual({})
     expect(KernelMetrics.derive({ cpu_seconds: 10, at: 1_000 }, { cpu_seconds: 4 }, 6_000)).toEqual({})
   })
+
+  test("omits cpu for a sub-second window but still reports memory, rather than fabricating a value across too short a gap", () => {
+    // 500ms apart — two clients on the same scoped route polling milliseconds
+    // after one another, the exact corruption `ps -o time=`'s whole-second
+    // resolution produces.
+    expect(
+      KernelMetrics.derive({ cpu_seconds: 10, at: 1_000 }, { cpu_seconds: 10.4, memory_bytes: 4_096 }, 1_500),
+    ).toEqual({ memory_bytes: 4_096 })
+  })
+
+  test("still derives a value at exactly a 1 second window, the inclusive floor", () => {
+    expect(KernelMetrics.derive({ cpu_seconds: 10, at: 1_000 }, { cpu_seconds: 10.5 }, 2_000)).toEqual({
+      cpu_percent: 50,
+    })
+  })
 })
 
 describe("kernel metrics sampling", () => {
@@ -83,7 +98,9 @@ describe("kernel metrics sampling", () => {
     expect(first.get(process.pid)?.memory_bytes).toBeGreaterThan(0)
     expect(first.get(process.pid)?.cpu_percent).toBeUndefined()
 
-    await Bun.sleep(120)
+    // Cross the 1 second floor from `derive` — a shorter gap would correctly
+    // omit cpu_percent as an unmeasurable window, not report a real value.
+    await Bun.sleep(1_100)
     const second = await KernelMetrics.sampleAll("kernels", [process.pid])
 
     expect(second.get(process.pid)?.cpu_percent).toBeGreaterThanOrEqual(0)
@@ -110,7 +127,9 @@ describe("kernel metrics sampling", () => {
       await KernelMetrics.sampleAll("kernels", [a.pid])
       // A second tab polling a different session (B) in between — must not touch A's entry.
       await KernelMetrics.sampleAll("kernels", [b.pid])
-      await Bun.sleep(120)
+      // Cross the 1 second floor from `derive` — a shorter gap would correctly
+      // omit cpu_percent as an unmeasurable window, not report a real value.
+      await Bun.sleep(1_100)
       const second = await KernelMetrics.sampleAll("kernels", [a.pid])
 
       expect(typeof second.get(a.pid)?.cpu_percent).toBe("number")

@@ -31,11 +31,17 @@ export namespace KernelMetrics {
   // that has not advanced, or cumulative seconds that went backwards because
   // the OS recycled the pid, yields no cpu_percent at all — never a 0 the UI
   // would render as an idle kernel.
+  //
+  // `ps -o time=` has whole-second resolution, so a window under 1s quantises
+  // to either a fabricated 0 or a wild multiple — two clients on the same
+  // scoped route polling milliseconds apart would otherwise corrupt each
+  // other's reading. A window that short is floored to unmeasurable rather
+  // than trusted.
   export function derive(previous: Mark | undefined, reading: Reading, at: number) {
     const elapsed = previous ? (at - previous.at) / 1_000 : 0
     const used = previous ? reading.cpu_seconds - previous.cpu_seconds : 0
     return {
-      ...(previous && elapsed > 0 && used >= 0 ? { cpu_percent: (used / elapsed) * 100 } : {}),
+      ...(previous && elapsed >= 1 && used >= 0 ? { cpu_percent: (used / elapsed) * 100 } : {}),
       ...(reading.memory_bytes === undefined ? {} : { memory_bytes: reading.memory_bytes }),
     }
   }
