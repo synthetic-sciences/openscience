@@ -83,10 +83,17 @@ async function setup(
   })
 }
 
-async function add(sessionID: string, name: string, parentIDs: string[] = [], branch = name) {
+async function add(
+  sessionID: string,
+  name: string,
+  parentIDs: string[] = [],
+  branch = name,
+  inspirationIDs: string[] = [],
+) {
   return HarnessSearch.add({
     sessionID,
     parentIDs,
+    inspirationIDs,
     branch,
     proposal: `proposal ${name}`,
     artifact: artifact(name),
@@ -151,8 +158,102 @@ describe("harness candidate graph", () => {
     const first = await add("search-dedupe", "seed")
     const duplicate = await add("search-dedupe", "seed")
     expect(first.id).toHaveLength(64)
-    expect(duplicate).toMatchObject({ accepted: true, id: first.id })
+    expect(duplicate).toMatchObject({ accepted: true, deduplicated: true, id: first.id })
     expect(Object.keys(duplicate.state.candidates)).toHaveLength(1)
+
+    const revision = duplicate.state.revision
+    const wrapped = await HarnessSearch.add({
+      sessionID: "search-dedupe",
+      parentIDs: [hash("unknown-wrapper-parent")],
+      inspirationIDs: [hash("unknown-wrapper-inspiration")],
+      branch: "different-wrapper",
+      proposal: "Claim the same bytes are a new discovery",
+      artifact: { uri: "candidate://mirror", sha256: artifact("seed").sha256 },
+    })
+    expect(wrapped).toMatchObject({ accepted: true, deduplicated: true, id: first.id })
+    expect(wrapped.state.revision).toBe(revision)
+    expect(Object.keys(wrapped.state.candidates)).toHaveLength(1)
+  })
+
+  test("serializes concurrent content duplicates into one budget slot", async () => {
+    await setup("search-dedupe-race", { candidates: 2 })
+    const sha256 = hash("shared-bytes")
+    const results = await Promise.all([
+      HarnessSearch.add({
+        sessionID: "search-dedupe-race",
+        parentIDs: [],
+        branch: "first",
+        proposal: "first wrapper",
+        artifact: { uri: "candidate://first", sha256 },
+      }),
+      HarnessSearch.add({
+        sessionID: "search-dedupe-race",
+        parentIDs: [],
+        branch: "second",
+        proposal: "second wrapper",
+        artifact: { uri: "candidate://second", sha256 },
+      }),
+    ])
+    expect(results.every((result) => result.accepted)).toBe(true)
+    expect(new Set(results.map((result) => result.id)).size).toBe(1)
+    expect(results.filter((result) => result.deduplicated)).toHaveLength(1)
+    expect(Object.keys((await HarnessSearch.read("search-dedupe-race")).candidates)).toHaveLength(1)
+  })
+
+  test("assigns deterministic islands server-side and preserves them across restart", async () => {
+    const initial = await setup("search-islands", { candidates: 8 })
+    expect(initial.population).toEqual({ mode: "islands", count: 2, topology: "ring", migrationInterval: 2 })
+
+    const first = await add("search-islands", "first", [], "line-a")
+    expect(first.state.candidates[first.id]).toMatchObject({ island: 0, ordinal: 0 })
+    await evaluate("search-islands", first.id, 0.9)
+    const second = await add("search-islands", "second", [], "line-b")
+    expect(second.state.candidates[second.id]).toMatchObject({ island: 1, ordinal: 1 })
+    await evaluate("search-islands", second.id, 0.8)
+    const child = await add("search-islands", "child", [first.id], "line-a")
+    expect(child.state.candidates[child.id]).toMatchObject({ island: 0, ordinal: 2, parentIDs: [first.id] })
+    expect(await HarnessSearch.read("search-islands")).toEqual(child.state)
+  })
+
+  test("migrates verified inspiration into a target island without copying candidate bytes", async () => {
+    await setup("search-migrate", { candidates: 8, stall: 5 })
+    const source = await add("search-migrate", "source", [], "source")
+    await evaluate("search-migrate", source.id, 0.9)
+    const target = await add("search-migrate", "target", [], "target")
+    const state = await evaluate("search-migrate", target.id, 0.8)
+    expect(HarnessSearch.recommend(state)).toEqual({
+      strategy: "migrate",
+      parentIDs: [target.id],
+      inspirationIDs: [source.id],
+      targetIsland: 1,
+      reasons: ["candidates:2", "ring:0->1", "verified-inspiration", "new-artifact-required"],
+    })
+
+    const migrated = await add("search-migrate", "migrated", [target.id], "target", [source.id])
+    expect(migrated.state.candidates[migrated.id]).toMatchObject({
+      island: 1,
+      parentIDs: [target.id],
+      inspirationIDs: [source.id],
+    })
+    await expect(add("search-migrate", "invalid", [target.id], "target", [migrated.id])).rejects.toThrow(
+      "externally verified passing inspirations",
+    )
+    await expect(add("search-migrate", "overlap", [source.id], "target", [source.id])).rejects.toThrow(
+      "distinct from parents",
+    )
+
+    const revision = migrated.state.revision
+    const copied = await HarnessSearch.add({
+      sessionID: "search-migrate",
+      parentIDs: [target.id],
+      inspirationIDs: [source.id],
+      branch: "target",
+      proposal: "Copy the source elite without modifying it",
+      artifact: { uri: "candidate://copied-source", sha256: artifact("source").sha256 },
+    })
+    expect(copied).toMatchObject({ accepted: true, deduplicated: true, id: source.id })
+    expect(copied.state.revision).toBe(revision)
+    expect(HarnessSearch.recommend(copied.state).strategy).not.toBe("migrate")
   })
 
   test("allows bounded independent roots and releases failed root capacity", async () => {
@@ -297,16 +398,48 @@ describe("harness candidate graph", () => {
     await expect(HarnessSearch.read("search-pareto-tamper")).rejects.toThrow("Pareto archive does not match")
   })
 
+  test("fails closed when persisted island policy or assignment is edited", async () => {
+    await setup("search-island-tamper", { candidates: 8 })
+    const seed = await add("search-island-tamper", "seed")
+    const file = path.join(Global.Path.data, "harness", "search", "search-island-tamper.json")
+    const assignment = JSON.parse(await fs.readFile(file, "utf8"))
+    assignment.candidates[seed.id].island = 1
+    await fs.writeFile(file, JSON.stringify(assignment))
+    await expect(HarnessSearch.read("search-island-tamper")).rejects.toThrow("island does not match")
+
+    assignment.candidates[seed.id].island = 0
+    assignment.population.migrationInterval = 99
+    await fs.writeFile(file, JSON.stringify(assignment))
+    await expect(HarnessSearch.read("search-island-tamper")).rejects.toThrow("server-derived budget policy")
+
+    assignment.population.migrationInterval = 2
+    assignment.candidates[seed.id].generation = 7
+    await fs.writeFile(file, JSON.stringify(assignment))
+    await expect(HarnessSearch.read("search-island-tamper")).rejects.toThrow("generation does not match")
+
+    assignment.candidates[seed.id].generation = 0
+    assignment.candidates[seed.id].proposal = "edited after registration"
+    await fs.writeFile(file, JSON.stringify(assignment))
+    await expect(HarnessSearch.read("search-island-tamper")).rejects.toThrow("identity does not match")
+  })
+
   test("migrates legacy single-metric search state without changing its frontier", async () => {
     await setup("search-pareto-legacy")
     const seed = await add("search-pareto-legacy", "seed")
     await evaluate("search-pareto-legacy", seed.id, 0.9)
     const file = path.join(Global.Path.data, "harness", "search", "search-pareto-legacy.json")
     const legacy = JSON.parse(await fs.readFile(file, "utf8"))
+    legacy.schemaVersion = 1
     delete legacy.objectives
     delete legacy.archiveIDs
+    delete legacy.population
+    delete legacy.candidates[seed.id].inspirationIDs
+    delete legacy.candidates[seed.id].island
+    delete legacy.candidates[seed.id].ordinal
     await fs.writeFile(file, JSON.stringify(legacy))
     const state = await HarnessSearch.read("search-pareto-legacy")
+    expect(state.schemaVersion).toBe(2)
+    expect(state.population).toEqual({ mode: "legacy", count: 1, topology: "ring", migrationInterval: 1 })
     expect(state.objectives).toEqual([])
     expect(state.archiveIDs).toEqual([seed.id])
     expect(state.bestID).toBe(seed.id)

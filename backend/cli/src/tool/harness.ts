@@ -29,6 +29,11 @@ const Parameters = z.object({
     .max(2)
     .optional()
     .describe("For propose: verified parents"),
+  inspiration_ids: z
+    .array(z.string().regex(/^[a-f0-9]{64}$/))
+    .max(2)
+    .optional()
+    .describe("For propose: verified inspirations returned by a migration recommendation"),
   branch: z.string().min(1).max(120).optional().describe("For propose: stable diversity branch label"),
   proposal: z.string().min(1).max(4_000).optional().describe("For propose: concise description of the change"),
   artifact_uri: z.string().min(1).max(2_048).optional().describe("For propose: immutable candidate artifact reference"),
@@ -125,9 +130,11 @@ const summary = (state: HarnessSearch.State) => ({
   metric: state.metric,
   direction: state.direction,
   target: state.target,
+  population: state.population,
   budget: state.budget,
   used: Object.keys(state.candidates).length,
   bestID: state.bestID,
+  archiveIDs: state.archiveIDs,
   stalled: state.stalled,
   revision: state.revision,
   recommendation: state.status === "active" ? HarnessSearch.recommend(state) : undefined,
@@ -137,11 +144,18 @@ const summary = (state: HarnessSearch.State) => ({
     .map((candidate) => ({
       id: candidate.id,
       parentIDs: candidate.parentIDs,
+      inspirationIDs: candidate.inspirationIDs,
       branch: candidate.branch,
       generation: candidate.generation,
+      island: candidate.island,
+      ordinal: candidate.ordinal,
+      proposal: candidate.proposal.slice(0, 1_000),
+      artifact: candidate.artifact,
       source: candidate.result?.source,
       status: candidate.result?.status,
       score: candidate.result?.score,
+      metrics: candidate.result?.metrics,
+      feedback: candidate.result?.feedback?.slice(0, 2_000),
     })),
 })
 
@@ -283,6 +297,7 @@ export const HarnessTool = Tool.define("harness", {
       const added = await HarnessSearch.add({
         sessionID: ctx.sessionID,
         parentIDs: params.parent_ids ?? [],
+        inspirationIDs: params.inspiration_ids ?? [],
         branch: params.branch,
         proposal: params.proposal,
         artifact: { uri: params.artifact_uri, sha256: params.artifact_sha256 },
@@ -290,6 +305,7 @@ export const HarnessTool = Tool.define("harness", {
       return result(added.accepted ? "Candidate registered" : "Candidate rejected", summary(added.state), {
         candidateID: added.id,
         accepted: added.accepted,
+        deduplicated: added.deduplicated,
         revision: added.state.revision,
       })
     }

@@ -108,8 +108,29 @@ describe("harness tool", () => {
     const candidateID = proposed.metadata.candidateID as string
     expect(proposed.metadata).toMatchObject({ accepted: true, candidateID })
 
+    const duplicate = await tool.execute(
+      {
+        action: "propose",
+        parent_ids: [hash("fabricated-parent")],
+        inspiration_ids: [hash("fabricated-inspiration")],
+        branch: "renamed",
+        proposal: "same bytes under a different wrapper",
+        artifact_uri: "artifact://baseline-mirror",
+        artifact_sha256: hash("baseline"),
+      },
+      context,
+    )
+    expect(duplicate.metadata).toMatchObject({ accepted: true, deduplicated: true, candidateID })
+
     const observed = await tool.execute(
-      { action: "observe", candidate_id: candidateID, status: "passed", score: 999 },
+      {
+        action: "observe",
+        candidate_id: candidateID,
+        status: "passed",
+        score: 999,
+        metrics: { proxy: 999 },
+        feedback: "provisional feedback stays visibly unverified",
+      },
       context,
     )
     expect(observed.title).toBe("Unverified observation recorded")
@@ -120,7 +141,17 @@ describe("harness tool", () => {
     const checkpoint = await tool.execute({ action: "status" }, context)
     expect(JSON.parse(checkpoint.output)).toMatchObject({
       revision: 2,
-      candidates: [{ id: candidateID, source: "observed", score: 999 }],
+      candidates: [
+        {
+          id: candidateID,
+          proposal: "baseline candidate",
+          artifact: { uri: "artifact://baseline", sha256: hash("baseline") },
+          source: "observed",
+          score: 999,
+          metrics: { proxy: 999 },
+          feedback: "provisional feedback stays visibly unverified",
+        },
+      ],
     })
   })
 

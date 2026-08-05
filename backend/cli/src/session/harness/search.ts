@@ -48,8 +48,15 @@ export namespace HarnessSearch {
         .array(z.string().regex(/^[a-f0-9]{64}$/))
         .max(2)
         .refine((ids) => new Set(ids).size === ids.length, "Candidate parents must be unique"),
+      inspirationIDs: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .max(2)
+        .refine((ids) => new Set(ids).size === ids.length, "Candidate inspirations must be unique")
+        .default([]),
       branch: z.string().min(1).max(120),
       generation: z.number().int().nonnegative(),
+      island: z.number().int().nonnegative().default(0),
+      ordinal: z.number().int().nonnegative().optional(),
       proposal: z.string().min(1).max(4_000),
       artifact: Artifact,
       result: Result.optional(),
@@ -58,9 +65,19 @@ export namespace HarnessSearch {
     .strict()
   export type Candidate = z.infer<typeof Candidate>
 
+  export const Population = z
+    .object({
+      mode: z.enum(["legacy", "islands"]),
+      count: z.number().int().min(1).max(4),
+      topology: z.literal("ring"),
+      migrationInterval: z.number().int().positive(),
+    })
+    .strict()
+  export type Population = z.infer<typeof Population>
+
   export const State = z
     .object({
-      schemaVersion: z.literal(1),
+      schemaVersion: z.literal(2),
       runID: z.string().min(1),
       sessionID: z.string().min(1),
       objective: z.string().min(1),
@@ -69,6 +86,7 @@ export namespace HarnessSearch {
       direction: z.enum(["maximize", "minimize", "pass"]),
       target: z.number().finite().optional(),
       objectives: HarnessContract.Objectives.default([]),
+      population: Population,
       budget: z
         .object({
           candidates: z.number().int().positive(),
@@ -96,8 +114,10 @@ export namespace HarnessSearch {
   export type State = z.infer<typeof State>
 
   export type Recommendation = {
-    strategy: "seed" | "explore" | "exploit" | "fuse" | "diverge"
+    strategy: "seed" | "explore" | "exploit" | "fuse" | "migrate" | "diverge"
     parentIDs: string[]
+    inspirationIDs: string[]
+    targetIsland: number
     reasons: string[]
   }
 
@@ -108,6 +128,15 @@ export namespace HarnessSearch {
   const candidates = (state: State) => Object.values(state.candidates)
   const verified = (candidate: Candidate) =>
     candidate.result?.source === "verified" && candidate.result.status === "passed"
+
+  const identity = (input: Pick<Candidate, "parentIDs" | "inspirationIDs" | "branch" | "proposal" | "artifact">) =>
+    digest({
+      parentIDs: input.parentIDs.toSorted(),
+      inspirationIDs: input.inspirationIDs.toSorted(),
+      branch: input.branch,
+      proposal: input.proposal,
+      artifact: input.artifact,
+    })
 
   function order(state: State, left: Candidate, right: Candidate) {
     if (state.direction === "pass") return left.createdAt - right.createdAt || left.id.localeCompare(right.id)
@@ -167,6 +196,23 @@ export namespace HarnessSearch {
   const expired = (state: State, now: number) =>
     state.budget.wallTimeMs !== undefined && now - state.startedAt >= state.budget.wallTimeMs
 
+  const population = (budget: number): Population => {
+    const count = budget < 6 ? 1 : Math.min(4, Math.floor(Math.sqrt(budget / 2)))
+    return {
+      mode: "islands",
+      count,
+      topology: "ring",
+      migrationInterval: Math.max(2, Math.ceil(budget / (count * 2))),
+    }
+  }
+
+  const vacancy = (state: State) => {
+    const counts = Array.from({ length: state.population.count }, () => 0)
+    for (const candidate of candidates(state)) counts[candidate.island] = (counts[candidate.island] ?? 0) + 1
+    const least = Math.min(...counts)
+    return counts.findIndex((count) => count === least)
+  }
+
   const stop = (state: State, reason: Stop, now = Date.now()): State => ({
     ...state,
     status: "completed",
@@ -175,13 +221,73 @@ export namespace HarnessSearch {
     updatedAt: now,
   })
 
+  function topology(state: State) {
+    if (state.population.mode === "legacy") {
+      if (candidates(state).some((candidate) => candidate.ordinal !== undefined || candidate.island !== 0)) {
+        throw new Error(`Legacy search state cannot contain island assignments`)
+      }
+      return
+    }
+    if (JSON.stringify(state.population) !== JSON.stringify(population(state.budget.candidates))) {
+      throw new Error(`Persisted island policy does not match the server-derived budget policy`)
+    }
+    const items = candidates(state).toSorted(
+      (a, b) => (a.ordinal ?? Number.MAX_SAFE_INTEGER) - (b.ordinal ?? Number.MAX_SAFE_INTEGER),
+    )
+    if (items.some((candidate, index) => candidate.ordinal !== index)) {
+      throw new Error(`Persisted island candidate order is not contiguous`)
+    }
+    const seen = new Map<string, Candidate>()
+    const hashes = new Set<string>()
+    const counts = Array.from({ length: state.population.count }, () => 0)
+    for (const candidate of items) {
+      if (identity(candidate) !== candidate.id)
+        throw new Error(`Persisted candidate identity does not match its content`)
+      if (hashes.has(candidate.artifact.sha256)) throw new Error(`Persisted search contains duplicate artifact content`)
+      hashes.add(candidate.artifact.sha256)
+      const parents = candidate.parentIDs.map((id) => seen.get(id))
+      const inspirations = candidate.inspirationIDs.map((id) => seen.get(id))
+      if (parents.some((parent) => !parent) || inspirations.some((item) => !item)) {
+        throw new Error(`Persisted candidate lineage must reference earlier candidates`)
+      }
+      if (parents.some((parent) => !verified(parent!)) || inspirations.some((item) => !verified(item!))) {
+        throw new Error(`Persisted candidate lineage must reference verified passing candidates`)
+      }
+      if (candidate.inspirationIDs.some((id) => candidate.parentIDs.includes(id))) {
+        throw new Error(`Candidate inspirations must be distinct from parents`)
+      }
+      const least = Math.min(...counts)
+      const expected = parents.length
+        ? parents.toSorted((a, b) => order(state, a!, b!))[0]!.island
+        : counts.findIndex((count) => count === least)
+      if (candidate.island !== expected || candidate.island >= state.population.count) {
+        throw new Error(`Persisted candidate island does not match server assignment`)
+      }
+      const generation = parents.length ? Math.max(...parents.map((parent) => parent!.generation)) + 1 : 0
+      if (candidate.generation !== generation) {
+        throw new Error(`Persisted candidate generation does not match its lineage`)
+      }
+      counts[candidate.island] = counts[candidate.island]! + 1
+      seen.set(candidate.id, candidate)
+    }
+  }
+
   function parse(data: Record<string, unknown>) {
-    const state = State.parse(data)
-    const expected = archive(state).map((item) => item.id)
-    if (!("archiveIDs" in data)) return State.parse({ ...state, archiveIDs: expected })
+    const migrated =
+      data.schemaVersion === 1
+        ? {
+            ...data,
+            schemaVersion: 2,
+            population: { mode: "legacy", count: 1, topology: "ring", migrationInterval: 1 },
+          }
+        : data
+    const parsed = State.parse(migrated)
+    const expected = archive(parsed).map((item) => item.id)
+    const state = "archiveIDs" in data ? parsed : State.parse({ ...parsed, archiveIDs: expected })
     if (JSON.stringify(state.archiveIDs) !== JSON.stringify(expected)) {
       throw new Error(`Persisted Pareto archive does not match verified candidate results`)
     }
+    topology(state)
     return state
   }
 
@@ -218,7 +324,7 @@ export namespace HarnessSearch {
     }
     const now = Date.now()
     const initial: State = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       runID: contract.runID,
       sessionID: input.sessionID,
       objective: contract.objective,
@@ -226,6 +332,7 @@ export namespace HarnessSearch {
       metric: contract.benchmark.metric ?? "status",
       direction: contract.benchmark.direction ?? "pass",
       objectives: contract.benchmark.objectives ?? [],
+      population: population(candidates),
       ...(contract.benchmark.target === undefined && input.target === undefined
         ? {}
         : { target: contract.benchmark.target ?? input.target }),
@@ -270,24 +377,29 @@ export namespace HarnessSearch {
   export async function add(input: {
     sessionID: string
     parentIDs: string[]
+    inspirationIDs?: string[]
     branch: string
     proposal: string
     artifact: Artifact
   }) {
     const artifact = Artifact.parse(input.artifact)
     const parents = input.parentIDs.toSorted()
-    const id = digest({
+    const inspirations = (input.inspirationIDs ?? []).toSorted()
+    const id = identity({
       parentIDs: parents,
+      inspirationIDs: inspirations,
       branch: input.branch,
       proposal: input.proposal,
       artifact,
     })
-    const out = { accepted: false, id }
+    const out = { accepted: false, deduplicated: false, id }
     await JsonStore.update(file(input.sessionID), (data) => {
       const state = parse(data)
-      const existing = state.candidates[id]
+      const existing = candidates(state).find((candidate) => candidate.artifact.sha256 === artifact.sha256)
       if (existing) {
         out.accepted = true
+        out.deduplicated = true
+        out.id = existing.id
         return state
       }
       const now = Date.now()
@@ -297,10 +409,20 @@ export namespace HarnessSearch {
       }
       if (parents.length > 2) throw new Error(`A candidate may have at most two parents`)
       if (new Set(parents).size !== parents.length) throw new Error(`Candidate parents must be unique`)
+      if (inspirations.length > 2) throw new Error(`A candidate may have at most two inspirations`)
+      if (new Set(inspirations).size !== inspirations.length) throw new Error(`Candidate inspirations must be unique`)
+      if (inspirations.some((id) => parents.includes(id))) {
+        throw new Error(`Candidate inspirations must be distinct from parents`)
+      }
       const ancestors = parents.map((parent) => state.candidates[parent])
+      const sources = inspirations.map((item) => state.candidates[item])
       if (ancestors.some((parent) => !parent)) throw new Error(`Every candidate parent must exist in the same search`)
+      if (sources.some((item) => !item)) throw new Error(`Every candidate inspiration must exist in the same search`)
       if (ancestors.some((parent) => !verified(parent!))) {
         throw new Error(`Candidates may only descend from externally verified passing parents`)
+      }
+      if (sources.some((item) => !verified(item!))) {
+        throw new Error(`Candidates may only use externally verified passing inspirations`)
       }
       if (!parents.length && candidates(state).length) {
         const roots = candidates(state).filter(
@@ -316,11 +438,15 @@ export namespace HarnessSearch {
         }
       }
       const generation = ancestors.length ? Math.max(...ancestors.map((parent) => parent!.generation)) + 1 : 0
+      const island = ancestors.length ? ancestors.toSorted((a, b) => order(state, a!, b!))[0]!.island : vacancy(state)
       const candidate: Candidate = Candidate.parse({
         id,
         parentIDs: parents,
+        inspirationIDs: inspirations,
         branch: input.branch,
         generation,
+        island,
+        ...(state.population.mode === "legacy" ? {} : { ordinal: candidates(state).length }),
         proposal: input.proposal,
         artifact,
         createdAt: now,
@@ -504,7 +630,15 @@ export namespace HarnessSearch {
 
   export function recommend(state: State): Recommendation {
     const pool = ranked(state)
-    if (!pool.length) return { strategy: "seed", parentIDs: [], reasons: ["no-verified-candidate"] }
+    if (!pool.length) {
+      return {
+        strategy: "seed",
+        parentIDs: [],
+        inspirationIDs: [],
+        targetIsland: vacancy(state),
+        reasons: ["no-verified-candidate"],
+      }
+    }
     const pareto = archive(state)
     const prioritized = [...pareto, ...pool.filter((candidate) => !pareto.some((item) => item.id === candidate.id))]
     const distinct = prioritized.filter(
@@ -514,7 +648,36 @@ export namespace HarnessSearch {
       return {
         strategy: "diverge",
         parentIDs: [pool[0]!.id],
+        inspirationIDs: [],
+        targetIsland: pool[0]!.island,
         reasons: [`stalled:${state.stalled}`, "strategy-level-mutation", "preserve-best"],
+      }
+    }
+    if (
+      state.population.mode === "islands" &&
+      state.population.count > 1 &&
+      candidates(state).length >= state.population.migrationInterval &&
+      candidates(state).length % state.population.migrationInterval === 0
+    ) {
+      const source = pool[0]!
+      const target = Array.from(
+        { length: state.population.count - 1 },
+        (_, index) => (source.island + index + 1) % state.population.count,
+      ).find((island) => pool.some((candidate) => candidate.island === island))
+      const anchor = target === undefined ? undefined : pool.find((candidate) => candidate.island === target)
+      if (anchor) {
+        return {
+          strategy: "migrate",
+          parentIDs: [anchor.id],
+          inspirationIDs: [source.id],
+          targetIsland: anchor.island,
+          reasons: [
+            `candidates:${candidates(state).length}`,
+            `ring:${source.island}->${anchor.island}`,
+            "verified-inspiration",
+            "new-artifact-required",
+          ],
+        }
       }
     }
     if (state.stalled >= state.budget.stall && distinct.length >= 2) {
@@ -523,6 +686,8 @@ export namespace HarnessSearch {
       return {
         strategy: "fuse",
         parentIDs: [best.id, complement.id],
+        inspirationIDs: [],
+        targetIsland: best.island,
         reasons: [
           `stalled:${state.stalled}`,
           "cross-branch-fusion",
@@ -542,6 +707,8 @@ export namespace HarnessSearch {
       return {
         strategy: "explore",
         parentIDs: [],
+        inspirationIDs: [],
+        targetIsland: vacancy(state),
         reasons: [`budget-progress:${progress.toFixed(2)}`, `independent-roots:${roots.length}/${rootTarget}`],
       }
     }
@@ -549,6 +716,8 @@ export namespace HarnessSearch {
       return {
         strategy: "exploit",
         parentIDs: [pool[0]!.id],
+        inspirationIDs: [],
+        targetIsland: pool[0]!.island,
         reasons: [`budget-progress:${progress.toFixed(2)}`, "verified-rank"],
       }
     }
@@ -569,6 +738,8 @@ export namespace HarnessSearch {
     return {
       strategy: "explore",
       parentIDs: [diverse[0]!.id],
+      inspirationIDs: [],
+      targetIsland: diverse[0]!.island,
       reasons: [
         `budget-progress:${progress.toFixed(2)}`,
         `branch-visits:${least}`,
