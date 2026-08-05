@@ -363,6 +363,34 @@ describe("files pane", () => {
     expect(host.querySelector(".files-table")).not.toBeNull()
   })
 
+  test("wires Browse… through the dialog host to the FolderPicker and back into the path field", () => {
+    // A source-text guard, and a weaker one than a mount: it pins that the wire
+    // is written, not that clicking Browse… produces a picker. A mount cannot
+    // reach this path at all, verified by probe rather than assumed:
+    //   - the standalone seam leaves `dialog` undefined, so <Show when={dialog}>
+    //     never renders the Browse… button (the connect form does render);
+    //   - dropping the seam to get a real dialog throws "SDK context must be
+    //     used within a context provider" before the pane mounts;
+    //   - mounting FolderPicker directly throws "GlobalSDK context must be used
+    //     within a context provider".
+    // Rendering it for real needs SDK, sync, router, dialog, global-SDK and
+    // global-sync providers plus a server to walk. A refactor that severs any
+    // link below would pass every behavioural test in this file, which is
+    // exactly why this exists.
+    const source = readFileSync(fileURLToPath(new URL("./FilesPane.tsx", import.meta.url)), "utf8")
+
+    expect(source).toContain('import { FolderPicker } from "@/atlas/FolderPicker"')
+    expect(source).toContain("dialog?.show(")
+    expect(source).toContain("<FolderPicker")
+    expect(source).toContain('kind="folder"')
+    // The picker answers with one path or several; either way one lands in the
+    // same store field the path input renders.
+    expect(source).toContain("const picked = Array.isArray(result) ? result[0] : result")
+    expect(source).toContain('if (picked) setConnect("path", picked)')
+    expect(source).toContain("onClick={browse}")
+    expect(source).toContain("value={connect.path}")
+  })
+
   test("mounts the real FileView for the active tab when nothing overrides it", () => {
     // The `view` seam above can only prove the switch, not what production
     // renders through it. This guards the default the seam falls back to.
