@@ -69,7 +69,9 @@ describe("kernel control room", () => {
     const panel = source()
     const runtime = readFileSync(fileURLToPath(new URL("../notebook/runtime.ts", import.meta.url)), "utf8")
 
-    expect(panel).toContain("{ sessionID: params.id }")
+    // The session id comes straight from the route params, and the poll names
+    // its client so two panels do not share one sampling window on this route.
+    expect(panel).toContain("{ sessionID: params.id, client }")
     expect(panel).not.toContain("Omit<KernelStatus")
     expect(panel).not.toContain("legacy")
     expect(runtime).toContain('"lazy" | "starting" | "idle" | "running" | "stopped" | "crashed"')

@@ -6,6 +6,7 @@ import { IconCpu, IconPlus, IconRefresh } from "@/atlas/shared/Icon"
 import { summarizeKernels, type KernelStatus } from "@/notebook/runtime"
 import { useExecutionAuthority } from "./use-execution-authority"
 import { useKernelList } from "./use-kernel-list"
+import { identify } from "@/atlas/poll-identity"
 import { KernelCard, type KernelAction } from "./KernelCard"
 
 type KernelsPayload = { kernels: KernelStatus[] }
@@ -54,6 +55,11 @@ export function inventory<T>(request: Promise<T>, settled: (error: string) => vo
 
 export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   const transport = props.request ?? useSDK().request
+  // Per-kernel CPU is measured across the window since this caller's previous
+  // poll, so a panel that does not name itself shares one window with every
+  // other panel on the route — two tabs then truncate each other's window to
+  // the stagger between them and both read Unavailable forever.
+  const client = identify()
   const params = useParams()
   const authority = useExecutionAuthority("kernel")
   const [view, setView] = createStore<{
@@ -83,8 +89,9 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   }
   const load = () => {
     if (!params.id || params.id === "new") return Promise.resolve({ kernels: [] })
-    return inventory(request<KernelsPayload>("/notebook/kernels", undefined, { sessionID: params.id }), (error) =>
-      setView(error ? { error } : { error: "", updated: Date.now() }),
+    return inventory(
+      request<KernelsPayload>("/notebook/kernels", undefined, { sessionID: params.id, client }),
+      (error) => setView(error ? { error } : { error: "", updated: Date.now() }),
     )
   }
   const [data, api] = createResource(load)

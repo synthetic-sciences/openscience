@@ -1,6 +1,7 @@
 import { Index, createMemo, createResource, onCleanup, type JSX } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { hostTiles, type Capacity } from "@/atlas/host-tiles"
+import { identify } from "@/atlas/poll-identity"
 import "@/atlas/HostStrip.css"
 
 // The transport is a prop so the degraded path can be mounted against a real
@@ -11,12 +12,8 @@ type HostStripProps = { request?: (path: string) => Promise<Response> }
 // measured across the window since the same client's previous poll, so two tabs
 // sharing one identity would truncate each other's window to the gap between
 // their polls — under the server's one-second floor, which then refuses a
-// reading for whichever polled second, every cycle. Per mount rather than per
-// module: two tabs are two page loads, but two strips in one page would collide
-// on a module-level value. crypto.randomUUID needs a secure context, which
-// localhost is, but the fallback keeps a reload from ever reusing an identity.
-const identify = () =>
-  globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
+// reading for whichever polled second, every cycle. See poll-identity.ts for
+// why the identity is per mount rather than per module.
 
 export function HostStrip(props: HostStripProps = {}): JSX.Element {
   const request = props.request ?? useSDK().request

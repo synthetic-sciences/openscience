@@ -198,8 +198,17 @@ export const NotebookRoutes = lazy(() =>
           }
         }
         const live = KernelRuntime.list(query.sessionID).filter((kernel) => owners.has(kernel.sessionID))
+        // Scoped per caller for the same reason /compute is: the CPU figure is a
+        // delta across the window since THIS caller's previous poll, so two
+        // panels sharing one scope truncate each other's window to the stagger
+        // between them, fall under the one-second floor, and both read
+        // Unavailable forever. `client` is deliberately read off the raw query
+        // rather than the validated one — it identifies a poller, it is not part
+        // of the route's contract, and an absent or forged value can only cost
+        // its own sender a window.
+        const caller = c.req.query("client")?.slice(0, 128) || "anonymous"
         const samples = await KernelMetrics.sampleAll(
-          "kernels",
+          `kernels:${caller}`,
           live.flatMap((kernel) => (kernel.active && kernel.process_id !== null ? [kernel.process_id] : [])),
         )
         const kernels = live.map((kernel) => {

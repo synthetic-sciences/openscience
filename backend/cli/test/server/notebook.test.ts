@@ -7,6 +7,7 @@ import { Session } from "../../src/session"
 import { Identifier } from "../../src/id/id"
 import { Server } from "../../src/server/server"
 import { KernelRuntime } from "../../src/science/kernel/registry"
+import { KernelMetrics } from "../../src/science/kernel/metrics"
 import { Sandbox } from "../../src/sandbox/sandbox"
 
 const alive = (pid: number) => {
@@ -1469,6 +1470,53 @@ describe("/notebook routes", () => {
 
         expect(result.kernels.live).toBeGreaterThan(0)
         expect("kernels" in result.cpu).toBe(false)
+
+        await app.request("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      },
+    })
+  }, 30_000)
+
+  test("gives each kernels-panel client its own sampling window instead of one shared scope", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const app = NotebookRoutes()
+        const session = await Session.create({})
+        const body = { sessionID: session.id, id: "analysis.ipynb", language: "python" } as const
+
+        expect(
+          (
+            await app.request("/execute", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...body, code: "warm = 1" }),
+            })
+          ).status,
+        ).toBe(200)
+
+        KernelMetrics.reset()
+        // Two panels — two tabs on the same session — poll this route. Each
+        // measures across the window since ITS OWN previous poll, so each must
+        // get its own baseline. Sharing one scope means whichever polls first
+        // advances it and the other's window collapses to the stagger between
+        // them, falls under the one-second floor, and reads Unavailable forever.
+        await app.request(`/kernels?sessionID=${session.id}&client=tab-a`)
+        await app.request(`/kernels?sessionID=${session.id}&client=tab-b`)
+
+        const keys = KernelMetrics.tracked()
+        const a = keys.filter((key) => key.startsWith("kernels:tab-a:"))
+        const b = keys.filter((key) => key.startsWith("kernels:tab-b:"))
+
+        // The same live pid, tracked once per client: two independent windows.
+        expect(a.length).toBeGreaterThan(0)
+        expect(b.length).toBeGreaterThan(0)
+        expect(a[0]?.split(":").at(-1)).toBe(b[0]?.split(":").at(-1))
 
         await app.request("/stop", {
           method: "POST",
