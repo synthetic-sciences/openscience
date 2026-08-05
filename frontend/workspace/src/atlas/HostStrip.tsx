@@ -36,7 +36,14 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
   // it so a poll only reallocates when the resource itself changes, and key the
   // render by position (Index) rather than by object (For) so the three DOM
   // nodes persist across polls instead of being torn down every 2.5s.
-  const tiles = createMemo(() => hostTiles(data()))
+  //
+  // Read `data.latest` rather than `data()`: `data()` re-registers with the
+  // nearest Suspense boundary on every in-flight fetch, which suspends the
+  // entire RightPane (see RightPane.tsx's Suspense around ComputeSurface) on
+  // every 2.5s poll. `.latest` only suspends on the first load and returns the
+  // previous value while a refetch is in flight, so this memo — and the pane
+  // around it — stays mounted across polls.
+  const tiles = createMemo(() => hostTiles(data.latest))
 
   return (
     <section class="host-strip" aria-label="Host capacity" data-testid="host-strip">

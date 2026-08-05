@@ -67,7 +67,14 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
   // by id (see use-kernel-list.ts), not the resource read directly — that
   // keeps unchanged kernel cards mounted across a poll instead of being torn
   // down and recreated every 2.5s.
-  const kernels = useKernelList(() => data()?.kernels)
+  //
+  // Read `data.latest` rather than `data()`: `data()` re-registers with the
+  // nearest Suspense boundary on every in-flight fetch, which suspends the
+  // entire RightPane on every 2.5s poll. `.latest` only suspends on the first
+  // load and returns the previous value while a refetch is in flight (see
+  // HostStrip.tsx for the full mechanism). `data.loading`, used below to
+  // disable the refresh button, is unaffected and left alone.
+  const kernels = useKernelList(() => data.latest?.kernels)
   const summary = createMemo(() => summarizeKernels(kernels))
   const ensureSession = async () => {
     if (params.id && params.id !== "new") return params.id

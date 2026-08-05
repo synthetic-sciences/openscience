@@ -17,10 +17,13 @@ const vite = await createServer({
     resolve: { conditions: ["browser", "production"] },
   },
 })
-const [subject, web, core] = await Promise.all([
+const [subject, web, core, suspenseFixture] = await Promise.all([
   vite.ssrLoadModule("/src/atlas/HostStrip.tsx") as Promise<typeof import("./HostStrip")>,
   vite.ssrLoadModule("solid-js/web") as Promise<typeof import("solid-js/web")>,
   vite.ssrLoadModule("solid-js") as Promise<typeof import("solid-js")>,
+  vite.ssrLoadModule("/src/atlas/host-strip-suspense-fixture.tsx") as Promise<
+    typeof import("./host-strip-suspense-fixture")
+  >,
 ])
 
 // Shaped like a real /notebook/compute body, so the populated tiles are read
@@ -187,6 +190,76 @@ describe("host strip", () => {
     expect(host.querySelector('[data-host-tile="kernels"]')).toBe(kernelsTile)
     expect(host.contains(memoryTile)).toBe(true)
     // Freshness: the values inside those same nodes actually moved.
+    expect(values(host)).toEqual(["900 MB", "1.1 cores", "5"])
+  })
+
+  test("stays mounted with no Suspense fallback while a poll is genuinely in flight", async () => {
+    // The regression this guards: RightPane.tsx wraps ComputeSurface (and so
+    // HostStrip) in a <Suspense>. Reading the resource with `data()` re-registers
+    // with that boundary on every in-flight fetch — including a background poll —
+    // which suspends the whole pane until the request resolves. Reading
+    // `data.latest` instead only suspends on the very first load and returns the
+    // previous value while a refetch is outstanding. A transport that resolves
+    // immediately can never distinguish the two, so this holds the second
+    // request open with a deferred promise to create a real window where the
+    // fetch is in flight, then asserts directly inside that window.
+    //
+    // This is mounted through host-strip-suspense-fixture.tsx rather than the
+    // guard()/core.createComponent(core.Suspense, ...) pattern used elsewhere in
+    // this file: Suspense's internal effect-resumption needs to run on the same
+    // solid-js module instance as the render() root, and the fixture's
+    // HostStrip + Suspense + render all come from one file's import graph so
+    // they share an instance; core and web here are loaded as separate
+    // ssrLoadModule calls and do not.
+    const refreshed = {
+      memory: { total: 16_000_000_000, available: 5_000_000_000, kernels: 900_000_000 },
+      cpu: { cores: 8, busy: 4.4, kernels: 1.1 },
+      kernels: { live: 5, running: 3 },
+    }
+    let settleSecond: ((response: Response) => void) | undefined
+    let requests = 0
+    const respond = (_path: string): Promise<Response> => {
+      requests += 1
+      if (requests === 1) return serving()
+      return new Promise<Response>((resolve) => (settleSecond = resolve))
+    }
+    const fallback = () => {
+      const marker = document.createElement("p")
+      marker.dataset.fallback = "true"
+      marker.textContent = "loading host strip"
+      return marker
+    }
+
+    const host = document.createElement("div")
+    document.body.append(host)
+    cleanups.push(suspenseFixture.mountHostStripInSuspense(respond, fallback, host))
+
+    // Let the first load resolve; the fallback should be gone and tiles present.
+    await Bun.sleep(20)
+    expect(host.querySelector("[data-fallback]")).toBeNull()
+    expect(values(host)).toEqual(["412 MB", "0.4 cores", "2"])
+    const memoryTile = host.querySelector('[data-host-tile="memory"]')
+    expect(memoryTile).not.toBeNull()
+
+    // Trigger a refetch and let it reach the transport, but hold it open.
+    document.dispatchEvent(new Event("visibilitychange"))
+    await Bun.sleep(20)
+    expect(requests).toBe(2)
+    expect(settleSecond).toBeDefined()
+
+    // While the second request is genuinely unresolved: no fallback, and the
+    // captured tile node is still the one mounted in the document.
+    expect(host.querySelector("[data-fallback]")).toBeNull()
+    expect(memoryTile?.isConnected).toBe(true)
+    expect(host.querySelector('[data-host-tile="memory"]')).toBe(memoryTile)
+    expect(values(host)).toEqual(["412 MB", "0.4 cores", "2"])
+
+    // Resolve it and confirm the value actually moved.
+    settleSecond?.(new Response(JSON.stringify(refreshed), { headers: { "content-type": "application/json" } }))
+    await Bun.sleep(20)
+
+    expect(host.querySelector("[data-fallback]")).toBeNull()
+    expect(host.querySelector('[data-host-tile="memory"]')).toBe(memoryTile)
     expect(values(host)).toEqual(["900 MB", "1.1 cores", "5"])
   })
 
