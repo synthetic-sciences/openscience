@@ -25,6 +25,16 @@ export namespace KernelMetrics {
     at: number
   }
 
+  // One row of unix `ps` output: a single process tagged with the process
+  // GROUP it belongs to. Kept separate from `Reading` because a kernel's
+  // reading is a SUM of rows (see `group`), not a single row.
+  export interface Row {
+    pid: number
+    pgid: number
+    cpu_seconds: number
+    memory_bytes?: number
+  }
+
   // The delta arithmetic on its own, so a known cpu delta across a known window
   // can be asserted exactly instead of against a wall clock. cpu_percent is
   // percent of ONE core, so a process pinning three cores reads 300. A window
@@ -58,16 +68,43 @@ export namespace KernelMetrics {
   }
 
   export function unix(text: string) {
-    const readings = new Map<number, Reading>()
+    const rows: Row[] = []
     for (const line of text.trim().split("\n")) {
-      const [id, time, rss] = line.trim().split(/\s+/)
+      const [id, gid, time, rss] = line.trim().split(/\s+/)
       const pid = Number.parseInt(id ?? "", 10)
+      const pgid = Number.parseInt(gid ?? "", 10)
       const cpu = seconds(time ?? "")
       const resident = Number.parseInt(rss ?? "", 10)
-      if (!Number.isFinite(pid) || cpu === undefined) continue
-      readings.set(pid, {
+      if (!Number.isFinite(pid) || !Number.isFinite(pgid) || cpu === undefined) continue
+      rows.push({
+        pid,
+        pgid,
         cpu_seconds: cpu,
         ...(Number.isFinite(resident) ? { memory_bytes: resident * 1024 } : {}),
+      })
+    }
+    return rows
+  }
+
+  // Folds every row belonging to a wanted process group into ONE Reading —
+  // the kernel leader plus every descendant it forked (the Python
+  // interpreter, plus any joblib/BLAS/multiprocessing workers), which all
+  // share its pgid because notebook.ts spawns the kernel with detached: true
+  // (setsid) specifically to make it its own process-group leader. A row
+  // whose pgid nobody asked about is dropped, so unrelated groups never
+  // bleed into each other's sum — pure and spawn-free, so it is testable
+  // against fixture rows alone.
+  export function group(rows: Row[], pgids: Iterable<number>) {
+    const wanted = new Set(pgids)
+    const readings = new Map<number, Reading>()
+    for (const row of rows) {
+      if (!wanted.has(row.pgid)) continue
+      const current = readings.get(row.pgid)
+      readings.set(row.pgid, {
+        cpu_seconds: (current?.cpu_seconds ?? 0) + row.cpu_seconds,
+        ...(current?.memory_bytes === undefined && row.memory_bytes === undefined
+          ? {}
+          : { memory_bytes: (current?.memory_bytes ?? 0) + (row.memory_bytes ?? 0) }),
       })
     }
     return readings
@@ -101,6 +138,12 @@ export namespace KernelMetrics {
 
   const read = async (pids: number[]) => {
     if (process.platform === "win32") {
+      // Windows Get-Process has no cheap way to enumerate a process's
+      // descendants (no pgid concept), so this stays a straight per-pid
+      // sample of the sandbox wrapper only — the same undercount the
+      // Linux/macOS path had before this fix. Walking each kernel's child
+      // tree via Win32_Process.ParentProcessId is a separate job; nobody can
+      // test it in this environment.
       const output = await $`powershell -NoProfile -NonInteractive -Command ${script(pids)}`
         .quiet()
         .text()
@@ -108,11 +151,19 @@ export namespace KernelMetrics {
       return windows(output)
     }
     if (process.platform !== "darwin" && process.platform !== "linux") return new Map<number, Reading>()
-    const output = await $`ps -o pid=,time=,rss= -p ${pids.join(",")}`
+    // One spawn samples EVERY process on the host, tagged with its group,
+    // rather than the pids we asked about — there is no portable, reliably
+    // pgid-scoped `ps` selector across GNU (Linux) and BSD (macOS) ps: GNU
+    // ps's own `-g` selects by session, not process group (verified against
+    // this host's procps-ng — a distinct pgid within the same session comes
+    // back empty). Filtering the full listing down to the wanted pgids in
+    // `group()` sidesteps that ambiguity entirely while keeping exactly one
+    // spawn per poll, same as before.
+    const output = await $`ps -Ao pid=,pgid=,time=,rss=`
       .quiet()
       .text()
       .catch(() => "")
-    return unix(output)
+    return group(unix(output), pids)
   }
 
   // Keyed by caller scope AND pid. Independent pollers watch the same pids on
