@@ -66,6 +66,15 @@ Sampling is a module-level rolling baseline: each call diffs against the previou
 stores the current one, so a 2.5 s poll costs nothing extra. A cold call with no baseline — or a baseline
 older than 30 s, where the average would be meaningless — takes one inline 200 ms sample instead.
 
+`busy` carries the same **one-second minimum window** as `KernelMetrics.derive`, for the same reason:
+`os.cpus()` counts in 10 ms jiffies, so two concurrent requests measure a span in which at most one core has
+ticked once — landing on idle that reads `busy: 0` on a host running at three cores, landing on user/sys it
+reads every core pegged. Measured over 120 concurrent polls with a core deliberately held: 27 fabricated
+zeros and 5 fully-pegged readings. A window under a second is refused and `busy` is **omitted**; the baseline
+retention rule already covers it, keeping the older mark so the next call spans something real. The cold
+path keeps its own 200 ms window — it takes both marks itself, so no concurrent caller can truncate it, and
+blocking the first paint for a full second buys precision nobody asked for.
+
 ### `GET /notebook/compute` (new route)
 
 Machine-wide, takes no `sessionID`. Distinct from `GET /notebook/kernels`, which stays session-scoped: the
@@ -103,15 +112,53 @@ Both problems have the same fix. Every platform can cheaply report **cumulative 
 bytes** for a PID. Sample those, keep the previous sample, and derive cores from the delta — the standard
 psutil formula, `cores = Δcpu_seconds / Δwall_seconds`. One algorithm, three command shapes:
 
-| Platform     | Command                                                                        | Yields                                             |
-| ------------ | ------------------------------------------------------------------------------ | -------------------------------------------------- |
-| Linux, macOS | `ps -o pid=,time=,rss= -p <pids>`                                              | cumulative `[[dd-]hh:]mm:ss`, RSS in KB            |
-| Windows      | `powershell -NoProfile -NonInteractive -Command "Get-Process -Id <pids> \| …"` | `CPU` (cumulative seconds), `WorkingSet64` (bytes) |
+| Platform     | Command                                                                        | Yields                                                |
+| ------------ | ------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| Linux, macOS | `ps -Ao pid=,pgid=,time=,rss=`                                                 | every host process tagged with its process GROUP      |
+| Linux        | `/proc/<pid>/smaps_rollup` per group member (no spawn)                         | `Pss:` in kB — the proportional share of shared pages |
+| Windows      | `powershell -NoProfile -NonInteractive -Command "Get-Process -Id <pids> \| …"` | `CPU` (cumulative seconds), `WorkingSet64` (bytes)    |
 
 Sampling batches every PID into **one** spawn per poll, replacing today's spawn-per-kernel `Promise.all`.
 
+**A kernel is a process GROUP, not a process.** `notebook.ts` spawns each kernel `detached: true`, so the
+leader is its own process-group leader and every descendant it forks — the interpreter, joblib/BLAS/
+multiprocessing workers, `subprocess` children — shares its pgid. Sampling the leader alone reports a
+fraction of what the kernel actually holds. There is no portable pgid selector across GNU and BSD `ps`
+(GNU `-g` selects by _session_), so the sampler lists the whole host once and filters to the wanted pgids
+in `group()` — still one spawn per poll.
+
+**CPU is kept per member, never pre-summed.** The sum of a group's _cumulative_ counters is not monotonic
+across a membership change: when a forked worker is reaped its accumulated seconds leave the total, so the
+next delta reads near zero (rendered `0.0 cores`) or negative (rendered `Unavailable`) while the group is
+pegging a core. `derive` therefore sums the per-pid deltas for pids present in **both** samples. A member
+that vanished contributes nothing further; one that appeared starts accumulating from the poll it appeared
+in. Every term is one process's own non-negative progress, so the aggregate is monotonic by construction.
+The cost is that work done entirely by a process born and reaped inside one window is invisible — an
+undercount, never a fabricated figure.
+
+**Memory is proportional (PSS) where the kernel can report it.** Summing RSS across a group counts every
+copy-on-write page once per member: a leader holding 300 MB that forks three idle children reads as 1.29 GB,
+a 4.03x overcount that can exceed `memory.total` and silently peg the meter (`ratio()` clamps to 1). On
+Linux the sampler reads `/proc/<pid>/smaps_rollup` for each member and sums `Pss:`, which divides each shared
+page by the number of processes mapping it — exactly the "how much of this machine do my kernels hold"
+question the strip asks. `smaps_rollup` is the kernel's own whole-process rollup, far cheaper than parsing
+`smaps`, and these are `/proc` reads rather than spawns.
+
+Where **any** member's rollup is unreadable — macOS, Linux before 4.14, permission denied, a member that
+died between the `ps` listing and the read — the group falls back to the summed RSS, because mixing PSS for
+some members with RSS for others reports a figure that is neither. **That fallback overcounts shared pages,
+by design:** a wrong-but-real number beats omitting a figure the machine genuinely holds. A missing rollup
+never produces a `0`.
+
+**Baselines expire.** A mark is keyed by caller scope and pid, and is dropped once it is older than 30s (the
+same bound `host.ts` uses for its rolling baseline). Death-eviction only reaches pids the current poll named
+and the routes only pass _active_ pids, so without an age sweep a stopped kernel's mark would live as long
+as the process — unbounded growth, and a fabricated near-zero once the OS recycled that pid onto a stranger.
+`derive` refuses a window that old as well, so a leaked mark could never be used even if the sweep missed it.
+
 Each platform's stdout parser is a pure exported function taking text and returning
-`Map<pid, { cpu_seconds, memory_bytes }>`, so both are testable on any host against fixture text.
+`Map<pgid, { cpu: Map<pid, cpu_seconds>, memory_bytes }>`, so both are testable on any host against fixture
+text. `pss()` is likewise pure over fixture `smaps_rollup` text.
 
 **The wire contract does not change.** `KernelMetrics.Sample` keeps emitting `cpu_percent` — percent of one
 core, the same units `ps %cpu` used — now computed as `100 × Δcpu_seconds / Δwall_seconds` instead of read
@@ -146,7 +193,8 @@ that claims to show current load. Switching to a cumulative-time delta fixes it 
 effect of making Windows work.
 
 The first poll has no baseline, so `cpu` is **absent** for one interval and the tile reads `Unavailable` —
-consistent with the never-render-0 contract. Memory needs no baseline and is present immediately.
+consistent with the never-render-0 contract. So is the first poll after a mark expires, and any poll whose
+window is under a second. Memory needs no baseline and is present immediately.
 
 ### `frontend/workspace/src/atlas/HostStrip.tsx` (new)
 
@@ -198,24 +246,39 @@ the body states what the list actually shows.
 - A kernel process that exits between `list()` and `sample()` while other kernels remain live → that entry
   contributes nothing to the aggregate rather than failing the request; the field still reports the surviving
   kernels' true sum, or is omitted only if none of them sampled either.
+- `/notebook/kernels` fails → the panel's fetcher resolves to no inventory rather than rejecting, the same
+  shape `HostStrip` uses. An errored resource re-throws where the render path reads it, and `app.tsx`'s is
+  the only `ErrorBoundary` in the app, so a rejecting 2.5 s poll replaces the entire workspace. The panel
+  shows its "Kernel inventory unavailable" alert and an empty state that says the list could not be read —
+  a failed poll degrades visibly rather than looking like an idle session.
+- `/proc/<pid>/smaps_rollup` unreadable for any member of a group → silent fall back to the summed RSS for
+  that group, which overcounts shared pages. Not an error state, and never a `0`.
 
 ## Testing
 
 No mocks, per `AGENTS.md`.
 
-| Test                     | Asserts                                                                                                                                 |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `host.test.ts`           | Real-machine invariants: `total > 0`, `0 < available ≤ total`, `cores ≥ 1`, `0 ≤ busy ≤ cores`                                          |
-| `host.test.ts`           | `MemAvailable` parsed from a fixture `/proc/meminfo` string; malformed input falls back                                                 |
-| `host.test.ts`           | Two `snapshot()` calls in sequence return a `busy` from the rolling baseline, not a re-sample                                           |
-| `metrics.test.ts`        | `ps` and `Get-Process` output parsers, both against fixture stdout, on any host platform                                                |
-| `metrics.test.ts`        | `ps` elapsed-time formats parse: `0:04`, `12:34`, `1:02:03`, `2-03:04:05`                                                               |
-| `metrics.test.ts`        | Unparseable output yields `{}`, not `{ cpu_percent: NaN }`                                                                              |
-| `metrics.test.ts`        | Cores derive from a delta: two fixture samples with known Δcpu and Δwall give the expected cores; a single sample yields no `cpu` field |
-| `metrics.test.ts`        | A PID present in the first sample and gone from the second drops out without throwing                                                   |
-| `notebook.test.ts`       | `GET /notebook/compute` returns the shape; `kernels` sub-fields absent rather than `0` when unsampled                                   |
-| `ComputeSurface.test.ts` | Strip renders before the tablist in DOM order                                                                                           |
-| `HostStrip.test.ts`      | Meter clamps; `Unavailable` on a failed load; no `0` rendered for absent fields                                                         |
+| Test                       | Asserts                                                                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `host.test.ts`             | Real-machine invariants: `total > 0`, `0 < available ≤ total`, `cores ≥ 1`, `0 ≤ busy ≤ cores`                                               |
+| `host.test.ts`             | `MemAvailable` parsed from a fixture `/proc/meminfo` string; malformed input falls back                                                      |
+| `host.test.ts`             | Two `snapshot()` calls in sequence return a `busy` from the rolling baseline, not a re-sample                                                |
+| `host.test.ts`             | A sub-second window yields no `busy` and holds the older baseline; exactly 1 s still measures                                                |
+| `host.test.ts`             | 60 concurrent `snapshot()` pairs against a held core: every reading is absent or strictly inside `(0, cores)`                                |
+| `metrics.test.ts`          | `ps`, `Get-Process` and `smaps_rollup` parsers, all against fixture text, on any host platform                                               |
+| `metrics.test.ts`          | `ps` elapsed-time formats parse: `0:04`, `12:34`, `1:02:03`, `2-03:04:05`                                                                    |
+| `metrics.test.ts`          | Unparseable output yields `{}`, not `{ cpu_percent: NaN }`                                                                                   |
+| `metrics.test.ts`          | Cores derive from a delta: two fixture samples with known Δcpu and Δwall give the expected cores; a single sample yields no `cpu` field      |
+| `metrics.test.ts`          | A reaped member cannot cancel out the group's work; a new member counts only from the poll it appeared in                                    |
+| `metrics.test.ts`          | A real leader forking and reaping a worker pool reports cpu on every poll while it stays busy                                                |
+| `metrics.test.ts`          | A real leader touching 200 MB then forking three children reports one 200 MB footprint, not four                                             |
+| `metrics.test.ts`          | A mark older than 30 s derives nothing, and the next poll of any scope sweeps it out of the baseline                                         |
+| `metrics.test.ts`          | A PID present in the first sample and gone from the second drops out without throwing                                                        |
+| `notebook.test.ts`         | `GET /notebook/compute` returns the shape; `kernels` sub-fields absent rather than `0` when unsampled, and a true `0` when no kernel is live |
+| `ComputeSurface.test.ts`   | Strip renders before the tablist in DOM order                                                                                                |
+| `HostStrip.test.ts`        | Meter clamps; `Unavailable` on a failed load; no `0` rendered for absent fields                                                              |
+| `host-tiles.test.ts`       | A body missing a section degrades that tile alone and never throws on the render path                                                        |
+| `KernelPanel.poll.test.ts` | A failed kernels poll resolves to no inventory instead of rejecting into the app-wide boundary                                               |
 
 ## Open risks
 
