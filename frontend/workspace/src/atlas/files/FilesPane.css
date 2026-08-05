@@ -549,6 +549,10 @@
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  /* The same gutter .files-search-row uses, so the count, the group headers and
+     the cards line up with the search box instead of hugging the pane edge. */
+  padding: 0 12px 12px;
+  overflow-y: auto;
 }
 
 .artifact-toolbar {
@@ -729,7 +733,7 @@
 .artifact-thumb {
   display: flex;
   overflow: hidden;
-  background: var(--color-bg-base);
+  background: var(--color-bg-subtle);
 }
 .artifact-card[data-layout="grid"] .artifact-thumb {
   height: 94px;
@@ -758,7 +762,7 @@
   padding: 8px 9px;
   overflow: hidden;
   color: var(--color-text-weak);
-  font-family: var(--font-family-mono);
+  font-family: var(--font-code);
   font-size: 7.4px;
   line-height: 1.55;
   white-space: pre;
@@ -780,7 +784,7 @@
   border: 1px solid var(--color-border-weak-base);
   border-radius: 6px;
   color: var(--color-text-faint);
-  font-family: var(--font-family-mono);
+  font-family: var(--font-code);
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -802,8 +806,8 @@
   border: 1px solid var(--color-border-weak-base);
   border-radius: 6px;
   opacity: 0;
-  background: var(--color-bg-base);
-  color: var(--color-text-weak);
+  background: var(--color-surface-solid);
+  color: var(--color-text);
   font: inherit;
   font-size: 13px;
   line-height: 1.35;
@@ -837,23 +841,29 @@
   background: transparent;
   cursor: default;
 }
+/* Fixed and placed in script: the menu is wider than a grid cell, so anchoring
+   it inside the card put the first column's menu at left: -16px, where the
+   pane's overflow: hidden cut it off entirely. */
 .artifact-menu {
-  position: absolute;
-  top: 30px;
-  right: 6px;
-  z-index: 6;
+  position: fixed;
+  visibility: hidden;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   min-width: 168px;
   padding: 4px;
   border: 1px solid var(--color-border-base);
   border-radius: 9px;
-  background: var(--color-bg-base);
-  box-shadow: 0 10px 26px -10px rgb(0 0 0 / 0.4);
+  background: var(--color-surface-solid);
+  box-shadow: 0 12px 30px -12px rgb(0 0 0 / 0.55);
 }
+/* The toolbar spans the pane, so anchoring this one to its right edge keeps it
+   inside without measurement. */
 .artifact-menu--prefs {
+  position: absolute;
   top: 30px;
   right: 0;
+  visibility: visible;
 }
 .artifact-menu button,
 .artifact-menu a {
@@ -880,8 +890,11 @@
   outline: 1px solid var(--color-text);
   outline-offset: -1px;
 }
-.artifact-menu__danger {
-  color: var(--color-text-critical, #e08a76);
+.artifact-menu button.artifact-menu__danger {
+  /* Compound, because `.artifact-menu button` above outranks a lone class and
+     was painting this in the ordinary text colour. --syntax-critical is the
+     only destructive colour this theme defines, and it varies by scheme. */
+  color: var(--syntax-critical);
 }
 .artifact-menu__check {
   flex: none;

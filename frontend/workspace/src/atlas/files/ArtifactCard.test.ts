@@ -122,6 +122,21 @@ describe("artifact card", () => {
     expect(host.querySelector("[data-card-menu]")?.getAttribute("aria-expanded")).toBe("false")
   })
 
+  // The menu is wider than a grid cell. Anchored inside the card it rendered at
+  // left: -16px in a real browser, where the pane's overflow: hidden cut it off,
+  // so it is placed in script against the viewport instead.
+  test("places the menu rather than letting it inherit the card's box", () => {
+    const host = mount(() => subject.ArtifactCard(props() as never))
+
+    host.querySelector<HTMLButtonElement>("[data-card-menu]")!.click()
+    const menu = host.querySelector<HTMLElement>("[role='menu']")!
+
+    expect(menu.style.visibility).toBe("visible")
+    expect(menu.style.left).not.toBe("")
+    expect(menu.style.top).not.toBe("")
+    expect(Number.parseFloat(menu.style.left)).toBeGreaterThanOrEqual(0)
+  })
+
   test("points Download at the raw route with download set", () => {
     const asked: Array<boolean | undefined> = []
     const host = mount(() =>

@@ -1,4 +1,4 @@
-import { Show, createSignal, type JSX } from "solid-js"
+import { Show, createSignal, onMount, type JSX } from "solid-js"
 import type { StoredArtifact } from "@/artifacts/store"
 import { ArtifactThumb, type ThumbProps } from "./ArtifactThumb"
 import { bytes } from "./bytes"
@@ -20,6 +20,25 @@ const ago = (created: number) => {
 
 export function ArtifactCard(props: CardProps): JSX.Element {
   const [open, setOpen] = createSignal(false)
+  let trigger: HTMLButtonElement | undefined
+
+  // The menu is wider than a grid cell, so anchoring it inside the card puts it
+  // off one edge or the other -- measured at -16px, and .files-pane clips with
+  // overflow: hidden, so the first column's menu was cut off rather than merely
+  // misplaced. Fixed placement, clamped to the viewport, is independent of both
+  // the column and the pane's own scroll.
+  const place = (menu: HTMLDivElement) => {
+    const anchor = trigger?.getBoundingClientRect()
+    if (!anchor) return
+    const box = menu.getBoundingClientRect()
+    const gap = 6
+    const left = Math.max(gap, Math.min(anchor.right - box.width, window.innerWidth - box.width - gap))
+    const below = anchor.bottom + gap
+    const top = below + box.height > window.innerHeight ? Math.max(gap, anchor.top - box.height - gap) : below
+    menu.style.left = `${Math.round(left)}px`
+    menu.style.top = `${Math.round(top)}px`
+    menu.style.visibility = "visible"
+  }
 
   const meta = () =>
     props.sizes
@@ -55,6 +74,7 @@ export function ArtifactCard(props: CardProps): JSX.Element {
 
       <button
         type="button"
+        ref={trigger}
         class="artifact-card__actions"
         data-card-menu
         aria-label={`Actions for ${props.artifact.title}`}
@@ -71,7 +91,7 @@ export function ArtifactCard(props: CardProps): JSX.Element {
           aria-label={`Dismiss actions for ${props.artifact.title}`}
           onClick={() => setOpen(false)}
         />
-        <div class="artifact-menu" role="menu">
+        <div class="artifact-menu" role="menu" ref={(node) => onMount(() => place(node))}>
           <button type="button" role="menuitem" data-action="open" onClick={() => act(props.onOpen)}>
             Open in tab
           </button>
