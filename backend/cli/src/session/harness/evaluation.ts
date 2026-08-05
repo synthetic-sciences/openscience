@@ -96,6 +96,10 @@ export namespace HarnessEvaluation {
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
+      failureDiscoveryReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       evaluator: z
         .object({
           name: z.string().min(1).max(200),
@@ -406,6 +410,19 @@ export namespace HarnessEvaluation {
         evaluatedAt: evaluation.evaluatedAt,
         recordedAt: evaluation.recordedAt!,
         requireQualified: evaluation.status === "passed" && final(evaluation),
+      })
+    }
+    if (evaluation.failureDiscoveryReceiptID && !contract.failureDiscovery) {
+      throw new Error(`Evaluation references a failure discovery receipt without a bound protocol`)
+    }
+    if (evaluation.failureDiscoveryReceiptID) {
+      const { HarnessFailure } = await import("./failure")
+      await HarnessFailure.assert({
+        contract,
+        receiptID: evaluation.failureDiscoveryReceiptID,
+        subject: evaluation.subject ?? { type: "run", id: evaluation.runID },
+        evaluatedAt: evaluation.evaluatedAt,
+        recordedAt: evaluation.recordedAt!,
       })
     }
     if (evaluation.status === "passed" && final(evaluation)) {

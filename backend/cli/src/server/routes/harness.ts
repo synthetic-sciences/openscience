@@ -10,6 +10,7 @@ import { HarnessConfirmation } from "@/session/harness/confirmation"
 import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
 import { HarnessEvolution } from "@/session/harness/evolution"
+import { HarnessFailure } from "@/session/harness/failure"
 import { HarnessJudge } from "@/session/harness/judge"
 import { HarnessLaunch } from "@/session/harness/launch"
 import { HarnessIntegrity } from "@/session/harness/integrity"
@@ -153,6 +154,98 @@ export const HarnessRoutes = lazy(() =>
       validator("param", z.object({ auditID: z.string().regex(/^[a-f0-9]{64}$/) })),
       validator("json", HarnessAudit.Access),
       async (c) => c.json(await HarnessAudit.seal(c.req.valid("param").auditID, c.req.valid("json"))),
+    )
+    .post(
+      "/failure-streams",
+      describeRoute({
+        summary: "Initialize a topic-aware adversarial failure stream",
+        description:
+          "Binds deterministic UCB1 topic allocation and server-derived failure anchors to a terminal active-audit receipt without adding generated cases to the population estimate.",
+        operationId: "harness.failure.initialize",
+        responses: {
+          200: {
+            description: "Topic-aware failure discovery state",
+            content: { "application/json": { schema: resolver(HarnessFailure.State) } },
+          },
+          ...errors(400, 403, 404, 409),
+        },
+      }),
+      validator("json", HarnessFailure.Initialize),
+      async (c) => c.json(await HarnessFailure.initialize(c.req.valid("json"))),
+    )
+    .post(
+      "/failure-streams/:streamID/status",
+      describeRoute({
+        summary: "Read a capability-protected failure discovery stream",
+        operationId: "harness.failure.status",
+        responses: {
+          200: {
+            description: "Topic-aware failure discovery state",
+            content: { "application/json": { schema: resolver(HarnessFailure.State) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ streamID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessFailure.Access),
+      async (c) => c.json(await HarnessFailure.status(c.req.valid("param").streamID, c.req.valid("json"))),
+    )
+    .post(
+      "/failure-streams/:streamID/selection",
+      describeRoute({
+        summary: "Select the next topic and authenticated failure anchors",
+        description:
+          "Forces every frozen topic once, then derives UCB1 from the immutable attempt journal with deterministic tie-breaking.",
+        operationId: "harness.failure.select",
+        responses: {
+          200: {
+            description: "Server-selected topic, anchors, and allocation evidence",
+            content: { "application/json": { schema: resolver(HarnessFailure.Selection) } },
+          },
+          ...errors(400, 403, 404, 409),
+        },
+      }),
+      validator("param", z.object({ streamID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessFailure.Access),
+      async (c) => c.json(await HarnessFailure.next(c.req.valid("param").streamID, c.req.valid("json"))),
+    )
+    .post(
+      "/failure-streams/:streamID/attempts",
+      describeRoute({
+        summary: "Record a validated adversarial generation attempt",
+        description:
+          "Consumes one attempt budget and derives admissibility and reward from the frozen correctness, topic, and novelty validators plus the target outcome.",
+        operationId: "harness.failure.observe",
+        responses: {
+          200: {
+            description: "Updated topic-aware failure discovery state",
+            content: { "application/json": { schema: resolver(HarnessFailure.State) } },
+          },
+          ...errors(400, 403, 404, 409),
+        },
+      }),
+      validator("param", z.object({ streamID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessFailure.Observe),
+      async (c) => c.json(await HarnessFailure.observe(c.req.valid("param").streamID, c.req.valid("json"))),
+    )
+    .post(
+      "/failure-streams/:streamID/receipt",
+      describeRoute({
+        summary: "Seal a terminal failure discovery receipt",
+        description:
+          "Content-addresses the exact audit source, subject, topic contract, attempt journal, replayed UCB statistics, failure yield, and diversity evidence.",
+        operationId: "harness.failure.seal",
+        responses: {
+          200: {
+            description: "Immutable topic-aware failure discovery receipt",
+            content: { "application/json": { schema: resolver(HarnessFailure.Receipt) } },
+          },
+          ...errors(400, 403, 404, 409),
+        },
+      }),
+      validator("param", z.object({ streamID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessFailure.Access),
+      async (c) => c.json(await HarnessFailure.seal(c.req.valid("param").streamID, c.req.valid("json"))),
     )
     .post(
       "/ablations",

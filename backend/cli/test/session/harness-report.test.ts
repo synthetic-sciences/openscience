@@ -275,6 +275,47 @@ describe("harness quality-cost reports", () => {
     expect(() => HarnessReport.compare([plain, report], plain.runID)).toThrow("only comparable")
   })
 
+  test("keeps topic-aware failure protocols and evidence-only receipts in report provenance", () => {
+    const hash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
+    const identity = (name: string) => ({
+      name,
+      version: "1",
+      promptSHA256: hash(`${name}-prompt`),
+      configSHA256: hash(`${name}-config`),
+    })
+    const base = contract("failure-report-base")
+    const audited = HarnessContract.Info.parse({
+      ...contract("failure-report-stream"),
+      audit: { mode: "failure", budget: 3, minSamples: 2, failureThreshold: 0.5 },
+      failureDiscovery: {
+        protocolVersion: "topic-aware-failure-v1",
+        sourcePoolSHA256: hash("source-pool"),
+        topicModel: { kind: "predefined", identity: identity("topic-model") },
+        topics: ["alpha", "beta"].map((id) => ({ id, commitment: hash(`topic-${id}`) })),
+        generator: identity("generator"),
+        validators: HarnessContract.FailureValidatorKind.options.map((kind) => ({
+          kind,
+          identity: identity(`${kind}-validator`),
+        })),
+        embedding: { identity: identity("embedding"), dimensions: 2 },
+        budget: 2,
+        anchorsPerAttempt: 1,
+        failureThreshold: 0.5,
+      },
+    })
+    const plain = HarnessReport.compile({ contract: base, evaluations: [evaluation(base, 0.8)], generatedAt: 3 })
+    const receiptID = "f".repeat(64)
+    const result = HarnessEvaluation.Info.parse({
+      ...evaluation(audited, 0.8),
+      failureDiscoveryReceiptID: receiptID,
+    })
+    const report = HarnessReport.compile({ contract: audited, evaluations: [result], generatedAt: 3 })
+    expect(report.quality.failureDiscoveryReceiptID).toBe(receiptID)
+    expect(report.quality.score).toBe(0.8)
+    expect(report.comparisonKey).not.toBe(plain.comparisonKey)
+    expect(() => HarnessReport.compare([plain, report], plain.runID)).toThrow("only comparable")
+  })
+
   test("refuses comparisons across different evaluator qualification protocols", () => {
     const audit = HarnessContract.EvaluatorAudit.parse({
       protocolVersion: "evaluator-audit-v1",

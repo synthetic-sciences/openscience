@@ -129,6 +129,16 @@ import type {
   HarnessEvolutionReceiptResponses,
   HarnessEvolutionRecordErrors,
   HarnessEvolutionRecordResponses,
+  HarnessFailureInitializeErrors,
+  HarnessFailureInitializeResponses,
+  HarnessFailureObserveErrors,
+  HarnessFailureObserveResponses,
+  HarnessFailureSealErrors,
+  HarnessFailureSealResponses,
+  HarnessFailureSelectErrors,
+  HarnessFailureSelectResponses,
+  HarnessFailureStatusErrors,
+  HarnessFailureStatusResponses,
   HarnessIntegrityReceiptErrors,
   HarnessIntegrityReceiptResponses,
   HarnessIntegrityRecordErrors,
@@ -3971,6 +3981,257 @@ export class Audit extends HeyApiClient {
   }
 }
 
+export class Failure extends HeyApiClient {
+  /**
+   * Initialize a topic-aware adversarial failure stream
+   *
+   * Binds deterministic UCB1 topic allocation and server-derived failure anchors to a terminal active-audit receipt without adding generated cases to the population estimate.
+   */
+  public initialize<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+      subject?: {
+        type: "run" | "candidate"
+        id: string
+        artifactSHA256: string
+      }
+      auditReceiptID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "auditReceiptID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessFailureInitializeResponses,
+      HarnessFailureInitializeErrors,
+      ThrowOnError
+    >({
+      url: "/harness/failure-streams",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected failure discovery stream
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      streamID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "streamID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessFailureStatusResponses,
+      HarnessFailureStatusErrors,
+      ThrowOnError
+    >({
+      url: "/harness/failure-streams/{streamID}/status",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Select the next topic and authenticated failure anchors
+   *
+   * Forces every frozen topic once, then derives UCB1 from the immutable attempt journal with deterministic tie-breaking.
+   */
+  public select<ThrowOnError extends boolean = false>(
+    parameters: {
+      streamID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "streamID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessFailureSelectResponses,
+      HarnessFailureSelectErrors,
+      ThrowOnError
+    >({
+      url: "/harness/failure-streams/{streamID}/selection",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Record a validated adversarial generation attempt
+   *
+   * Consumes one attempt budget and derives admissibility and reward from the frozen correctness, topic, and novelty validators plus the target outcome.
+   */
+  public observe<ThrowOnError extends boolean = false>(
+    parameters: {
+      streamID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+      selectionID?: string
+      generation?:
+        | {
+            status: "failed"
+            mode: "generator_error" | "timeout" | "invalid_output" | "other"
+            outputSHA256?: string
+            evidence: Array<string>
+          }
+        | {
+            status: "generated"
+            caseSHA256: string
+            outputSHA256: string
+            embedding: Array<number>
+            evidence: Array<string>
+          }
+      validations?: Array<{
+        kind: "correctness" | "topic" | "novelty"
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        evidence: Array<string>
+        note?: string
+      }>
+      outcome?: {
+        loss: number
+        failure: boolean
+        outputSHA256: string
+        evidence: Array<string>
+      }
+      evaluatedAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "streamID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "selectionID" },
+            { in: "body", key: "generation" },
+            { in: "body", key: "validations" },
+            { in: "body", key: "outcome" },
+            { in: "body", key: "evaluatedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessFailureObserveResponses,
+      HarnessFailureObserveErrors,
+      ThrowOnError
+    >({
+      url: "/harness/failure-streams/{streamID}/attempts",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Seal a terminal failure discovery receipt
+   *
+   * Content-addresses the exact audit source, subject, topic contract, attempt journal, replayed UCB statistics, failure yield, and diversity evidence.
+   */
+  public seal<ThrowOnError extends boolean = false>(
+    parameters: {
+      streamID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "streamID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessFailureSealResponses, HarnessFailureSealErrors, ThrowOnError>({
+      url: "/harness/failure-streams/{streamID}/receipt",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Ablation extends HeyApiClient {
   /**
    * Freeze a matched scientific ablation plan
@@ -5962,6 +6223,73 @@ export class Harness extends HeyApiClient {
         }
         promotionRequired?: boolean
       }
+      failureDiscovery?: {
+        protocolVersion: "topic-aware-failure-v1"
+        sourcePoolSHA256: string
+        topicModel: {
+          kind: "predefined" | "bertopic"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        }
+        topics: Array<{
+          id: string
+          commitment: string
+        }>
+        generator: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        validators: [
+          {
+            kind: "correctness" | "topic" | "novelty"
+            identity: {
+              name: string
+              version: string
+              promptSHA256: string
+              configSHA256: string
+            }
+          },
+          {
+            kind: "correctness" | "topic" | "novelty"
+            identity: {
+              name: string
+              version: string
+              promptSHA256: string
+              configSHA256: string
+            }
+          },
+          {
+            kind: "correctness" | "topic" | "novelty"
+            identity: {
+              name: string
+              version: string
+              promptSHA256: string
+              configSHA256: string
+            }
+          },
+        ]
+        embedding: {
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+          dimensions: number
+          regularization?: number
+        }
+        budget: number
+        anchorsPerAttempt: number
+        exploration?: number
+        failureThreshold: number
+        targetFailures?: number
+      }
       launch?: {
         protocolVersion: "benchmark-launch-v1"
         runner: {
@@ -6333,6 +6661,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "search" },
             { in: "body", key: "orchestration" },
             { in: "body", key: "audit" },
+            { in: "body", key: "failureDiscovery" },
             { in: "body", key: "launch" },
             { in: "body", key: "recipe" },
             { in: "body", key: "integrity" },
@@ -6395,6 +6724,7 @@ export class Harness extends HeyApiClient {
       semanticReceiptID?: string
       replicationReceiptID?: string
       auditReceiptID?: string
+      failureDiscoveryReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
       metrics?: {
@@ -6439,6 +6769,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "semanticReceiptID" },
             { in: "body", key: "replicationReceiptID" },
             { in: "body", key: "auditReceiptID" },
+            { in: "body", key: "failureDiscoveryReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
             { in: "body", key: "metrics" },
@@ -6609,6 +6940,11 @@ export class Harness extends HeyApiClient {
   private _audit?: Audit
   get audit(): Audit {
     return (this._audit ??= new Audit({ client: this.client }))
+  }
+
+  private _failure?: Failure
+  get failure(): Failure {
+    return (this._failure ??= new Failure({ client: this.client }))
   }
 
   private _ablation?: Ablation

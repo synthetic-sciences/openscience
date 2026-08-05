@@ -36,6 +36,7 @@ export namespace HarnessAdapter {
       search: z.enum(["adaptive", "static"]).optional(),
       orchestration: HarnessContract.Orchestration.optional(),
       audit: HarnessContract.Audit.optional(),
+      failureDiscovery: HarnessContract.FailureDiscovery.optional(),
       launch: HarnessContract.Launch.optional(),
       recipe: HarnessRecipe.Selection.optional(),
       integrity: HarnessContract.Integrity.optional(),
@@ -234,6 +235,10 @@ export namespace HarnessAdapter {
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
       auditReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      failureDiscoveryReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -495,6 +500,7 @@ export namespace HarnessAdapter {
           ? HarnessContract.adaptiveSearch
           : undefined,
       audit: task.audit,
+      failureDiscovery: task.failureDiscovery,
       launch: task.launch,
       recipe,
       integrity: task.integrity,
@@ -627,6 +633,7 @@ export namespace HarnessAdapter {
       semanticReceiptID: value.semanticReceiptID,
       replicationReceiptID: value.replicationReceiptID,
       auditReceiptID: value.auditReceiptID,
+      failureDiscoveryReceiptID: value.failureDiscoveryReceiptID,
       evaluator: binding.evaluator,
       status: value.status,
       score: value.score,

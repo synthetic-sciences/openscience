@@ -8281,6 +8281,893 @@ export type HarnessAuditSealResponses = {
 
 export type HarnessAuditSealResponse = HarnessAuditSealResponses[keyof HarnessAuditSealResponses]
 
+export type HarnessFailureInitializeData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifactSHA256: string
+    }
+    auditReceiptID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/failure-streams"
+}
+
+export type HarnessFailureInitializeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessFailureInitializeError = HarnessFailureInitializeErrors[keyof HarnessFailureInitializeErrors]
+
+export type HarnessFailureInitializeResponses = {
+  /**
+   * Topic-aware failure discovery state
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "topic-aware-failure-v1"
+    streamID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifactSHA256: string
+    }
+    auditReceiptID: string
+    sourcePoolSHA256: string
+    anchors: Array<{
+      id: string
+      commitment: string
+      loss: number
+    }>
+    config: {
+      protocolVersion: "topic-aware-failure-v1"
+      sourcePoolSHA256: string
+      topicModel: {
+        kind: "predefined" | "bertopic"
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+      }
+      topics: Array<{
+        id: string
+        commitment: string
+      }>
+      generator: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      validators: [
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+      ]
+      embedding: {
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        dimensions: number
+        regularization?: number
+      }
+      budget: number
+      anchorsPerAttempt: number
+      exploration?: number
+      failureThreshold: number
+      targetFailures?: number
+    }
+    status: "active" | "completed"
+    stopReason?: "budget_exhausted" | "failure_target_reached"
+    pending?: {
+      selectionID: string
+      round: number
+      topic: {
+        id: string
+        commitment: string
+      }
+      anchors: Array<{
+        id: string
+        commitment: string
+        loss: number
+      }>
+      allocation: {
+        phase: "initialization" | "ucb1"
+        pulls: number
+        rewards: number
+        score: number
+      }
+      selectedAt: number
+    }
+    attempts: Array<{
+      attemptID: string
+      selection: {
+        selectionID: string
+        round: number
+        topic: {
+          id: string
+          commitment: string
+        }
+        anchors: Array<{
+          id: string
+          commitment: string
+          loss: number
+        }>
+        allocation: {
+          phase: "initialization" | "ucb1"
+          pulls: number
+          rewards: number
+          score: number
+        }
+        selectedAt: number
+      }
+      generation:
+        | {
+            status: "failed"
+            mode: "generator_error" | "timeout" | "invalid_output" | "other"
+            outputSHA256?: string
+            evidence: Array<string>
+          }
+        | {
+            status: "generated"
+            caseSHA256: string
+            outputSHA256: string
+            embedding: Array<number>
+            evidence: Array<string>
+          }
+      validations: Array<{
+        kind: "correctness" | "topic" | "novelty"
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        evidence: Array<string>
+        note?: string
+      }>
+      outcome?: {
+        loss: number
+        failure: boolean
+        outputSHA256: string
+        evidence: Array<string>
+      }
+      admissible: boolean
+      reward: 0 | 1
+      evaluatedAt: number
+      recordedAt: number
+    }>
+    statistics: {
+      attempts: number
+      generated: number
+      admissible: number
+      failures: number
+      invalid: number
+      samplesToFirstFailure?: number
+      failureRate: number
+      topicEntropy: number
+      embeddingLogDet: number
+      topics: {
+        [key: string]: {
+          pulls: number
+          rewards: number
+          rate: number
+        }
+      }
+    }
+    revision: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type HarnessFailureInitializeResponse =
+  HarnessFailureInitializeResponses[keyof HarnessFailureInitializeResponses]
+
+export type HarnessFailureStatusData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    streamID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/failure-streams/{streamID}/status"
+}
+
+export type HarnessFailureStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessFailureStatusError = HarnessFailureStatusErrors[keyof HarnessFailureStatusErrors]
+
+export type HarnessFailureStatusResponses = {
+  /**
+   * Topic-aware failure discovery state
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "topic-aware-failure-v1"
+    streamID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifactSHA256: string
+    }
+    auditReceiptID: string
+    sourcePoolSHA256: string
+    anchors: Array<{
+      id: string
+      commitment: string
+      loss: number
+    }>
+    config: {
+      protocolVersion: "topic-aware-failure-v1"
+      sourcePoolSHA256: string
+      topicModel: {
+        kind: "predefined" | "bertopic"
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+      }
+      topics: Array<{
+        id: string
+        commitment: string
+      }>
+      generator: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      validators: [
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+      ]
+      embedding: {
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        dimensions: number
+        regularization?: number
+      }
+      budget: number
+      anchorsPerAttempt: number
+      exploration?: number
+      failureThreshold: number
+      targetFailures?: number
+    }
+    status: "active" | "completed"
+    stopReason?: "budget_exhausted" | "failure_target_reached"
+    pending?: {
+      selectionID: string
+      round: number
+      topic: {
+        id: string
+        commitment: string
+      }
+      anchors: Array<{
+        id: string
+        commitment: string
+        loss: number
+      }>
+      allocation: {
+        phase: "initialization" | "ucb1"
+        pulls: number
+        rewards: number
+        score: number
+      }
+      selectedAt: number
+    }
+    attempts: Array<{
+      attemptID: string
+      selection: {
+        selectionID: string
+        round: number
+        topic: {
+          id: string
+          commitment: string
+        }
+        anchors: Array<{
+          id: string
+          commitment: string
+          loss: number
+        }>
+        allocation: {
+          phase: "initialization" | "ucb1"
+          pulls: number
+          rewards: number
+          score: number
+        }
+        selectedAt: number
+      }
+      generation:
+        | {
+            status: "failed"
+            mode: "generator_error" | "timeout" | "invalid_output" | "other"
+            outputSHA256?: string
+            evidence: Array<string>
+          }
+        | {
+            status: "generated"
+            caseSHA256: string
+            outputSHA256: string
+            embedding: Array<number>
+            evidence: Array<string>
+          }
+      validations: Array<{
+        kind: "correctness" | "topic" | "novelty"
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        evidence: Array<string>
+        note?: string
+      }>
+      outcome?: {
+        loss: number
+        failure: boolean
+        outputSHA256: string
+        evidence: Array<string>
+      }
+      admissible: boolean
+      reward: 0 | 1
+      evaluatedAt: number
+      recordedAt: number
+    }>
+    statistics: {
+      attempts: number
+      generated: number
+      admissible: number
+      failures: number
+      invalid: number
+      samplesToFirstFailure?: number
+      failureRate: number
+      topicEntropy: number
+      embeddingLogDet: number
+      topics: {
+        [key: string]: {
+          pulls: number
+          rewards: number
+          rate: number
+        }
+      }
+    }
+    revision: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type HarnessFailureStatusResponse = HarnessFailureStatusResponses[keyof HarnessFailureStatusResponses]
+
+export type HarnessFailureSelectData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    streamID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/failure-streams/{streamID}/selection"
+}
+
+export type HarnessFailureSelectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessFailureSelectError = HarnessFailureSelectErrors[keyof HarnessFailureSelectErrors]
+
+export type HarnessFailureSelectResponses = {
+  /**
+   * Server-selected topic, anchors, and allocation evidence
+   */
+  200: {
+    selectionID: string
+    round: number
+    topic: {
+      id: string
+      commitment: string
+    }
+    anchors: Array<{
+      id: string
+      commitment: string
+      loss: number
+    }>
+    allocation: {
+      phase: "initialization" | "ucb1"
+      pulls: number
+      rewards: number
+      score: number
+    }
+    selectedAt: number
+  }
+}
+
+export type HarnessFailureSelectResponse = HarnessFailureSelectResponses[keyof HarnessFailureSelectResponses]
+
+export type HarnessFailureObserveData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+    selectionID: string
+    generation:
+      | {
+          status: "failed"
+          mode: "generator_error" | "timeout" | "invalid_output" | "other"
+          outputSHA256?: string
+          evidence: Array<string>
+        }
+      | {
+          status: "generated"
+          caseSHA256: string
+          outputSHA256: string
+          embedding: Array<number>
+          evidence: Array<string>
+        }
+    validations: Array<{
+      kind: "correctness" | "topic" | "novelty"
+      status: "passed" | "failed" | "inconclusive"
+      score?: number
+      evidence: Array<string>
+      note?: string
+    }>
+    outcome?: {
+      loss: number
+      failure: boolean
+      outputSHA256: string
+      evidence: Array<string>
+    }
+    evaluatedAt: number
+  }
+  path: {
+    streamID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/failure-streams/{streamID}/attempts"
+}
+
+export type HarnessFailureObserveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessFailureObserveError = HarnessFailureObserveErrors[keyof HarnessFailureObserveErrors]
+
+export type HarnessFailureObserveResponses = {
+  /**
+   * Updated topic-aware failure discovery state
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "topic-aware-failure-v1"
+    streamID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifactSHA256: string
+    }
+    auditReceiptID: string
+    sourcePoolSHA256: string
+    anchors: Array<{
+      id: string
+      commitment: string
+      loss: number
+    }>
+    config: {
+      protocolVersion: "topic-aware-failure-v1"
+      sourcePoolSHA256: string
+      topicModel: {
+        kind: "predefined" | "bertopic"
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+      }
+      topics: Array<{
+        id: string
+        commitment: string
+      }>
+      generator: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      validators: [
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+      ]
+      embedding: {
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        dimensions: number
+        regularization?: number
+      }
+      budget: number
+      anchorsPerAttempt: number
+      exploration?: number
+      failureThreshold: number
+      targetFailures?: number
+    }
+    status: "active" | "completed"
+    stopReason?: "budget_exhausted" | "failure_target_reached"
+    pending?: {
+      selectionID: string
+      round: number
+      topic: {
+        id: string
+        commitment: string
+      }
+      anchors: Array<{
+        id: string
+        commitment: string
+        loss: number
+      }>
+      allocation: {
+        phase: "initialization" | "ucb1"
+        pulls: number
+        rewards: number
+        score: number
+      }
+      selectedAt: number
+    }
+    attempts: Array<{
+      attemptID: string
+      selection: {
+        selectionID: string
+        round: number
+        topic: {
+          id: string
+          commitment: string
+        }
+        anchors: Array<{
+          id: string
+          commitment: string
+          loss: number
+        }>
+        allocation: {
+          phase: "initialization" | "ucb1"
+          pulls: number
+          rewards: number
+          score: number
+        }
+        selectedAt: number
+      }
+      generation:
+        | {
+            status: "failed"
+            mode: "generator_error" | "timeout" | "invalid_output" | "other"
+            outputSHA256?: string
+            evidence: Array<string>
+          }
+        | {
+            status: "generated"
+            caseSHA256: string
+            outputSHA256: string
+            embedding: Array<number>
+            evidence: Array<string>
+          }
+      validations: Array<{
+        kind: "correctness" | "topic" | "novelty"
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        evidence: Array<string>
+        note?: string
+      }>
+      outcome?: {
+        loss: number
+        failure: boolean
+        outputSHA256: string
+        evidence: Array<string>
+      }
+      admissible: boolean
+      reward: 0 | 1
+      evaluatedAt: number
+      recordedAt: number
+    }>
+    statistics: {
+      attempts: number
+      generated: number
+      admissible: number
+      failures: number
+      invalid: number
+      samplesToFirstFailure?: number
+      failureRate: number
+      topicEntropy: number
+      embeddingLogDet: number
+      topics: {
+        [key: string]: {
+          pulls: number
+          rewards: number
+          rate: number
+        }
+      }
+    }
+    revision: number
+    createdAt: number
+    updatedAt: number
+  }
+}
+
+export type HarnessFailureObserveResponse = HarnessFailureObserveResponses[keyof HarnessFailureObserveResponses]
+
+export type HarnessFailureSealData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    streamID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/failure-streams/{streamID}/receipt"
+}
+
+export type HarnessFailureSealErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessFailureSealError = HarnessFailureSealErrors[keyof HarnessFailureSealErrors]
+
+export type HarnessFailureSealResponses = {
+  /**
+   * Immutable topic-aware failure discovery receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "topic-aware-failure-receipt-v1"
+    receiptID: string
+    streamID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifactSHA256: string
+    }
+    auditReceiptID: string
+    sourcePoolSHA256: string
+    config: {
+      protocolVersion: "topic-aware-failure-v1"
+      sourcePoolSHA256: string
+      topicModel: {
+        kind: "predefined" | "bertopic"
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+      }
+      topics: Array<{
+        id: string
+        commitment: string
+      }>
+      generator: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      validators: [
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+      ]
+      embedding: {
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        dimensions: number
+        regularization?: number
+      }
+      budget: number
+      anchorsPerAttempt: number
+      exploration?: number
+      failureThreshold: number
+      targetFailures?: number
+    }
+    attemptIDs: Array<string>
+    statistics: {
+      attempts: number
+      generated: number
+      admissible: number
+      failures: number
+      invalid: number
+      samplesToFirstFailure?: number
+      failureRate: number
+      topicEntropy: number
+      embeddingLogDet: number
+      topics: {
+        [key: string]: {
+          pulls: number
+          rewards: number
+          rate: number
+        }
+      }
+    }
+    stopReason: "budget_exhausted" | "failure_target_reached"
+    revision: number
+    completedAt: number
+    sealedAt: number
+  }
+}
+
+export type HarnessFailureSealResponse = HarnessFailureSealResponses[keyof HarnessFailureSealResponses]
+
 export type HarnessAblationInitializeData = {
   body?: {
     schemaVersion: 1
@@ -12515,6 +13402,73 @@ export type HarnessBindData = {
       }
       promotionRequired?: boolean
     }
+    failureDiscovery?: {
+      protocolVersion: "topic-aware-failure-v1"
+      sourcePoolSHA256: string
+      topicModel: {
+        kind: "predefined" | "bertopic"
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+      }
+      topics: Array<{
+        id: string
+        commitment: string
+      }>
+      generator: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      validators: [
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+      ]
+      embedding: {
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        dimensions: number
+        regularization?: number
+      }
+      budget: number
+      anchorsPerAttempt: number
+      exploration?: number
+      failureThreshold: number
+      targetFailures?: number
+    }
     launch?: {
       protocolVersion: "benchmark-launch-v1"
       runner: {
@@ -13005,6 +13959,73 @@ export type HarnessBindResponses = {
       }
       promotionRequired?: boolean
     }
+    failureDiscovery?: {
+      protocolVersion: "topic-aware-failure-v1"
+      sourcePoolSHA256: string
+      topicModel: {
+        kind: "predefined" | "bertopic"
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+      }
+      topics: Array<{
+        id: string
+        commitment: string
+      }>
+      generator: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      validators: [
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+      ]
+      embedding: {
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        dimensions: number
+        regularization?: number
+      }
+      budget: number
+      anchorsPerAttempt: number
+      exploration?: number
+      failureThreshold: number
+      targetFailures?: number
+    }
     launch?: {
       protocolVersion: "benchmark-launch-v1"
       runner: {
@@ -13466,6 +14487,7 @@ export type HarnessEvaluateData = {
     semanticReceiptID?: string
     replicationReceiptID?: string
     auditReceiptID?: string
+    failureDiscoveryReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
     metrics?: {
@@ -13934,6 +14956,73 @@ export type HarnessContractResponses = {
         maxCalibrationMAE: number
       }
       promotionRequired?: boolean
+    }
+    failureDiscovery?: {
+      protocolVersion: "topic-aware-failure-v1"
+      sourcePoolSHA256: string
+      topicModel: {
+        kind: "predefined" | "bertopic"
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+      }
+      topics: Array<{
+        id: string
+        commitment: string
+      }>
+      generator: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      validators: [
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+        {
+          kind: "correctness" | "topic" | "novelty"
+          identity: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        },
+      ]
+      embedding: {
+        identity: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        dimensions: number
+        regularization?: number
+      }
+      budget: number
+      anchorsPerAttempt: number
+      exploration?: number
+      failureThreshold: number
+      targetFailures?: number
     }
     launch?: {
       protocolVersion: "benchmark-launch-v1"
@@ -14424,6 +15513,7 @@ export type HarnessEvaluationsResponses = {
     semanticReceiptID?: string
     replicationReceiptID?: string
     auditReceiptID?: string
+    failureDiscoveryReceiptID?: string
     evaluator: {
       name: string
       version: string
@@ -14550,6 +15640,7 @@ export type HarnessReportResponses = {
       semanticReceiptID?: string
       replicationReceiptID?: string
       auditReceiptID?: string
+      failureDiscoveryReceiptID?: string
       confirmationReceiptID?: string
       evaluations: number
     }

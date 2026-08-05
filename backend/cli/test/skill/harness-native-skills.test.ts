@@ -2043,3 +2043,91 @@ test("run-proactive-evaluation commits a token-free score-history pool", async (
     await fs.rm(dir, { recursive: true, force: true })
   }
 })
+
+test("run-topic-aware-failure-discovery salts definitions and emits a bindable protocol", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-topic-failure-"))
+  const script = "research/run-topic-aware-failure-discovery/scripts/preflight.ts"
+  const manifestFile = path.join(dir, "manifest.json")
+  const firstSalt = "a".repeat(64)
+  const definitions = ["molecular and organismal biology", "mechanics and field theory"]
+  const names = [
+    "topic-model",
+    "generator",
+    "correctness-validator",
+    "topic-validator",
+    "novelty-validator",
+    "embedding-model",
+  ]
+  const identity = (name: string) => ({
+    name,
+    version: "1",
+    promptPath: `${name}.prompt.txt`,
+    configPath: `${name}.config.json`,
+  })
+  const manifest = {
+    sourcePoolSHA256: hash("audit-pool"),
+    topicSaltPath: "salt.txt",
+    topics: [
+      { id: "biology", definition: definitions[0] },
+      { id: "physics", definition: definitions[1] },
+    ],
+    topicModel: { kind: "predefined", ...identity("topic-model") },
+    generator: identity("generator"),
+    validators: {
+      correctness: identity("correctness-validator"),
+      topic: identity("topic-validator"),
+      novelty: identity("novelty-validator"),
+    },
+    embedding: { ...identity("embedding-model"), dimensions: 8 },
+    budget: 6,
+    anchorsPerAttempt: 2,
+    failureThreshold: 0.5,
+  }
+  try {
+    await Promise.all([
+      ...names.flatMap((name) => [
+        Bun.write(path.join(dir, `${name}.prompt.txt`), `private prompt for ${name}`),
+        Bun.write(path.join(dir, `${name}.config.json`), JSON.stringify({ actor: name, seed: 7 })),
+      ]),
+      Bun.write(path.join(dir, "salt.txt"), firstSalt),
+      Bun.write(manifestFile, JSON.stringify(manifest)),
+    ])
+    const valid = await bun(script, [manifestFile])
+    expect(valid.code).toBe(0)
+    const payload = JSON.parse(valid.stdout)
+    expect(HarnessContract.FailureDiscovery.parse(payload.protocol)).toEqual(payload.protocol)
+    expect(payload.protocol.topics.map((topic: { id: string }) => topic.id)).toEqual(["biology", "physics"])
+    const privateValues = [
+      ...definitions,
+      firstSalt,
+      ...names.flatMap((name) => [`private prompt for ${name}`, JSON.stringify({ actor: name, seed: 7 })]),
+    ]
+    for (const secret of privateValues) expect(valid.stdout).not.toContain(secret)
+
+    await Bun.write(path.join(dir, "salt.txt"), "b".repeat(64))
+    const salted = await bun(script, [manifestFile])
+    expect(salted.code).toBe(0)
+    expect(JSON.parse(salted.stdout).protocol.topics).not.toEqual(payload.protocol.topics)
+
+    await Bun.write(path.join(dir, "salt.txt"), "too-short")
+    const short = await bun(script, [manifestFile])
+    expect(short.code).toBe(1)
+    expect(short.stderr).toContain("at least 32 bytes")
+
+    await Bun.write(path.join(dir, "salt.txt"), firstSalt)
+    await Bun.write(manifestFile, JSON.stringify({ ...manifest, evaluatorToken: "must-not-touch-disk" }))
+    const unknown = await bun(script, [manifestFile])
+    expect(unknown.code).toBe(1)
+    expect(unknown.stderr).toContain("unknown fields: evaluatorToken")
+
+    await Bun.write(
+      manifestFile,
+      JSON.stringify({ ...manifest, topics: [{ id: "__proto__", definition: definitions[0] }, manifest.topics[1]] }),
+    )
+    const unsafe = await bun(script, [manifestFile])
+    expect(unsafe.code).toBe(1)
+    expect(unsafe.stderr).toContain("opaque safe identifier")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})

@@ -267,6 +267,109 @@ export namespace HarnessContract {
     })
   export type Audit = z.infer<typeof Audit>
 
+  export const FailureValidatorKind = z.enum(["correctness", "topic", "novelty"])
+  export type FailureValidatorKind = z.infer<typeof FailureValidatorKind>
+
+  const FailureIdentity = z
+    .object({
+      name: z.string().min(1).max(200),
+      version: z.string().min(1).max(200),
+      promptSHA256: Hash,
+      configSHA256: Hash,
+    })
+    .strict()
+
+  export const FailureTopic = z
+    .object({
+      id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/),
+      commitment: Hash,
+    })
+    .strict()
+  export type FailureTopic = z.infer<typeof FailureTopic>
+
+  export const FailureDiscovery = z
+    .object({
+      protocolVersion: z.literal("topic-aware-failure-v1"),
+      sourcePoolSHA256: Hash,
+      topicModel: z
+        .object({
+          kind: z.enum(["predefined", "bertopic"]),
+          identity: FailureIdentity,
+        })
+        .strict(),
+      topics: z
+        .array(FailureTopic)
+        .min(2)
+        .max(64)
+        .refine((items) => new Set(items.map((item) => item.id)).size === items.length, "Failure topics must be unique")
+        .refine(
+          (items) => new Set(items.map((item) => item.commitment)).size === items.length,
+          "Failure topic commitments must be unique",
+        )
+        .refine(
+          (items) => items.every((item, index) => !index || items[index - 1]!.id < item.id),
+          "Failure topics must be sorted by ID",
+        ),
+      generator: FailureIdentity,
+      validators: z
+        .array(
+          z
+            .object({
+              kind: FailureValidatorKind,
+              identity: FailureIdentity,
+            })
+            .strict(),
+        )
+        .length(FailureValidatorKind.options.length)
+        .refine(
+          (items) => new Set(items.map((item) => item.kind)).size === items.length,
+          "Failure discovery requires every validator class",
+        )
+        .refine(
+          (items) => items.every((item, index) => item.kind === FailureValidatorKind.options[index]),
+          "Failure discovery validators must use canonical kind order",
+        ),
+      embedding: z
+        .object({
+          identity: FailureIdentity,
+          dimensions: z.number().int().min(2).max(64),
+          regularization: z.number().positive().max(0.01).default(1e-6),
+        })
+        .strict(),
+      budget: z.number().int().min(2).max(512),
+      anchorsPerAttempt: z.number().int().min(1).max(8),
+      exploration: z.number().positive().max(4).default(Math.SQRT2),
+      failureThreshold: z.number().min(0).max(1),
+      targetFailures: z.number().int().positive().max(512).optional(),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (value.targetFailures !== undefined && value.targetFailures > value.budget) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["targetFailures"],
+          message: "Failure discovery target exceeds its attempt budget",
+        })
+      }
+      if (value.budget < value.topics.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["budget"],
+          message: "Failure discovery budget must initialize every topic arm",
+        })
+      }
+      const actors = [value.generator, ...value.validators.map((item) => item.identity)]
+      const identities = actors.map((item) => `${item.promptSHA256}:${item.configSHA256}`)
+      if (new Set(identities).size !== identities.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["validators"],
+          message: "Failure generator and validators must use distinct prompt/config commitments",
+        })
+      }
+    })
+  export type FailureDiscovery = z.infer<typeof FailureDiscovery>
+
   export const ObjectiveAudit = z
     .object({
       schemaVersion: z.literal(1),
@@ -962,6 +1065,7 @@ export namespace HarnessContract {
       orchestration: Orchestration.optional(),
       search: Search.optional(),
       audit: Audit.optional(),
+      failureDiscovery: FailureDiscovery.optional(),
       launch: Launch.optional(),
       recipe: HarnessRecipe.Materialized.optional(),
       integrity: Integrity.optional(),
@@ -1073,6 +1177,7 @@ export namespace HarnessContract {
       }
       if (
         (value.launch ||
+          value.failureDiscovery ||
           value.integrity ||
           value.evolution ||
           value.interventions ||
@@ -1089,8 +1194,34 @@ export namespace HarnessContract {
           message: "Evaluator-controlled validation needs an evaluator version",
         })
       }
+      if (value.failureDiscovery && !value.audit) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["failureDiscovery"],
+          message: "Topic-aware failure discovery requires a bound active audit",
+        })
+      }
+      if (
+        value.failureDiscovery &&
+        value.audit &&
+        value.failureDiscovery.failureThreshold !== value.audit.failureThreshold
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["failureDiscovery", "failureThreshold"],
+          message: "Failure discovery must use the active audit failure threshold",
+        })
+      }
+      if (value.failureDiscovery && value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Topic-aware failure discovery requires a capability-authenticated evaluator source",
+        })
+      }
       if (
         (value.launch ||
+          value.failureDiscovery ||
           value.integrity ||
           value.evolution ||
           value.interventions ||
