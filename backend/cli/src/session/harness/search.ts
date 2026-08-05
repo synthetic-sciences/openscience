@@ -16,6 +16,29 @@ export namespace HarnessSearch {
   export const Mode = z.enum(["single-pass", "stepwise", "diff"])
   export type Mode = z.infer<typeof Mode>
 
+  export const Operator = z.enum([
+    "bug-fix",
+    "external-dependency",
+    "architectural-change",
+    "composition",
+    "local-refinement",
+    "pruning",
+    "refactor",
+    "efficiency",
+    "hyperparameter-tuning",
+  ])
+  export type Operator = z.infer<typeof Operator>
+
+  export const Mandate = z
+    .object({
+      id: z.string().regex(/^[a-f0-9]{64}$/),
+      protocol: z.literal("agentic-variation-v1"),
+      operator: Operator,
+      instruction: z.string().min(1).max(1_000),
+    })
+    .strict()
+  export type Mandate = z.infer<typeof Mandate>
+
   export const Artifact = z
     .object({
       uri: z.string().min(1).max(2_048),
@@ -104,6 +127,7 @@ export namespace HarnessSearch {
         .max(2)
         .refine((ids) => new Set(ids).size === ids.length, "Reservation inspirations must be unique"),
       lease: Lease,
+      mandate: Mandate.optional(),
       status: z.enum(["open", "consumed", "released"]),
       candidateID: z
         .string()
@@ -212,9 +236,11 @@ export namespace HarnessSearch {
       contextIDs: input.contextIDs,
     })
 
+  const mandateID = (input: Omit<Mandate, "id">) => digest(input)
+
   const reservationID = (
     state: Pick<State, "runID" | "sessionID">,
-    input: Pick<Reservation, "ordinal" | "parentIDs" | "inspirationIDs" | "lease" | "createdAt">,
+    input: Pick<Reservation, "ordinal" | "parentIDs" | "inspirationIDs" | "lease" | "mandate" | "createdAt">,
   ) =>
     digest({
       runID: state.runID,
@@ -223,6 +249,7 @@ export namespace HarnessSearch {
       parentIDs: input.parentIDs.toSorted(),
       inspirationIDs: input.inspirationIDs.toSorted(),
       lease: input.lease,
+      ...(input.mandate ? { mandate: input.mandate } : {}),
       createdAt: input.createdAt,
     })
 
@@ -404,6 +431,16 @@ export namespace HarnessSearch {
       if (reservationID(state, item) !== item.id) {
         throw new Error(`Persisted reservation identity does not match its content`)
       }
+      if (
+        item.mandate &&
+        mandateID({
+          protocol: item.mandate.protocol,
+          operator: item.mandate.operator,
+          instruction: item.mandate.instruction,
+        }) !== item.mandate.id
+      ) {
+        throw new Error(`Persisted variation mandate identity does not match its content`)
+      }
       if (item.updatedAt < item.createdAt) throw new Error(`Persisted reservation timestamps are invalid`)
       if (item.inspirationIDs.some((id) => item.parentIDs.includes(id))) {
         throw new Error(`Reservation inspirations must be distinct from parents`)
@@ -580,32 +617,22 @@ export namespace HarnessSearch {
       const size = Math.min(count, capacity)
       if (!size) return state
       const start = reservations(state).length
-      const additions = Array.from({ length: size }, (_, index) => {
-        const targetIsland = choice.parentIDs.length
-          ? choice.targetIsland
-          : (choice.targetIsland + openRoots + index) % state.population.count
-        const body = {
-          revision: choice.revision,
-          strategy: choice.strategy,
-          mode: choice.mode,
-          parentIDs: choice.parentIDs,
-          inspirationIDs: choice.inspirationIDs,
-          targetIsland,
-          contextIDs: choice.contextIDs,
-        }
+      const plans = portfolio(state, size, start, openRoots)
+      const additions = plans.map((plan, index) => {
         const lease = Lease.parse({
-          id: leaseID(state, body),
-          revision: body.revision,
-          strategy: body.strategy,
-          mode: body.mode,
-          targetIsland: body.targetIsland,
-          contextIDs: body.contextIDs,
+          id: plan.recommendation.id,
+          revision: plan.recommendation.revision,
+          strategy: plan.recommendation.strategy,
+          mode: plan.recommendation.mode,
+          targetIsland: plan.recommendation.targetIsland,
+          contextIDs: plan.recommendation.contextIDs,
         })
         const draft = {
           ordinal: start + index,
-          parentIDs: choice.parentIDs.toSorted(),
-          inspirationIDs: choice.inspirationIDs.toSorted(),
+          parentIDs: plan.recommendation.parentIDs.toSorted(),
+          inspirationIDs: plan.recommendation.inspirationIDs.toSorted(),
           lease,
+          mandate: plan.mandate,
           status: "open" as const,
           createdAt: now,
           updatedAt: now,
@@ -1115,8 +1142,175 @@ export namespace HarnessSearch {
     return found
   }
 
-  export function recommend(state: State): Recommendation {
-    const choice = route(State.parse(state))
+  const instructions = {
+    "bug-fix":
+      "Diagnose a concrete correctness, execution, or validity failure and repair its root cause. Use tools and local checks freely, but return one new runnable artifact for external evaluation.",
+    "external-dependency":
+      "Investigate whether a justified external method, dataset, library, simulator, or reference implementation can improve this lineage. Integrate only what the task contract permits and return one reproducible artifact.",
+    "architectural-change":
+      "Pursue a materially different algorithm, representation, decomposition, or system architecture. Do not satisfy this mandate with parameter-only changes; plan, test, debug, and revise before returning one artifact.",
+    composition:
+      "Compose complementary mechanisms from the leased lineage and context into one coherent artifact. Resolve incompatibilities explicitly and test the integration before returning it.",
+    "local-refinement":
+      "Keep the core approach and make a focused evidence-driven improvement. Use the verified trajectory and feedback to choose the smallest high-leverage edit, then test and revise it.",
+    pruning:
+      "Remove, disable, or simplify a component that may be unnecessary, harmful, or overfit. Preserve the task contract and return a runnable artifact that makes the causal change inspectable.",
+    refactor:
+      "Reorganize the artifact to improve clarity, modularity, stability, or future evolvability without relying on a new scientific premise. Preserve intended behavior and validate the result.",
+    efficiency:
+      "Improve runtime, memory, sample efficiency, tool use, or cost while protecting the declared primary and secondary objectives. Measure locally when possible, then return one artifact for external evaluation.",
+    "hyperparameter-tuning":
+      "Keep the algorithmic structure fixed and tune constants, thresholds, schedules, or other parameters using a principled local search. Avoid presenting retuning as a new architecture.",
+  } satisfies Record<Operator, string>
+
+  const operators = {
+    seed: [
+      "architectural-change",
+      "composition",
+      "efficiency",
+      "external-dependency",
+      "local-refinement",
+      "pruning",
+      "refactor",
+      "hyperparameter-tuning",
+      "bug-fix",
+    ],
+    explore: [
+      "architectural-change",
+      "composition",
+      "external-dependency",
+      "efficiency",
+      "local-refinement",
+      "pruning",
+      "refactor",
+      "hyperparameter-tuning",
+      "bug-fix",
+    ],
+    exploit: [
+      "local-refinement",
+      "efficiency",
+      "hyperparameter-tuning",
+      "pruning",
+      "refactor",
+      "composition",
+      "bug-fix",
+      "architectural-change",
+      "external-dependency",
+    ],
+    fuse: [
+      "composition",
+      "architectural-change",
+      "local-refinement",
+      "efficiency",
+      "pruning",
+      "refactor",
+      "hyperparameter-tuning",
+      "bug-fix",
+      "external-dependency",
+    ],
+    migrate: [
+      "composition",
+      "local-refinement",
+      "architectural-change",
+      "efficiency",
+      "pruning",
+      "refactor",
+      "hyperparameter-tuning",
+      "bug-fix",
+      "external-dependency",
+    ],
+    diverge: [
+      "architectural-change",
+      "external-dependency",
+      "composition",
+      "pruning",
+      "efficiency",
+      "refactor",
+      "bug-fix",
+      "local-refinement",
+      "hyperparameter-tuning",
+    ],
+  } satisfies Record<Strategy, Operator[]>
+
+  function mandate(strategy: Strategy, ordinal: number): Mandate {
+    const operator = operators[strategy][ordinal % operators[strategy].length]!
+    const body = {
+      protocol: "agentic-variation-v1" as const,
+      operator,
+      instruction: instructions[operator],
+    }
+    return Mandate.parse({ id: mandateID(body), ...body })
+  }
+
+  const routeID = (input: Route) =>
+    JSON.stringify({
+      strategy: input.strategy,
+      parentIDs: input.parentIDs.toSorted(),
+      inspirationIDs: input.inspirationIDs.toSorted(),
+      targetIsland: input.targetIsland,
+    })
+
+  function routes(state: State) {
+    const primary = route(state)
+    const pool = ranked(state)
+    if (!pool.length || !primary.parentIDs.length) return [primary]
+    const pareto = archive(state)
+    const ordered = [...pareto, ...pool.filter((candidate) => !pareto.some((item) => item.id === candidate.id))]
+    const distinct = ordered.filter(
+      (candidate, index) => ordered.findIndex((item) => item.branch === candidate.branch) === index,
+    )
+    const options: Route[] = [primary]
+    const seen = new Set([routeID(primary)])
+    const add = (choice: Route) => {
+      const id = routeID(choice)
+      if (seen.has(id)) return
+      seen.add(id)
+      options.push(choice)
+    }
+    if (primary.strategy === "fuse") {
+      const best = pool[0]!
+      for (const candidate of distinct) {
+        if (candidate.branch === best.branch) continue
+        add({
+          strategy: "fuse",
+          parentIDs: [best.id, candidate.id],
+          inspirationIDs: [],
+          targetIsland: best.island,
+          reasons: ["portfolio-cross-branch-fusion", `source-branch:${candidate.branch}`],
+        })
+      }
+      return options
+    }
+    if (primary.strategy === "migrate") {
+      const source = pool[0]!
+      const islands = pool.filter(
+        (candidate, index) => pool.findIndex((item) => item.island === candidate.island) === index,
+      )
+      for (const anchor of islands) {
+        if (anchor.island === source.island) continue
+        add({
+          strategy: "migrate",
+          parentIDs: [anchor.id],
+          inspirationIDs: [source.id],
+          targetIsland: anchor.island,
+          reasons: ["portfolio-ring-migration", `source:${source.island}`, `target:${anchor.island}`],
+        })
+      }
+      return options
+    }
+    for (const candidate of distinct) {
+      add({
+        strategy: primary.strategy,
+        parentIDs: [candidate.id],
+        inspirationIDs: [],
+        targetIsland: candidate.island,
+        reasons: ["portfolio-verified-lineage", `branch:${candidate.branch}`],
+      })
+    }
+    return options
+  }
+
+  function materialize(state: State, choice: Route): Recommendation {
     const mode: Mode =
       choice.strategy === "seed"
         ? "single-pass"
@@ -1141,5 +1335,28 @@ export namespace HarnessSearch {
       contextIDs,
     }
     return { id: leaseID(state, body), ...body, reasons: choice.reasons }
+  }
+
+  function portfolio(state: State, count: number, start: number, openRoots: number) {
+    const options = routes(state)
+    return Array.from({ length: count }, (_, index) => {
+      const selected = options[index % options.length]!
+      const choice = selected.parentIDs.length
+        ? selected
+        : {
+            ...selected,
+            targetIsland: (selected.targetIsland + openRoots + index) % state.population.count,
+            reasons: [...selected.reasons, `portfolio-root:${index}`],
+          }
+      return {
+        recommendation: materialize(state, choice),
+        mandate: mandate(choice.strategy, start + index),
+      }
+    })
+  }
+
+  export function recommend(state: State): Recommendation {
+    const parsed = State.parse(state)
+    return materialize(parsed, route(parsed))
   }
 }

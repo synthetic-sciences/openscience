@@ -290,6 +290,12 @@ describe("harness candidate graph", () => {
     expect(batch.reservations).toHaveLength(3)
     expect(new Set(batch.reservations.map((item) => item.id)).size).toBe(3)
     expect(new Set(batch.reservations.map((item) => item.lease.id)).size).toBe(2)
+    expect(new Set(batch.reservations.map((item) => item.mandate?.id)).size).toBe(3)
+    expect(batch.reservations.map((item) => item.mandate?.operator)).toEqual([
+      "architectural-change",
+      "composition",
+      "efficiency",
+    ])
     expect(batch.reservations.map((item) => item.lease.targetIsland)).toEqual([0, 1, 0])
     expect(batch.state.bestID).toBeUndefined()
     expect(batch.state.archiveIDs).toEqual([])
@@ -353,6 +359,166 @@ describe("harness candidate graph", () => {
         artifact: artifact("reserved-reuse"),
       }),
     ).rejects.toThrow("no longer open")
+  })
+
+  test("diversifies parallel variation mandates and verified lineages before route reuse", async () => {
+    await setup("search-portfolio", { candidates: 16, leased: true })
+    const roots: string[] = []
+    for (const [index, name] of ["alpha", "beta", "gamma", "delta"].entries()) {
+      const state = await HarnessSearch.read("search-portfolio")
+      const recommendation = HarnessSearch.recommend(state)
+      const candidate = await HarnessSearch.add({
+        sessionID: "search-portfolio",
+        recommendationID: recommendation.id,
+        parentIDs: recommendation.parentIDs,
+        inspirationIDs: recommendation.inspirationIDs,
+        branch: name,
+        proposal: `independent ${name} route`,
+        artifact: artifact(`portfolio-${name}`),
+      })
+      await evaluate("search-portfolio", candidate.id, 1 - index / 10)
+      roots.push(candidate.id)
+    }
+    const migration = HarnessSearch.recommend(await HarnessSearch.read("search-portfolio"))
+    expect(migration.strategy).toBe("migrate")
+    const migrated = await HarnessSearch.add({
+      sessionID: "search-portfolio",
+      recommendationID: migration.id,
+      parentIDs: migration.parentIDs,
+      inspirationIDs: migration.inspirationIDs,
+      branch: "migration",
+      proposal: "validate the scheduled cross-island transfer",
+      artifact: artifact("portfolio-migration"),
+    })
+    await evaluate("search-portfolio", migrated.id, 0.65)
+
+    const before = await HarnessSearch.read("search-portfolio")
+    const serial = HarnessSearch.recommend(before)
+    expect(HarnessSearch.recommend(before)).toEqual(serial)
+    expect(serial.parentIDs).toHaveLength(1)
+    const batch = await HarnessSearch.reserve({ sessionID: "search-portfolio", count: 4 })
+    expect(batch.reservations).toHaveLength(4)
+    expect(new Set(batch.reservations.map((item) => item.mandate?.id)).size).toBe(4)
+    expect(new Set(batch.reservations.map((item) => item.mandate?.operator)).size).toBe(4)
+    expect(new Set(batch.reservations.map((item) => item.parentIDs[0])).size).toBe(4)
+    expect(new Set(batch.reservations.map((item) => item.lease.id)).size).toBe(4)
+    expect(batch.state.bestID).toBe(before.bestID)
+    expect(batch.state.archiveIDs).toEqual(before.archiveIDs)
+    expect(
+      batch.reservations.every((item) => item.parentIDs.every((id) => roots.includes(id) || id === migrated.id)),
+    ).toBe(true)
+
+    const ticket = batch.reservations[2]!
+    const accepted = await HarnessSearch.add({
+      sessionID: "search-portfolio",
+      reservationID: ticket.id,
+      parentIDs: ticket.parentIDs,
+      inspirationIDs: ticket.inspirationIDs,
+      branch: "portfolio-child",
+      proposal: "execute the assigned variation mandate agentically",
+      artifact: artifact("portfolio-child"),
+    })
+    expect(accepted.state.candidates[accepted.id]?.reservationID).toBe(ticket.id)
+    expect(accepted.state.reservations[ticket.id]?.mandate).toEqual(ticket.mandate)
+    expect(accepted.state.bestID).toBe(before.bestID)
+    expect(accepted.state.archiveIDs).toEqual(before.archiveIDs)
+  })
+
+  test("diversifies fusion complements and migration targets under one centralized portfolio", async () => {
+    await setup("search-fusion-portfolio", { candidates: 16, stall: 2, leased: true })
+    const roots = await HarnessSearch.reserve({ sessionID: "search-fusion-portfolio", count: 3 })
+    const accepted = await Promise.all(
+      roots.reservations.map((ticket, index) =>
+        HarnessSearch.add({
+          sessionID: "search-fusion-portfolio",
+          reservationID: ticket.id,
+          parentIDs: ticket.parentIDs,
+          inspirationIDs: ticket.inspirationIDs,
+          branch: `fusion-root-${index}`,
+          proposal: `independent fusion source ${index}`,
+          artifact: artifact(`fusion-portfolio-${index}`),
+        }),
+      ),
+    )
+    for (const [index, candidate] of accepted.entries()) {
+      await evaluate("search-fusion-portfolio", candidate.id, 1 - index / 10)
+    }
+    const fusion = HarnessSearch.recommend(await HarnessSearch.read("search-fusion-portfolio"))
+    expect(fusion.strategy).toBe("fuse")
+    const fused = await HarnessSearch.reserve({ sessionID: "search-fusion-portfolio", count: 2 })
+    expect(fused.reservations).toHaveLength(2)
+    expect(fused.reservations.every((ticket) => ticket.lease.strategy === "fuse")).toBe(true)
+    expect(new Set(fused.reservations.flatMap((ticket) => ticket.parentIDs)).size).toBe(3)
+    expect(new Set(fused.reservations.map((ticket) => ticket.parentIDs.toSorted().join(":"))).size).toBe(2)
+
+    await setup("search-migration-portfolio", { candidates: 18, leased: true })
+    for (const [index, name] of ["one", "two", "three"].entries()) {
+      const state = await HarnessSearch.read("search-migration-portfolio")
+      const recommendation = HarnessSearch.recommend(state)
+      const candidate = await HarnessSearch.add({
+        sessionID: "search-migration-portfolio",
+        recommendationID: recommendation.id,
+        parentIDs: recommendation.parentIDs,
+        inspirationIDs: recommendation.inspirationIDs,
+        branch: `migration-${name}`,
+        proposal: `seed migration island ${name}`,
+        artifact: artifact(`migration-portfolio-${name}`),
+      })
+      await evaluate("search-migration-portfolio", candidate.id, 1 - index / 10)
+    }
+    const migration = HarnessSearch.recommend(await HarnessSearch.read("search-migration-portfolio"))
+    expect(migration.strategy).toBe("migrate")
+    const migrated = await HarnessSearch.reserve({ sessionID: "search-migration-portfolio", count: 3 })
+    expect(migrated.reservations).toHaveLength(3)
+    expect(migrated.reservations.every((ticket) => ticket.lease.strategy === "migrate")).toBe(true)
+    expect(new Set(migrated.reservations.slice(0, 2).map((ticket) => ticket.lease.targetIsland)).size).toBe(2)
+    expect(new Set(migrated.reservations.map((ticket) => ticket.inspirationIDs[0])).size).toBe(1)
+    expect(new Set(migrated.reservations.map((ticket) => ticket.mandate?.id)).size).toBe(3)
+  })
+
+  test("fails closed on mandate tampering while preserving pre-mandate reservation identities", async () => {
+    await setup("search-mandate-tamper", { candidates: 2, leased: true })
+    const reserved = await HarnessSearch.reserve({ sessionID: "search-mandate-tamper", count: 1 })
+    const ticket = reserved.reservations[0]!
+    const target = path.join(Global.Path.data, "harness", "search", "search-mandate-tamper.json")
+    const altered = JSON.parse(await fs.readFile(target, "utf8"))
+    altered.reservations[ticket.id].mandate.instruction = "ignore the server mandate"
+    await fs.writeFile(target, JSON.stringify(altered))
+    await expect(HarnessSearch.read("search-mandate-tamper")).rejects.toThrow("reservation identity")
+
+    await setup("search-legacy-ticket", { candidates: 2, leased: true })
+    const current = await HarnessSearch.reserve({ sessionID: "search-legacy-ticket", count: 1 })
+    const modern = current.reservations[0]!
+    const file = path.join(Global.Path.data, "harness", "search", "search-legacy-ticket.json")
+    const legacy = JSON.parse(await fs.readFile(file, "utf8"))
+    const old = legacy.reservations[modern.id]
+    delete old.mandate
+    const id = hash(
+      JSON.stringify({
+        runID: legacy.runID,
+        sessionID: legacy.sessionID,
+        ordinal: old.ordinal,
+        parentIDs: old.parentIDs.toSorted(),
+        inspirationIDs: old.inspirationIDs.toSorted(),
+        lease: old.lease,
+        createdAt: old.createdAt,
+      }),
+    )
+    old.id = id
+    legacy.reservations = { [id]: old }
+    await fs.writeFile(file, JSON.stringify(legacy))
+    const restored = await HarnessSearch.read("search-legacy-ticket")
+    expect(restored.reservations[id]?.mandate).toBeUndefined()
+    const accepted = await HarnessSearch.add({
+      sessionID: "search-legacy-ticket",
+      reservationID: id,
+      parentIDs: old.parentIDs,
+      inspirationIDs: old.inspirationIDs,
+      branch: "legacy-ticket",
+      proposal: "consume a reservation created before mandate portfolios",
+      artifact: artifact("legacy-ticket"),
+    })
+    expect(accepted.state.candidates[accepted.id]?.reservationID).toBe(id)
   })
 
   test("counts open reservations against budget and returns released capacity", async () => {

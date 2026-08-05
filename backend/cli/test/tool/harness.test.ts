@@ -334,6 +334,9 @@ describe("harness tool", () => {
     const batch = JSON.parse(dispatched.output)
     expect(batch.reservations).toMatchObject({ open: 2, consumed: 0, released: 0 })
     const [first, second] = batch.reservations.ready
+    expect(first.mandate).toMatchObject({ protocol: "agentic-variation-v1", operator: "architectural-change" })
+    expect(second.mandate).toMatchObject({ protocol: "agentic-variation-v1", operator: "composition" })
+    expect(first.mandate.id).not.toBe(second.mandate.id)
 
     const invalid = await tool.execute(
       {
@@ -367,7 +370,11 @@ describe("harness tool", () => {
     expect(proposed.metadata.accepted).toBe(true)
     const state = JSON.parse(proposed.output)
     expect(state.reservations).toMatchObject({ open: 0, consumed: 1, released: 1 })
-    expect(state.candidates[0]).toMatchObject({ reservationID: second.id, lease: second.lease })
+    expect(state.candidates[0]).toMatchObject({
+      reservationID: second.id,
+      lease: second.lease,
+      mandate: second.mandate,
+    })
   })
 
   test("surfaces external hindsight only after backend verification", async () => {

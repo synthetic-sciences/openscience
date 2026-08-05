@@ -138,7 +138,7 @@ const result = (title: string, output: unknown, metadata: Record<string, unknown
   metadata,
 })
 
-const view = (candidate: HarnessSearch.Candidate) => ({
+const view = (candidate: HarnessSearch.Candidate, mandate?: HarnessSearch.Mandate) => ({
   id: candidate.id,
   parentIDs: candidate.parentIDs,
   inspirationIDs: candidate.inspirationIDs,
@@ -150,6 +150,7 @@ const view = (candidate: HarnessSearch.Candidate) => ({
   artifact: candidate.artifact,
   lease: candidate.lease,
   reservationID: candidate.reservationID,
+  mandate,
   source: candidate.result?.source,
   status: candidate.result?.status,
   score: candidate.result?.score,
@@ -175,7 +176,11 @@ const summary = (state: HarnessSearch.State) => {
     stalled: state.stalled,
     revision: state.revision,
     recommendation,
-    recommendationContext: recommendation?.contextIDs.map((id) => view(state.candidates[id]!)),
+    recommendationContext: recommendation?.contextIDs.map((id) => {
+      const candidate = state.candidates[id]!
+      const mandate = candidate.reservationID ? state.reservations[candidate.reservationID]?.mandate : undefined
+      return view(candidate, mandate)
+    }),
     reservations: {
       open: Object.values(state.reservations).filter((item) => item.status === "open").length,
       consumed: Object.values(state.reservations).filter((item) => item.status === "consumed").length,
@@ -187,12 +192,16 @@ const summary = (state: HarnessSearch.State) => {
           parentIDs: item.parentIDs,
           inspirationIDs: item.inspirationIDs,
           lease: item.lease,
+          mandate: item.mandate,
         })),
     },
     candidates: Object.values(state.candidates)
       .toSorted((a, b) => b.createdAt - a.createdAt)
       .slice(0, 20)
-      .map(view),
+      .map((candidate) => {
+        const mandate = candidate.reservationID ? state.reservations[candidate.reservationID]?.mandate : undefined
+        return view(candidate, mandate)
+      }),
   }
 }
 
