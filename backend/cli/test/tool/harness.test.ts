@@ -5,8 +5,10 @@ import { Global } from "../../src/global"
 import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessEvaluation } from "../../src/session/harness/evaluation"
 import { HarnessMemory } from "../../src/session/harness/memory"
+import { HarnessOrchestrator } from "../../src/session/harness/orchestrator"
 import { HarnessSearch } from "../../src/session/harness/search"
 import { HarnessTool } from "../../src/tool/harness"
+import { TaskParameters } from "../../src/tool/task"
 
 const sessionID = "harness-tool-session"
 const hash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
@@ -59,17 +61,46 @@ async function bind(orchestration?: HarnessContract.Orchestration) {
   })
 }
 
+const turns: string[] = []
+const attest = async (
+  work: { id: string; agent: HarnessOrchestrator.WorkerReceipt["agent"]; prompt: string },
+  worker: string,
+) => {
+  const state = await HarnessOrchestrator.read(sessionID)
+  const completedAt = Date.now()
+  return HarnessOrchestrator.attest({
+    sessionID,
+    workID: work.id,
+    workerSessionID: worker,
+    turnID: `harness-tool-turn-${turns.push(work.id)}`,
+    agent: work.agent,
+    prompt: `Execute:\n${work.prompt}`,
+    outcome: "completed",
+    usage: { steps: 1, tokens: 100, costUSD: 0.01, wallTimeMs: 10 },
+    toolCalls: 1,
+    failedToolCalls: 0,
+    startedAt: Math.max(state.createdAt, completedAt - 10),
+    completedAt,
+  })
+}
+
 describe("harness tool", () => {
   test("exposes persisted provisional coalition work without evaluator authority", async () => {
     await bind()
     const tool = await HarnessTool.init()
     const started = await tool.execute({ action: "coalition_start" }, context)
     const state = JSON.parse(started.output)
-    expect(state).toMatchObject({ status: "active", minIndependentVerifiers: 1, revision: 0 })
+    expect(state).toMatchObject({
+      status: "active",
+      workerPolicy: "task-attested-v1",
+      minIndependentVerifiers: 1,
+      revision: 0,
+    })
     expect(state.ready.length).toBeGreaterThan(0)
     expect(state.ready.length).toBeLessThanOrEqual(state.maxWorkers)
 
     const work = state.ready[0]
+    await attest(work, "fresh-child-session")
     const completed = await tool.execute(
       {
         action: "coalition_complete",
@@ -81,9 +112,26 @@ describe("harness tool", () => {
       },
       context,
     )
-    expect(completed.metadata).toMatchObject({ workID: work.id, provisional: true, revision: 1 })
-    expect(JSON.parse(completed.output).revision).toBe(1)
+    expect(completed.metadata).toMatchObject({ workID: work.id, provisional: true, revision: 2 })
+    expect(JSON.parse(completed.output).revision).toBe(2)
     expect(tool.parameters.safeParse({ action: "coalition_verify", work_id: work.id }).success).toBe(false)
+
+    expect(
+      TaskParameters.safeParse({
+        description: "Execute coalition work",
+        prompt: work.prompt,
+        subagent_type: work.agent,
+        harness_work_id: work.id,
+      }).success,
+    ).toBe(true)
+    expect(
+      TaskParameters.safeParse({
+        description: "Execute coalition work",
+        prompt: work.prompt,
+        subagent_type: work.agent,
+        harness_work_id: "fabricated",
+      }).success,
+    ).toBe(false)
   })
 
   test("publishes the exact Task session contract for persistent producer lanes", async () => {
@@ -98,8 +146,19 @@ describe("harness tool", () => {
       ["producer-b", undefined],
     ])
 
-    const complete = async (state: { ready: Array<{ id: string; label: string }> }, worker: string) =>
-      JSON.parse(
+    const complete = async (
+      state: {
+        ready: Array<{
+          id: string
+          label: string
+          agent: HarnessOrchestrator.WorkerReceipt["agent"]
+          prompt: string
+        }>
+      },
+      worker: string,
+    ) => {
+      await attest(state.ready[0]!, worker)
+      return JSON.parse(
         (
           await tool.execute(
             {
@@ -114,6 +173,7 @@ describe("harness tool", () => {
           )
         ).output,
       )
+    }
     const seededA = await complete(started, "lane-a-session")
     const seededB = await complete(seededA, "lane-b-session")
     const mapped = await complete(seededB, "fresh-map")

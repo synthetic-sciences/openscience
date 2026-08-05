@@ -23444,7 +23444,7 @@
                   "properties": {
                     "schemaVersion": {
                       "type": "number",
-                      "const": 2
+                      "const": 3
                     },
                     "protocolVersion": {
                       "type": "string",
@@ -23459,6 +23459,13 @@
                         "legacy-v1",
                         "fresh-v1",
                         "producer-lanes-v1"
+                      ]
+                    },
+                    "workerPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "claimed-v1",
+                        "task-attested-v1"
                       ]
                     },
                     "runID": {
@@ -23891,6 +23898,7 @@
                             "type": "string",
                             "enum": [
                               "pending",
+                              "executed",
                               "completed",
                               "failed",
                               "cancelled"
@@ -23899,6 +23907,120 @@
                           "workerSessionID": {
                             "type": "string",
                             "minLength": 1
+                          },
+                          "workerReceipt": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "workID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "workerSessionID": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "turnID": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "agent": {
+                                "type": "string",
+                                "enum": [
+                                  "task",
+                                  "biology",
+                                  "physics",
+                                  "ml",
+                                  "critique",
+                                  "physics-critique",
+                                  "reviewer"
+                                ]
+                              },
+                              "workPromptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "taskPromptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": [
+                                  "completed",
+                                  "failed"
+                                ]
+                              },
+                              "usage": {
+                                "type": "object",
+                                "properties": {
+                                  "steps": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "tokens": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "costUSD": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "wallTimeMs": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "toolCalls": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "failedToolCalls": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "startedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "completedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "provisional": {
+                                "type": "boolean",
+                                "const": true
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "workID",
+                              "workerSessionID",
+                              "turnID",
+                              "agent",
+                              "workPromptSHA256",
+                              "taskPromptSHA256",
+                              "outcome",
+                              "usage",
+                              "toolCalls",
+                              "failedToolCalls",
+                              "startedAt",
+                              "completedAt",
+                              "provisional"
+                            ],
+                            "additionalProperties": false
                           },
                           "result": {
                             "type": "object",
@@ -24075,6 +24197,7 @@
                     "schemaVersion",
                     "protocolVersion",
                     "sessionPolicy",
+                    "workerPolicy",
                     "runID",
                     "sessionID",
                     "contractFingerprint",
@@ -24154,7 +24277,7 @@
                   "properties": {
                     "schemaVersion": {
                       "type": "number",
-                      "const": 2
+                      "const": 3
                     },
                     "protocolVersion": {
                       "type": "string",
@@ -24169,6 +24292,13 @@
                         "legacy-v1",
                         "fresh-v1",
                         "producer-lanes-v1"
+                      ]
+                    },
+                    "workerPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "claimed-v1",
+                        "task-attested-v1"
                       ]
                     },
                     "runID": {
@@ -24601,6 +24731,7 @@
                             "type": "string",
                             "enum": [
                               "pending",
+                              "executed",
                               "completed",
                               "failed",
                               "cancelled"
@@ -24609,6 +24740,120 @@
                           "workerSessionID": {
                             "type": "string",
                             "minLength": 1
+                          },
+                          "workerReceipt": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "workID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "workerSessionID": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "turnID": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "agent": {
+                                "type": "string",
+                                "enum": [
+                                  "task",
+                                  "biology",
+                                  "physics",
+                                  "ml",
+                                  "critique",
+                                  "physics-critique",
+                                  "reviewer"
+                                ]
+                              },
+                              "workPromptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "taskPromptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": [
+                                  "completed",
+                                  "failed"
+                                ]
+                              },
+                              "usage": {
+                                "type": "object",
+                                "properties": {
+                                  "steps": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "tokens": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "costUSD": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "wallTimeMs": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "toolCalls": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "failedToolCalls": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "startedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "completedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "provisional": {
+                                "type": "boolean",
+                                "const": true
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "workID",
+                              "workerSessionID",
+                              "turnID",
+                              "agent",
+                              "workPromptSHA256",
+                              "taskPromptSHA256",
+                              "outcome",
+                              "usage",
+                              "toolCalls",
+                              "failedToolCalls",
+                              "startedAt",
+                              "completedAt",
+                              "provisional"
+                            ],
+                            "additionalProperties": false
                           },
                           "result": {
                             "type": "object",
@@ -24785,6 +25030,7 @@
                     "schemaVersion",
                     "protocolVersion",
                     "sessionPolicy",
+                    "workerPolicy",
                     "runID",
                     "sessionID",
                     "contractFingerprint",
@@ -24867,7 +25113,7 @@
                   "properties": {
                     "schemaVersion": {
                       "type": "number",
-                      "const": 2
+                      "const": 3
                     },
                     "protocolVersion": {
                       "type": "string",
@@ -24882,6 +25128,13 @@
                         "legacy-v1",
                         "fresh-v1",
                         "producer-lanes-v1"
+                      ]
+                    },
+                    "workerPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "claimed-v1",
+                        "task-attested-v1"
                       ]
                     },
                     "runID": {
@@ -25314,6 +25567,7 @@
                             "type": "string",
                             "enum": [
                               "pending",
+                              "executed",
                               "completed",
                               "failed",
                               "cancelled"
@@ -25322,6 +25576,120 @@
                           "workerSessionID": {
                             "type": "string",
                             "minLength": 1
+                          },
+                          "workerReceipt": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "workID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "workerSessionID": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "turnID": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "agent": {
+                                "type": "string",
+                                "enum": [
+                                  "task",
+                                  "biology",
+                                  "physics",
+                                  "ml",
+                                  "critique",
+                                  "physics-critique",
+                                  "reviewer"
+                                ]
+                              },
+                              "workPromptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "taskPromptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": [
+                                  "completed",
+                                  "failed"
+                                ]
+                              },
+                              "usage": {
+                                "type": "object",
+                                "properties": {
+                                  "steps": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "tokens": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "costUSD": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "wallTimeMs": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "toolCalls": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "failedToolCalls": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "startedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "completedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "provisional": {
+                                "type": "boolean",
+                                "const": true
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "workID",
+                              "workerSessionID",
+                              "turnID",
+                              "agent",
+                              "workPromptSHA256",
+                              "taskPromptSHA256",
+                              "outcome",
+                              "usage",
+                              "toolCalls",
+                              "failedToolCalls",
+                              "startedAt",
+                              "completedAt",
+                              "provisional"
+                            ],
+                            "additionalProperties": false
                           },
                           "result": {
                             "type": "object",
@@ -25498,6 +25866,7 @@
                     "schemaVersion",
                     "protocolVersion",
                     "sessionPolicy",
+                    "workerPolicy",
                     "runID",
                     "sessionID",
                     "contractFingerprint",

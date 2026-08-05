@@ -8,9 +8,11 @@ import { HarnessLaunch } from "./launch"
 
 export namespace HarnessOrchestrator {
   const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
-  const Agent = z.enum(["task", "biology", "physics", "ml", "critique", "physics-critique", "reviewer"])
-  const Status = z.enum(["pending", "completed", "failed", "cancelled"])
+  export const WorkerAgent = z.enum(["task", "biology", "physics", "ml", "critique", "physics-critique", "reviewer"])
+  const Agent = WorkerAgent
+  const Status = z.enum(["pending", "executed", "completed", "failed", "cancelled"])
   const Lane = z.enum(["producer-a", "producer-b"])
+  const WorkerPolicy = z.enum(["claimed-v1", "task-attested-v1"])
 
   const Usage = z
     .object({
@@ -22,6 +24,34 @@ export namespace HarnessOrchestrator {
     .strict()
 
   const Allocation = Usage
+
+  export const WorkerReceipt = z
+    .object({
+      id: z.string().regex(/^[a-f0-9]{64}$/),
+      workID: z.string().regex(/^[a-f0-9]{64}$/),
+      workerSessionID: z.string().min(1),
+      turnID: z.string().min(1),
+      agent: Agent,
+      workPromptSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+      taskPromptSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+      outcome: z.enum(["completed", "failed"]),
+      usage: Usage,
+      toolCalls: z.number().int().nonnegative(),
+      failedToolCalls: z.number().int().nonnegative(),
+      startedAt: z.number().int().positive(),
+      completedAt: z.number().int().positive(),
+      provisional: z.literal(true),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (value.failedToolCalls > value.toolCalls) {
+        ctx.addIssue({ code: "custom", path: ["failedToolCalls"], message: "Failed tool calls exceed all tool calls" })
+      }
+      if (value.completedAt < value.startedAt) {
+        ctx.addIssue({ code: "custom", path: ["completedAt"], message: "Worker receipt ends before it starts" })
+      }
+    })
+  export type WorkerReceipt = z.infer<typeof WorkerReceipt>
 
   export const Verdict = z
     .object({
@@ -201,6 +231,7 @@ export namespace HarnessOrchestrator {
       lane: Lane.optional(),
       status: Status,
       workerSessionID: z.string().min(1).optional(),
+      workerReceipt: WorkerReceipt.optional(),
       result: Result.optional(),
       failure: z.string().min(1).max(4_000).optional(),
     })
@@ -218,10 +249,22 @@ export namespace HarnessOrchestrator {
       if (value.status === "failed" && !value.workerSessionID) {
         ctx.addIssue({ code: "custom", path: ["workerSessionID"], message: "Failed work requires a worker session" })
       }
-      if (value.status === "pending" && (value.result || value.failure || value.workerSessionID)) {
+      if (value.status === "executed" && (!value.workerSessionID || !value.workerReceipt)) {
+        ctx.addIssue({ code: "custom", message: "Executed work requires a worker receipt and session" })
+      }
+      if (value.status === "executed" && (value.result || value.failure)) {
+        ctx.addIssue({ code: "custom", message: "Executed work cannot contain settled state" })
+      }
+      if (
+        value.status === "pending" &&
+        (value.result || value.failure || value.workerSessionID || value.workerReceipt)
+      ) {
         ctx.addIssue({ code: "custom", message: "Pending work cannot contain settled state" })
       }
-      if (value.status === "cancelled" && (value.result || value.failure || value.workerSessionID)) {
+      if (
+        value.status === "cancelled" &&
+        (value.result || value.failure || value.workerSessionID || value.workerReceipt)
+      ) {
         ctx.addIssue({ code: "custom", message: "Cancelled work cannot contain settled state" })
       }
       if (value.status === "completed" && value.failure) {
@@ -244,6 +287,7 @@ export namespace HarnessOrchestrator {
     runID: string,
     work: Pick<Work, "role" | "label" | "dependencies" | "round" | "lane">,
     policy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1",
+    workers: z.infer<typeof WorkerPolicy>,
   ) {
     return digest({
       runID,
@@ -252,7 +296,28 @@ export namespace HarnessOrchestrator {
       dependencies: work.dependencies,
       round: work.round,
       ...(policy === "legacy-v1" ? {} : { sessionPolicy: policy }),
+      ...(workers === "claimed-v1" ? {} : { workerPolicy: workers }),
       ...(work.lane ? { lane: work.lane } : {}),
+    })
+  }
+
+  function receiptID(fingerprint: string, runID: string, receipt: Omit<WorkerReceipt, "id">) {
+    return digest({
+      fingerprint,
+      runID,
+      workID: receipt.workID,
+      workerSessionID: receipt.workerSessionID,
+      turnID: receipt.turnID,
+      agent: receipt.agent,
+      workPromptSHA256: receipt.workPromptSHA256,
+      taskPromptSHA256: receipt.taskPromptSHA256,
+      outcome: receipt.outcome,
+      usage: receipt.usage,
+      toolCalls: receipt.toolCalls,
+      failedToolCalls: receipt.failedToolCalls,
+      startedAt: receipt.startedAt,
+      completedAt: receipt.completedAt,
+      provisional: receipt.provisional,
     })
   }
 
@@ -283,9 +348,10 @@ export namespace HarnessOrchestrator {
 
   export const State = z
     .object({
-      schemaVersion: z.literal(2),
+      schemaVersion: z.literal(3),
       protocolVersion: z.enum(["coalition-v1", "coalition-v2"]),
       sessionPolicy: z.enum(["legacy-v1", "fresh-v1", "producer-lanes-v1"]),
+      workerPolicy: WorkerPolicy,
       runID: z.string().min(1),
       sessionID: z.string().min(1),
       contractFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
@@ -320,12 +386,53 @@ export namespace HarnessOrchestrator {
         if (work.lane !== expected) {
           ctx.addIssue({ code: "custom", path: ["work", work.id, "lane"], message: "Producer lane assignment drifted" })
         }
-        if (value.sessionPolicy !== "legacy-v1" && work.id !== workID(value.runID, work, value.sessionPolicy)) {
+        if (work.id !== workID(value.runID, work, value.sessionPolicy, value.workerPolicy)) {
           ctx.addIssue({
             code: "custom",
             path: ["work", work.id, "id"],
             message: "Orchestration work identity drifted",
           })
+        }
+      }
+      const turns = new Set<string>()
+      for (const work of items) {
+        const receipt = work.workerReceipt
+        if (value.workerPolicy === "task-attested-v1" && ["executed", "completed", "failed"].includes(work.status)) {
+          if (!receipt) {
+            ctx.addIssue({ code: "custom", path: ["work", work.id], message: "Settled work lacks a Task receipt" })
+            continue
+          }
+        }
+        if (!receipt) continue
+        if (value.workerPolicy !== "task-attested-v1") {
+          ctx.addIssue({
+            code: "custom",
+            path: ["work", work.id],
+            message: "Claimed worker state cannot contain receipts",
+          })
+        }
+        if (
+          receipt.workID !== work.id ||
+          receipt.workerSessionID !== work.workerSessionID ||
+          receipt.agent !== work.agent ||
+          receipt.workPromptSHA256 !== digest(work.prompt) ||
+          receipt.id !== receiptID(value.contractFingerprint, value.runID, receipt)
+        ) {
+          ctx.addIssue({ code: "custom", path: ["work", work.id, "workerReceipt"], message: "Worker receipt drifted" })
+        }
+        if (receipt.startedAt < value.createdAt || receipt.completedAt > value.updatedAt) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["work", work.id, "workerReceipt"],
+            message: "Worker receipt falls outside the persisted orchestration window",
+          })
+        }
+        if (turns.has(receipt.turnID)) {
+          ctx.addIssue({ code: "custom", path: ["work"], message: "A Task turn cannot attest multiple work items" })
+        }
+        turns.add(receipt.turnID)
+        if (work.status === "completed" && receipt.outcome !== "completed") {
+          ctx.addIssue({ code: "custom", path: ["work", work.id], message: "Completed work has a failed Task receipt" })
         }
       }
       const sessions = new Map<string, Work[]>()
@@ -454,7 +561,11 @@ export namespace HarnessOrchestrator {
 
   function parse(data: Record<string, unknown>) {
     const migrated =
-      data.schemaVersion === 1 ? { ...data, schemaVersion: 2, sessionPolicy: "legacy-v1" as const } : data
+      data.schemaVersion === 1
+        ? { ...data, schemaVersion: 3, sessionPolicy: "legacy-v1" as const, workerPolicy: "claimed-v1" as const }
+        : data.schemaVersion === 2
+          ? { ...data, schemaVersion: 3, workerPolicy: "claimed-v1" as const }
+          : data
     return State.parse(migrated)
   }
 
@@ -609,7 +720,7 @@ export namespace HarnessOrchestrator {
     lane?: z.infer<typeof Lane>,
   ): Omit<Work, "allocation"> {
     const policy = selection.topology === "evolution" ? "producer-lanes-v1" : "fresh-v1"
-    const id = workID(contract.runID, { role, label, dependencies, round, lane }, policy)
+    const id = workID(contract.runID, { role, label, dependencies, round, lane }, policy, "task-attested-v1")
     return {
       id,
       role,
@@ -719,9 +830,10 @@ export namespace HarnessOrchestrator {
     const work = Object.fromEntries(planned.map((item) => [item.id, Work.parse({ ...item, allocation: budget })]))
     const now = Date.now()
     const state = State.parse({
-      schemaVersion: 2,
+      schemaVersion: 3,
       protocolVersion: contract.orchestration?.adaptive ? "coalition-v2" : "coalition-v1",
       sessionPolicy: selection.topology === "evolution" ? "producer-lanes-v1" : "fresh-v1",
+      workerPolicy: "task-attested-v1",
       runID: contract.runID,
       sessionID,
       contractFingerprint: HarnessContract.fingerprint(contract),
@@ -778,6 +890,87 @@ export namespace HarnessOrchestrator {
     if (Object.values(state.work).some((item) => item.workerSessionID === sessionID)) {
       throw new Error(`Each fresh coalition role requires a distinct worker session`)
     }
+  }
+
+  const WorkerAttestation = z
+    .object({
+      sessionID: z.string().min(1),
+      workID: z.string().regex(/^[a-f0-9]{64}$/),
+      workerSessionID: z.string().min(1),
+      turnID: z.string().min(1),
+      agent: Agent,
+      prompt: z.string().min(1).max(128_000),
+      outcome: z.enum(["completed", "failed"]),
+      usage: Usage,
+      toolCalls: z.number().int().nonnegative(),
+      failedToolCalls: z.number().int().nonnegative(),
+      startedAt: z.number().int().positive(),
+      completedAt: z.number().int().positive(),
+    })
+    .strict()
+
+  export async function attest(input: z.input<typeof WorkerAttestation>) {
+    const value = WorkerAttestation.parse(input)
+    await JsonStore.update(file(value.sessionID), (data) => {
+      const state = parse(data)
+      if (state.workerPolicy !== "task-attested-v1") {
+        throw new Error(`Legacy orchestration does not accept Task execution receipts`)
+      }
+      const work = state.work[value.workID]
+      if (!work) throw new Error(`Unknown orchestration work ${value.workID}`)
+      const base = {
+        workID: work.id,
+        workerSessionID: value.workerSessionID,
+        turnID: value.turnID,
+        agent: value.agent,
+        workPromptSHA256: digest(work.prompt),
+        taskPromptSHA256: digest(value.prompt),
+        outcome: value.outcome,
+        usage: Usage.parse(value.usage),
+        toolCalls: value.toolCalls,
+        failedToolCalls: value.failedToolCalls,
+        startedAt: value.startedAt,
+        completedAt: value.completedAt,
+        provisional: true as const,
+      }
+      const receipt = WorkerReceipt.parse({
+        id: receiptID(state.contractFingerprint, state.runID, base),
+        ...base,
+      })
+      if (work.status === "executed") {
+        if (JSON.stringify(work.workerReceipt) === JSON.stringify(receipt)) return state
+        throw new Error(`Task execution receipt is immutable`)
+      }
+      if (work.status !== "pending") throw new Error(`Orchestration work ${work.id} cannot accept a Task receipt`)
+      if (!ready(state).some((item) => item.id === work.id)) {
+        throw new Error(`Orchestration work is not ready for Task execution`)
+      }
+      if (value.agent !== work.agent) throw new Error(`Task execution used the wrong coalition agent`)
+      if (!value.prompt.includes(work.prompt)) throw new Error(`Task execution omitted the canonical coalition prompt`)
+      const now = Date.now()
+      if (value.startedAt < state.createdAt || value.completedAt > now) {
+        throw new Error(`Task execution timestamps fall outside the orchestration window`)
+      }
+      if (Object.values(state.work).some((item) => item.workerReceipt?.turnID === value.turnID)) {
+        throw new Error(`Task turn already attests another orchestration work item`)
+      }
+      worker(state, work, value.workerSessionID)
+      return State.parse({
+        ...state,
+        work: {
+          ...state.work,
+          [work.id]: {
+            ...work,
+            status: "executed",
+            workerSessionID: value.workerSessionID,
+            workerReceipt: receipt,
+          },
+        },
+        revision: state.revision + 1,
+        updatedAt: now,
+      })
+    })
+    return read(value.sessionID)
   }
 
   export function ready(state: State): Ready[] {
@@ -1050,6 +1243,8 @@ export namespace HarnessOrchestrator {
       const state = parse(data)
       const work = state.work[input.workID]
       if (!work) throw new Error(`Unknown orchestration work ${input.workID}`)
+      const usage = work.workerReceipt?.usage ?? submission.usage
+      const submitted = { ...submission, ...(usage ? { usage } : {}) }
       if (work.status === "completed") {
         const previous = {
           summary: work.result!.summary,
@@ -1058,16 +1253,34 @@ export namespace HarnessOrchestrator {
           usage: work.result!.usage,
           verdict: work.result!.verdict,
         }
-        if (work.workerSessionID === input.workerSessionID && JSON.stringify(previous) === JSON.stringify(submission)) {
+        if (work.workerSessionID === input.workerSessionID && JSON.stringify(previous) === JSON.stringify(submitted)) {
           return state
         }
         throw new Error(`Completed orchestration work is immutable`)
       }
-      if (work.status !== "pending") throw new Error(`Orchestration work ${input.workID} is not pending`)
+      if (state.workerPolicy === "task-attested-v1" && work.status !== "executed") {
+        throw new Error(`Orchestration work must be executed by the Task tool before completion`)
+      }
+      if (state.workerPolicy === "claimed-v1" && work.status !== "pending") {
+        throw new Error(`Orchestration work ${input.workID} is not pending`)
+      }
       if (!work.dependencies.every((dependency) => state.work[dependency]?.status === "completed")) {
         throw new Error(`Orchestration work cannot complete before its dependencies`)
       }
-      worker(state, work, input.workerSessionID)
+      if (state.workerPolicy === "claimed-v1") worker(state, work, input.workerSessionID)
+      if (state.workerPolicy === "task-attested-v1" && work.workerSessionID !== input.workerSessionID) {
+        throw new Error(`Coalition completion does not match the Task execution receipt`)
+      }
+      if (work.workerReceipt?.outcome === "failed") {
+        throw new Error(`A failed Task execution cannot complete coalition work`)
+      }
+      if (
+        work.workerReceipt &&
+        submission.usage &&
+        JSON.stringify(submission.usage) !== JSON.stringify(work.workerReceipt.usage)
+      ) {
+        throw new Error(`Coalition usage does not match the Task execution receipt`)
+      }
       if (work.role === "verification" && !submission.verdict) {
         throw new Error(`Verification work requires a structured verdict`)
       }
@@ -1078,7 +1291,7 @@ export namespace HarnessOrchestrator {
         throw new Error(`Only verification work may submit a verdict`)
       }
       const now = Date.now()
-      const result = Result.parse({ ...submission, completedAt: now })
+      const result = Result.parse({ ...submitted, completedAt: now })
       within(result.usage, work.allocation)
       const next: State = {
         ...state,
@@ -1103,11 +1316,19 @@ export namespace HarnessOrchestrator {
         if (work.workerSessionID === input.workerSessionID && work.failure === input.failure) return state
         throw new Error(`Failed orchestration work is immutable`)
       }
-      if (work.status !== "pending") throw new Error(`Orchestration work ${input.workID} is not pending`)
+      if (state.workerPolicy === "task-attested-v1" && work.status !== "executed") {
+        throw new Error(`Orchestration work must be executed by the Task tool before failure settlement`)
+      }
+      if (state.workerPolicy === "claimed-v1" && work.status !== "pending") {
+        throw new Error(`Orchestration work ${input.workID} is not pending`)
+      }
       if (!work.dependencies.every((dependency) => state.work[dependency]?.status === "completed")) {
         throw new Error(`Orchestration work cannot fail before its dependencies`)
       }
-      worker(state, work, input.workerSessionID)
+      if (state.workerPolicy === "claimed-v1") worker(state, work, input.workerSessionID)
+      if (state.workerPolicy === "task-attested-v1" && work.workerSessionID !== input.workerSessionID) {
+        throw new Error(`Coalition failure does not match the Task execution receipt`)
+      }
       const now = Date.now()
       const next: State = {
         ...state,

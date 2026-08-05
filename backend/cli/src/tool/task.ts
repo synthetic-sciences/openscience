@@ -13,6 +13,7 @@ import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
 import { RLMState } from "../session/rlm/state"
 import { HierarchicalSemaphore } from "../util/semaphore"
+import { HarnessOrchestrator } from "../session/harness/orchestrator"
 
 const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml"]
 const COMPUTE_SUBAGENTS = new Set(["biology", "ml", "physics"])
@@ -23,11 +24,16 @@ const MAX_COMPUTE_SUBAGENTS =
   Number.isFinite(configuredComputeCap) && configuredComputeCap >= 1 ? Math.floor(configuredComputeCap) : 2
 const computeSlots = new HierarchicalSemaphore(MAX_COMPUTE_SUBAGENTS)
 
-const parameters = z.object({
+export const TaskParameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string().describe("The type of specialized agent to use for this task"),
   session_id: z.string().describe("Existing Task session to continue").optional(),
+  harness_work_id: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .describe("Ready coalition work identity this exact Task turn executes")
+    .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
 })
 
@@ -48,8 +54,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
   )
   return {
     description,
-    parameters,
-    async execute(params: z.infer<typeof parameters>, ctx) {
+    parameters: TaskParameters,
+    async execute(params: z.infer<typeof TaskParameters>, ctx) {
       const config = await Config.get()
       const started = Date.now()
 
@@ -178,8 +184,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+      const history = new Set((await Session.messages({ sessionID: session.id })).map((item) => item.info.id))
 
-      const result = await SessionPrompt.prompt({
+      const attempt = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
         model: {
@@ -194,12 +201,23 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
-      }).finally(() => {
-        unsub()
       })
+        .then(
+          (result) => ({ result }) as const,
+          (error: unknown) => ({ error }) as const,
+        )
+        .finally(() => {
+          unsub()
+        })
 
       const messages = await Session.messages({ sessionID: session.id })
-      const summary = messages
+      const turnID =
+        messages.find((item) => item.info.role === "user" && !history.has(item.info.id))?.info.id ??
+        ("result" in attempt && attempt.result.info.role === "assistant"
+          ? attempt.result.info.parentID
+          : `task-${ctx.sessionID}-${ctx.messageID}-${ctx.callID}`)
+      const turn = messages.filter((item) => item.info.role === "assistant" && !history.has(item.info.id))
+      const summary = turn
         .filter((x) => x.info.role === "assistant")
         .flatMap((msg) => msg.parts.filter((part): part is MessageV2.ToolPart => part.type === "tool"))
         .map((part) => ({
@@ -210,12 +228,13 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             title: part.state.status === "completed" ? part.state.title : undefined,
           },
         }))
-      const usage = messages.reduce(
+      const usage = turn.reduce(
         (total, message) => {
           if (message.info.role !== "assistant") return total
           total.cost += message.info.cost
           total.tokens.input += message.info.tokens.input
           total.tokens.output += message.info.tokens.output
+          total.tokens.reasoning += message.info.tokens.reasoning
           total.tokens.cache.read += message.info.tokens.cache.read
           total.tokens.cache.write += message.info.tokens.cache.write
           return total
@@ -225,10 +244,42 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           tokens: {
             input: 0,
             output: 0,
+            reasoning: 0,
             cache: { read: 0, write: 0 },
           },
         },
       )
+      const completed = Date.now()
+      const failed =
+        "error" in attempt || (attempt.result.info.role === "assistant" && attempt.result.info.error !== undefined)
+      const receipt = params.harness_work_id
+        ? await HarnessOrchestrator.attest({
+            sessionID: ctx.sessionID,
+            workID: params.harness_work_id,
+            workerSessionID: session.id,
+            turnID,
+            agent: HarnessOrchestrator.WorkerAgent.parse(agent.name),
+            prompt: params.prompt,
+            outcome: failed ? "failed" : "completed",
+            usage: {
+              steps: turn.length,
+              tokens:
+                usage.tokens.input +
+                usage.tokens.output +
+                usage.tokens.reasoning +
+                usage.tokens.cache.read +
+                usage.tokens.cache.write,
+              costUSD: usage.cost,
+              wallTimeMs: completed - started,
+            },
+            toolCalls: summary.length,
+            failedToolCalls: summary.filter((part) => part.state.status === "error").length,
+            startedAt: started,
+            completedAt: completed,
+          })
+        : undefined
+      if ("error" in attempt) throw attempt.error
+      const result = attempt.result
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
       const callingAgent = msg.info.agent
@@ -266,6 +317,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           toolCalls: summary.length,
           failedToolCalls: summary.filter((part) => part.state.status === "error").length,
           usage,
+          workerReceiptID: params.harness_work_id
+            ? receipt?.work[params.harness_work_id]?.workerReceipt?.id
+            : undefined,
           maxConcurrentChildren: MAX_CHILD_AGENTS,
         },
         output,

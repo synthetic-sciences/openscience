@@ -166,6 +166,7 @@ const coalition = (state: HarnessOrchestrator.State) => ({
   status: state.status,
   protocolVersion: state.protocolVersion,
   sessionPolicy: state.sessionPolicy,
+  workerPolicy: state.workerPolicy,
   topology: state.selection.topology,
   selectionSource: state.selection.source,
   selectionReasons: state.selection.reasons,
@@ -177,11 +178,22 @@ const coalition = (state: HarnessOrchestrator.State) => ({
   consensus: state.consensus,
   revision: state.revision,
   progress: Object.fromEntries(
-    ["pending", "completed", "failed", "cancelled"].map((status) => [
+    ["pending", "executed", "completed", "failed", "cancelled"].map((status) => [
       status,
       Object.values(state.work).filter((item) => item.status === status).length,
     ]),
   ),
+  executed: Object.values(state.work)
+    .filter((work) => work.status === "executed")
+    .map((work) => ({
+      id: work.id,
+      role: work.role,
+      label: work.label,
+      workerSessionID: work.workerSessionID,
+      receiptID: work.workerReceipt?.id,
+      outcome: work.workerReceipt?.outcome,
+      usage: work.workerReceipt?.usage,
+    })),
   ready: HarnessOrchestrator.ready(state)
     .slice(0, state.maxWorkers)
     .map((work) => ({

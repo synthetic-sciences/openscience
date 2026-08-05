@@ -9862,9 +9862,10 @@ export type HarnessOrchestrationStatusResponses = {
    * Scientific orchestration state
    */
   200: {
-    schemaVersion: 2
+    schemaVersion: 3
     protocolVersion: "coalition-v1" | "coalition-v2"
     sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
+    workerPolicy: "claimed-v1" | "task-attested-v1"
     runID: string
     sessionID: string
     contractFingerprint: string
@@ -9945,8 +9946,29 @@ export type HarnessOrchestrationStatusResponses = {
           wallTimeMs?: number
         }
         lane?: "producer-a" | "producer-b"
-        status: "pending" | "completed" | "failed" | "cancelled"
+        status: "pending" | "executed" | "completed" | "failed" | "cancelled"
         workerSessionID?: string
+        workerReceipt?: {
+          id: string
+          workID: string
+          workerSessionID: string
+          turnID: string
+          agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
+          workPromptSHA256: string
+          taskPromptSHA256: string
+          outcome: "completed" | "failed"
+          usage: {
+            steps?: number
+            tokens?: number
+            costUSD?: number
+            wallTimeMs?: number
+          }
+          toolCalls: number
+          failedToolCalls: number
+          startedAt: number
+          completedAt: number
+          provisional: true
+        }
         result?: {
           summary: string
           artifactRefs?: Array<string>
@@ -10010,9 +10032,10 @@ export type HarnessOrchestrationStartResponses = {
    * Scientific orchestration state
    */
   200: {
-    schemaVersion: 2
+    schemaVersion: 3
     protocolVersion: "coalition-v1" | "coalition-v2"
     sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
+    workerPolicy: "claimed-v1" | "task-attested-v1"
     runID: string
     sessionID: string
     contractFingerprint: string
@@ -10093,8 +10116,29 @@ export type HarnessOrchestrationStartResponses = {
           wallTimeMs?: number
         }
         lane?: "producer-a" | "producer-b"
-        status: "pending" | "completed" | "failed" | "cancelled"
+        status: "pending" | "executed" | "completed" | "failed" | "cancelled"
         workerSessionID?: string
+        workerReceipt?: {
+          id: string
+          workID: string
+          workerSessionID: string
+          turnID: string
+          agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
+          workPromptSHA256: string
+          taskPromptSHA256: string
+          outcome: "completed" | "failed"
+          usage: {
+            steps?: number
+            tokens?: number
+            costUSD?: number
+            wallTimeMs?: number
+          }
+          toolCalls: number
+          failedToolCalls: number
+          startedAt: number
+          completedAt: number
+          provisional: true
+        }
         result?: {
           summary: string
           artifactRefs?: Array<string>
@@ -10166,9 +10210,10 @@ export type HarnessOrchestrationCheckpointResponses = {
    * Scientific orchestration state
    */
   200: {
-    schemaVersion: 2
+    schemaVersion: 3
     protocolVersion: "coalition-v1" | "coalition-v2"
     sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
+    workerPolicy: "claimed-v1" | "task-attested-v1"
     runID: string
     sessionID: string
     contractFingerprint: string
@@ -10249,8 +10294,29 @@ export type HarnessOrchestrationCheckpointResponses = {
           wallTimeMs?: number
         }
         lane?: "producer-a" | "producer-b"
-        status: "pending" | "completed" | "failed" | "cancelled"
+        status: "pending" | "executed" | "completed" | "failed" | "cancelled"
         workerSessionID?: string
+        workerReceipt?: {
+          id: string
+          workID: string
+          workerSessionID: string
+          turnID: string
+          agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
+          workPromptSHA256: string
+          taskPromptSHA256: string
+          outcome: "completed" | "failed"
+          usage: {
+            steps?: number
+            tokens?: number
+            costUSD?: number
+            wallTimeMs?: number
+          }
+          toolCalls: number
+          failedToolCalls: number
+          startedAt: number
+          completedAt: number
+          provisional: true
+        }
         result?: {
           summary: string
           artifactRefs?: Array<string>

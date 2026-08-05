@@ -6,6 +6,7 @@ import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessOrchestrator } from "../../src/session/harness/orchestrator"
 
 const sessions = new Set<string>()
+const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
 
 afterEach(async () => {
   await Promise.all(
@@ -107,6 +108,75 @@ const verdict = (decision: HarnessOrchestrator.Verdict["decision"]): HarnessOrch
   ],
 })
 
+const turns: string[] = []
+
+const attest = async (
+  sessionID: string,
+  work: HarnessOrchestrator.Work | HarnessOrchestrator.Ready,
+  worker: string,
+  outcome: HarnessOrchestrator.WorkerReceipt["outcome"] = "completed",
+  usage: NonNullable<HarnessOrchestrator.Result["usage"]> = done("receipt").usage,
+) => {
+  const state = await HarnessOrchestrator.read(sessionID)
+  const completedAt = Date.now()
+  return HarnessOrchestrator.attest({
+    sessionID,
+    workID: work.id,
+    workerSessionID: worker,
+    turnID: `task-turn-${turns.push(work.id)}`,
+    agent: work.agent,
+    prompt: `Execute this exact coalition unit:\n${work.prompt}`,
+    outcome,
+    usage,
+    toolCalls: 1,
+    failedToolCalls: outcome === "failed" ? 1 : 0,
+    startedAt: Math.max(state.createdAt, completedAt - 1),
+    completedAt,
+  })
+}
+
+const finish = async (
+  sessionID: string,
+  work: HarnessOrchestrator.Work | HarnessOrchestrator.Ready,
+  worker: string,
+  result: Parameters<typeof HarnessOrchestrator.complete>[0]["result"],
+) => {
+  await attest(sessionID, work, worker, "completed", result.usage ?? {})
+  return HarnessOrchestrator.complete({ sessionID, workID: work.id, workerSessionID: worker, result })
+}
+
+const fail = async (
+  sessionID: string,
+  work: HarnessOrchestrator.Work | HarnessOrchestrator.Ready,
+  worker: string,
+  failure: string,
+) => {
+  await attest(sessionID, work, worker, "failed")
+  return HarnessOrchestrator.fail({ sessionID, workID: work.id, workerSessionID: worker, failure })
+}
+
+const rekey = (state: HarnessOrchestrator.State, policy: HarnessOrchestrator.State["sessionPolicy"]) => {
+  const ids = new Map<string, string>()
+  const work: Record<string, HarnessOrchestrator.Work> = {}
+  const order = state.order.map((id) => {
+    const item = state.work[id]!
+    const dependencies = item.dependencies.map((dependency) => ids.get(dependency)!)
+    const next = digest({
+      runID: state.runID,
+      role: item.role,
+      label: item.label,
+      dependencies,
+      round: item.round,
+      ...(policy === "legacy-v1" ? {} : { sessionPolicy: policy }),
+      ...(item.lane ? { lane: item.lane } : {}),
+    })
+    ids.set(id, next)
+    work[next] = { ...item, id: next, dependencies }
+    return next
+  })
+  return { ...state, work, order }
+}
+
 const advance = async (sessionID: string, state: HarnessOrchestrator.State): Promise<HarnessOrchestrator.State> => {
   if (["awaiting_checkpoint", "completed"].includes(state.status)) return state
   const work = HarnessOrchestrator.ready(state)[0]
@@ -116,12 +186,7 @@ const advance = async (sessionID: string, state: HarnessOrchestrator.State): Pro
     evidenceRefs: work.role === "verification" ? [`evidence://${work.label}`] : [],
     verdict: work.role === "verification" ? verdict("support") : undefined,
   }
-  const next = await HarnessOrchestrator.complete({
-    sessionID,
-    workID: work.id,
-    workerSessionID: work.resumeSessionID ?? `worker-${sessionID}-${state.revision}`,
-    result,
-  })
+  const next = await finish(sessionID, work, work.resumeSessionID ?? `worker-${sessionID}-${state.revision}`, result)
   return advance(sessionID, next)
 }
 
@@ -174,49 +239,117 @@ describe("scientific coalition orchestration", () => {
     const initial = await HarnessOrchestrator.initialize("dag")
     const roots = HarnessOrchestrator.ready(initial)
     expect(initial.selection.topology).toBe("tournament")
+    expect(HarnessOrchestrator.State.safeParse({ ...initial, workerPolicy: "claimed-v1" }).success).toBe(false)
     expect(roots.map((work) => work.role)).toEqual(["generation", "generation"])
 
-    const first = await HarnessOrchestrator.complete({
-      sessionID: "dag",
-      workID: roots[0]!.id,
-      workerSessionID: "worker-a",
-      result: done("proposal-a"),
-    })
+    const first = await finish("dag", roots[0]!, "worker-a", done("proposal-a"))
     expect(HarnessOrchestrator.ready(first).map((work) => work.id)).toEqual([roots[1]!.id])
 
     const ranking = Object.values(first.work).find((work) => work.role === "ranking")!
-    await expect(
-      HarnessOrchestrator.complete({
-        sessionID: "dag",
-        workID: ranking.id,
-        workerSessionID: "worker-skip",
-        result: done("invalid-ranking"),
-      }),
-    ).rejects.toThrow("before its dependencies")
+    await expect(attest("dag", ranking, "worker-skip")).rejects.toThrow("not ready")
 
-    const second = await HarnessOrchestrator.complete({
-      sessionID: "dag",
-      workID: roots[1]!.id,
-      workerSessionID: "worker-b",
-      result: done("proposal-b"),
-    })
+    const second = await finish("dag", roots[1]!, "worker-b", done("proposal-b"))
     const proximity = HarnessOrchestrator.ready(second)[0]!
     expect(proximity.role).toBe("proximity")
     expect(proximity.context).toEqual([
       expect.objectContaining({ summary: "proposal-a", evidenceRefs: ["evidence://proposal-a"] }),
       expect.objectContaining({ summary: "proposal-b", evidenceRefs: ["evidence://proposal-b"] }),
     ])
-    await expect(
-      HarnessOrchestrator.complete({
-        sessionID: "dag",
-        workID: proximity.id,
-        workerSessionID: "worker-a",
-        result: done("invalid-reuse"),
-      }),
-    ).rejects.toThrow("distinct worker session")
+    await expect(finish("dag", proximity, "worker-a", done("invalid-reuse"))).rejects.toThrow("distinct worker session")
 
     const restarted = await HarnessOrchestrator.initialize("dag")
     expect(restarted).toEqual(second)
+  })
+
+  test("requires immutable Task-attested execution before accepting coalition output", async () => {
+    const sessionID = "task-receipt"
+    await bind(sessionID)
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    const work = HarnessOrchestrator.ready(initial)[0]!
+    await expect(
+      HarnessOrchestrator.complete({
+        sessionID,
+        workID: work.id,
+        workerSessionID: "unattested-worker",
+        result: done("fabricated-output"),
+      }),
+    ).rejects.toThrow("executed by the Task tool")
+
+    const now = Date.now()
+    const input = {
+      sessionID,
+      workID: work.id,
+      workerSessionID: "actual-task-session",
+      turnID: "actual-task-turn",
+      agent: work.agent,
+      prompt: `Bound Task prompt:\n${work.prompt}`,
+      outcome: "completed" as const,
+      usage: { steps: 2, tokens: 321, costUSD: 0.02, wallTimeMs: 20 },
+      toolCalls: 3,
+      failedToolCalls: 0,
+      startedAt: Math.max(initial.createdAt, now - 20),
+      completedAt: now,
+    }
+    await expect(
+      HarnessOrchestrator.attest({
+        ...input,
+        agent: HarnessOrchestrator.WorkerAgent.parse(work.agent === "reviewer" ? "task" : "reviewer"),
+      }),
+    ).rejects.toThrow("wrong coalition agent")
+    await expect(HarnessOrchestrator.attest({ ...input, prompt: "Omit the bound work prompt" })).rejects.toThrow(
+      "omitted the canonical coalition prompt",
+    )
+
+    const executed = await HarnessOrchestrator.attest(input)
+    expect(executed.work[work.id]).toMatchObject({
+      status: "executed",
+      workerSessionID: input.workerSessionID,
+      workerReceipt: {
+        workID: work.id,
+        turnID: input.turnID,
+        outcome: "completed",
+        usage: input.usage,
+        provisional: true,
+      },
+    })
+    expect(await HarnessOrchestrator.attest(input)).toEqual(executed)
+    expect(
+      HarnessOrchestrator.State.safeParse({
+        ...executed,
+        work: {
+          ...executed.work,
+          [work.id]: {
+            ...executed.work[work.id]!,
+            workerReceipt: { ...executed.work[work.id]!.workerReceipt!, toolCalls: 99 },
+          },
+        },
+      }).success,
+    ).toBe(false)
+
+    const other = HarnessOrchestrator.ready(executed)[0]!
+    await expect(
+      HarnessOrchestrator.attest({ ...input, workID: other.id, agent: other.agent, prompt: other.prompt }),
+    ).rejects.toThrow("already attests")
+    await expect(
+      HarnessOrchestrator.complete({
+        sessionID,
+        workID: work.id,
+        workerSessionID: input.workerSessionID,
+        result: done("measured-output", { ...input.usage, tokens: input.usage.tokens + 1 }),
+      }),
+    ).rejects.toThrow("does not match")
+
+    const completed = await HarnessOrchestrator.complete({
+      sessionID,
+      workID: work.id,
+      workerSessionID: input.workerSessionID,
+      result: {
+        summary: "measured-output",
+        artifactRefs: ["artifact://measured-output"],
+        evidenceRefs: ["evidence://measured-output"],
+      },
+    })
+    expect(completed.work[work.id]!.result!.usage).toEqual(input.usage)
   })
 
   test("resumes only the exact same producer lane while keeping verification fresh", async () => {
@@ -224,7 +357,11 @@ describe("scientific coalition orchestration", () => {
     await bind(sessionID, { ...config("evolution"), maxRounds: 1 })
     const initial = await HarnessOrchestrator.initialize(sessionID)
     const roots = HarnessOrchestrator.ready(initial)
-    expect(initial).toMatchObject({ schemaVersion: 2, sessionPolicy: "producer-lanes-v1" })
+    expect(initial).toMatchObject({
+      schemaVersion: 3,
+      sessionPolicy: "producer-lanes-v1",
+      workerPolicy: "task-attested-v1",
+    })
     expect(roots.map((work) => [work.label, work.lane, work.resumeSessionID])).toEqual([
       ["seed-a", "producer-a", undefined],
       ["seed-b", "producer-b", undefined],
@@ -238,31 +375,14 @@ describe("scientific coalition orchestration", () => {
       }).success,
     ).toBe(false)
 
-    const first = await HarnessOrchestrator.complete({
-      sessionID,
-      workID: roots[0]!.id,
-      workerSessionID: "lane-a-session",
-      result: done("seed-a"),
-    })
-    const second = await HarnessOrchestrator.complete({
-      sessionID,
-      workID: roots[1]!.id,
-      workerSessionID: "lane-b-session",
-      result: done("seed-b"),
-    })
+    const first = await finish(sessionID, roots[0]!, "lane-a-session", done("seed-a"))
+    const second = await finish(sessionID, roots[1]!, "lane-b-session", done("seed-b"))
     expect(first.work[roots[0]!.id]!.workerSessionID).toBe("lane-a-session")
 
     const evolve = async (state: HarnessOrchestrator.State): Promise<HarnessOrchestrator.State> => {
       if (HarnessOrchestrator.ready(state).some((work) => work.role === "evolution")) return state
       const work = HarnessOrchestrator.ready(state)[0]!
-      return evolve(
-        await HarnessOrchestrator.complete({
-          sessionID,
-          workID: work.id,
-          workerSessionID: `fresh-${state.revision}`,
-          result: done(work.label),
-        }),
-      )
+      return evolve(await finish(sessionID, work, `fresh-${state.revision}`, done(work.label)))
     }
     const staged = await evolve(second)
     const ready = HarnessOrchestrator.ready(staged)
@@ -271,40 +391,18 @@ describe("scientific coalition orchestration", () => {
       ["producer-b", "lane-b-session"],
     ])
 
-    await expect(
-      HarnessOrchestrator.complete({
-        sessionID,
-        workID: ready[0]!.id,
-        workerSessionID: "substituted-session",
-        result: done("substituted"),
-      }),
-    ).rejects.toThrow("must resume")
-    await expect(
-      HarnessOrchestrator.complete({
-        sessionID,
-        workID: ready[1]!.id,
-        workerSessionID: "lane-a-session",
-        result: done("crossed"),
-      }),
-    ).rejects.toThrow("must resume")
+    await expect(finish(sessionID, ready[0]!, "substituted-session", done("substituted"))).rejects.toThrow(
+      "must resume",
+    )
+    await expect(finish(sessionID, ready[1]!, "lane-a-session", done("crossed"))).rejects.toThrow("must resume")
 
     const restarted = await HarnessOrchestrator.initialize(sessionID)
     expect(HarnessOrchestrator.ready(restarted).map((work) => work.resumeSessionID)).toEqual([
       "lane-a-session",
       "lane-b-session",
     ])
-    const a = await HarnessOrchestrator.complete({
-      sessionID,
-      workID: ready[0]!.id,
-      workerSessionID: "lane-a-session",
-      result: done("evolved-a"),
-    })
-    const b = await HarnessOrchestrator.complete({
-      sessionID,
-      workID: ready[1]!.id,
-      workerSessionID: "lane-b-session",
-      result: done("evolved-b"),
-    })
+    const a = await finish(sessionID, ready[0]!, "lane-a-session", done("evolved-a"))
+    const b = await finish(sessionID, ready[1]!, "lane-b-session", done("evolved-b"))
     const tampered = {
       ...b,
       work: {
@@ -319,21 +417,14 @@ describe("scientific coalition orchestration", () => {
     expect(probe).toMatchObject({ role: "investigation" })
     expect(probe.lane).toBeUndefined()
     expect(probe.resumeSessionID).toBeUndefined()
-    const investigated = await HarnessOrchestrator.complete({
-      sessionID,
-      workID: probe.id,
-      workerSessionID: "fresh-investigator",
-      result: done("investigation"),
-    })
+    const investigated = await finish(sessionID, probe, "fresh-investigator", done("investigation"))
     const verifier = HarnessOrchestrator.ready(investigated)[0]!
     expect(verifier).toMatchObject({ role: "verification" })
     expect(verifier.resumeSessionID).toBeUndefined()
     await expect(
-      HarnessOrchestrator.complete({
-        sessionID,
-        workID: verifier.id,
-        workerSessionID: "lane-a-session",
-        result: { ...done("tainted-verification"), verdict: verdict("support") },
+      finish(sessionID, verifier, "lane-a-session", {
+        ...done("tainted-verification"),
+        verdict: verdict("support"),
       }),
     ).rejects.toThrow("distinct worker session")
   })
@@ -343,13 +434,17 @@ describe("scientific coalition orchestration", () => {
     await bind(sessionID)
     const initial = await HarnessOrchestrator.initialize(sessionID)
     const file = path.join(Global.Path.data, "harness", "orchestration", `${encodeURIComponent(sessionID)}.json`)
-    const legacy = { ...initial } as Record<string, unknown>
+    const legacy = { ...rekey(initial, "legacy-v1") } as Record<string, unknown>
     legacy.schemaVersion = 1
     delete legacy.sessionPolicy
     await Bun.write(file, JSON.stringify(legacy))
 
     const migrated = await HarnessOrchestrator.read(sessionID)
-    expect(migrated).toMatchObject({ schemaVersion: 2, sessionPolicy: "legacy-v1" })
+    expect(migrated).toMatchObject({
+      schemaVersion: 3,
+      sessionPolicy: "legacy-v1",
+      workerPolicy: "claimed-v1",
+    })
     expect(Object.values(migrated.work).every((work) => work.lane === undefined)).toBe(true)
     const work = HarnessOrchestrator.ready(migrated)[0]!
     const completed = await HarnessOrchestrator.complete({
@@ -361,18 +456,43 @@ describe("scientific coalition orchestration", () => {
     expect(completed.sessionPolicy).toBe("legacy-v1")
   })
 
+  test("migrates version-two orchestration into claimed-worker compatibility mode", async () => {
+    const sessionID = "version-two-orchestration"
+    await bind(sessionID)
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    const file = path.join(Global.Path.data, "harness", "orchestration", `${encodeURIComponent(sessionID)}.json`)
+    const previous = { ...rekey(initial, initial.sessionPolicy) } as Record<string, unknown>
+    previous.schemaVersion = 2
+    delete previous.workerPolicy
+    await Bun.write(file, JSON.stringify(previous))
+
+    const migrated = await HarnessOrchestrator.read(sessionID)
+    expect(migrated).toMatchObject({
+      schemaVersion: 3,
+      sessionPolicy: "fresh-v1",
+      workerPolicy: "claimed-v1",
+    })
+    const work = HarnessOrchestrator.ready(migrated)[0]!
+    const completed = await HarnessOrchestrator.complete({
+      sessionID,
+      workID: work.id,
+      workerSessionID: "version-two-worker",
+      result: done("version-two-output"),
+    })
+    expect(completed.work[work.id]!.status).toBe("completed")
+  })
+
   test("enforces per-role allocation and immutable idempotent completion", async () => {
+    await bind("budget-over", { ...config("auto"), maxWorkers: 1, minIndependentVerifiers: 1 })
+    const over = await HarnessOrchestrator.initialize("budget-over")
+    const oversized = HarnessOrchestrator.ready(over)[0]!
+    await expect(
+      finish("budget-over", oversized, "worker-over", done("overspend", { steps: oversized.allocation.steps! + 1 })),
+    ).rejects.toThrow("exceeded its steps")
+
     await bind("budget", { ...config("auto"), maxWorkers: 1, minIndependentVerifiers: 1 })
     const initial = await HarnessOrchestrator.initialize("budget")
     const work = HarnessOrchestrator.ready(initial)[0]!
-    await expect(
-      HarnessOrchestrator.complete({
-        sessionID: "budget",
-        workID: work.id,
-        workerSessionID: "worker-over",
-        result: done("overspend", { steps: work.allocation.steps! + 1 }),
-      }),
-    ).rejects.toThrow("exceeded its steps")
 
     const input = {
       sessionID: "budget",
@@ -380,6 +500,7 @@ describe("scientific coalition orchestration", () => {
       workerSessionID: "worker-ok",
       result: done("bounded"),
     }
+    await attest("budget", work, input.workerSessionID, "completed", input.result.usage)
     const completed = await HarnessOrchestrator.complete(input)
     expect(completed.status).toBe("completed")
     expect(await HarnessOrchestrator.complete(input)).toEqual(completed)
@@ -390,22 +511,12 @@ describe("scientific coalition orchestration", () => {
     await bind("failure")
     const initial = await HarnessOrchestrator.initialize("failure")
     const roots = HarnessOrchestrator.ready(initial)
-    const failed = await HarnessOrchestrator.fail({
-      sessionID: "failure",
-      workID: roots[0]!.id,
-      workerSessionID: "worker-failed",
-      failure: "solver diverged",
-    })
+    const failed = await fail("failure", roots[0]!, "worker-failed", "solver diverged")
     expect(failed.work[roots[0]!.id]!.status).toBe("failed")
     expect(HarnessOrchestrator.ready(failed).map((work) => work.id)).toEqual([roots[1]!.id])
     expect(Object.values(failed.work).filter((work) => work.status === "cancelled").length).toBeGreaterThan(0)
 
-    const completed = await HarnessOrchestrator.complete({
-      sessionID: "failure",
-      workID: roots[1]!.id,
-      workerSessionID: "worker-survivor",
-      result: done("surviving-root"),
-    })
+    const completed = await finish("failure", roots[1]!, "worker-survivor", done("surviving-root"))
     expect(completed.status).toBe("completed")
   })
 
@@ -435,12 +546,7 @@ describe("scientific coalition orchestration", () => {
         evidenceRefs: work.role === "verification" ? [`evidence://${work.label}`] : [],
         verdict: work.role === "verification" ? verdict(decisions.get(work.label)!) : undefined,
       }
-      const next = await HarnessOrchestrator.complete({
-        sessionID: "consensus",
-        workID: work.id,
-        workerSessionID: worker,
-        result,
-      })
+      const next = await finish("consensus", work, worker, result)
       if (work.role === "verification" && next.status === "active") expect(next.consensus).toBeUndefined()
       return settle(next)
     }
@@ -462,12 +568,19 @@ describe("scientific coalition orchestration", () => {
     const advance = async (state: HarnessOrchestrator.State, count = 0): Promise<HarnessOrchestrator.State> => {
       if (state.status === "completed") return state
       const work = HarnessOrchestrator.ready(state)[0]!
+      const worker = `worker-${count}`
+      const result = {
+        ...done(work.label),
+        evidenceRefs: work.role === "verification" ? ["evidence://single"] : [],
+        verdict: work.role === "verification" ? verdict("support") : undefined,
+      }
+      await attest("single-consensus", work, worker, "completed", result.usage)
       if (work.role === "verification") {
         await expect(
           HarnessOrchestrator.complete({
             sessionID: "single-consensus",
             workID: work.id,
-            workerSessionID: `worker-missing-${count}`,
+            workerSessionID: worker,
             result: { ...done("missing-evidence"), evidenceRefs: [], verdict: verdict("support") },
           }),
         ).rejects.toThrow("observable evidence")
@@ -475,12 +588,8 @@ describe("scientific coalition orchestration", () => {
       const next = await HarnessOrchestrator.complete({
         sessionID: "single-consensus",
         workID: work.id,
-        workerSessionID: `worker-${count}`,
-        result: {
-          ...done(work.label),
-          evidenceRefs: work.role === "verification" ? ["evidence://single"] : [],
-          verdict: work.role === "verification" ? verdict("support") : undefined,
-        },
+        workerSessionID: worker,
+        result,
       })
       return advance(next, count + 1)
     }

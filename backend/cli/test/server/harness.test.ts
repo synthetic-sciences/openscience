@@ -276,10 +276,26 @@ describe("/harness routes", () => {
     const advance = async (state: HarnessOrchestrator.State): Promise<HarnessOrchestrator.State> => {
       if (state.status === "awaiting_checkpoint") return state
       const work = HarnessOrchestrator.ready(state)[0]!
+      const worker = work.resumeSessionID ?? `route-worker-${state.revision}`
+      const completedAt = Date.now()
+      await HarnessOrchestrator.attest({
+        sessionID,
+        workID: work.id,
+        workerSessionID: worker,
+        turnID: `route-task-turn-${state.revision}`,
+        agent: work.agent,
+        prompt: `Execute:\n${work.prompt}`,
+        outcome: "completed",
+        usage: { steps: 1 },
+        toolCalls: 1,
+        failedToolCalls: 0,
+        startedAt: Math.max(state.createdAt, completedAt - 1),
+        completedAt,
+      })
       const next = await HarnessOrchestrator.complete({
         sessionID,
         workID: work.id,
-        workerSessionID: work.resumeSessionID ?? `route-worker-${state.revision}`,
+        workerSessionID: worker,
         result: {
           summary: work.label,
           artifactRefs: [`artifact://${work.label}`],
