@@ -34,8 +34,11 @@ const mount = (view: () => JSX.Element) => {
   return host
 }
 
+// GET /file returns a bare array body (backend/cli/src/server/routes/file.ts:158-182),
+// never a {data} wrapper — that shape belongs only to the generated client's
+// RequestResult, which this pane's transport never touches.
 const listing = (rows: unknown[]) =>
-  new Response(JSON.stringify({ data: rows }), { status: 200, headers: { "Content-Type": "application/json" } })
+  new Response(JSON.stringify(rows), { status: 200, headers: { "Content-Type": "application/json" } })
 
 describe("files pane", () => {
   test("renders the tab strip, the picker and a table", async () => {
@@ -49,6 +52,8 @@ describe("files pane", () => {
     expect(host.querySelector('[data-tab="files"]')).not.toBeNull()
     expect(host.querySelector("[data-source-button]")).not.toBeNull()
     expect(host.querySelector(".files-table")).not.toBeNull()
+    expect(host.querySelectorAll("[data-file-row]").length).toBe(1)
+    expect(host.querySelector("[data-file-name]")?.textContent).toBe("train_lr.py")
   })
 
   test("a failed listing degrades in place instead of throwing to the boundary", async () => {

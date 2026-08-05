@@ -34,23 +34,17 @@ async function readAccess(transport: Transport, identity: FilesystemIdentity): P
   throw new Error("Filesystem access belongs to another session or project.")
 }
 
-// useSDK/useSync/useParams throw outside their providers. Production always
-// mounts this pane inside them, but the `request` prop is a standalone test
-// seam (see FilesPane.test.ts) that mounts with none — so every context read
-// here must degrade to undefined instead of taking the whole render down.
-function optional<T>(read: () => T): T | undefined {
-  try {
-    return read()
-  } catch {
-    return undefined
-  }
-}
-
 export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
-  const sdk = optional(useSDK)
-  const sync = optional(useSync)
-  const params = optional(useParams) ?? {}
-  const transport: Transport = props.request ?? sdk?.request ?? (async () => new Response(null, { status: 503 }))
+  // The `request` prop is a standalone test seam (see FilesPane.test.ts) that
+  // mounts with no providers at all. Key the context reads off the prop
+  // itself rather than swallowing whatever throws: in production `standalone`
+  // is always false, so a missing provider is a real wiring bug and throws
+  // loudly instead of quietly degrading into a fake "could not be read".
+  const standalone = Boolean(props.request)
+  const sdk = standalone ? undefined : useSDK()
+  const sync = standalone ? undefined : useSync()
+  const params = standalone ? ({} as ReturnType<typeof useParams>) : useParams()
+  const transport: Transport = props.request ?? sdk!.request
 
   const projectRoot = () => sdk?.directory || sync?.data.path.directory || sync?.project?.worktree || ""
   const projectName = () => projectRoot().split("/").filter(Boolean).at(-1) ?? "Project"
@@ -86,14 +80,25 @@ export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
   // errored resource during render reaches app.tsx's ErrorBoundary, which
   // would replace the entire workspace over one failed poll.
   const [entries] = createResource(
-    () => [where(), sessionID()] as const,
-    ([target, session]) => {
+    () => [where(), sessionID(), current().kind] as const,
+    ([target, session, kind]) => {
+      // The artifacts pseudo-source (sources.ts:25) always has root "" — it
+      // has no filesystem backing yet, and the server falls back an empty
+      // path to the project root (File.list(dir || root)), which would
+      // silently list the project's files mislabeled as artifacts. Every
+      // other kind always carries a real root once a live project context
+      // exists, so gate on the source kind rather than on target emptiness.
+      if (kind === "artifacts") return Promise.resolve([] as FileRow[])
       const query: Record<string, string> = { path: target }
       if (session) query.sessionID = session
       return transport("/file", undefined, query)
         .then(json)
         .then((value) => {
           setError("")
+          // GET /file returns a bare FileNode[] (backend/cli/src/server/routes/file.ts:158-182,
+          // FileListResponses in tooling/sdk/js/src/v2/gen/types.gen.ts:7889). The {data}
+          // wrapper only exists on the generated client's RequestResult, never on the body.
+          if (Array.isArray(value)) return value as FileRow[]
           const data = (value as { data?: unknown }).data
           return Array.isArray(data) ? (data as FileRow[]) : []
         })
