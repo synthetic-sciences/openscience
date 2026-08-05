@@ -918,6 +918,117 @@ export namespace HarnessContract {
     .strict()
   export type HumanAIAutonomy = z.infer<typeof HumanAIAutonomy>
 
+  export const FormalTier = z.enum(["kernel", "fresh_recheck", "external_crosscheck"])
+  export type FormalTier = z.infer<typeof FormalTier>
+
+  export const FormalRelation = z.enum(["exact_proof", "exact_refutation", "repaired_proof"])
+  export type FormalRelation = z.infer<typeof FormalRelation>
+
+  export const FormalForbidden = z.enum(["sorry", "admit", "debug.skipKernelTC", "native_decide"])
+  export type FormalForbidden = z.infer<typeof FormalForbidden>
+
+  export const FormalVerifierRole = z.enum([
+    "lean_kernel",
+    "source_auditor",
+    "axiom_auditor",
+    "fresh_rechecker",
+    "sandbox_comparator",
+    "external_checker",
+  ])
+  export type FormalVerifierRole = z.infer<typeof FormalVerifierRole>
+
+  const FormalVerifier = z
+    .object({
+      role: FormalVerifierRole,
+      name: z.string().min(1).max(200),
+      version: z.string().min(1).max(200),
+      artifactSHA256: Hash,
+    })
+    .strict()
+
+  export const FormalProof = z
+    .object({
+      protocolVersion: z.literal("formal-proof-v1"),
+      language: z.literal("lean4"),
+      tier: FormalTier,
+      relation: FormalRelation,
+      challengeSHA256: Hash,
+      statementSHA256: Hash,
+      declaration: z.string().min(1).max(500),
+      module: z.string().min(1).max(500),
+      leanVersion: z.string().min(1).max(200),
+      leanToolchainSHA256: Hash,
+      lakeManifestSHA256: Hash,
+      dependencyTreeSHA256: Hash,
+      verifiers: z.array(FormalVerifier).min(2).max(FormalVerifierRole.options.length),
+      sandboxImageSHA256: Hash.optional(),
+      forbiddenConstructs: z.array(FormalForbidden).length(FormalForbidden.options.length),
+      allowedAxioms: z.array(z.string().min(1).max(300)).max(64),
+      maxFiles: z.number().int().min(6).max(10_000),
+      completeManifestRequired: z.literal(true),
+      warningPolicy: z.literal("fail"),
+      semanticPolicy: z.literal("formal_statement_only"),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      const roles = value.verifiers.map((item) => item.role)
+      const required =
+        value.tier === "kernel"
+          ? ["lean_kernel", "source_auditor", "axiom_auditor"]
+          : value.tier === "fresh_recheck"
+            ? ["lean_kernel", "source_auditor", "axiom_auditor", "fresh_rechecker"]
+            : FormalVerifierRole.options
+      if (new Set(roles).size !== roles.length || JSON.stringify(roles) !== JSON.stringify(required)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["verifiers"],
+          message: "Formal proof verifier roles must exactly match the frozen trust tier in canonical order",
+        })
+      }
+      const artifacts = value.verifiers.map((item) => item.artifactSHA256)
+      if (new Set(artifacts).size !== artifacts.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["verifiers"],
+          message: "Formal proof trust roles require distinct verifier artifacts",
+        })
+      }
+      if (Boolean(value.sandboxImageSHA256) !== (value.tier === "external_crosscheck")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["sandboxImageSHA256"],
+          message: "Only the external cross-check tier requires a frozen sandbox image",
+        })
+      }
+      if (JSON.stringify(value.forbiddenConstructs) !== JSON.stringify(FormalForbidden.options)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["forbiddenConstructs"],
+          message: "Formal proof forbidden constructs must use the complete canonical protocol policy",
+        })
+      }
+      if (
+        new Set(value.allowedAxioms).size !== value.allowedAxioms.length ||
+        value.allowedAxioms.some(
+          (item, index) => Boolean(index) && value.allowedAxioms[index - 1]!.localeCompare(item) >= 0,
+        )
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["allowedAxioms"],
+          message: "Formal proof allowed axioms must be unique and use canonical order",
+        })
+      }
+      if (value.allowedAxioms.includes("sorryAx")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["allowedAxioms"],
+          message: "A formal proof protocol can never allow sorryAx",
+        })
+      }
+    })
+  export type FormalProof = z.infer<typeof FormalProof>
+
   export const ReplicationEstimator = z.enum(["mean", "median", "iqm", "pass_rate"])
   export type ReplicationEstimator = z.infer<typeof ReplicationEstimator>
 
@@ -1166,6 +1277,7 @@ export namespace HarnessContract {
       semanticAudit: SemanticAudit.optional(),
       synthesis: ScientificSynthesis.optional(),
       autonomy: HumanAIAutonomy.optional(),
+      formalProof: FormalProof.optional(),
       replication: Replication.optional(),
       confirmation: Confirmation.optional(),
       packs: z
@@ -1278,6 +1390,7 @@ export namespace HarnessContract {
           value.semanticAudit ||
           value.synthesis ||
           value.autonomy ||
+          value.formalProof ||
           value.replication ||
           value.confirmation) &&
         !value.benchmark.evaluatorVersion
@@ -1324,6 +1437,7 @@ export namespace HarnessContract {
           value.semanticAudit ||
           value.synthesis ||
           value.autonomy ||
+          value.formalProof ||
           value.replication ||
           value.confirmation) &&
         !value.benchmark.evaluatorSource
@@ -1563,6 +1677,13 @@ export namespace HarnessContract {
           code: "custom",
           path: ["intervention"],
           message: "Collaborative or primarily-human claims require the human_reprompted intervention label",
+        })
+      }
+      if (value.formalProof && value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Formal proof validation requires a capability-authenticated evaluator source",
         })
       }
       if (

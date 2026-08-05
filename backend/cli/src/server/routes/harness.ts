@@ -12,6 +12,7 @@ import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
 import { HarnessEvolution } from "@/session/harness/evolution"
 import { HarnessFailure } from "@/session/harness/failure"
+import { HarnessFormal } from "@/session/harness/formal"
 import { HarnessJudge } from "@/session/harness/judge"
 import { HarnessLaunch } from "@/session/harness/launch"
 import { HarnessIntegrity } from "@/session/harness/integrity"
@@ -683,6 +684,49 @@ export const HarnessRoutes = lazy(() =>
         const input = c.req.valid("json")
         const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
         return c.json(await HarnessAutonomy.read(c.req.valid("param").receiptID, contract))
+      },
+    )
+    .post(
+      "/proofs/receipts",
+      describeRoute({
+        summary: "Record an evaluator-authenticated formal proof verification",
+        description:
+          "Binds a trusted Lean challenge, exact proof artifact, frozen environment, transitive axiom audit, and the contract's kernel, fresh-recheck, or external-crosscheck trust tier.",
+        operationId: "harness.formal.record",
+        responses: {
+          200: {
+            description: "Immutable backend-derived formal proof receipt",
+            content: { "application/json": { schema: resolver(HarnessFormal.Receipt) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessFormal.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessFormal.record(input, contract))
+      },
+    )
+    .post(
+      "/proofs/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected formal proof receipt",
+        operationId: "harness.formal.receipt",
+        responses: {
+          200: {
+            description: "Canonical formal proof receipt",
+            content: { "application/json": { schema: resolver(HarnessFormal.Receipt) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessFormal.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessFormal.read(c.req.valid("param").receiptID, contract))
       },
     )
     .post(

@@ -143,6 +143,10 @@ import type {
   HarnessFailureSelectResponses,
   HarnessFailureStatusErrors,
   HarnessFailureStatusResponses,
+  HarnessFormalReceiptErrors,
+  HarnessFormalReceiptResponses,
+  HarnessFormalRecordErrors,
+  HarnessFormalRecordResponses,
   HarnessIntegrityReceiptErrors,
   HarnessIntegrityReceiptResponses,
   HarnessIntegrityRecordErrors,
@@ -4262,6 +4266,7 @@ export class Ablation extends HeyApiClient {
           | "semantic_audit"
           | "synthesis"
           | "autonomy"
+          | "formal_proof"
           | "replication"
           | "fidelities"
           | "skill"
@@ -5384,6 +5389,185 @@ export class Autonomy extends HeyApiClient {
       ThrowOnError
     >({
       url: "/harness/autonomy/receipts/{receiptID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Formal extends HeyApiClient {
+  /**
+   * Record an evaluator-authenticated formal proof verification
+   *
+   * Binds a trusted Lean challenge, exact proof artifact, frozen environment, transitive axiom audit, and the contract's kernel, fresh-recheck, or external-crosscheck trust tier.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+      subject?: {
+        type: "run" | "candidate"
+        id: string
+      }
+      artifactSHA256?: string
+      relation?: "exact_proof" | "exact_refutation" | "repaired_proof"
+      challengeSHA256?: string
+      statementSHA256?: string
+      declaration?: string
+      module?: string
+      environment?: {
+        leanVersion: string
+        leanToolchainSHA256: string
+        lakeManifestSHA256: string
+        dependencyTreeSHA256: string
+      }
+      manifest?: {
+        complete: boolean
+        files: Array<{
+          path: string
+          role:
+            | "challenge"
+            | "statement"
+            | "proof"
+            | "lean_toolchain"
+            | "lake_manifest"
+            | "dependency_tree"
+            | "config"
+            | "support"
+          sha256: string
+        }>
+      }
+      verification?: {
+        startedAt: number
+        endedAt: number
+        build: {
+          verifierArtifactSHA256: string
+          exitCode: number
+          warnings: number
+          transcriptSHA256: string
+        }
+        source: {
+          verifierArtifactSHA256: string
+          complete: boolean
+          findings: Array<{
+            construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
+            path: string
+            line: number
+          }>
+          transcriptSHA256: string
+        }
+        axioms: {
+          verifierArtifactSHA256: string
+          complete: boolean
+          typesTraversed: boolean
+          observed: Array<string>
+          transcriptSHA256: string
+        }
+        fresh?: {
+          verifierArtifactSHA256: string
+          fresh: boolean
+          exitCode: number
+          transcriptSHA256: string
+        }
+        external?: {
+          comparatorArtifactSHA256: string
+          sandboxImageSHA256: string
+          sandboxed: boolean
+          challengeMatched: boolean
+          proofTermSHA256: string
+          transcriptSHA256: string
+          checks: [
+            {
+              role: "lean_kernel" | "external_checker"
+              verifierArtifactSHA256: string
+              accepted: boolean
+              transcriptSHA256: string
+            },
+            {
+              role: "lean_kernel" | "external_checker"
+              verifierArtifactSHA256: string
+              accepted: boolean
+              transcriptSHA256: string
+            },
+          ]
+        }
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "artifactSHA256" },
+            { in: "body", key: "relation" },
+            { in: "body", key: "challengeSHA256" },
+            { in: "body", key: "statementSHA256" },
+            { in: "body", key: "declaration" },
+            { in: "body", key: "module" },
+            { in: "body", key: "environment" },
+            { in: "body", key: "manifest" },
+            { in: "body", key: "verification" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessFormalRecordResponses, HarnessFormalRecordErrors, ThrowOnError>(
+      {
+        url: "/harness/proofs/receipts",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Read a capability-protected formal proof receipt
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessFormalReceiptResponses,
+      HarnessFormalReceiptErrors,
+      ThrowOnError
+    >({
+      url: "/harness/proofs/receipts/{receiptID}",
       ...options,
       ...params,
       headers: {
@@ -6836,6 +7020,44 @@ export class Harness extends HeyApiClient {
         completeTraceRequired: true
         uncertaintyPolicy: "inconclusive"
       }
+      formalProof?: {
+        protocolVersion: "formal-proof-v1"
+        language: "lean4"
+        tier: "kernel" | "fresh_recheck" | "external_crosscheck"
+        relation: "exact_proof" | "exact_refutation" | "repaired_proof"
+        challengeSHA256: string
+        statementSHA256: string
+        declaration: string
+        module: string
+        leanVersion: string
+        leanToolchainSHA256: string
+        lakeManifestSHA256: string
+        dependencyTreeSHA256: string
+        verifiers: Array<{
+          role:
+            | "lean_kernel"
+            | "source_auditor"
+            | "axiom_auditor"
+            | "fresh_rechecker"
+            | "sandbox_comparator"
+            | "external_checker"
+          name: string
+          version: string
+          artifactSHA256: string
+        }>
+        sandboxImageSHA256?: string
+        forbiddenConstructs: [
+          "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+          "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+          "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+          "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+        ]
+        allowedAxioms: Array<string>
+        maxFiles: number
+        completeManifestRequired: true
+        warningPolicy: "fail"
+        semanticPolicy: "formal_statement_only"
+      }
       replication?: {
         protocolVersion: "replicated-evaluation-v1"
         validatorSHA256: string
@@ -6912,7 +7134,7 @@ export class Harness extends HeyApiClient {
         }
         token: string
       }
-      extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+      extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast" | "formal">
       metric?: {
         name?: string
         direction: "maximize" | "minimize" | "pass"
@@ -6996,6 +7218,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "semanticAudit" },
             { in: "body", key: "synthesis" },
             { in: "body", key: "autonomy" },
+            { in: "body", key: "formalProof" },
             { in: "body", key: "replication" },
             { in: "body", key: "confirmation" },
             { in: "body", key: "extraPacks" },
@@ -7053,6 +7276,7 @@ export class Harness extends HeyApiClient {
       failureDiscoveryReceiptID?: string
       synthesisReceiptID?: string
       autonomyReceiptID?: string
+      proofReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
       metrics?: {
@@ -7100,6 +7324,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "failureDiscoveryReceiptID" },
             { in: "body", key: "synthesisReceiptID" },
             { in: "body", key: "autonomyReceiptID" },
+            { in: "body", key: "proofReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
             { in: "body", key: "metrics" },
@@ -7315,6 +7540,11 @@ export class Harness extends HeyApiClient {
   private _autonomy?: Autonomy
   get autonomy(): Autonomy {
     return (this._autonomy ??= new Autonomy({ client: this.client }))
+  }
+
+  private _formal?: Formal
+  get formal(): Formal {
+    return (this._formal ??= new Formal({ client: this.client }))
   }
 
   private _launch?: Launch

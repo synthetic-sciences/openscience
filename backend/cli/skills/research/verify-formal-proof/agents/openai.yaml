@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Formal Proof"
+  short_description: "Preflight kernel and cross-check proof evidence"
+  default_prompt: "Use $verify-formal-proof to freeze and validate a Lean proof verification submission."

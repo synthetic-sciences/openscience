@@ -7513,7 +7513,7 @@ export type HarnessBenchmarksResponses = {
     aliases: Array<string>
     profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
     profiles: Array<"react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast">
-    packs: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+    packs: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast" | "formal">
     execution: "external_runner_required"
     source:
       | {
@@ -9185,6 +9185,7 @@ export type HarnessAblationInitializeData = {
         | "semantic_audit"
         | "synthesis"
         | "autonomy"
+        | "formal_proof"
         | "replication"
         | "fidelities"
         | "skill"
@@ -9241,6 +9242,7 @@ export type HarnessAblationInitializeResponses = {
           | "semantic_audit"
           | "synthesis"
           | "autonomy"
+          | "formal_proof"
           | "replication"
           | "fidelities"
           | "skill"
@@ -9293,6 +9295,7 @@ export type HarnessAblationInitializeResponses = {
           | "semantic_audit"
           | "synthesis"
           | "autonomy"
+          | "formal_proof"
           | "replication"
           | "fidelities"
           | "skill"
@@ -9391,6 +9394,7 @@ export type HarnessAblationAssessResponses = {
           | "semantic_audit"
           | "synthesis"
           | "autonomy"
+          | "formal_proof"
           | "replication"
           | "fidelities"
           | "skill"
@@ -9443,6 +9447,7 @@ export type HarnessAblationAssessResponses = {
           | "semantic_audit"
           | "synthesis"
           | "autonomy"
+          | "formal_proof"
           | "replication"
           | "fidelities"
           | "skill"
@@ -11665,6 +11670,389 @@ export type HarnessAutonomyReceiptResponses = {
 }
 
 export type HarnessAutonomyReceiptResponse = HarnessAutonomyReceiptResponses[keyof HarnessAutonomyReceiptResponses]
+
+export type HarnessFormalRecordData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    artifactSHA256: string
+    relation: "exact_proof" | "exact_refutation" | "repaired_proof"
+    challengeSHA256: string
+    statementSHA256: string
+    declaration: string
+    module: string
+    environment: {
+      leanVersion: string
+      leanToolchainSHA256: string
+      lakeManifestSHA256: string
+      dependencyTreeSHA256: string
+    }
+    manifest: {
+      complete: boolean
+      files: Array<{
+        path: string
+        role:
+          | "challenge"
+          | "statement"
+          | "proof"
+          | "lean_toolchain"
+          | "lake_manifest"
+          | "dependency_tree"
+          | "config"
+          | "support"
+        sha256: string
+      }>
+    }
+    verification: {
+      startedAt: number
+      endedAt: number
+      build: {
+        verifierArtifactSHA256: string
+        exitCode: number
+        warnings: number
+        transcriptSHA256: string
+      }
+      source: {
+        verifierArtifactSHA256: string
+        complete: boolean
+        findings: Array<{
+          construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
+          path: string
+          line: number
+        }>
+        transcriptSHA256: string
+      }
+      axioms: {
+        verifierArtifactSHA256: string
+        complete: boolean
+        typesTraversed: boolean
+        observed: Array<string>
+        transcriptSHA256: string
+      }
+      fresh?: {
+        verifierArtifactSHA256: string
+        fresh: boolean
+        exitCode: number
+        transcriptSHA256: string
+      }
+      external?: {
+        comparatorArtifactSHA256: string
+        sandboxImageSHA256: string
+        sandboxed: boolean
+        challengeMatched: boolean
+        proofTermSHA256: string
+        transcriptSHA256: string
+        checks: [
+          {
+            role: "lean_kernel" | "external_checker"
+            verifierArtifactSHA256: string
+            accepted: boolean
+            transcriptSHA256: string
+          },
+          {
+            role: "lean_kernel" | "external_checker"
+            verifierArtifactSHA256: string
+            accepted: boolean
+            transcriptSHA256: string
+          },
+        ]
+      }
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/proofs/receipts"
+}
+
+export type HarnessFormalRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessFormalRecordError = HarnessFormalRecordErrors[keyof HarnessFormalRecordErrors]
+
+export type HarnessFormalRecordResponses = {
+  /**
+   * Immutable backend-derived formal proof receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "formal-proof-receipt-v1"
+    receiptID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    protocolSHA256: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    artifactSHA256: string
+    relation: "exact_proof" | "exact_refutation" | "repaired_proof"
+    challengeSHA256: string
+    statementSHA256: string
+    declaration: string
+    module: string
+    environment: {
+      leanVersion: string
+      leanToolchainSHA256: string
+      lakeManifestSHA256: string
+      dependencyTreeSHA256: string
+    }
+    manifestSHA256: string
+    files: Array<{
+      path: string
+      role:
+        | "challenge"
+        | "statement"
+        | "proof"
+        | "lean_toolchain"
+        | "lake_manifest"
+        | "dependency_tree"
+        | "config"
+        | "support"
+      sha256: string
+    }>
+    verification: {
+      startedAt: number
+      endedAt: number
+      build: {
+        verifierArtifactSHA256: string
+        exitCode: number
+        warnings: number
+        transcriptSHA256: string
+      }
+      source: {
+        verifierArtifactSHA256: string
+        complete: boolean
+        findings: Array<{
+          construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
+          path: string
+          line: number
+        }>
+        transcriptSHA256: string
+      }
+      axioms: {
+        verifierArtifactSHA256: string
+        complete: boolean
+        typesTraversed: boolean
+        observed: Array<string>
+        transcriptSHA256: string
+      }
+      fresh?: {
+        verifierArtifactSHA256: string
+        fresh: boolean
+        exitCode: number
+        transcriptSHA256: string
+      }
+      external?: {
+        comparatorArtifactSHA256: string
+        sandboxImageSHA256: string
+        sandboxed: boolean
+        challengeMatched: boolean
+        proofTermSHA256: string
+        transcriptSHA256: string
+        checks: [
+          {
+            role: "lean_kernel" | "external_checker"
+            verifierArtifactSHA256: string
+            accepted: boolean
+            transcriptSHA256: string
+          },
+          {
+            role: "lean_kernel" | "external_checker"
+            verifierArtifactSHA256: string
+            accepted: boolean
+            transcriptSHA256: string
+          },
+        ]
+      }
+    }
+    tier: "kernel" | "fresh_recheck" | "external_crosscheck"
+    metrics: {
+      files: number
+      warnings: number
+      observedAxioms: number
+      disallowedAxioms: Array<string>
+      manifestComplete: boolean
+      buildAccepted: boolean
+      sourceAuditAccepted: boolean
+      forbiddenFindings: Array<{
+        construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
+        path: string
+        line: number
+      }>
+      axiomAuditAccepted: boolean
+      freshRecheckAccepted: boolean
+      externalCrosscheckAccepted: boolean
+      statementMatched: boolean
+    }
+    status: "passed" | "failed"
+    failures: Array<string>
+    recordedAt: number
+  }
+}
+
+export type HarnessFormalRecordResponse = HarnessFormalRecordResponses[keyof HarnessFormalRecordResponses]
+
+export type HarnessFormalReceiptData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/proofs/receipts/{receiptID}"
+}
+
+export type HarnessFormalReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessFormalReceiptError = HarnessFormalReceiptErrors[keyof HarnessFormalReceiptErrors]
+
+export type HarnessFormalReceiptResponses = {
+  /**
+   * Canonical formal proof receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "formal-proof-receipt-v1"
+    receiptID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    protocolSHA256: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    artifactSHA256: string
+    relation: "exact_proof" | "exact_refutation" | "repaired_proof"
+    challengeSHA256: string
+    statementSHA256: string
+    declaration: string
+    module: string
+    environment: {
+      leanVersion: string
+      leanToolchainSHA256: string
+      lakeManifestSHA256: string
+      dependencyTreeSHA256: string
+    }
+    manifestSHA256: string
+    files: Array<{
+      path: string
+      role:
+        | "challenge"
+        | "statement"
+        | "proof"
+        | "lean_toolchain"
+        | "lake_manifest"
+        | "dependency_tree"
+        | "config"
+        | "support"
+      sha256: string
+    }>
+    verification: {
+      startedAt: number
+      endedAt: number
+      build: {
+        verifierArtifactSHA256: string
+        exitCode: number
+        warnings: number
+        transcriptSHA256: string
+      }
+      source: {
+        verifierArtifactSHA256: string
+        complete: boolean
+        findings: Array<{
+          construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
+          path: string
+          line: number
+        }>
+        transcriptSHA256: string
+      }
+      axioms: {
+        verifierArtifactSHA256: string
+        complete: boolean
+        typesTraversed: boolean
+        observed: Array<string>
+        transcriptSHA256: string
+      }
+      fresh?: {
+        verifierArtifactSHA256: string
+        fresh: boolean
+        exitCode: number
+        transcriptSHA256: string
+      }
+      external?: {
+        comparatorArtifactSHA256: string
+        sandboxImageSHA256: string
+        sandboxed: boolean
+        challengeMatched: boolean
+        proofTermSHA256: string
+        transcriptSHA256: string
+        checks: [
+          {
+            role: "lean_kernel" | "external_checker"
+            verifierArtifactSHA256: string
+            accepted: boolean
+            transcriptSHA256: string
+          },
+          {
+            role: "lean_kernel" | "external_checker"
+            verifierArtifactSHA256: string
+            accepted: boolean
+            transcriptSHA256: string
+          },
+        ]
+      }
+    }
+    tier: "kernel" | "fresh_recheck" | "external_crosscheck"
+    metrics: {
+      files: number
+      warnings: number
+      observedAxioms: number
+      disallowedAxioms: Array<string>
+      manifestComplete: boolean
+      buildAccepted: boolean
+      sourceAuditAccepted: boolean
+      forbiddenFindings: Array<{
+        construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
+        path: string
+        line: number
+      }>
+      axiomAuditAccepted: boolean
+      freshRecheckAccepted: boolean
+      externalCrosscheckAccepted: boolean
+      statementMatched: boolean
+    }
+    status: "passed" | "failed"
+    failures: Array<string>
+    recordedAt: number
+  }
+}
+
+export type HarnessFormalReceiptResponse = HarnessFormalReceiptResponses[keyof HarnessFormalReceiptResponses]
 
 export type HarnessLaunchRecordData = {
   body?: {
@@ -14236,6 +14624,44 @@ export type HarnessBindData = {
       completeTraceRequired: true
       uncertaintyPolicy: "inconclusive"
     }
+    formalProof?: {
+      protocolVersion: "formal-proof-v1"
+      language: "lean4"
+      tier: "kernel" | "fresh_recheck" | "external_crosscheck"
+      relation: "exact_proof" | "exact_refutation" | "repaired_proof"
+      challengeSHA256: string
+      statementSHA256: string
+      declaration: string
+      module: string
+      leanVersion: string
+      leanToolchainSHA256: string
+      lakeManifestSHA256: string
+      dependencyTreeSHA256: string
+      verifiers: Array<{
+        role:
+          | "lean_kernel"
+          | "source_auditor"
+          | "axiom_auditor"
+          | "fresh_rechecker"
+          | "sandbox_comparator"
+          | "external_checker"
+        name: string
+        version: string
+        artifactSHA256: string
+      }>
+      sandboxImageSHA256?: string
+      forbiddenConstructs: [
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+      ]
+      allowedAxioms: Array<string>
+      maxFiles: number
+      completeManifestRequired: true
+      warningPolicy: "fail"
+      semanticPolicy: "formal_statement_only"
+    }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
       validatorSHA256: string
@@ -14312,7 +14738,7 @@ export type HarnessBindData = {
       }
       token: string
     }
-    extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+    extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast" | "formal">
     metric?: {
       name?: string
       direction: "maximize" | "minimize" | "pass"
@@ -14964,6 +15390,44 @@ export type HarnessBindResponses = {
       completeTraceRequired: true
       uncertaintyPolicy: "inconclusive"
     }
+    formalProof?: {
+      protocolVersion: "formal-proof-v1"
+      language: "lean4"
+      tier: "kernel" | "fresh_recheck" | "external_crosscheck"
+      relation: "exact_proof" | "exact_refutation" | "repaired_proof"
+      challengeSHA256: string
+      statementSHA256: string
+      declaration: string
+      module: string
+      leanVersion: string
+      leanToolchainSHA256: string
+      lakeManifestSHA256: string
+      dependencyTreeSHA256: string
+      verifiers: Array<{
+        role:
+          | "lean_kernel"
+          | "source_auditor"
+          | "axiom_auditor"
+          | "fresh_rechecker"
+          | "sandbox_comparator"
+          | "external_checker"
+        name: string
+        version: string
+        artifactSHA256: string
+      }>
+      sandboxImageSHA256?: string
+      forbiddenConstructs: [
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+      ]
+      allowedAxioms: Array<string>
+      maxFiles: number
+      completeManifestRequired: true
+      warningPolicy: "fail"
+      semanticPolicy: "formal_statement_only"
+    }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
       validatorSHA256: string
@@ -15037,7 +15501,7 @@ export type HarnessBindResponses = {
       }
       failurePolicy: "fail-closed"
     }
-    packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+    packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast" | "formal">
     model: {
       provider: string
       name: string
@@ -15091,6 +15555,7 @@ export type HarnessEvaluateData = {
     failureDiscoveryReceiptID?: string
     synthesisReceiptID?: string
     autonomyReceiptID?: string
+    proofReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
     metrics?: {
@@ -16020,6 +16485,44 @@ export type HarnessContractResponses = {
       completeTraceRequired: true
       uncertaintyPolicy: "inconclusive"
     }
+    formalProof?: {
+      protocolVersion: "formal-proof-v1"
+      language: "lean4"
+      tier: "kernel" | "fresh_recheck" | "external_crosscheck"
+      relation: "exact_proof" | "exact_refutation" | "repaired_proof"
+      challengeSHA256: string
+      statementSHA256: string
+      declaration: string
+      module: string
+      leanVersion: string
+      leanToolchainSHA256: string
+      lakeManifestSHA256: string
+      dependencyTreeSHA256: string
+      verifiers: Array<{
+        role:
+          | "lean_kernel"
+          | "source_auditor"
+          | "axiom_auditor"
+          | "fresh_rechecker"
+          | "sandbox_comparator"
+          | "external_checker"
+        name: string
+        version: string
+        artifactSHA256: string
+      }>
+      sandboxImageSHA256?: string
+      forbiddenConstructs: [
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
+      ]
+      allowedAxioms: Array<string>
+      maxFiles: number
+      completeManifestRequired: true
+      warningPolicy: "fail"
+      semanticPolicy: "formal_statement_only"
+    }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
       validatorSHA256: string
@@ -16093,7 +16596,7 @@ export type HarnessContractResponses = {
       }
       failurePolicy: "fail-closed"
     }
-    packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
+    packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast" | "formal">
     model: {
       provider: string
       name: string
@@ -16175,6 +16678,7 @@ export type HarnessEvaluationsResponses = {
     failureDiscoveryReceiptID?: string
     synthesisReceiptID?: string
     autonomyReceiptID?: string
+    proofReceiptID?: string
     evaluator: {
       name: string
       version: string
@@ -16285,6 +16789,11 @@ export type HarnessReportResponses = {
         derivedLevel?: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
         status?: "passed" | "failed" | "inconclusive"
       }
+      formal?: {
+        tier: "kernel" | "fresh_recheck" | "external_crosscheck"
+        relation: "exact_proof" | "exact_refutation" | "repaired_proof"
+        status?: "passed" | "failed"
+      }
       seed: number
     }
     quality: {
@@ -16310,6 +16819,7 @@ export type HarnessReportResponses = {
       failureDiscoveryReceiptID?: string
       synthesisReceiptID?: string
       autonomyReceiptID?: string
+      proofReceiptID?: string
       confirmationReceiptID?: string
       evaluations: number
     }

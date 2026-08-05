@@ -59,6 +59,7 @@ export namespace HarnessAdapter {
         .optional(),
       synthesis: HarnessContract.ScientificSynthesis.optional(),
       autonomy: HarnessContract.HumanAIAutonomy.optional(),
+      formalProof: HarnessContract.FormalProof.optional(),
       replication: HarnessContract.Replication.optional(),
       confirmation: z
         .object({
@@ -249,6 +250,10 @@ export namespace HarnessAdapter {
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
       autonomyReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      proofReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -479,7 +484,9 @@ export namespace HarnessAdapter {
     ) {
       throw new Error(`Benchmark launch does not match the materialized source-verified native driver`)
     }
-    const packs = [...benchmark.packs, ...task.extraPacks].filter((pack, index, items) => items.indexOf(pack) === index)
+    const packs = [...benchmark.packs, ...task.extraPacks, ...(task.formalProof ? (["formal"] as const) : [])].filter(
+      (pack, index, items) => items.indexOf(pack) === index,
+    )
     if (task.simulation && !packs.some((pack) => ["physics", "pde", "chemistry"].includes(pack))) {
       throw new Error(`A simulator validation contract requires a physics, PDE, or chemistry verification pack`)
     }
@@ -521,6 +528,7 @@ export namespace HarnessAdapter {
       semanticAudit: task.semanticAudit?.protocol,
       synthesis: task.synthesis,
       autonomy: task.autonomy,
+      formalProof: task.formalProof,
       replication: task.replication,
       confirmation: task.confirmation?.protocol,
       packs,
@@ -648,6 +656,7 @@ export namespace HarnessAdapter {
       failureDiscoveryReceiptID: value.failureDiscoveryReceiptID,
       synthesisReceiptID: value.synthesisReceiptID,
       autonomyReceiptID: value.autonomyReceiptID,
+      proofReceiptID: value.proofReceiptID,
       evaluator: binding.evaluator,
       status: value.status,
       score: value.score,

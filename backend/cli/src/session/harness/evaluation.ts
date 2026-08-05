@@ -108,6 +108,10 @@ export namespace HarnessEvaluation {
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
+      proofReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       evaluator: z
         .object({
           name: z.string().min(1).max(200),
@@ -462,6 +466,23 @@ export namespace HarnessEvaluation {
       await HarnessAutonomy.assert({
         contract,
         receiptID: evaluation.autonomyReceiptID,
+        subject: evaluation.subject ?? { type: "run", id: evaluation.runID },
+        evaluatedAt: evaluation.evaluatedAt,
+        recordedAt: evaluation.recordedAt!,
+        requirePassed: evaluation.status === "passed" && final(evaluation),
+      })
+    }
+    if (evaluation.proofReceiptID && !contract.formalProof) {
+      throw new Error(`Evaluation references a proof receipt without a bound formal proof protocol`)
+    }
+    if (contract.formalProof && evaluation.status === "passed" && final(evaluation) && !evaluation.proofReceiptID) {
+      throw new Error(`A passing final evaluation must reference a formal proof receipt`)
+    }
+    if (evaluation.proofReceiptID) {
+      const { HarnessFormal } = await import("./formal")
+      await HarnessFormal.assert({
+        contract,
+        receiptID: evaluation.proofReceiptID,
         subject: evaluation.subject ?? { type: "run", id: evaluation.runID },
         evaluatedAt: evaluation.evaluatedAt,
         recordedAt: evaluation.recordedAt!,

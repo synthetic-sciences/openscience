@@ -77,7 +77,7 @@ function evaluation(
 }
 
 describe("domain verification packs", () => {
-  test("publishes exactly the seven typed domain packs", () => {
+  test("publishes every typed domain pack", () => {
     expect(Object.keys(HarnessDomain.catalog).toSorted()).toEqual(HarnessPack.Id.options.toSorted())
     for (const pack of Object.values(HarnessDomain.catalog)) expect(HarnessDomain.Info.parse(pack)).toEqual(pack)
   })

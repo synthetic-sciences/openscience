@@ -25,6 +25,7 @@ export namespace HarnessAblation {
         "semantic_audit",
         "synthesis",
         "autonomy",
+        "formal_proof",
         "replication",
         "fidelities",
         "skill",
@@ -222,6 +223,7 @@ export namespace HarnessAblation {
     if (factor.kind === "semantic_audit") return contract.semanticAudit ?? null
     if (factor.kind === "synthesis") return contract.synthesis ?? null
     if (factor.kind === "autonomy") return contract.autonomy ?? null
+    if (factor.kind === "formal_proof") return contract.formalProof ?? null
     if (factor.kind === "replication") return contract.replication ?? null
     if (factor.kind === "fidelities") return contract.benchmark.fidelities ?? null
     if (factor.kind === "skill") return contract.skills.find((item) => item.name === factor.name) ?? null
@@ -259,9 +261,10 @@ export namespace HarnessAblation {
       ...(factor.kind === "semantic_audit" ? {} : { semanticAudit: contract.semanticAudit }),
       ...(factor.kind === "synthesis" ? {} : { synthesis: contract.synthesis }),
       ...(factor.kind === "autonomy" ? {} : { autonomy: contract.autonomy }),
+      ...(factor.kind === "formal_proof" ? {} : { formalProof: contract.formalProof }),
       ...(factor.kind === "replication" ? {} : { replication: contract.replication }),
       confirmation: contract.confirmation,
-      packs: (contract.packs ?? []).toSorted(),
+      packs: (contract.packs ?? []).filter((item) => factor.kind !== "formal_proof" || item !== "formal").toSorted(),
       model: contract.model,
       tools: contract.tools.filter((item) => factor.kind !== "tool" || item !== factor.name).toSorted(),
       skills: contract.skills

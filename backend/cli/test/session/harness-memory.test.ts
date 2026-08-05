@@ -30,6 +30,7 @@ async function bind(
   replication = false,
   synthesis = false,
   autonomy = false,
+  formal = false,
 ) {
   sessions.add(sessionID)
   return HarnessContract.bind({
@@ -137,6 +138,48 @@ async function bind(
           disclosure: "evaluator_retained",
           completeTraceRequired: true,
           uncertaintyPolicy: "inconclusive",
+        }
+      : undefined,
+    formalProof: formal
+      ? {
+          protocolVersion: "formal-proof-v1",
+          language: "lean4",
+          tier: "kernel",
+          relation: "exact_proof",
+          challengeSHA256: hash("memory-formal-challenge"),
+          statementSHA256: hash("memory-formal-statement"),
+          declaration: "Memory.formal",
+          module: "Memory.Formal",
+          leanVersion: "4.33.0",
+          leanToolchainSHA256: hash("memory-lean-toolchain"),
+          lakeManifestSHA256: hash("memory-lake-manifest"),
+          dependencyTreeSHA256: hash("memory-dependency-tree"),
+          verifiers: [
+            {
+              role: "lean_kernel",
+              name: "memory-lean-kernel",
+              version: "1",
+              artifactSHA256: hash("memory-lean-kernel"),
+            },
+            {
+              role: "source_auditor",
+              name: "memory-source-auditor",
+              version: "1",
+              artifactSHA256: hash("memory-source-auditor"),
+            },
+            {
+              role: "axiom_auditor",
+              name: "memory-axiom-auditor",
+              version: "1",
+              artifactSHA256: hash("memory-axiom-auditor"),
+            },
+          ],
+          forbiddenConstructs: ["sorry", "admit", "debug.skipKernelTC", "native_decide"],
+          allowedAxioms: ["Classical.choice", "Quot.sound", "propext"].toSorted((a, b) => a.localeCompare(b)),
+          maxFiles: 32,
+          completeManifestRequired: true,
+          warningPolicy: "fail",
+          semanticPolicy: "formal_statement_only",
         }
       : undefined,
     replication: replication
@@ -356,6 +399,22 @@ describe("verified retrospective memory", () => {
       await HarnessMemory.retrieve({
         sessionID: "memory-autonomy-query",
         query: "method selected after an undocumented human hint",
+      }),
+    ).toEqual([])
+  })
+
+  test("does not reuse unverified hindsight inside a frozen formal-proof scope", async () => {
+    await candidate({
+      sessionID: "memory-formal-source",
+      scope: "formal",
+      proposal: "compiler-looking proof without a bound kernel receipt",
+      score: 0.99,
+    })
+    await bind("memory-formal-query", "formal", "Prove the frozen theorem", false, false, false, false, true)
+    expect(
+      await HarnessMemory.retrieve({
+        sessionID: "memory-formal-query",
+        query: "compiler-looking proof without a bound kernel receipt",
       }),
     ).toEqual([])
   })

@@ -41,7 +41,15 @@ async function run(input: {
   createdAt: number
   model?: string
   direction?: "maximize" | "minimize"
-  factor?: "orchestration" | "search" | "evaluator_audit" | "semantic_audit" | "synthesis" | "autonomy" | "replication"
+  factor?:
+    | "orchestration"
+    | "search"
+    | "evaluator_audit"
+    | "semantic_audit"
+    | "synthesis"
+    | "autonomy"
+    | "formal_proof"
+    | "replication"
 }) {
   const sessionID = `${input.prefix}-${input.seed}-${input.role}`
   sessions.add(sessionID)
@@ -143,6 +151,49 @@ async function run(input: {
             uncertaintyPolicy: "inconclusive",
           }
         : undefined,
+    formalProof:
+      input.role === "arm" && input.factor === "formal_proof"
+        ? {
+            protocolVersion: "formal-proof-v1",
+            language: "lean4",
+            tier: "kernel",
+            relation: "exact_proof",
+            challengeSHA256: hash("ablation-formal-challenge"),
+            statementSHA256: hash("ablation-formal-statement"),
+            declaration: "Ablation.formal",
+            module: "Ablation.Formal",
+            leanVersion: "4.33.0",
+            leanToolchainSHA256: hash("ablation-lean-toolchain"),
+            lakeManifestSHA256: hash("ablation-lake-manifest"),
+            dependencyTreeSHA256: hash("ablation-dependency-tree"),
+            verifiers: [
+              {
+                role: "lean_kernel",
+                name: "ablation-lean-kernel",
+                version: "1",
+                artifactSHA256: hash("ablation-lean-kernel"),
+              },
+              {
+                role: "source_auditor",
+                name: "ablation-source-auditor",
+                version: "1",
+                artifactSHA256: hash("ablation-source-auditor"),
+              },
+              {
+                role: "axiom_auditor",
+                name: "ablation-axiom-auditor",
+                version: "1",
+                artifactSHA256: hash("ablation-axiom-auditor"),
+              },
+            ],
+            forbiddenConstructs: ["sorry", "admit", "debug.skipKernelTC", "native_decide"],
+            allowedAxioms: ["Classical.choice", "Quot.sound", "propext"].toSorted((a, b) => a.localeCompare(b)),
+            maxFiles: 32,
+            completeManifestRequired: true,
+            warningPolicy: "fail",
+            semanticPolicy: "formal_statement_only",
+          }
+        : undefined,
     semanticAudit:
       input.role === "arm" && input.factor === "semantic_audit"
         ? {
@@ -231,6 +282,7 @@ async function study(
     | "semantic_audit"
     | "synthesis"
     | "autonomy"
+    | "formal_proof"
     | "replication" = "orchestration",
 ) {
   const createdAt = Date.now()
@@ -397,6 +449,15 @@ describe("matched scientific ablations", () => {
     if (!initialized) throw new Error("Expected an initialized ablation")
     plans.add(initialized.plan.planID)
     expect(initialized.plan.factor.kind).toBe("autonomy")
+    expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
+  })
+
+  test("isolates formal proof verification as its own ablatable protocol factor", async () => {
+    const input = await study("ablation-formal-proof", false, "maximize", "formal_proof")
+    const initialized = await HarnessAblation.initialize(input.plan)
+    if (!initialized) throw new Error("Expected an initialized ablation")
+    plans.add(initialized.plan.planID)
+    expect(initialized.plan.factor.kind).toBe("formal_proof")
     expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
   })
 

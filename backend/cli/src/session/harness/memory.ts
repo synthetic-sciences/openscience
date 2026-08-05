@@ -68,6 +68,10 @@ export namespace HarnessMemory {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          formalProofSHA256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
           replicationSHA256: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
@@ -96,6 +100,8 @@ export namespace HarnessMemory {
     contract.synthesis ? digest(JSON.stringify(contract.synthesis)) : undefined
   const autonomy = (contract: HarnessContract.Info) =>
     contract.autonomy ? digest(JSON.stringify(contract.autonomy)) : undefined
+  const formal = (contract: HarnessContract.Info) =>
+    contract.formalProof ? digest(JSON.stringify(contract.formalProof)) : undefined
   const confirmation = (contract: HarnessContract.Info) =>
     contract.confirmation ? digest(JSON.stringify(contract.confirmation)) : undefined
   const key = (contract: HarnessContract.Info) => {
@@ -107,8 +113,10 @@ export namespace HarnessMemory {
     const scientific = factuality ? `${prior}\0${factuality}` : prior
     const provenance = autonomy(contract)
     const accountable = provenance ? `${scientific}\0${provenance}` : scientific
+    const proof = formal(contract)
+    const verified = proof ? `${accountable}\0${proof}` : accountable
     const sealed = confirmation(contract)
-    return digest(sealed ? `${accountable}\0${sealed}` : accountable)
+    return digest(sealed ? `${verified}\0${sealed}` : verified)
   }
   const file = (contract: HarnessContract.Info) => path.join(root, `${key(contract)}.json`)
   const clip = (value: string, max = 1_000) =>
@@ -131,6 +139,7 @@ export namespace HarnessMemory {
     const scope = semantic(contract)
     const factuality = synthesis(contract)
     const provenance = autonomy(contract)
+    const proof = formal(contract)
     const repeat = replication(contract)
     const sealed = confirmation(contract)
     return {
@@ -143,6 +152,7 @@ export namespace HarnessMemory {
         ...(scope ? { semanticAuditSHA256: scope } : {}),
         ...(factuality ? { synthesisSHA256: factuality } : {}),
         ...(provenance ? { autonomySHA256: provenance } : {}),
+        ...(proof ? { formalProofSHA256: proof } : {}),
         ...(repeat ? { replicationSHA256: repeat } : {}),
         ...(sealed ? { confirmationSHA256: sealed } : {}),
       },

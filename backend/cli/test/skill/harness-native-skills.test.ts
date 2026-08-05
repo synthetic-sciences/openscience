@@ -5,6 +5,7 @@ import path from "path"
 import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessAutonomy } from "../../src/session/harness/autonomy"
 import { HarnessEvolution } from "../../src/session/harness/evolution"
+import { HarnessFormal } from "../../src/session/harness/formal"
 import { HarnessLaunch } from "../../src/session/harness/launch"
 
 const skills = path.resolve(import.meta.dir, "../../skills")
@@ -2329,6 +2330,153 @@ test("record-human-ai-autonomy hashes private interactions and emits a token-fre
     const secret = await bun(script, ["protocol", manifestFile])
     expect(secret.code).toBe(1)
     expect(secret.stderr).toContain("unknown fields: evaluatorToken")
+
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("verify-formal-proof freezes a full external checker stack and emits token-free proof evidence", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-formal-proof-"))
+  const script = "research/verify-formal-proof/scripts/preflight.ts"
+  const manifestFile = path.join(dir, "manifest.json")
+  const protocolFile = path.join(dir, "preflight.json")
+  const evidenceFile = path.join(dir, "evidence.json")
+  const startedAt = Date.now()
+  const challenge = "private trusted theorem challenge"
+  const proof = "theorem target : True := by trivial"
+  const transcript = "private checker output accepted"
+  const token = "private-formal-evaluator-capability-must-never-be-emitted"
+  const verifiers = HarnessContract.FormalVerifierRole.options.map((role) => ({
+    role,
+    name: `native-${role}`,
+    version: "1",
+    artifactPath: `${role}.bin`,
+  }))
+  const manifest = {
+    tier: "external_crosscheck",
+    relation: "exact_proof",
+    challengePath: "challenge.lean",
+    statementPath: "statement.lean",
+    declaration: "Native.target",
+    module: "Native.Proof",
+    leanVersion: "4.33.0",
+    leanToolchainPath: "lean-toolchain",
+    lakeManifestPath: "lake-manifest.json",
+    dependencyTreePath: "deps.json",
+    verifiers,
+    sandboxImagePath: "sandbox.img",
+    allowedAxioms: ["Classical.choice", "Quot.sound", "propext"],
+    maxFiles: 16,
+  }
+  const evidence = {
+    sessionID: "native-formal-proof",
+    subject: { type: "run", id: "run-native-formal-proof" },
+    artifactPath: "proof.lean",
+    manifest: {
+      complete: true,
+      files: [
+        { path: "statement.lean", role: "statement" },
+        { path: "proof.lean", role: "proof" },
+        { path: "lean-toolchain", role: "lean_toolchain" },
+        { path: "lake-manifest.json", role: "lake_manifest" },
+        { path: "deps.json", role: "dependency_tree" },
+        { path: "challenge.lean", role: "challenge" },
+      ],
+    },
+    verification: {
+      startedAt,
+      endedAt: startedAt + 1,
+      build: { exitCode: 0, warnings: 0, transcriptPath: "build.log" },
+      source: { complete: true, findings: [], transcriptPath: "source.log" },
+      axioms: {
+        complete: true,
+        typesTraversed: true,
+        observed: ["propext", "Classical.choice", "Quot.sound"],
+        transcriptPath: "axioms.log",
+      },
+      fresh: { fresh: true, exitCode: 0, transcriptPath: "fresh.log" },
+      external: {
+        sandboxed: true,
+        challengeMatched: true,
+        proofTermPath: "proof.term",
+        transcriptPath: "comparator.log",
+        checks: [
+          { role: "lean_kernel", accepted: true, transcriptPath: "external-lean.log" },
+          { role: "external_checker", accepted: true, transcriptPath: "external-independent.log" },
+        ],
+      },
+    },
+  }
+  try {
+    await Promise.all([
+      Bun.write(path.join(dir, "challenge.lean"), challenge),
+      Bun.write(path.join(dir, "statement.lean"), "Native.target : True"),
+      Bun.write(path.join(dir, "proof.lean"), proof),
+      Bun.write(path.join(dir, "lean-toolchain"), "leanprover/lean4:v4.33.0"),
+      Bun.write(path.join(dir, "lake-manifest.json"), JSON.stringify({ packages: [] })),
+      Bun.write(path.join(dir, "deps.json"), JSON.stringify({ closure: ["mathlib"] })),
+      Bun.write(path.join(dir, "sandbox.img"), "frozen formal verification sandbox"),
+      Bun.write(path.join(dir, "proof.term"), "serialized proof term"),
+      ...verifiers.map((item) => Bun.write(path.join(dir, item.artifactPath), `binary:${item.role}`)),
+      ...[
+        "build.log",
+        "source.log",
+        "axioms.log",
+        "fresh.log",
+        "comparator.log",
+        "external-lean.log",
+        "external-independent.log",
+      ].map((name) => Bun.write(path.join(dir, name), `${transcript}:${name}:${token}`)),
+      Bun.write(manifestFile, JSON.stringify(manifest)),
+      Bun.write(evidenceFile, JSON.stringify(evidence)),
+    ])
+    const frozen = await bun(script, ["protocol", manifestFile])
+    expect(frozen.code).toBe(0)
+    const preflight = JSON.parse(frozen.stdout)
+    expect(HarnessContract.FormalProof.parse(preflight.protocol)).toEqual(preflight.protocol)
+    await Bun.write(protocolFile, frozen.stdout)
+
+    const prepared = await bun(script, ["submission", protocolFile, evidenceFile])
+    expect(prepared.code).toBe(0)
+    const payload = JSON.parse(prepared.stdout)
+    const submission = HarnessFormal.Submit.parse({ ...payload.submission, evaluatorToken: "x".repeat(32) })
+    expect(submission).toMatchObject({
+      sessionID: "native-formal-proof",
+      relation: "exact_proof",
+      artifactSHA256: hash(proof),
+      manifest: { complete: true },
+      verification: {
+        build: { exitCode: 0, warnings: 0 },
+        source: { complete: true, findings: [] },
+        axioms: { complete: true, typesTraversed: true },
+        fresh: { fresh: true, exitCode: 0 },
+        external: { sandboxed: true, challengeMatched: true },
+      },
+    })
+    expect(submission.manifest.files[0]?.path).toBe("challenge.lean")
+    expect(payload.preview).toMatchObject({
+      tier: "external_crosscheck",
+      relation: "exact_proof",
+      files: 6,
+      artifactSHA256: hash(proof),
+    })
+    for (const secret of [challenge, proof, transcript, token]) expect(prepared.stdout).not.toContain(secret)
+
+    await Bun.write(manifestFile, JSON.stringify({ ...manifest, allowedAxioms: ["sorryAx"] }))
+    const sorry = await bun(script, ["protocol", manifestFile])
+    expect(sorry.code).toBe(1)
+    expect(sorry.stderr).toContain("never include sorryAx")
+
+    await Bun.write(manifestFile, JSON.stringify({ ...manifest, evaluatorToken: token }))
+    const secret = await bun(script, ["protocol", manifestFile])
+    expect(secret.code).toBe(1)
+    expect(secret.stderr).toContain("unknown fields: evaluatorToken")
+
+    await Bun.write(manifestFile, JSON.stringify({ ...manifest, challengePath: "../private-challenge.lean" }))
+    const escaped = await bun(script, ["protocol", manifestFile])
+    expect(escaped.code).toBe(1)
+    expect(escaped.stderr).toContain("escapes its evidence directory")
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
   }

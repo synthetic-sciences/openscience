@@ -7,6 +7,7 @@ import { HarnessBenchmark } from "./benchmark"
 import { HarnessConfirmation } from "./confirmation"
 import { HarnessContract } from "./contract"
 import { HarnessEvaluation } from "./evaluation"
+import { HarnessFormal } from "./formal"
 import { HarnessSearch } from "./search"
 import { SessionTrace } from "../trace"
 
@@ -52,6 +53,14 @@ export namespace HarnessReport {
               claimedLevel: HarnessContract.AutonomyLevel,
               derivedLevel: HarnessContract.AutonomyLevel.optional(),
               status: z.enum(["passed", "failed", "inconclusive"]).optional(),
+            })
+            .strict()
+            .optional(),
+          formal: z
+            .object({
+              tier: HarnessContract.FormalTier,
+              relation: HarnessContract.FormalRelation,
+              status: z.enum(["passed", "failed"]).optional(),
             })
             .strict()
             .optional(),
@@ -115,6 +124,10 @@ export namespace HarnessReport {
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
           autonomyReceiptID: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+          proofReceiptID: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
@@ -208,6 +221,7 @@ export namespace HarnessReport {
     search?: HarnessSearch.State
     confirmation?: HarnessConfirmation.Receipt
     autonomy?: HarnessAutonomy.Receipt
+    formal?: HarnessFormal.Receipt
     generatedAt?: number
   }) {
     const contract = HarnessContract.Info.parse(input.contract)
@@ -217,6 +231,10 @@ export namespace HarnessReport {
     const autonomy = input.autonomy ? HarnessAutonomy.Receipt.parse(input.autonomy) : undefined
     if (autonomy && autonomy.receiptID !== evaluation?.autonomyReceiptID) {
       throw new Error(`Human-AI autonomy receipt does not match the selected evaluation`)
+    }
+    const formal = input.formal ? HarnessFormal.Receipt.parse(input.formal) : undefined
+    if (formal && formal.receiptID !== evaluation?.proofReceiptID) {
+      throw new Error(`Formal proof receipt does not match the selected evaluation`)
     }
     const confirmation = input.confirmation ? HarnessConfirmation.binds(contract, input.confirmation) : undefined
     if (confirmation && !contract.confirmation) {
@@ -253,6 +271,7 @@ export namespace HarnessReport {
       failureDiscovery: contract.failureDiscovery,
       synthesis: contract.synthesis,
       autonomy: contract.autonomy,
+      formalProof: contract.formalProof,
       confirmation: contract.confirmation,
       contamination: contract.contamination,
     })
@@ -318,6 +337,13 @@ export namespace HarnessReport {
               status: autonomy?.status,
             }
           : undefined,
+        formal: contract.formalProof
+          ? {
+              tier: contract.formalProof.tier,
+              relation: contract.formalProof.relation,
+              status: formal?.status,
+            }
+          : undefined,
         seed: contract.seed,
       },
       quality: {
@@ -343,6 +369,7 @@ export namespace HarnessReport {
         failureDiscoveryReceiptID: contract.confirmation ? undefined : evaluation?.failureDiscoveryReceiptID,
         synthesisReceiptID: contract.confirmation ? undefined : evaluation?.synthesisReceiptID,
         autonomyReceiptID: evaluation?.autonomyReceiptID,
+        proofReceiptID: evaluation?.proofReceiptID,
         confirmationReceiptID: confirmation?.receiptID,
         evaluations: evaluations.length,
       },
@@ -394,6 +421,9 @@ export namespace HarnessReport {
     const autonomy = evaluation?.autonomyReceiptID
       ? await HarnessAutonomy.read(evaluation.autonomyReceiptID, contract)
       : undefined
+    const formal = evaluation?.proofReceiptID
+      ? await HarnessFormal.read(evaluation.proofReceiptID, contract)
+      : undefined
     const report = compile({
       contract,
       evaluations,
@@ -401,6 +431,7 @@ export namespace HarnessReport {
       search,
       confirmation: confirmation ?? undefined,
       autonomy,
+      formal,
     })
     await Bun.write(file(sessionID), JSON.stringify(report, null, 2) + "\n")
     return report

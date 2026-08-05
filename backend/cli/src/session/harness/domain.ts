@@ -172,6 +172,35 @@ export namespace HarnessDomain {
         uncertainty,
       ],
     }),
+    formal: Info.parse({
+      id: "formal",
+      title: "Formal theorem verification",
+      purpose:
+        "Guard statement identity, proof relation, environment closure, kernel acceptance, and trust assumptions.",
+      checks: [
+        gate("formal-challenge", "Bind the exact trusted challenge, canonical statement, declaration, and module."),
+        gate("formal-relation", "Distinguish an exact proof, exact refutation, and repaired-statement proof."),
+        gate("formal-environment", "Pin Lean, toolchain, package manifest, dependency tree, and checker artifacts."),
+        gate("formal-manifest", "Commit the complete challenge, statement, proof, environment, and support manifest."),
+        gate(
+          "formal-kernel",
+          "Build successfully with no warnings and replay the proof through the frozen Lean kernel.",
+        ),
+        gate(
+          "formal-source",
+          "Audit every manifest source with the frozen policy and reject all unchecked escape constructs.",
+        ),
+        gate(
+          "formal-axioms",
+          "Audit the transitive axiom closure, including axiom types, against the frozen allowlist.",
+        ),
+        gate("formal-tier", "Satisfy the contract's kernel, fresh-recheck, or independent external-checker tier."),
+        advise(
+          "formal-semantics",
+          "Review that the frozen formal statement and definitions express the intended informal mathematics.",
+        ),
+      ],
+    }),
   }
 
   export function compose(ids: HarnessPack.Id[]) {
@@ -244,6 +273,9 @@ export namespace HarnessDomain {
     if (chemistry && active) add("chemistry")
     if (input.profile === "training" || (input.profile === "optimize" && input.agent === "ml")) add("ml")
     if (input.profile === "forecast") add("ml", "forecast")
+    if (/\b(lean\s*4?|formal(?:ize|ization| proof)?|theorem prover|proof assistant|kernel[- ]checked)\b/.test(text)) {
+      add("formal")
+    }
     return ids
   }
 
