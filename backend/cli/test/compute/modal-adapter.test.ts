@@ -50,4 +50,12 @@ describe("ModalAdapter sandbox lifecycle", () => {
     expect(await child.exited).toBe(0)
     await fs.rm(root, { recursive: true, force: true })
   })
+
+  test("uses the sandbox timeout result when the terminated command records a different code", () => {
+    expect(ModalAdapter.reconcile(124, { code: 120, outputs: [] })).toEqual({
+      code: 124,
+      outputs: [],
+      timedOut: true,
+    })
+  })
 })

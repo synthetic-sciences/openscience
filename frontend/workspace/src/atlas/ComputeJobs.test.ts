@@ -192,6 +192,8 @@ describe("compute jobs surface", () => {
     expect(interval).not.toContain("eventsApi.refetch")
     expect(interval).toContain("void refresh()")
     expect(interval).toContain("void streams")
+    expect(source).toContain("if (outputBusy() || eventsBusy()) return")
+    expect(source).toContain(".finally(() =>")
     expect(source).not.toContain("Save the session before starting")
   })
 })

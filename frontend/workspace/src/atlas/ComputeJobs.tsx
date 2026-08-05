@@ -93,9 +93,10 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
   }
 
   const streams = async (id: string) => {
+    if (outputBusy() || eventsBusy()) return
     setOutputBusy(true)
     setEventsBusy(true)
-    const [log, lifecycle] = await Promise.all([
+    await Promise.all([
       api
         .log(id)
         .then((value) => value.log)
@@ -105,11 +106,15 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
         .then((value) => value.events)
         .catch(() => undefined),
     ])
-    if (selected() !== id) return
-    if (log !== undefined && log !== output()) setOutput(log)
-    if (lifecycle !== undefined && lifecycle !== events()) setEvents(lifecycle)
-    setOutputBusy(false)
-    setEventsBusy(false)
+      .then(([log, lifecycle]) => {
+        if (selected() !== id) return
+        if (log !== undefined && log !== output()) setOutput(log)
+        if (lifecycle !== undefined && lifecycle !== events()) setEvents(lifecycle)
+      })
+      .finally(() => {
+        setOutputBusy(false)
+        setEventsBusy(false)
+      })
   }
 
   createEffect(() => {

@@ -504,6 +504,69 @@ describe("ComputeJobs local lifecycle", () => {
 })
 
 describe("ComputeJobs Modal governance", () => {
+  test("records a Modal sandbox timeout as a terminal timed-out job", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const provider = {
+      volume: (project: string, id: string) => `test-${Bun.hash(`${project}\0${id}`)}`,
+      run: async (
+        _context: Parameters<ComputeJobs.ModalProvider["run"]>[0],
+        spec: Parameters<ComputeJobs.ModalProvider["run"]>[1],
+        hooks: Parameters<ComputeJobs.ModalProvider["run"]>[2],
+      ) => {
+        await hooks.created(`sandbox-${spec.id}`)
+        return { code: 124, outputs: [], timedOut: true }
+      },
+      recover: async () => ({ code: 124, outputs: [], timedOut: true }),
+      find: async () => undefined,
+      close: async () => undefined,
+      release: async () => undefined,
+    } satisfies ComputeJobs.ModalProvider
+    const modal = {
+      app: "openscience-test",
+      image: "python:3.12-slim",
+      network: "none" as const,
+      timeoutMinutes: 15,
+      concurrency: 1,
+    }
+    const credentials = { ...modal, tokenId: "ak-test", tokenSecret: "as-test" }
+    const request = {
+      name: "timed out modal job",
+      command: "sleep 900",
+      target: { kind: "modal" as const },
+      gpu: "T4",
+      resources: { time_minutes: 15 },
+    }
+    const prepared = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const plan = await ComputeJobs.plan({ ...request, sessionID: session.id }, { root, workspace: tmp.path, modal })
+        return { session, plan }
+      },
+    })
+    const job = await Instance.provide({
+      directory: tmp.path,
+      fn: () =>
+        ComputeJobs.start(
+          { ...request, sessionID: prepared.session.id, approval: prepared.plan.digest },
+          { root, workspace: tmp.path, modal, credentials, provider },
+        ),
+    })
+    const finished = await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })
+
+    expect(finished.status).toBe("failed")
+    expect(finished.exit_code).toBe(124)
+    expect(finished.error).toBe("Modal job timed out after 15 minutes")
+    expect(finished.lifecycle).toMatchObject({
+      execution: "timed_out",
+      deadline_fired: true,
+      delivery: "none",
+      resource: "closed",
+    })
+  })
+
   test("refuses another paid dispatch after the project reaches its configured concurrency", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
@@ -748,9 +811,12 @@ describe("ComputeJobs Modal governance", () => {
         _context: Parameters<ComputeJobs.ModalProvider["recover"]>[0],
         spec: Parameters<ComputeJobs.ModalProvider["recover"]>[1],
         id: Parameters<ComputeJobs.ModalProvider["recover"]>[2],
+        hooks: Parameters<ComputeJobs.ModalProvider["recover"]>[3],
       ) => {
         calls.recover++
         expect(id).toBe(`sandbox-${spec.id}`)
+        expect(await ComputeJobs.log(spec.id, { root, workspace: tmp.path })).toBe("last visible output\n")
+        await hooks.output("recovered output\n")
         const staging = path.join(tmp.path, "recovered", "result.txt")
         await Bun.write(staging, "recovered")
         return { code: 0, outputs: [{ path: "result.txt", staging, size: 9 }] }
@@ -806,6 +872,7 @@ describe("ComputeJobs Modal governance", () => {
     expect(failed.lifecycle?.recoverable).toBe(true)
     expect(calls).toEqual({ run: 1, recover: 0, release: 0 })
 
+    await Bun.write(path.join(root, "jobs", `${job.id}.log`), "last visible output\n")
     await ComputeJobs.retry(job.id, { root, workspace: tmp.path, credentials, provider })
     const complete = async (attempts = 100): Promise<ComputeJobs.Job> => {
       const current = await ComputeJobs.get(job.id, { root, workspace: tmp.path })
@@ -818,6 +885,7 @@ describe("ComputeJobs Modal governance", () => {
 
     expect(recovered.status).toBe("succeeded")
     expect(recovered.lifecycle).toMatchObject({ delivery: "complete", resource: "closed", recoverable: false })
+    expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path })).toBe("recovered output\n")
     expect(await Bun.file(path.join(tmp.path, "result.txt")).text()).toBe("recovered")
     expect(calls).toEqual({ run: 1, recover: 1, release: 1 })
   })

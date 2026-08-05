@@ -51,9 +51,9 @@ Select **Review command**. Verify the app, image, GPU, network policy, timeout, 
 
 A successful run should show `nvidia-smi` in the streamed log and copy `outputs/modal-smoke.txt` into the project with its checksum in **Captured outputs**.
 
-Every governed job mounts a named per-job Modal Volume at `/workspace`. The volume name is recorded with the job without exposing the local project path. If the execution sandbox exits before collection, OpenScience creates a short-lived, network-blocked harvest sandbox, mounts the same Volume read-only, and recovers the command result and declared outputs. The Volume is deleted only after local delivery succeeds and the execution sandbox is closed.
+Every governed job mounts a named per-job Modal Volume at `/workspace`. The volume name is recorded with the job without exposing the local project path. After the execution sandbox exits, OpenScience reads the command result and declared outputs directly through Modal's control-plane Volume API. It does not create a harvest sandbox. The Volume is deleted only after local delivery succeeds.
 
-If local output delivery fails, the finished run remains visible with **Retry delivery**. That action reattaches to the existing sandbox or mounts the retained Volume in a harvest sandbox; it does not rerun the approved command. **Clear finished** keeps the record until delivery succeeds or the retained resource is explicitly cleaned up.
+If local output delivery fails, the finished run remains visible with **Retry delivery**. That action reattaches to a live execution sandbox when necessary or reads the retained Volume directly; it does not rerun the approved command. **Clear finished** keeps the record until delivery succeeds or the retained resource is explicitly cleaned up.
 
 To test cancellation, dispatch `sleep 300`, wait for the job to become running, then select **Cancel job**. Modal should terminate the tagged sandbox and the job should become cancelled.
 

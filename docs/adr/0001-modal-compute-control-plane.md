@@ -28,13 +28,13 @@ The following rules are mandatory:
 7. Execution, output delivery, and resource state are tracked independently. A resource cannot close while it holds the only recoverable output unless the user explicitly abandons that recovery path.
 8. Existing `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `interrupted` statuses remain a compatibility projection while clients migrate to the richer lifecycle.
 
-Modal job files live in a named per-job Volume mounted at `/workspace`, not only in the execution container filesystem. The public JavaScript SDK does not expose direct Volume reads, so recovery mounts that Volume read-only in a short-lived harvest sandbox. Successful delivery releases the execution sandbox and deletes the Volume; failed delivery, unconfirmed cancellation, or an unknown remote resource retains the job record and recovery identity.
+Modal job files live in a named per-job Volume mounted at `/workspace`, not only in the execution container filesystem. The public JavaScript SDK does not expose direct Volume reads, so a pinned Python control-plane bridge uses `Volume.listdir` and `Volume.read_file` after the execution sandbox exits. The bridge never creates a Function or Sandbox. Successful delivery deletes the Volume; failed delivery, unconfirmed cancellation, or an unknown remote resource retains the job record and recovery identity.
 
 Delivery recovery is an explicit lifecycle operation. It reads the already-computed result from the owned sandbox or Volume, retries local validation and delivery, and releases provider resources only after delivery succeeds. It never reruns the paid command.
 
 ## Modal SDK baseline
 
-Use the official JavaScript SDK, pinned as `modal` 0.9.0. Its versioning is independent of the Python SDK used by the earlier experiment. It supports Bun directly and provides Sandbox creation, explicit client credentials, streaming logs, filesystem transfer, tags, reattachment, and cancellation without an embedded Python/uv driver. Provider-specific SDK objects remain private to the Modal adapter.
+Use the official JavaScript SDK, pinned as `modal` 0.9.0, for Sandbox creation, explicit client credentials, streaming logs, filesystem transfer, tags, reattachment, and cancellation. Use the official Python SDK, pinned as `modal` 1.1.4, only for control-plane Volume listing and reads that the JavaScript SDK does not expose. The Python bridge is embedded in the compiled binary and launched through `uv` when a compatible system Python is unavailable. Provider-specific SDK objects remain private to the Modal adapter.
 
 ## Consequences
 

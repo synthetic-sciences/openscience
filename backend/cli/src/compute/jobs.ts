@@ -318,6 +318,18 @@ export namespace ComputeJobs {
     await fs.appendFile(eventsOf(root, id), `[${new Date().toISOString()}] ${message}\n`, { mode: 0o600 })
   }
 
+  async function snapshot(filepath: string, value: string) {
+    const temp = `${filepath}.${process.pid}.${crypto.randomUUID()}.tmp`
+    await fs.mkdir(path.dirname(filepath), { recursive: true })
+    await fs
+      .writeFile(temp, OpenScience.redactSecrets(value), { mode: 0o600, flag: "wx" })
+      .then(() => fs.rename(temp, filepath))
+      .catch(async (error) => {
+        await fs.unlink(temp).catch(() => undefined)
+        throw error
+      })
+  }
+
   async function preserve(root: string, error: unknown): Promise<never> {
     if (!(error instanceof ComputeJobsCorruptError)) throw error
     const filepath = metaOf(root)
@@ -382,10 +394,7 @@ export namespace ComputeJobs {
               void recoverModal(job, scope, options.credentials, options.provider ?? ModalAdapter)
                 .catch(async (error) => {
                   const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
-                  await fs.mkdir(logsOf(root), { recursive: true })
-                  await fs.appendFile(path.join(logsOf(root), `${job.id}.log`), `Modal recovery: ${message}\n`, {
-                    mode: 0o600,
-                  })
+                  await event(root, job.id, `Modal recovery failed: ${message}`)
                 })
                 .finally(() => active.delete(key))
               return
@@ -1046,6 +1055,9 @@ export namespace ComputeJobs {
     result: ModalAdapter.Result,
     provider: ModalProvider,
   ): Promise<void> {
+    const timeout = result.timedOut
+      ? `Modal job timed out after ${job.modal?.timeout_minutes ?? "the configured"} minutes`
+      : undefined
     const finished = await change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === job.id)
       if (index < 0) return
@@ -1054,8 +1066,12 @@ export namespace ComputeJobs {
       }
       const draft = move(
         jobs[index]!,
-        { type: "finish", outcome: result.code === 0 ? "succeeded" : "failed" },
-        { completed_at: new Date().toISOString(), exit_code: result.code },
+        {
+          type: "finish",
+          outcome: result.timedOut ? "timed_out" : result.code === 0 ? "succeeded" : "failed",
+          ...(timeout ? { message: timeout } : {}),
+        },
+        { completed_at: new Date().toISOString(), exit_code: result.code, ...(timeout ? { error: timeout } : {}) },
       )
       const collecting = job.artifact_patterns?.length || job.checkpoint_path ? move(draft, { type: "collect" }) : draft
       jobs[index] = Job.parse({ ...collecting, provenance: provenance(collecting) })
@@ -1111,10 +1127,19 @@ export namespace ComputeJobs {
       const index = jobs.findIndex((item) => item.id === job.id)
       if (index < 0 || jobs[index]!.lifecycle?.resource === "closed") return
       const ended = released.ok ? move(jobs[index]!, { type: "close" }) : move(jobs[index]!, { type: "lose" })
-      const updated = Job.parse({ ...ended, ...captured, error: warning, provenance: provenance(ended) })
+      const updated = Job.parse({
+        ...ended,
+        ...captured,
+        error: warning ?? jobs[index]!.error,
+        provenance: provenance(ended),
+      })
       jobs[index] = updated
     })
-    await event(scope.root, job.id, `Modal job ${result.code === 0 ? "succeeded" : "failed"}`)
+    await event(
+      scope.root,
+      job.id,
+      `Modal job ${result.timedOut ? "timed out" : result.code === 0 ? "succeeded" : "failed"}`,
+    )
     await fs.rm(path.join(logsOf(scope.root), `${job.id}.modal`), { recursive: true, force: true })
   }
 
@@ -1149,7 +1174,7 @@ export namespace ComputeJobs {
         await event(scope.root, job.id, value)
       },
       output: async (value) => {
-        await fs.appendFile(log, OpenScience.redactSecrets(value), { mode: 0o600 })
+        await snapshot(log, value)
       },
     })
     await completeModal(job, scope, context, result, provider)
@@ -1182,13 +1207,12 @@ export namespace ComputeJobs {
         jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
       })
     }
-    await fs.writeFile(log, "", { mode: 0o600 })
     const result = await provider.recover(context, spec, id, {
       log: async (value) => {
         await event(scope.root, job.id, value)
       },
       output: async (value) => {
-        await fs.appendFile(log, OpenScience.redactSecrets(value), { mode: 0o600 })
+        await snapshot(log, value)
       },
     })
     await completeModal(Job.parse({ ...job, remote_id: id }), scope, context, result, provider)
@@ -1253,7 +1277,7 @@ export namespace ComputeJobs {
       if (index < 0 || terminal.has(jobs[index]!.status)) return
       const finished = move(
         jobs[index]!,
-        { type: "finish", outcome: error.code === 0 ? "succeeded" : "failed" },
+        { type: "finish", outcome: error.code === 124 ? "timed_out" : error.code === 0 ? "succeeded" : "failed" },
         { completed_at: new Date().toISOString(), exit_code: error.code },
       )
       const collecting = move(finished, { type: "collect" })
