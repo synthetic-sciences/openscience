@@ -5,7 +5,10 @@ import { useSync } from "@/context/sync"
 import { SourceMenu } from "@/atlas/files/SourceMenu"
 import { FileTable, type FileRow } from "@/atlas/files/FileTable"
 import { FileTabs } from "@/atlas/files/FileTabs"
+import { TrashList } from "@/atlas/files/TrashList"
 import { buildSources, type PaneSource } from "@/atlas/files/sources"
+import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/resource"
+import type { StoredArtifact } from "@/artifacts/store"
 import {
   connectedFilesystemGrants,
   parseFilesystemSnapshot,
@@ -21,6 +24,11 @@ async function json(response: Response): Promise<unknown> {
   if (response.ok) return response.json()
   const text = await response.text()
   throw new Error(text || `Request failed (${response.status})`)
+}
+
+const errorMessage = (value: unknown) => {
+  if (value instanceof Error) return value.message
+  return String(value || "Request failed")
 }
 
 // FileExplorer.tsx (FileExplorer.tsx:121) keeps an equivalent readAccess as a
@@ -55,6 +63,11 @@ export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
     return { sessionID: session, projectID: sdk?.projectID, directory: projectRoot() }
   }
 
+  // The artifact store is project-scoped through the request headers, so it
+  // needs no session identity — only the project root as a refetch key.
+  const ask = (path: string, init?: RequestInit) => transport(path, init)
+  const [artifacts, { refetch: refetchArtifacts }] = createArtifactsResource(ask, () => sdk?.directory ?? true)
+
   const [snapshot] = createResource(identity, (current) => readAccess(transport, current).catch(() => undefined))
   const sources = createMemo(() =>
     buildSources({
@@ -72,6 +85,7 @@ export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
   const [error, setError] = createSignal("")
   const [tabs, setTabs] = createSignal<string[]>([])
   const [active, setActive] = createSignal("files")
+  const [busy, setBusy] = createSignal(false)
 
   const where = () => [current().root, ...path()].filter(Boolean).join("/")
 
@@ -82,13 +96,14 @@ export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
   const [entries] = createResource(
     () => [where(), sessionID(), current().kind] as const,
     ([target, session, kind]) => {
-      // The artifacts pseudo-source (sources.ts:25) always has root "" — it
-      // has no filesystem backing yet, and the server falls back an empty
-      // path to the project root (File.list(dir || root)), which would
-      // silently list the project's files mislabeled as artifacts. Every
-      // other kind always carries a real root once a live project context
-      // exists, so gate on the source kind rather than on target emptiness.
-      if (kind === "artifacts") return Promise.resolve([] as FileRow[])
+      // The artifacts and trash pseudo-sources always have root "" — they are
+      // backed by the artifact store, not the filesystem, and the server
+      // falls back an empty path to the project root (File.list(dir || root)),
+      // which would silently list the project's files mislabeled as
+      // artifacts. Every other kind always carries a real root once a live
+      // project context exists, so gate on the source kind rather than on
+      // target emptiness.
+      if (kind === "artifacts" || kind === "trash") return Promise.resolve([] as FileRow[])
       const query: Record<string, string> = { path: target }
       if (session) query.sessionID = session
       return transport("/file", undefined, query)
@@ -115,9 +130,30 @@ export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
     return query ? list.filter((row) => row.name.toLowerCase().includes(query)) : list
   })
 
+  const trash = createMemo(() => {
+    const query = filter().trim().toLowerCase()
+    const list = artifacts.latest?.trash ?? []
+    return query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
+  })
+
   const open = (name: string) => {
     if (!tabs().includes(name)) setTabs([...tabs(), name])
     setActive(name)
+  }
+
+  const restore = (artifact: StoredArtifact) => {
+    if (busy()) return
+    setBusy(true)
+    restoreStoredArtifact(ask, artifact.id)
+      .then(() => refetchArtifacts())
+      .then(() => {
+        setBusy(false)
+        setError("")
+      })
+      .catch((cause) => {
+        setBusy(false)
+        setError(errorMessage(cause))
+      })
   }
 
   return (
@@ -161,19 +197,26 @@ export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
         </div>
       </Show>
 
-      <FileTable
-        rows={rows()}
-        depth={path().length}
-        onUp={() => setPath(path().slice(0, -1))}
-        onOpen={(row) => {
-          if (row.type === "directory") {
-            setPath([...path(), row.name])
-            setFilter("")
-            return
-          }
-          open(row.name)
-        }}
-      />
+      <Show
+        when={current().kind === "trash"}
+        fallback={
+          <FileTable
+            rows={rows()}
+            depth={path().length}
+            onUp={() => setPath(path().slice(0, -1))}
+            onOpen={(row) => {
+              if (row.type === "directory") {
+                setPath([...path(), row.name])
+                setFilter("")
+                return
+              }
+              open(row.name)
+            }}
+          />
+        }
+      >
+        <TrashList rows={trash()} busy={busy()} onRestore={restore} />
+      </Show>
     </section>
   )
 }

@@ -8,7 +8,7 @@ export interface PaneSource {
   name: string
   sub?: string
   root: string
-  kind: "artifacts" | "project" | "session" | "connected"
+  kind: "artifacts" | "trash" | "project" | "session" | "connected"
   readonly?: boolean
   live?: boolean
 }
@@ -23,6 +23,10 @@ export function buildSources(input: {
 }): PaneSource[] {
   const list: PaneSource[] = [
     { id: "artifacts", group: "Artifacts", name: "All artifacts", root: "", kind: "artifacts" },
+    // Listed unconditionally: a trash entry that appears only once something
+    // is in it is a recovery path nobody can find in advance, and the delete
+    // dialog promises this surface before anything has been deleted.
+    { id: "trash", group: "Artifacts", name: "Trash", root: "", kind: "trash" },
     {
       id: "project",
       group: "This computer",

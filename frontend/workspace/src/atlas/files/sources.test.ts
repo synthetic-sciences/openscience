@@ -20,10 +20,18 @@ describe("pane sources", () => {
       grants: [grant("g1", "/home/keertan/data/pdebench", "read")],
     })
 
-    expect(list.map((s) => s.id)).toEqual(["artifacts", "project", "g1"])
+    expect(list.map((s) => s.id)).toEqual(["artifacts", "trash", "project", "g1"])
     expect(list[0]?.group).toBe("Artifacts")
-    expect(list[1]?.group).toBe("This computer")
-    expect(list[1]?.sub).toBe("/home/keertan/codes/openscience-demoo")
+    expect(list[2]?.group).toBe("This computer")
+    expect(list[2]?.sub).toBe("/home/keertan/codes/openscience-demoo")
+  })
+
+  test("always offers trash so the delete dialog's 30-day recovery promise has a surface", () => {
+    const list = buildSources({ projectRoot: "/p", projectName: "p", grants: [] })
+    const entry = list.find((s) => s.kind === "trash")
+
+    expect(entry?.id).toBe("trash")
+    expect(entry?.group).toBe("Artifacts")
   })
 
   test("marks a read grant read-only so the badge has something true to show", () => {

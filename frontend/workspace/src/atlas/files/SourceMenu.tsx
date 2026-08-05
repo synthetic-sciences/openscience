@@ -55,7 +55,13 @@ export function SourceMenu(props: {
                         onClick={() => pick(source)}
                       >
                         <span class="files-menu__glyph" aria-hidden="true">
-                          {source.kind === "artifacts" ? "◈" : source.kind === "connected" ? "◇" : "▢"}
+                          {source.kind === "artifacts"
+                            ? "◈"
+                            : source.kind === "trash"
+                              ? "◌"
+                              : source.kind === "connected"
+                                ? "◇"
+                                : "▢"}
                         </span>
                         <span>
                           <span class="files-menu__label">{source.name}</span>
