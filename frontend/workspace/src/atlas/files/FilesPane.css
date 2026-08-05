@@ -80,3 +80,18 @@
 }
 .files-pane *:hover::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, var(--color-text) 18%, transparent); }
 .files-pane ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--color-text) 32%, transparent); }
+
+.files-tabs { display: flex; align-items: center; gap: 4px; padding: 8px 10px 0; overflow-x: auto; scrollbar-width: none; }
+.files-tabs::-webkit-scrollbar { display: none; }
+.files-tab {
+  display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; max-width: 210px;
+  padding: 7px 10px; border: 0; border-radius: 7px; background: none; color: var(--color-text-muted);
+  font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+}
+.files-tab:hover { background: var(--color-bg-subtle); color: var(--color-text); }
+.files-tab:focus-visible { outline: 1px solid var(--color-text); outline-offset: -2px; }
+.files-tab[aria-selected="true"] { background: var(--color-surface); color: var(--color-text); }
+.files-tab__label { overflow: hidden; text-overflow: ellipsis; }
+.files-tab__close { color: var(--color-text-faint); font-size: 14px; line-height: 1; }
+.files-tab__close:hover { color: var(--color-text); }
+.files-tab__close:focus-visible { outline: 1px solid var(--color-text); outline-offset: 1px; border-radius: 3px; }
