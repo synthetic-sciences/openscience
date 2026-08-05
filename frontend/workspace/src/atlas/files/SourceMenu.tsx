@@ -51,67 +51,64 @@ export function SourceMenu(props: {
                   </div>
                   <For each={group.items}>
                     {(source) => (
-                      <button
-                        type="button"
-                        class="files-menu__item"
-                        role="menuitemradio"
-                        data-source-item={source.id}
-                        aria-checked={source === props.active}
-                        onClick={() => pick(source)}
-                      >
-                        <span class="files-menu__glyph" aria-hidden="true">
-                          {source.kind === "artifacts"
-                            ? "◈"
-                            : source.kind === "trash"
-                              ? "◌"
-                              : source.kind === "connected"
-                                ? "◇"
-                                : "▢"}
-                        </span>
-                        <span>
-                          <span class="files-menu__label">{source.name}</span>
-                          <Show when={source.sub}>
-                            <span class="files-menu__sub">{source.sub}</span>
-                          </Show>
-                        </span>
-                        <span class="files-menu__tail">
-                          {/* A connected folder is a durable grant, so the way
-                              out sits on the row that shows it. A nested
-                              <button> is invalid inside the row button, so this
-                              mirrors FileTabs' close control: a span with the
-                              button role and its own keyboard handler. */}
-                          <Show when={source.kind === "connected" && props.onRevoke}>
-                            <span
-                              class="files-menu__revoke"
-                              role="button"
-                              tabindex="0"
-                              data-source-revoke={source.id}
-                              aria-label={`Revoke access to ${source.name}`}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                revoke(source)
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key !== "Enter" && event.key !== " ") return
-                                event.preventDefault()
-                                event.stopPropagation()
-                                revoke(source)
-                              }}
-                            >
-                              Revoke
-                            </span>
-                          </Show>
-                          <Show when={source.readonly}>
-                            <span class="files-menu__badge">ro</span>
-                          </Show>
-                          <Show when={source.live}>
-                            <span class="files-menu__dot" aria-label="Reachable" />
-                          </Show>
-                          <Show when={source === props.active}>
-                            <span aria-hidden="true">✓</span>
-                          </Show>
-                        </span>
-                      </button>
+                      // The row is a presentational container, not a control:
+                      // picking a source and revoking it are two separate
+                      // actions, so they are two sibling <button>s. Nesting the
+                      // revoke control inside the row button (as a role="button"
+                      // span) was invalid content and folded its label into the
+                      // row's accessible name — "pdebench … Revoke access to
+                      // pdebench" announced as one control.
+                      <div class="files-menu__row" role="none">
+                        <button
+                          type="button"
+                          class="files-menu__item"
+                          role="menuitemradio"
+                          data-source-item={source.id}
+                          aria-checked={source === props.active}
+                          onClick={() => pick(source)}
+                        >
+                          <span class="files-menu__glyph" aria-hidden="true">
+                            {source.kind === "artifacts"
+                              ? "◈"
+                              : source.kind === "trash"
+                                ? "◌"
+                                : source.kind === "connected"
+                                  ? "◇"
+                                  : "▢"}
+                          </span>
+                          <span>
+                            <span class="files-menu__label">{source.name}</span>
+                            <Show when={source.sub}>
+                              <span class="files-menu__sub">{source.sub}</span>
+                            </Show>
+                          </span>
+                          <span class="files-menu__tail">
+                            <Show when={source.readonly}>
+                              <span class="files-menu__badge">ro</span>
+                            </Show>
+                            <Show when={source.live}>
+                              <span class="files-menu__dot" aria-label="Reachable" />
+                            </Show>
+                            <Show when={source === props.active}>
+                              <span aria-hidden="true">✓</span>
+                            </Show>
+                          </span>
+                        </button>
+                        {/* A connected folder is a durable grant, so the way out
+                            sits on the row that shows it. */}
+                        <Show when={source.kind === "connected" && props.onRevoke}>
+                          <button
+                            type="button"
+                            class="files-menu__revoke"
+                            role="menuitem"
+                            data-source-revoke={source.id}
+                            aria-label={`Revoke access to ${source.name}`}
+                            onClick={() => revoke(source)}
+                          >
+                            Revoke
+                          </button>
+                        </Show>
+                      </div>
                     )}
                   </For>
                 </>

@@ -69,6 +69,20 @@
   letter-spacing: 0.06em;
   color: var(--color-text-faint);
 }
+/* Two sibling controls, one row: picking the source and revoking it are
+   separate actions, so neither may contain the other. */
+.files-menu__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.files-menu__row .files-menu__item {
+  flex: 1;
+  min-width: 0;
+}
+.files-menu__row:hover .files-menu__item {
+  background: var(--color-bg-subtle);
+}
 .files-menu__item {
   display: grid;
   grid-template-columns: 20px 1fr auto;
@@ -142,9 +156,13 @@
   background: var(--color-text-muted);
 }
 .files-menu__revoke {
+  flex: 0 0 auto;
   padding: 2px 6px;
   border: 1px solid var(--color-border-weak-base);
   border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-family: var(--font-code);
   font-size: 10.5px;
   color: var(--color-text-muted);
   cursor: pointer;

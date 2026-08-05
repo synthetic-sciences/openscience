@@ -116,6 +116,29 @@ describe("source menu", () => {
     expect(host.querySelector("[data-source-menu]")).toBeNull()
   })
 
+  test("keeps revoke a sibling of the source it revokes, not a control inside it", () => {
+    // Nested interactive content is invalid, and a nested label folds into the
+    // parent's accessible name: a screen reader would announce the whole row as
+    // "pdebench … Revoke access to pdebench", one control with two purposes.
+    const host = mount(() =>
+      subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {}, onRevoke: () => {} }),
+    )
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    const item = host.querySelector<HTMLElement>('[data-source-item="ro"]')!
+    const revoke = host.querySelector<HTMLElement>('[data-source-revoke="ro"]')!
+
+    expect(item.contains(revoke)).toBe(false)
+    expect(item.querySelector("button, [role='button']")).toBeNull()
+    expect(item.textContent).not.toContain("Revoke")
+    // Each control is a real button, so each is keyboard reachable and carries
+    // its own accessible name with no tabindex or key handler of its own.
+    expect(item.tagName).toBe("BUTTON")
+    expect(revoke.tagName).toBe("BUTTON")
+    expect(revoke.getAttribute("aria-label")).toBe("Revoke access to pdebench")
+    expect(revoke.getAttribute("tabindex")).toBeNull()
+  })
+
   test("hides the revoke control when no handler can act on it", () => {
     const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {} }))
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
