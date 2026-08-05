@@ -81,11 +81,39 @@ export namespace HarnessSearch {
       proposal: z.string().min(1).max(4_000),
       artifact: Artifact,
       lease: Lease.optional(),
+      reservationID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       result: Result.optional(),
       createdAt: z.number().int().positive(),
     })
     .strict()
   export type Candidate = z.infer<typeof Candidate>
+
+  export const Reservation = z
+    .object({
+      id: z.string().regex(/^[a-f0-9]{64}$/),
+      ordinal: z.number().int().nonnegative(),
+      parentIDs: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .max(2)
+        .refine((ids) => new Set(ids).size === ids.length, "Reservation parents must be unique"),
+      inspirationIDs: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .max(2)
+        .refine((ids) => new Set(ids).size === ids.length, "Reservation inspirations must be unique"),
+      lease: Lease,
+      status: z.enum(["open", "consumed", "released"]),
+      candidateID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      createdAt: z.number().int().positive(),
+      updatedAt: z.number().int().positive(),
+    })
+    .strict()
+  export type Reservation = z.infer<typeof Reservation>
 
   export const Population = z
     .object({
@@ -120,6 +148,7 @@ export namespace HarnessSearch {
       status: z.enum(["active", "completed"]),
       stopReason: Stop.optional(),
       candidates: z.record(z.string(), Candidate),
+      reservations: z.record(z.string(), Reservation).default({}),
       bestID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
@@ -149,11 +178,16 @@ export namespace HarnessSearch {
   const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
 
   const candidates = (state: State) => Object.values(state.candidates)
+  const reservations = (state: State) => Object.values(state.reservations)
+  const open = (state: State) => reservations(state).filter((item) => item.status === "open")
   const verified = (candidate: Candidate) =>
     candidate.result?.source === "verified" && candidate.result.status === "passed"
 
   const identity = (
-    input: Pick<Candidate, "parentIDs" | "inspirationIDs" | "branch" | "proposal" | "artifact" | "lease">,
+    input: Pick<
+      Candidate,
+      "parentIDs" | "inspirationIDs" | "branch" | "proposal" | "artifact" | "lease" | "reservationID"
+    >,
   ) =>
     digest({
       parentIDs: input.parentIDs.toSorted(),
@@ -162,6 +196,7 @@ export namespace HarnessSearch {
       proposal: input.proposal,
       artifact: input.artifact,
       ...(input.lease ? { lease: input.lease } : {}),
+      ...(input.reservationID ? { reservationID: input.reservationID } : {}),
     })
 
   const leaseID = (state: Pick<State, "runID" | "sessionID">, input: Omit<Recommendation, "id" | "reasons">) =>
@@ -175,6 +210,20 @@ export namespace HarnessSearch {
       inspirationIDs: input.inspirationIDs.toSorted(),
       targetIsland: input.targetIsland,
       contextIDs: input.contextIDs,
+    })
+
+  const reservationID = (
+    state: Pick<State, "runID" | "sessionID">,
+    input: Pick<Reservation, "ordinal" | "parentIDs" | "inspirationIDs" | "lease" | "createdAt">,
+  ) =>
+    digest({
+      runID: state.runID,
+      sessionID: state.sessionID,
+      ordinal: input.ordinal,
+      parentIDs: input.parentIDs.toSorted(),
+      inspirationIDs: input.inspirationIDs.toSorted(),
+      lease: input.lease,
+      createdAt: input.createdAt,
     })
 
   function order(state: State, left: Candidate, right: Candidate) {
@@ -256,6 +305,12 @@ export namespace HarnessSearch {
     ...state,
     status: "completed",
     stopReason: reason,
+    reservations: Object.fromEntries(
+      reservations(state).map((item) => [
+        item.id,
+        item.status === "open" ? { ...item, status: "released" as const, updatedAt: now } : item,
+      ]),
+    ),
     revision: state.revision + 1,
     updatedAt: now,
   })
@@ -280,6 +335,7 @@ export namespace HarnessSearch {
       throw new Error(`Persisted island candidate order is not contiguous`)
     }
     const seen = new Map<string, Candidate>()
+    const claimed = new Set<string>()
     const hashes = new Set<string>()
     const counts = Array.from({ length: state.population.count }, () => 0)
     for (const candidate of items) {
@@ -297,6 +353,10 @@ export namespace HarnessSearch {
       }
       if (candidate.inspirationIDs.some((id) => candidate.parentIDs.includes(id))) {
         throw new Error(`Candidate inspirations must be distinct from parents`)
+      }
+      if (candidate.reservationID) {
+        if (claimed.has(candidate.reservationID)) throw new Error(`A reservation may authorize only one candidate`)
+        claimed.add(candidate.reservationID)
       }
       if (state.proposalPolicy === "leased-v3") {
         if (!candidate.lease) throw new Error(`Leased search candidate is missing recommendation provenance`)
@@ -321,9 +381,11 @@ export namespace HarnessSearch {
         }
       }
       const least = Math.min(...counts)
-      const expected = parents.length
-        ? parents.toSorted((a, b) => order(state, a!, b!))[0]!.island
-        : counts.findIndex((count) => count === least)
+      const expected = candidate.reservationID
+        ? candidate.lease?.targetIsland
+        : parents.length
+          ? parents.toSorted((a, b) => order(state, a!, b!))[0]!.island
+          : counts.findIndex((count) => count === least)
       if (candidate.island !== expected || candidate.island >= state.population.count) {
         throw new Error(`Persisted candidate island does not match server assignment`)
       }
@@ -333,6 +395,54 @@ export namespace HarnessSearch {
       }
       counts[candidate.island] = counts[candidate.island]! + 1
       seen.set(candidate.id, candidate)
+    }
+    const tickets = reservations(state).toSorted((a, b) => a.ordinal - b.ordinal)
+    if (tickets.some((item, index) => item.ordinal !== index)) {
+      throw new Error(`Persisted reservation order is not contiguous`)
+    }
+    for (const item of tickets) {
+      if (reservationID(state, item) !== item.id) {
+        throw new Error(`Persisted reservation identity does not match its content`)
+      }
+      if (item.updatedAt < item.createdAt) throw new Error(`Persisted reservation timestamps are invalid`)
+      if (item.inspirationIDs.some((id) => item.parentIDs.includes(id))) {
+        throw new Error(`Reservation inspirations must be distinct from parents`)
+      }
+      if (item.lease.targetIsland >= state.population.count) {
+        throw new Error(`Persisted reservation target island is outside the search population`)
+      }
+      const parents = item.parentIDs.map((id) => state.candidates[id])
+      const inspirations = item.inspirationIDs.map((id) => state.candidates[id])
+      const context = item.lease.contextIDs.map((id) => state.candidates[id])
+      if (
+        parents.some((candidate) => !candidate || !verified(candidate)) ||
+        inspirations.some((candidate) => !candidate || !verified(candidate)) ||
+        context.some((candidate) => !candidate || !verified(candidate))
+      ) {
+        throw new Error(`Persisted reservation may reference only verified passing candidates`)
+      }
+      const expected = leaseID(state, {
+        revision: item.lease.revision,
+        strategy: item.lease.strategy,
+        mode: item.lease.mode,
+        parentIDs: item.parentIDs,
+        inspirationIDs: item.inspirationIDs,
+        targetIsland: item.lease.targetIsland,
+        contextIDs: item.lease.contextIDs,
+      })
+      if (item.lease.id !== expected) throw new Error(`Persisted reservation lease does not match its content`)
+      if (item.status === "open" && item.candidateID) {
+        throw new Error(`An open reservation cannot name a candidate`)
+      }
+      if (item.status === "released" && item.candidateID && !state.candidates[item.candidateID]) {
+        throw new Error(`A duplicate-released reservation must name an existing candidate`)
+      }
+      if (item.status === "consumed") {
+        const candidate = item.candidateID ? state.candidates[item.candidateID] : undefined
+        if (!candidate || candidate.reservationID !== item.id) {
+          throw new Error(`A consumed reservation must name its authorized candidate`)
+        }
+      }
     }
   }
 
@@ -411,6 +521,7 @@ export namespace HarnessSearch {
       },
       status: "active",
       candidates: {},
+      reservations: {},
       archiveIDs: [],
       stalled: 0,
       revision: 0,
@@ -442,15 +553,113 @@ export namespace HarnessSearch {
     return parse(await JsonStore.read(file(sessionID)))
   }
 
+  export async function reserve(input: { sessionID: string; count: number }) {
+    const count = z.number().int().min(1).max(8).parse(input.count)
+    const issued: Reservation[] = []
+    await JsonStore.update(file(input.sessionID), (data) => {
+      const state = parse(data)
+      const now = Date.now()
+      if (state.proposalPolicy !== "leased-v3") {
+        throw new Error(`Parallel reservations require the leased-v3 proposal policy`)
+      }
+      if (state.status !== "active") return state
+      if (expired(state, now)) return stop(state, "budget_exhausted", now)
+      const remaining = Math.max(0, state.budget.candidates - candidates(state).length - open(state).length)
+      const choice = recommend(state)
+      const roots = candidates(state).filter(
+        (candidate) =>
+          !candidate.parentIDs.length &&
+          (candidate.result === undefined ||
+            (candidate.result.source === "verified" && candidate.result.status === "passed")),
+      )
+      const rootLimit = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(state.budget.candidates))))
+      const openRoots = open(state).filter((item) => !item.parentIDs.length).length
+      const capacity = choice.parentIDs.length
+        ? remaining
+        : Math.max(0, Math.min(remaining, rootLimit - roots.length - openRoots))
+      const size = Math.min(count, capacity)
+      if (!size) return state
+      const start = reservations(state).length
+      const additions = Array.from({ length: size }, (_, index) => {
+        const targetIsland = choice.parentIDs.length
+          ? choice.targetIsland
+          : (choice.targetIsland + openRoots + index) % state.population.count
+        const body = {
+          revision: choice.revision,
+          strategy: choice.strategy,
+          mode: choice.mode,
+          parentIDs: choice.parentIDs,
+          inspirationIDs: choice.inspirationIDs,
+          targetIsland,
+          contextIDs: choice.contextIDs,
+        }
+        const lease = Lease.parse({
+          id: leaseID(state, body),
+          revision: body.revision,
+          strategy: body.strategy,
+          mode: body.mode,
+          targetIsland: body.targetIsland,
+          contextIDs: body.contextIDs,
+        })
+        const draft = {
+          ordinal: start + index,
+          parentIDs: choice.parentIDs.toSorted(),
+          inspirationIDs: choice.inspirationIDs.toSorted(),
+          lease,
+          status: "open" as const,
+          createdAt: now,
+          updatedAt: now,
+        }
+        return Reservation.parse({ id: reservationID(state, draft), ...draft })
+      })
+      issued.push(...additions)
+      return {
+        ...state,
+        reservations: {
+          ...state.reservations,
+          ...Object.fromEntries(additions.map((item) => [item.id, item])),
+        },
+        revision: state.revision + 1,
+        updatedAt: now,
+      }
+    })
+    return { reservations: issued, state: await read(input.sessionID) }
+  }
+
+  export async function release(input: { sessionID: string; reservationID: string }) {
+    await JsonStore.update(file(input.sessionID), (data) => {
+      const state = parse(data)
+      const reservation = state.reservations[input.reservationID]
+      if (!reservation) throw new Error(`Unknown reservation ${input.reservationID}`)
+      if (reservation.status === "released") return state
+      if (reservation.status === "consumed") throw new Error(`A consumed reservation cannot be released`)
+      const now = Date.now()
+      return {
+        ...state,
+        reservations: {
+          ...state.reservations,
+          [reservation.id]: { ...reservation, status: "released", updatedAt: now },
+        },
+        revision: state.revision + 1,
+        updatedAt: now,
+      }
+    })
+    return read(input.sessionID)
+  }
+
   export async function add(input: {
     sessionID: string
     recommendationID?: string
+    reservationID?: string
     parentIDs: string[]
     inspirationIDs?: string[]
     branch: string
     proposal: string
     artifact: Artifact
   }) {
+    if (input.recommendationID && input.reservationID) {
+      throw new Error(`A proposal must use either a recommendation or a reservation, not both`)
+    }
     const artifact = Artifact.parse(input.artifact)
     const parents = input.parentIDs.toSorted()
     const inspirations = (input.inspirationIDs ?? []).toSorted()
@@ -464,17 +673,35 @@ export namespace HarnessSearch {
     const out = { accepted: false, deduplicated: false, id: initial }
     await JsonStore.update(file(input.sessionID), (data) => {
       const state = parse(data)
+      const reservation = input.reservationID ? state.reservations[input.reservationID] : undefined
+      if (input.reservationID && !reservation) throw new Error(`Unknown reservation ${input.reservationID}`)
       const existing = candidates(state).find((candidate) => candidate.artifact.sha256 === artifact.sha256)
       if (existing) {
         out.accepted = true
         out.deduplicated = true
         out.id = existing.id
-        return state
+        if (!reservation) return state
+        if (reservation.candidateID === existing.id) return state
+        if (reservation.status !== "open") throw new Error(`Reservation is no longer open`)
+        const now = Date.now()
+        return {
+          ...state,
+          reservations: {
+            ...state.reservations,
+            [reservation.id]: { ...reservation, status: "released", candidateID: existing.id, updatedAt: now },
+          },
+          revision: state.revision + 1,
+          updatedAt: now,
+        }
       }
       const now = Date.now()
       if (state.status !== "active") return state
       if (expired(state, now) || candidates(state).length >= state.budget.candidates) {
         return stop(state, "budget_exhausted", now)
+      }
+      if (!reservation && candidates(state).length + open(state).length >= state.budget.candidates) return state
+      if (reservation?.status !== undefined && reservation.status !== "open") {
+        throw new Error(`Reservation is no longer open`)
       }
       if (parents.length > 2) throw new Error(`A candidate may have at most two parents`)
       if (new Set(parents).size !== parents.length) throw new Error(`Candidate parents must be unique`)
@@ -493,11 +720,20 @@ export namespace HarnessSearch {
       if (sources.some((item) => !verified(item!))) {
         throw new Error(`Candidates may only use externally verified passing inspirations`)
       }
-      const recommendation = state.proposalPolicy === "leased-v3" ? recommend(state) : undefined
-      if (recommendation && !input.recommendationID) {
-        throw new Error(`A current recommendation_id is required by the leased proposal policy`)
+      const recommendation: Recommendation | undefined = reservation
+        ? {
+            ...reservation.lease,
+            parentIDs: reservation.parentIDs,
+            inspirationIDs: reservation.inspirationIDs,
+            reasons: ["budget-backed-parallel-reservation"],
+          }
+        : state.proposalPolicy === "leased-v3"
+          ? recommend(state)
+          : undefined
+      if (recommendation && !input.recommendationID && !reservation) {
+        throw new Error(`A current recommendation_id or reservation_id is required by the leased proposal policy`)
       }
-      if (recommendation && recommendation.id !== input.recommendationID) {
+      if (recommendation && !reservation && recommendation.id !== input.recommendationID) {
         throw new Error(`Recommendation lease is stale or belongs to a different search state`)
       }
       if (
@@ -507,7 +743,7 @@ export namespace HarnessSearch {
       ) {
         throw new Error(`Proposal lineage does not match the leased recommendation`)
       }
-      if (!parents.length && candidates(state).length) {
+      if (!parents.length) {
         const roots = candidates(state).filter(
           (candidate) =>
             !candidate.parentIDs.length &&
@@ -515,26 +751,30 @@ export namespace HarnessSearch {
               (candidate.result.source === "verified" && candidate.result.status === "passed")),
         )
         const limit = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(state.budget.candidates))))
-        if (roots.length >= limit) throw new Error(`Independent candidate root budget is exhausted`)
+        const held = reservation ? 0 : open(state).filter((item) => !item.parentIDs.length).length
+        if (roots.length + held >= limit) throw new Error(`Independent candidate root budget is exhausted`)
         if (roots.some((candidate) => candidate.branch === input.branch)) {
           throw new Error(`An active independent root already exists for branch ${input.branch}`)
         }
       }
       const generation = ancestors.length ? Math.max(...ancestors.map((parent) => parent!.generation)) + 1 : 0
-      const island = ancestors.length ? ancestors.toSorted((a, b) => order(state, a!, b!))[0]!.island : vacancy(state)
-      if (recommendation && island !== recommendation.targetIsland) {
+      const derived = ancestors.length ? ancestors.toSorted((a, b) => order(state, a!, b!))[0]!.island : vacancy(state)
+      const island = reservation?.lease.targetIsland ?? derived
+      if (recommendation && ancestors.length && derived !== recommendation.targetIsland) {
         throw new Error(`Server island assignment does not match the leased recommendation`)
       }
-      const lease = recommendation
-        ? Lease.parse({
-            id: recommendation.id,
-            revision: recommendation.revision,
-            strategy: recommendation.strategy,
-            mode: recommendation.mode,
-            targetIsland: recommendation.targetIsland,
-            contextIDs: recommendation.contextIDs,
-          })
-        : undefined
+      const lease =
+        reservation?.lease ??
+        (recommendation
+          ? Lease.parse({
+              id: recommendation.id,
+              revision: recommendation.revision,
+              strategy: recommendation.strategy,
+              mode: recommendation.mode,
+              targetIsland: recommendation.targetIsland,
+              contextIDs: recommendation.contextIDs,
+            })
+          : undefined)
       const id = identity({
         parentIDs: parents,
         inspirationIDs: inspirations,
@@ -542,6 +782,7 @@ export namespace HarnessSearch {
         proposal: input.proposal,
         artifact,
         lease,
+        reservationID: reservation?.id,
       })
       const candidate: Candidate = Candidate.parse({
         id,
@@ -554,6 +795,7 @@ export namespace HarnessSearch {
         proposal: input.proposal,
         artifact,
         lease,
+        reservationID: reservation?.id,
         createdAt: now,
       })
       out.accepted = true
@@ -561,6 +803,12 @@ export namespace HarnessSearch {
       return {
         ...state,
         candidates: { ...state.candidates, [id]: candidate },
+        reservations: reservation
+          ? {
+              ...state.reservations,
+              [reservation.id]: { ...reservation, status: "consumed", candidateID: id, updatedAt: now },
+            }
+          : state.reservations,
         revision: state.revision + 1,
         updatedAt: now,
       }

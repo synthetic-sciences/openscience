@@ -9,6 +9,8 @@ const Parameters = z.object({
   action: z.enum([
     "start",
     "status",
+    "dispatch",
+    "release",
     "propose",
     "observe",
     "hindsight",
@@ -39,6 +41,12 @@ const Parameters = z.object({
     .regex(/^[a-f0-9]{64}$/)
     .optional()
     .describe("For propose: current content-addressed recommendation lease returned by start or status"),
+  reservation_id: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional()
+    .describe("For propose/release: budget-backed parallel variation reservation"),
+  count: z.number().int().min(1).max(8).optional().describe("For dispatch: maximum parallel reservations to issue"),
   branch: z.string().min(1).max(120).optional().describe("For propose: stable diversity branch label"),
   proposal: z.string().min(1).max(4_000).optional().describe("For propose: concise description of the change"),
   artifact_uri: z.string().min(1).max(2_048).optional().describe("For propose: immutable candidate artifact reference"),
@@ -141,6 +149,7 @@ const view = (candidate: HarnessSearch.Candidate) => ({
   proposal: candidate.proposal.slice(0, 1_000),
   artifact: candidate.artifact,
   lease: candidate.lease,
+  reservationID: candidate.reservationID,
   source: candidate.result?.source,
   status: candidate.result?.status,
   score: candidate.result?.score,
@@ -167,6 +176,19 @@ const summary = (state: HarnessSearch.State) => {
     revision: state.revision,
     recommendation,
     recommendationContext: recommendation?.contextIDs.map((id) => view(state.candidates[id]!)),
+    reservations: {
+      open: Object.values(state.reservations).filter((item) => item.status === "open").length,
+      consumed: Object.values(state.reservations).filter((item) => item.status === "consumed").length,
+      released: Object.values(state.reservations).filter((item) => item.status === "released").length,
+      ready: Object.values(state.reservations)
+        .filter((item) => item.status === "open")
+        .map((item) => ({
+          id: item.id,
+          parentIDs: item.parentIDs,
+          inspirationIDs: item.inspirationIDs,
+          lease: item.lease,
+        })),
+    },
     candidates: Object.values(state.candidates)
       .toSorted((a, b) => b.createdAt - a.createdAt)
       .slice(0, 20)
@@ -320,9 +342,31 @@ export const HarnessTool = Tool.define("harness", {
       })
     }
 
+    if (params.action === "dispatch") {
+      const reserved = await HarnessSearch.reserve({ sessionID: ctx.sessionID, count: params.count ?? 1 })
+      return result("Parallel variations reserved", summary(reserved.state), {
+        reservationIDs: reserved.reservations.map((item) => item.id),
+        issued: reserved.reservations.length,
+        revision: reserved.state.revision,
+      })
+    }
+
+    if (params.action === "release") {
+      if (!params.reservation_id) return result("Invalid release", "release requires reservation_id")
+      const state = await HarnessSearch.release({
+        sessionID: ctx.sessionID,
+        reservationID: params.reservation_id,
+      })
+      return result("Parallel variation released", summary(state), {
+        reservationID: params.reservation_id,
+        revision: state.revision,
+      })
+    }
+
     if (params.action === "propose") {
+      const admission = [params.recommendation_id, params.reservation_id].filter((item) => item !== undefined)
       if (
-        !params.recommendation_id ||
+        admission.length !== 1 ||
         !params.branch ||
         !params.proposal ||
         !params.artifact_uri ||
@@ -330,12 +374,13 @@ export const HarnessTool = Tool.define("harness", {
       ) {
         return result(
           "Invalid proposal",
-          "propose requires recommendation_id, branch, proposal, artifact_uri, and artifact_sha256",
+          "propose requires exactly one of recommendation_id or reservation_id, plus branch, proposal, artifact_uri, and artifact_sha256",
         )
       }
       const added = await HarnessSearch.add({
         sessionID: ctx.sessionID,
         recommendationID: params.recommendation_id,
+        reservationID: params.reservation_id,
         parentIDs: params.parent_ids ?? [],
         inspirationIDs: params.inspiration_ids ?? [],
         branch: params.branch,

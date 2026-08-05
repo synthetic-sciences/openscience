@@ -325,6 +325,51 @@ describe("harness tool", () => {
     ])
   })
 
+  test("dispatches, releases, and consumes budget-backed parallel variations", async () => {
+    await bind()
+    const tool = await HarnessTool.init()
+    const started = JSON.parse((await tool.execute({ action: "start" }, context)).output)
+    const dispatched = await tool.execute({ action: "dispatch", count: 8 }, context)
+    expect(dispatched.metadata).toMatchObject({ issued: 2 })
+    const batch = JSON.parse(dispatched.output)
+    expect(batch.reservations).toMatchObject({ open: 2, consumed: 0, released: 0 })
+    const [first, second] = batch.reservations.ready
+
+    const invalid = await tool.execute(
+      {
+        action: "propose",
+        recommendation_id: started.recommendation.id,
+        reservation_id: second.id,
+        branch: "invalid",
+        proposal: "two admission capabilities",
+        artifact_uri: "artifact://invalid-admission",
+        artifact_sha256: hash("invalid-admission"),
+      },
+      context,
+    )
+    expect(invalid.title).toBe("Invalid proposal")
+
+    const released = await tool.execute({ action: "release", reservation_id: first.id }, context)
+    expect(JSON.parse(released.output).reservations).toMatchObject({ open: 1, consumed: 0, released: 1 })
+    const proposed = await tool.execute(
+      {
+        action: "propose",
+        reservation_id: second.id,
+        parent_ids: second.parentIDs,
+        inspiration_ids: second.inspirationIDs,
+        branch: "parallel",
+        proposal: "consume one reserved sibling",
+        artifact_uri: "artifact://parallel",
+        artifact_sha256: hash("parallel"),
+      },
+      context,
+    )
+    expect(proposed.metadata.accepted).toBe(true)
+    const state = JSON.parse(proposed.output)
+    expect(state.reservations).toMatchObject({ open: 0, consumed: 1, released: 1 })
+    expect(state.candidates[0]).toMatchObject({ reservationID: second.id, lease: second.lease })
+  })
+
   test("surfaces external hindsight only after backend verification", async () => {
     await bind()
     const tool = await HarnessTool.init()

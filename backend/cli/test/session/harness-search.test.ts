@@ -182,7 +182,7 @@ describe("harness candidate graph", () => {
         proposal: "bypass the server recommendation",
         artifact: artifact("missing-lease"),
       }),
-    ).rejects.toThrow("recommendation_id is required")
+    ).rejects.toThrow("recommendation_id or reservation_id is required")
 
     const first = await HarnessSearch.add({
       sessionID: "search-leased",
@@ -282,6 +282,196 @@ describe("harness candidate graph", () => {
     const exploit = HarnessSearch.recommend(await HarnessSearch.read("search-lease-race"))
     expect(exploit).toMatchObject({ strategy: "exploit", mode: "diff", parentIDs: [first.id] })
     expect(exploit.contextIDs).toEqual([first.id])
+  })
+
+  test("atomically reserves and consumes parallel sibling variations out of order", async () => {
+    await setup("search-reservations", { candidates: 8, leased: true })
+    const batch = await HarnessSearch.reserve({ sessionID: "search-reservations", count: 8 })
+    expect(batch.reservations).toHaveLength(3)
+    expect(new Set(batch.reservations.map((item) => item.id)).size).toBe(3)
+    expect(new Set(batch.reservations.map((item) => item.lease.id)).size).toBe(2)
+    expect(batch.reservations.map((item) => item.lease.targetIsland)).toEqual([0, 1, 0])
+    expect(batch.state.bestID).toBeUndefined()
+    expect(batch.state.archiveIDs).toEqual([])
+    expect(await HarnessSearch.read("search-reservations")).toEqual(batch.state)
+    const blocked = HarnessSearch.recommend(batch.state)
+    await expect(
+      HarnessSearch.add({
+        sessionID: "search-reservations",
+        recommendationID: blocked.id,
+        parentIDs: blocked.parentIDs,
+        inspirationIDs: blocked.inspirationIDs,
+        branch: "unreserved-root",
+        proposal: "exceed the independent-root capacity held by reservations",
+        artifact: artifact("unreserved-root"),
+      }),
+    ).rejects.toThrow("root budget")
+
+    const order = [batch.reservations[2]!, batch.reservations[0]!, batch.reservations[1]!]
+    const results = await Promise.all(
+      order.map((reservation, index) =>
+        HarnessSearch.add({
+          sessionID: "search-reservations",
+          reservationID: reservation.id,
+          parentIDs: reservation.parentIDs,
+          inspirationIDs: reservation.inspirationIDs,
+          branch: `parallel-${index}`,
+          proposal: `independent reserved sibling ${index}`,
+          artifact: artifact(`reserved-${index}`),
+        }),
+      ),
+    )
+    expect(results.every((item) => item.accepted)).toBe(true)
+    const state = await HarnessSearch.read("search-reservations")
+    expect(Object.keys(state.candidates)).toHaveLength(3)
+    expect(Object.values(state.reservations).every((item) => item.status === "consumed")).toBe(true)
+    expect(state.bestID).toBeUndefined()
+    expect(state.archiveIDs).toEqual([])
+    for (const result of results) {
+      expect(state.candidates[result.id]?.reservationID).toBeDefined()
+      expect(state.candidates[result.id]?.result).toBeUndefined()
+    }
+
+    const retry = await HarnessSearch.add({
+      sessionID: "search-reservations",
+      reservationID: order[0]!.id,
+      parentIDs: order[0]!.parentIDs,
+      inspirationIDs: order[0]!.inspirationIDs,
+      branch: "parallel-0",
+      proposal: "idempotent retry uses different wrapper text",
+      artifact: artifact("reserved-0"),
+    })
+    expect(retry).toMatchObject({ accepted: true, deduplicated: true, id: results[0]!.id })
+    await expect(
+      HarnessSearch.add({
+        sessionID: "search-reservations",
+        reservationID: order[0]!.id,
+        parentIDs: order[0]!.parentIDs,
+        inspirationIDs: order[0]!.inspirationIDs,
+        branch: "parallel-reuse",
+        proposal: "consume one ticket twice",
+        artifact: artifact("reserved-reuse"),
+      }),
+    ).rejects.toThrow("no longer open")
+  })
+
+  test("counts open reservations against budget and returns released capacity", async () => {
+    await setup("search-reservation-budget", { candidates: 2, leased: true })
+    const batch = await HarnessSearch.reserve({ sessionID: "search-reservation-budget", count: 8 })
+    expect(batch.reservations).toHaveLength(2)
+    const blocked = HarnessSearch.recommend(batch.state)
+    const rejected = await HarnessSearch.add({
+      sessionID: "search-reservation-budget",
+      recommendationID: blocked.id,
+      parentIDs: blocked.parentIDs,
+      inspirationIDs: blocked.inspirationIDs,
+      branch: "unreserved",
+      proposal: "steal capacity held by parallel workers",
+      artifact: artifact("unreserved"),
+    })
+    expect(rejected.accepted).toBe(false)
+
+    const released = await HarnessSearch.release({
+      sessionID: "search-reservation-budget",
+      reservationID: batch.reservations[0]!.id,
+    })
+    expect(released.reservations[batch.reservations[0]!.id]?.status).toBe("released")
+    const serial = HarnessSearch.recommend(released)
+    const first = await HarnessSearch.add({
+      sessionID: "search-reservation-budget",
+      recommendationID: serial.id,
+      parentIDs: serial.parentIDs,
+      inspirationIDs: serial.inspirationIDs,
+      branch: "serial",
+      proposal: "use the returned serial slot",
+      artifact: artifact("reservation-serial"),
+    })
+    expect(first.accepted).toBe(true)
+    const ticket = batch.reservations[1]!
+    const second = await HarnessSearch.add({
+      sessionID: "search-reservation-budget",
+      reservationID: ticket.id,
+      parentIDs: ticket.parentIDs,
+      inspirationIDs: ticket.inspirationIDs,
+      branch: "parallel",
+      proposal: "consume the remaining parallel slot",
+      artifact: artifact("reservation-parallel"),
+    })
+    expect(second.accepted).toBe(true)
+    expect(Object.keys(second.state.candidates)).toHaveLength(2)
+    await expect(
+      HarnessSearch.release({ sessionID: "search-reservation-budget", reservationID: ticket.id }),
+    ).rejects.toThrow("consumed")
+  })
+
+  test("serializes concurrent attempts to consume one reservation", async () => {
+    await setup("search-reservation-race", { candidates: 2, leased: true })
+    const batch = await HarnessSearch.reserve({ sessionID: "search-reservation-race", count: 1 })
+    const ticket = batch.reservations[0]!
+    const attempts = await Promise.allSettled(
+      ["a", "b"].map((name) =>
+        HarnessSearch.add({
+          sessionID: "search-reservation-race",
+          reservationID: ticket.id,
+          parentIDs: ticket.parentIDs,
+          inspirationIDs: ticket.inspirationIDs,
+          branch: name,
+          proposal: `race ${name}`,
+          artifact: artifact(`reservation-race-${name}`),
+        }),
+      ),
+    )
+    expect(attempts.filter((item) => item.status === "fulfilled")).toHaveLength(1)
+    expect(attempts.filter((item) => item.status === "rejected")).toHaveLength(1)
+    const state = await HarnessSearch.read("search-reservation-race")
+    expect(Object.keys(state.candidates)).toHaveLength(1)
+    expect(state.reservations[ticket.id]?.status).toBe("consumed")
+  })
+
+  test("releases a reservation when a worker rediscovers existing bytes", async () => {
+    const initial = await setup("search-reservation-duplicate", { candidates: 3, leased: true })
+    const recommendation = HarnessSearch.recommend(initial)
+    const seed = await HarnessSearch.add({
+      sessionID: "search-reservation-duplicate",
+      recommendationID: recommendation.id,
+      parentIDs: recommendation.parentIDs,
+      inspirationIDs: recommendation.inspirationIDs,
+      branch: "seed",
+      proposal: "seed",
+      artifact: artifact("reservation-duplicate"),
+    })
+    const batch = await HarnessSearch.reserve({ sessionID: "search-reservation-duplicate", count: 1 })
+    const ticket = batch.reservations[0]!
+    const duplicate = await HarnessSearch.add({
+      sessionID: "search-reservation-duplicate",
+      reservationID: ticket.id,
+      parentIDs: ticket.parentIDs,
+      inspirationIDs: ticket.inspirationIDs,
+      branch: "rediscovery",
+      proposal: "same bytes found independently",
+      artifact: artifact("reservation-duplicate"),
+    })
+    expect(duplicate).toMatchObject({ accepted: true, deduplicated: true, id: seed.id })
+    expect(duplicate.state.reservations[ticket.id]).toMatchObject({ status: "released", candidateID: seed.id })
+    const replacement = await HarnessSearch.reserve({ sessionID: "search-reservation-duplicate", count: 1 })
+    expect(replacement.reservations).toHaveLength(1)
+  })
+
+  test("releases unused reservations on termination and fails closed on ticket tampering", async () => {
+    await setup("search-reservation-stop", { candidates: 2, leased: true })
+    await HarnessSearch.reserve({ sessionID: "search-reservation-stop", count: 2 })
+    const stopped = await HarnessSearch.finish("search-reservation-stop", "user_cancelled")
+    expect(Object.values(stopped.reservations)).toHaveLength(2)
+    expect(Object.values(stopped.reservations).every((item) => item.status === "released")).toBe(true)
+
+    await setup("search-reservation-tamper", { candidates: 2, leased: true })
+    const reserved = await HarnessSearch.reserve({ sessionID: "search-reservation-tamper", count: 1 })
+    const ticket = reserved.reservations[0]!
+    const file = path.join(Global.Path.data, "harness", "search", "search-reservation-tamper.json")
+    const state = JSON.parse(await fs.readFile(file, "utf8"))
+    state.reservations[ticket.id].status = "consumed"
+    await fs.writeFile(file, JSON.stringify(state))
+    await expect(HarnessSearch.read("search-reservation-tamper")).rejects.toThrow("authorized candidate")
   })
 
   test("fails closed when leased recommendation provenance is edited", async () => {
@@ -615,6 +805,7 @@ describe("harness candidate graph", () => {
     expect(state.objectives).toEqual([])
     expect(state.archiveIDs).toEqual([seed.id])
     expect(state.bestID).toBe(seed.id)
+    await expect(HarnessSearch.reserve({ sessionID: "search-pareto-legacy", count: 1 })).rejects.toThrow("leased-v3")
   })
 
   test("preserves branch diversity during early exploration", async () => {
