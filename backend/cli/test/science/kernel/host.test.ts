@@ -58,10 +58,11 @@ describe("kernel host snapshot", () => {
 
   test("serves the second snapshot from the rolling baseline without a blocking sample", async () => {
     await KernelHost.snapshot()
-    // A same-tick second call has no window to measure. 50ms is enough for the
-    // scheduler to advance os.cpus() while staying far below the 200ms a cold
-    // sample would cost — so this still proves the warm path never blocks.
-    await Bun.sleep(50)
+    // Cross the 1 second floor `advance` applies — a shorter gap would
+    // correctly report nothing rather than trust a window in which barely a
+    // jiffy ticked. Still far below the 200ms a cold sample would cost plus the
+    // sleep itself, so this proves the warm path never blocks.
+    await Bun.sleep(1_100)
     const started = Date.now()
     const snapshot = await KernelHost.snapshot()
 
@@ -71,7 +72,7 @@ describe("kernel host snapshot", () => {
 
   test("keeps the older baseline when the window produced no reading", () => {
     const previous = { times: { active: 1_000, total: 10_000 }, at: 1_000 }
-    const fresh = { times: { active: 1_000, total: 10_000 }, at: 1_050 }
+    const fresh = { times: { active: 1_000, total: 10_000 }, at: 2_050 }
     const result = KernelHost.advance(previous, fresh, 8)
 
     expect(result.reading).toEqual({})
@@ -80,10 +81,69 @@ describe("kernel host snapshot", () => {
 
   test("advances the baseline only once the window produced a reading", () => {
     const previous = { times: { active: 1_000, total: 10_000 }, at: 1_000 }
-    const fresh = { times: { active: 1_500, total: 12_000 }, at: 1_050 }
+    const fresh = { times: { active: 1_500, total: 12_000 }, at: 2_050 }
     const result = KernelHost.advance(previous, fresh, 8)
 
     expect(result.reading.busy).toBeCloseTo(2, 5)
     expect(result.baseline).toBe(fresh)
   })
+
+  test("reports nothing across a sub-second window instead of a jiffy's worth of noise", () => {
+    // Two /notebook/compute requests milliseconds apart: the second measures a
+    // span in which one core has ticked once. Counted as idle that reads
+    // `busy: 0` on a machine running at three cores; counted as active it reads
+    // every core pegged. Both are noise dressed as a measurement, so the window
+    // is refused and the older baseline held for the next call.
+    const previous = { times: { active: 1_000, total: 10_000 }, at: 1_000 }
+    const idle = { times: { active: 1_000, total: 10_010 }, at: 1_001 }
+    const active = { times: { active: 1_010, total: 10_010 }, at: 1_001 }
+
+    expect(KernelHost.advance(previous, idle, 8).reading).toEqual({})
+    expect(KernelHost.advance(previous, idle, 8).baseline).toBe(previous)
+    expect(KernelHost.advance(previous, active, 8).reading).toEqual({})
+    expect(KernelHost.advance(previous, active, 8).baseline).toBe(previous)
+  })
+
+  test("still measures at exactly a 1 second window, the inclusive floor", () => {
+    const previous = { times: { active: 1_000, total: 10_000 }, at: 1_000 }
+    const fresh = { times: { active: 1_500, total: 12_000 }, at: 2_000 }
+
+    expect(KernelHost.advance(previous, fresh, 8).reading.busy).toBeCloseTo(2, 5)
+  })
+
+  test("never answers concurrent snapshots with a fabricated 0 or a fully pegged host", async () => {
+    // The empirical half of the floor: real concurrent callers against the real
+    // rolling baseline, with one core genuinely held so neither extreme can be
+    // the truth. 5ms straddles the 10ms jiffy, so a window in which exactly one
+    // core ticked once — the corruption the floor exists to refuse — happens
+    // repeatedly over 60 rounds.
+    const spinner = Bun.spawn(["sh", "-c", "while :; do :; done"], {
+      detached: true,
+      stdout: "ignore",
+      stderr: "ignore",
+    })
+    try {
+      const cores = os.cpus().length
+      const readings: Array<number | undefined> = []
+      for (let round = 0; round < 60; round += 1) {
+        const pair = await Promise.all([KernelHost.snapshot(), KernelHost.snapshot()])
+        readings.push(...pair.map((snapshot) => snapshot.cpu.busy))
+        await Bun.sleep(5)
+      }
+
+      expect(readings.length).toBe(120)
+      // Non-vacuous: refusing every window would satisfy the loop below, so at
+      // least one round must have produced a real figure — the cold sample's,
+      // which measures its own 200ms and sees the spinner.
+      const measured = readings.filter((value) => value !== undefined)
+      expect(measured.length).toBeGreaterThan(0)
+      for (const value of measured) {
+        expect(value).toBeGreaterThan(0)
+        expect(value).toBeLessThan(cores)
+      }
+    } finally {
+      spinner.kill()
+      await spinner.exited
+    }
+  }, 30_000)
 })

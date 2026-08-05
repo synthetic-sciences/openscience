@@ -44,8 +44,19 @@ export namespace KernelHost {
   // The baseline advances only when the window produced a reading; a failed
   // window keeps the older mark so the next call measures across a span that
   // has actually advanced. Pure, so the rule is testable without wall clock.
+  //
+  // A window under a second is refused outright, the same floor
+  // KernelMetrics.derive applies and for the same reason: os.cpus() counts in
+  // 10ms jiffies, so two requests arriving milliseconds apart measure a span in
+  // which at most one core has ticked once. That single jiffy landing on idle
+  // reads as `busy: 0` on a machine running at three cores, and landing on
+  // user/sys reads as every core pegged — 12 of 120 concurrent polls came back
+  // one or the other. Too short to measure is not a measurement, and the
+  // retention rule above already has the right answer for it: keep the older
+  // baseline so the NEXT call spans something real, and report nothing now.
   export function advance(previous: Mark, fresh: Mark, cores: number) {
-    const value = busy(previous.times, fresh.times, cores)
+    const elapsed = fresh.at - previous.at
+    const value = elapsed >= 1_000 ? busy(previous.times, fresh.times, cores) : undefined
     if (value === undefined) return { baseline: previous, reading: {} }
     return { baseline: fresh, reading: { busy: value } }
   }
@@ -73,6 +84,11 @@ export namespace KernelHost {
       baseline = result.baseline
       return result.reading
     }
+    // The cold sample keeps its own 200ms window rather than the 1s floor
+    // above: it takes BOTH marks itself, so there is no shared baseline another
+    // request can truncate, and 200ms is ~20 jiffies per core — resolution
+    // enough for a real reading. Blocking the first paint for a full second to
+    // gain precision nobody asked for is the worse trade.
     await Bun.sleep(200)
     const next = mark()
     baseline = next
