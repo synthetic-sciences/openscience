@@ -2,20 +2,9 @@
 
 <img src="assets/wordmark.svg" alt="AppliedScience" width="440">
 
-### The open-source AI workbench for scientific research
+### The AI workbench for scientific research
 
 Give it a goal. It reads the literature, writes and runs code, runs the experiments, and writes up what it found.
-
-<br/>
-
-[![CI](https://github.com/synthetic-sciences/OpenScience/actions/workflows/ci.yml/badge.svg)](https://github.com/synthetic-sciences/OpenScience/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/%40synsci%2Fopenscience?label=%40synsci%2Fopenscience&color=0d9488)](https://www.npmjs.com/package/@synsci/openscience)
-[![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![docs](https://img.shields.io/badge/docs-openscience.sh-0d9488.svg)](https://openscience.sh/docs)
-
-[Quickstart](#quickstart) · [Docs](https://openscience.sh/docs)
-
-</div>
 
 ---
 
