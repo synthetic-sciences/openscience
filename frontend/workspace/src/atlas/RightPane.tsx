@@ -15,7 +15,8 @@ import {
 import { uiStore, type ContextTab, type WorkTab } from "@/atlas/store/ui"
 import { AtlasCanvas } from "@/atlas/AtlasCanvas"
 import { ComputeSurface } from "@/atlas/ComputeSurface"
-import { ExternalFileAccess, FileExplorer } from "@/atlas/FileExplorer"
+import { ExternalFileAccess } from "@/atlas/FileExplorer"
+import { FilesPane } from "@/atlas/FilesPane"
 import { FileView } from "@/atlas/FilePreview"
 import { TerminalSurface } from "@/atlas/TerminalSurface"
 import { SessionTraceSurface } from "@/atlas/SessionTraceSurface"
@@ -389,7 +390,7 @@ export function RightPane(
                 {(current) => <StoredArtifactView artifact={current()} />}
               </Match>
               <Match when={context() === "files" && !uiStore.file() && !uiStore.saved()}>
-                <FileExplorer />
+                <FilesPane />
               </Match>
               <Match when={context() === "terminal"}>
                 <TerminalSurface />

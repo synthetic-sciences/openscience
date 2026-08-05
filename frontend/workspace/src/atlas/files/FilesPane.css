@@ -95,3 +95,17 @@
 .files-tab__close { color: var(--color-text-faint); font-size: 14px; line-height: 1; }
 .files-tab__close:hover { color: var(--color-text); }
 .files-tab__close:focus-visible { outline: 1px solid var(--color-text); outline-offset: 1px; border-radius: 3px; }
+
+.files-pane { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--color-bg); }
+.files-source-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px; }
+.files-search-row { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; }
+.files-search {
+  flex: 1; min-width: 0; padding: 8px 11px; border: 1px solid var(--color-border-weak-base);
+  border-radius: 8px; background: var(--color-bg-subtle); color: var(--color-text); font: inherit; font-size: 12.5px;
+}
+.files-search::placeholder { color: var(--color-text-faint); }
+.files-search:focus { outline: none; border-color: var(--color-text-muted); }
+.files-notice {
+  margin: 0 12px 8px; padding: 8px 10px; border-left: 2px solid var(--color-border-weak-base);
+  background: var(--color-bg-subtle); color: var(--color-text-muted); font-size: 12px; line-height: 1.5;
+}
