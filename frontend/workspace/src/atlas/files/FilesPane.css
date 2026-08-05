@@ -1,0 +1,51 @@
+.files-source { position: relative; }
+
+.files-source__button {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+  padding: 7px 10px; border: 1px solid var(--color-border-weak-base); border-radius: 8px;
+  background: var(--color-bg-subtle); color: var(--color-text); font: inherit; font-size: 13px; cursor: pointer;
+}
+.files-source__button:hover { background: var(--color-surface); }
+.files-source__button:focus-visible { outline: 1px solid var(--color-text); outline-offset: 1px; }
+.files-source__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-source__caret { color: var(--color-text-faint); font-size: 10px; }
+
+.files-menu-wrap { position: absolute; inset: 0; z-index: 5; }
+.files-menu__scrim { position: absolute; inset: 0; width: 100%; border: 0; background: transparent; cursor: default; }
+
+.files-menu {
+  /* Never wider than the pane it opens inside: a docked pane is ~396px, and a
+     fixed-width menu plus a long path forces a horizontal scrollbar. */
+  position: absolute; top: 40px; left: 0; width: min(300px, calc(100vw - 24px));
+  max-height: 400px; overflow-y: auto; overflow-x: hidden;
+  padding: 8px; border: 1px solid var(--color-border-weak-base); border-radius: 10px;
+  background: var(--color-surface-solid); box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+.files-menu__group { padding: 9px 8px 4px; font-size: 11px; letter-spacing: 0.06em; color: var(--color-text-faint); }
+.files-menu__item {
+  display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 10px;
+  width: 100%; padding: 8px; border: 0; border-radius: 7px; background: none;
+  color: var(--color-text); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.files-menu__item:hover { background: var(--color-bg-subtle); }
+.files-menu__item:focus-visible { outline: 1px solid var(--color-text); outline-offset: -2px; }
+/* A 1fr track still refuses to shrink below its content unless the child says it may. */
+.files-menu__item > span:nth-child(2) { min-width: 0; overflow: hidden; }
+.files-menu__glyph { color: var(--color-text-faint); }
+.files-menu__label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-menu__sub {
+  display: block; margin-top: 1px; font-family: var(--font-code); font-size: 10.5px;
+  color: var(--color-text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* Truncate from the left: the tail of a path is what distinguishes sources. */
+  direction: rtl; text-align: left;
+}
+.files-menu__tail {
+  display: inline-flex; align-items: center; gap: 7px;
+  color: var(--color-text-faint); font-family: var(--font-code); font-size: 11px;
+}
+.files-menu__badge {
+  padding: 1px 5px; border: 1px solid var(--color-border-weak-base); border-radius: 999px;
+  font-size: 9.5px; letter-spacing: 0.04em; color: var(--color-text-muted);
+}
+.files-menu__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-muted); }
+.files-menu__sep { height: 1px; margin: 7px 8px; background: var(--color-border-weak-base); }
