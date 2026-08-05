@@ -5,6 +5,7 @@ import { useSDK } from "@/context/sdk"
 import { IconCpu, IconPlus, IconRefresh } from "@/atlas/shared/Icon"
 import { summarizeKernels, type KernelStatus } from "@/notebook/runtime"
 import { useExecutionAuthority } from "./use-execution-authority"
+import { useKernelList } from "./use-kernel-list"
 import { KernelCard, type KernelAction } from "./KernelCard"
 
 type Response = { kernels: KernelStatus[] }
@@ -62,8 +63,12 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
     )
   }
   const [data, api] = createResource(load)
-  const kernels = () => data()?.kernels ?? []
-  const summary = createMemo(() => summarizeKernels(kernels()))
+  // The rendered list is the resource's kernels reconciled into a store keyed
+  // by id (see use-kernel-list.ts), not the resource read directly — that
+  // keeps unchanged kernel cards mounted across a poll instead of being torn
+  // down and recreated every 2.5s.
+  const kernels = useKernelList(() => data()?.kernels)
+  const summary = createMemo(() => summarizeKernels(kernels))
   const ensureSession = async () => {
     if (params.id && params.id !== "new") return params.id
     return props.onEnsureSession?.()
@@ -265,7 +270,7 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
         </Show>
 
         <Show
-          when={kernels().length > 0}
+          when={kernels.length > 0}
           fallback={
             <div class="kernel-panel__empty">
               <span aria-hidden="true">
@@ -277,7 +282,7 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
           }
         >
           <div class="kernel-panel__list">
-            <For each={kernels()}>
+            <For each={kernels}>
               {(kernel) => (
                 <KernelCard
                   kernel={kernel}
