@@ -3,19 +3,35 @@ import { useSDK } from "@/context/sdk"
 import { hostTiles, type Capacity } from "@/atlas/host-tiles"
 import "@/atlas/HostStrip.css"
 
-export function HostStrip(): JSX.Element {
-  const sdk = useSDK()
+// The transport is a prop so the degraded path can be mounted against a real
+// endpoint that really fails; the session SDK supplies it in the product.
+type HostStripProps = { request?: (path: string) => Promise<Response> }
+
+export function HostStrip(props: HostStripProps = {}): JSX.Element {
+  const request = props.request ?? useSDK().request
+  // A poll that fails resolves to no capacity instead of rejecting. An errored
+  // resource re-throws where it is read, and the nearest ErrorBoundary wraps the
+  // entire workspace, so a server restart or a sleep/wake while this pane is
+  // open would swap the whole app for the error page. hostTiles already reads an
+  // absent capacity as "Unavailable" on every tile, which is the designed
+  // degraded state — never a 0, never a blank tile, never a thrown boundary.
   const load = () =>
-    sdk.request("/notebook/compute").then((response) => {
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
-      return response.json() as Promise<Capacity>
-    })
+    request("/notebook/compute")
+      .then((response) => (response.ok ? (response.json() as Promise<Capacity>) : undefined))
+      .catch(() => undefined)
   const [data, api] = createResource(load)
-  const timer = setInterval(() => {
+  // A hidden tab skips its polls, so returning to it would otherwise show
+  // numbers up to one interval stale until the next tick.
+  const refresh = () => {
     if (document.hidden) return
     void api.refetch()
-  }, 2_500)
-  onCleanup(() => clearInterval(timer))
+  }
+  const timer = setInterval(refresh, 2_500)
+  document.addEventListener("visibilitychange", refresh)
+  onCleanup(() => {
+    clearInterval(timer)
+    document.removeEventListener("visibilitychange", refresh)
+  })
 
   return (
     <section class="host-strip" aria-label="Host capacity" data-testid="host-strip">
