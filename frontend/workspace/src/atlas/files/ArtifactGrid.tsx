@@ -4,21 +4,17 @@ import { ArtifactCard } from "./ArtifactCard"
 import type { ThumbProps } from "./ArtifactThumb"
 import { groupBySession, sortArtifacts, type Group } from "./artifact-groups"
 import { readView, writeView, type View } from "./artifact-view"
+import { age } from "./ago"
 
 export interface GridProps extends Omit<ThumbProps, "artifact"> {
   artifacts: StoredArtifact[]
   titles: Map<string, string>
   currentSession: string | undefined
+  /** Set while the pane's search box is filtering, so an empty grid can say why. */
+  filtered?: boolean
   onOpen: (artifact: StoredArtifact) => void
   onRename: (artifact: StoredArtifact) => void
   onTrash: (artifact: StoredArtifact) => void
-}
-
-const age = (created: number) => {
-  const minutes = Math.max(1, Math.round((Date.now() - created) / 60_000))
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.round(minutes / 60)
-  return hours < 24 ? `${hours}h` : `${Math.round(hours / 24)}d`
 }
 
 export function ArtifactGrid(props: GridProps): JSX.Element {
@@ -34,10 +30,18 @@ export function ArtifactGrid(props: GridProps): JSX.Element {
     writeView(merged)
   }
 
+  // Each field gets its own memo. Reading view().sort inside the grouping memo
+  // subscribed it to the whole object, and apply() always writes a fresh one, so
+  // toggling layout or file sizes rebuilt every Group -- which made <For>
+  // recreate every card and re-read every artifact's bytes.
+  const sort = createMemo(() => view().sort)
+  const layout = createMemo(() => view().layout)
+  const sizes = createMemo(() => view().sizes)
+
   // One group with no label is how the flat A-Z case reuses the grouped render
   // path; the header is what disappears, not the list.
   const groups = createMemo((): Group[] =>
-    view().sort === "created"
+    sort() === "created"
       ? groupBySession(props.artifacts, props.titles, props.currentSession)
       : [{ key: "all", label: "", artifacts: sortArtifacts(props.artifacts, "name"), newest: 0 }],
   )
@@ -45,8 +49,8 @@ export function ArtifactGrid(props: GridProps): JSX.Element {
   const card = (artifact: StoredArtifact) => (
     <ArtifactCard
       artifact={artifact}
-      layout={view().layout}
-      sizes={view().sizes}
+      layout={layout()}
+      sizes={sizes()}
       url={props.url}
       read={props.read}
       highlight={props.highlight}
@@ -67,22 +71,22 @@ export function ArtifactGrid(props: GridProps): JSX.Element {
           type="button"
           class="artifact-toolbar__sort"
           data-artifact-sort
-          onClick={() => apply({ sort: view().sort === "created" ? "name" : "created" })}
+          onClick={() => apply({ sort: sort() === "created" ? "name" : "created" })}
         >
-          {view().sort === "created" ? "Created ↓" : "Name ↓"}
+          {sort() === "created" ? "Created ↓" : "Name ↓"}
         </button>
 
         <span class="artifact-toolbar__layout">
           <For each={["grid", "list"] as const}>
-            {(layout) => (
+            {(option) => (
               <button
                 type="button"
-                data-artifact-layout={layout}
-                aria-label={layout === "grid" ? "Grid" : "List"}
-                aria-pressed={view().layout === layout}
-                onClick={() => apply({ layout })}
+                data-artifact-layout={option}
+                aria-label={option === "grid" ? "Grid" : "List"}
+                aria-pressed={layout() === option}
+                onClick={() => apply({ layout: option })}
               >
-                {layout === "grid" ? "▦" : "≡"}
+                {option === "grid" ? "▦" : "≡"}
               </button>
             )}
           </For>
@@ -113,9 +117,9 @@ export function ArtifactGrid(props: GridProps): JSX.Element {
               state, config, worktree and directory but never data, so any path
               this menu offered would be a guess. It needs a backend field first. */}
           <div class="artifact-menu artifact-menu--prefs" role="menu">
-            <button type="button" role="menuitem" data-pref="sizes" onClick={() => apply({ sizes: !view().sizes })}>
+            <button type="button" role="menuitem" data-pref="sizes" onClick={() => apply({ sizes: !sizes() })}>
               <span aria-hidden="true" class="artifact-menu__check">
-                {view().sizes ? "✓" : ""}
+                {sizes() ? "✓" : ""}
               </span>
               Show file sizes
             </button>
@@ -123,7 +127,16 @@ export function ArtifactGrid(props: GridProps): JSX.Element {
         </Show>
       </div>
 
-      <Show when={props.artifacts.length > 0} fallback={<div class="files-empty">No artifacts saved yet.</div>}>
+      <Show
+        when={props.artifacts.length > 0}
+        fallback={
+          // "No artifacts saved yet." is false when a search simply matched
+          // nothing, and the count beside it already says 0.
+          <div class="files-empty">
+            {props.filtered ? "No artifacts match this search." : "No artifacts saved yet."}
+          </div>
+        }
+      >
         <For each={groups()}>
           {(group) => (
             <>
@@ -136,8 +149,8 @@ export function ArtifactGrid(props: GridProps): JSX.Element {
                 </div>
               </Show>
               <div
-                class={view().layout === "grid" ? "artifact-grid" : "artifact-list"}
-                {...(view().layout === "grid" ? { "data-artifact-grid": true } : { "data-artifact-list": true })}
+                class={layout() === "grid" ? "artifact-grid" : "artifact-list"}
+                {...(layout() === "grid" ? { "data-artifact-grid": true } : { "data-artifact-list": true })}
               >
                 <For each={group.artifacts}>{card}</For>
               </div>

@@ -1,4 +1,4 @@
-import { Match, Show, Switch, createResource, type JSX } from "solid-js"
+import { Match, Show, Switch, createEffect, createSignal, onCleanup, type JSX } from "solid-js"
 import type { StoredArtifact } from "@/artifacts/store"
 import { extension, thumbKind, thumbLanguage } from "./artifact-thumb"
 
@@ -19,24 +19,38 @@ const shared = (code: string, lang: string) =>
 
 export function ArtifactThumb(props: ThumbProps): JSX.Element {
   const kind = () => thumbKind(props.artifact.current)
+  const [preview, setPreview] = createSignal<{ text: string; html?: string }>()
+  const [failed, setFailed] = createSignal(false)
 
-  // A failed preview is a quiet chip, never a thrown error: this renders inside
-  // the workspace's only ErrorBoundary, and one unreadable artifact must not
-  // replace the whole pane.
-  const [preview] = createResource(
-    () => (kind() === "text" ? props.artifact : undefined),
-    // One shape, always: a union would force every reader to narrow, and the
-    // interesting case here is "we have nothing", not "which variant".
-    async (artifact): Promise<{ text: string; html: string | undefined; failed: boolean }> => {
-      const body = await props.read(artifact).catch(() => undefined)
-      if (body === undefined) return { text: "", html: undefined, failed: true }
-      const lines = body.split("\n").slice(0, PREVIEW_LINES).join("\n")
-      const tinted = await (props.highlight ?? shared)(lines, thumbLanguage(artifact.current.filename)).catch(
-        () => undefined,
-      )
-      return { text: lines, html: tinted, failed: false }
-    },
-  )
+  // Deliberately a signal and an effect rather than createResource. Reading a
+  // resource from the render tree increments the nearest <Suspense> counter, and
+  // this renders inside RightPane's (RightPane.tsx:351) -- one thumbnail waiting
+  // on shiki's cold start replaced the whole pane with the spinner, the same
+  // hazard FilesPane.tsx:248 already documents for the listing.
+  createEffect(() => {
+    const artifact = props.artifact
+    setPreview(undefined)
+    setFailed(false)
+    if (kind() !== "text") return
+
+    let live = true
+    onCleanup(() => (live = false))
+
+    void (async () => {
+      try {
+        // Inside the try, because `read` can throw rather than reject:
+        // sdk.request is a plain function that throws when no project is open.
+        const body = await props.read(artifact)
+        const lines = body.split("\n").slice(0, PREVIEW_LINES).join("\n")
+        const html = await (props.highlight ?? shared)(lines, thumbLanguage(artifact.current.filename)).catch(
+          () => undefined,
+        )
+        if (live) setPreview({ text: lines, html })
+      } catch {
+        if (live) setFailed(true)
+      }
+    })()
+  })
 
   const chip = () => (
     <span class="artifact-thumb artifact-thumb--binary">
@@ -46,25 +60,31 @@ export function ArtifactThumb(props: ThumbProps): JSX.Element {
 
   return (
     <Switch fallback={chip()}>
-      <Match when={kind() === "image"}>
-        <img class="artifact-thumb artifact-thumb--image" src={props.url(props.artifact)} alt="" loading="lazy" />
+      <Match when={kind() === "image" && !failed()}>
+        {/* Bytes that cannot be served must reach the same chip as an unreadable
+            text preview, not the browser's broken-image glyph. */}
+        <img
+          class="artifact-thumb artifact-thumb--image"
+          src={props.url(props.artifact)}
+          alt=""
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
       </Match>
-      <Match when={kind() === "text" && preview.latest}>
+      <Match when={kind() === "text" && !failed() && preview()}>
         {(value) => (
-          <Show when={!value().failed} fallback={chip()}>
-            {/* innerHTML and children cannot both own a node, so the tinted and
-                plain cases are separate elements rather than one with a Show
-                nested inside it. */}
-            <Show
-              when={value().html}
-              fallback={
-                <pre class="artifact-thumb artifact-thumb--text" data-thumb-text>
-                  {value().text}
-                </pre>
-              }
-            >
-              {(html) => <pre class="artifact-thumb artifact-thumb--text" data-thumb-text innerHTML={html()} />}
-            </Show>
+          // innerHTML and children cannot both own a node, so the tinted and
+          // plain cases are separate elements rather than one nested inside the
+          // other.
+          <Show
+            when={value().html}
+            fallback={
+              <pre class="artifact-thumb artifact-thumb--text" data-thumb-text>
+                {value().text}
+              </pre>
+            }
+          >
+            {(html) => <pre class="artifact-thumb artifact-thumb--text" data-thumb-text innerHTML={html()} />}
           </Show>
         )}
       </Match>

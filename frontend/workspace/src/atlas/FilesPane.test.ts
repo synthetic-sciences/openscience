@@ -29,7 +29,13 @@ afterAll(() => server.close())
 afterEach(() => {
   cleanups.splice(0).forEach((fn) => fn())
   document.body.replaceChildren()
+  // The pane remembers its last source; without this, whichever test ran first
+  // would decide what every later one opens on.
+  globalThis.localStorage?.clear()
 })
+
+/** Starts the pane on a source other than its artifacts default. */
+const startOn = (id: string) => globalThis.localStorage?.setItem("openscience:files-source", id)
 
 const mount = (view: () => JSX.Element) => {
   const host = document.createElement("div")
@@ -111,7 +117,70 @@ const grant = (id: string, path: string, access: "read" | "write") => ({
 })
 
 describe("files pane", () => {
+  // Artifacts are what a session produces, so the pane opens on them rather than
+  // on the project tree.
+  test("opens on artifacts when nothing has been picked yet", async () => {
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
+          if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "peak_fit.ipynb")])
+          return listing([{ name: "SHOULD_NOT_APPEAR.py", type: "file", size: 1 }])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("All artifacts")
+    expect(host.querySelector("[data-artifact-grid]")).not.toBeNull()
+    expect(host.textContent).not.toContain("SHOULD_NOT_APPEAR.py")
+  })
+
+  test("remembers the source it was left on", async () => {
+    const request = async (path: string) => {
+      if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
+      if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "peak_fit.ipynb")])
+      return listing([{ name: "train_lr.py", type: "file", size: 10 }])
+    }
+    const first = mount(() => subject.FilesPane({ request }))
+    await settle()
+
+    first.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    first.querySelector<HTMLButtonElement>('[data-source-item="project"]')?.click()
+    await settle()
+    expect(first.querySelector(".files-table")).not.toBeNull()
+
+    cleanups.splice(0).forEach((fn) => fn())
+    document.body.replaceChildren()
+
+    const second = mount(() => subject.FilesPane({ request }))
+    await settle()
+
+    expect(second.querySelector(".files-table")).not.toBeNull()
+    expect(second.querySelector("[data-artifact-grid]")).toBeNull()
+  })
+
+  // A remembered grant that was later revoked names a source that no longer
+  // exists; falling back beats rendering nothing.
+  test("falls back to artifacts when the remembered source is gone", async () => {
+    startOn("grant_that_no_longer_exists")
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
+          if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "peak_fit.ipynb")])
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("All artifacts")
+    expect(host.querySelector("[data-artifact-grid]")).not.toBeNull()
+  })
+
   test("renders the tab strip, the picker and a table", async () => {
+    startOn("project")
     const host = mount(() =>
       subject.FilesPane({
         request: async () => listing([{ name: "train_lr.py", type: "file", size: 2534 }]),
@@ -127,6 +196,7 @@ describe("files pane", () => {
   })
 
   test("clears the search box on the way back up, not only on the way down", async () => {
+    startOn("project")
     // Descending cleared the filter but `..` did not, so returning to a folder
     // re-entered it with a stale query still applied and the table announced
     // "This folder is empty." over a folder that was not.
@@ -163,6 +233,7 @@ describe("files pane", () => {
   })
 
   test("a failed listing degrades in place instead of throwing to the boundary", async () => {
+    startOn("project")
     // The pane must not reach the app-wide ErrorBoundary. Mount it inside a real
     // one and assert the fallback never renders — reading an errored resource
     // during render is what would trip it.
@@ -482,6 +553,7 @@ describe("files pane", () => {
   })
 
   test("drops the stale listing error when the source changes to one it does not describe", async () => {
+    startOn("project")
     // The folder listing fails; the artifact store answers normally. Switching
     // to Trash must not leave "this folder could not be read" over a good list.
     const host = mount(() =>
@@ -543,6 +615,7 @@ describe("files pane", () => {
   })
 
   test("opening a file swaps the browser for the file itself and closing swaps it back", async () => {
+    startOn("project")
     const host = mount(() =>
       subject.FilesPane({
         directory: DIRECTORY,

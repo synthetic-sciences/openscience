@@ -19,8 +19,6 @@ export function FileTable(props: {
   depth: number
   onOpen: (row: FileRow) => void
   onUp: () => void
-  /** What an empty listing says. The artifact store is not a folder. */
-  empty?: string
 }): JSX.Element {
   const sorted = createMemo(() =>
     [...props.rows].sort((a, b) =>
@@ -40,10 +38,7 @@ export function FileTable(props: {
         </button>
       </Show>
 
-      <Show
-        when={sorted().length > 0}
-        fallback={<div class="files-empty">{props.empty ?? "This folder is empty."}</div>}
-      >
+      <Show when={sorted().length > 0} fallback={<div class="files-empty">This folder is empty.</div>}>
         <For each={sorted()}>
           {(row) => (
             <button

@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createResource, createSignal, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createMemo, createResource, createSignal, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useDialog } from "@synsci/ui/context/dialog"
@@ -10,6 +10,7 @@ import { FileTable, type FileRow } from "@/atlas/files/FileTable"
 import { FileTabs } from "@/atlas/files/FileTabs"
 import { TrashList } from "@/atlas/files/TrashList"
 import { buildSources, type PaneSource } from "@/atlas/files/sources"
+import { readSource, writeSource } from "@/atlas/files/last-source"
 import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/resource"
 import type { StoredArtifact } from "@/artifacts/store"
 import { uiStore } from "@/atlas/store/ui"
@@ -220,10 +221,21 @@ export function FilesPane(
   // with (a project switch would keep listing the old project), and it stops
   // matching the rows the menu renders, which compare the active source by
   // identity for their ✓ and aria-checked.
-  const [picked, setPicked] = createSignal<string>()
+  const [picked, setPicked] = createSignal<string | undefined>(readSource())
+
+  /** Picking a source is also how the pane remembers where to open next time. */
+  const choose = (id: string | undefined) => {
+    setPicked(id)
+    writeSource(id)
+  }
+
+  // Artifacts lead: they are what a session produces, and a remembered pick only
+  // wins while it still names a source that exists — a grant that was revoked, or
+  // a project that was closed, falls back rather than showing nothing.
   const current = createMemo(
     () =>
       sources().find((item) => item.id === picked()) ??
+      sources().find((item) => item.kind === "artifacts") ??
       sources().find((item) => item.kind === "project") ??
       sources()[0]!,
   )
@@ -464,7 +476,7 @@ export function FilesPane(
         // grant leaves the browsed folder alone — resetting the path there
         // would throw the user back to the root of a folder nothing happened to.
         if (picked() === target.id) {
-          setPicked(undefined)
+          choose(undefined)
           setPath([])
         }
         setBusy(false)
@@ -498,7 +510,7 @@ export function FilesPane(
           sources={sources()}
           active={current()}
           onPick={(next) => {
-            setPicked(next.id)
+            choose(next.id)
             setPath([])
             setFilter("")
             // The notice describes the source being left, not the one arriving.
@@ -596,47 +608,50 @@ export function FilesPane(
         </div>
       </Show>
 
-      <Show when={current().kind === "artifacts"}>
-        <ArtifactGrid
-          artifacts={stored()}
-          titles={titles()}
-          currentSession={sessionID()}
-          url={artifactUrl}
-          read={readArtifact}
-          onOpen={openArtifact}
-          onRename={renameArtifact}
-          onTrash={(artifact) => void trashArtifact(artifact)}
-        />
-      </Show>
+      {/* One surface per source kind. A Switch says that outright; the nested
+          Show whose fallback re-tested the same condition left a reader to
+          derive the exclusivity. */}
+      <Switch>
+        <Match when={current().kind === "trash"}>
+          <TrashList rows={trash()} busy={busy()} onRestore={restore} />
+        </Match>
 
-      <Show
-        when={current().kind === "trash"}
-        fallback={
-          <Show when={current().kind !== "artifacts"}>
-            <FileTable
-              rows={rows()}
-              depth={path().length}
-              onUp={() => {
-                setPath(path().slice(0, -1))
-                // Symmetric with descending: a query typed for the folder being
-                // left does not describe the one being returned to, and leaving
-                // it applied reports the parent as empty.
+        <Match when={current().kind === "artifacts"}>
+          <ArtifactGrid
+            artifacts={stored()}
+            titles={titles()}
+            currentSession={sessionID()}
+            filtered={Boolean(filter().trim())}
+            url={artifactUrl}
+            read={readArtifact}
+            onOpen={openArtifact}
+            onRename={renameArtifact}
+            onTrash={(artifact) => void trashArtifact(artifact)}
+          />
+        </Match>
+
+        <Match when={true}>
+          <FileTable
+            rows={rows()}
+            depth={path().length}
+            onUp={() => {
+              setPath(path().slice(0, -1))
+              // Symmetric with descending: a query typed for the folder being
+              // left does not describe the one being returned to, and leaving
+              // it applied reports the parent as empty.
+              setFilter("")
+            }}
+            onOpen={(row) => {
+              if (row.type === "directory") {
+                setPath([...path(), row.name])
                 setFilter("")
-              }}
-              onOpen={(row) => {
-                if (row.type === "directory") {
-                  setPath([...path(), row.name])
-                  setFilter("")
-                  return
-                }
-                open(row)
-              }}
-            />
-          </Show>
-        }
-      >
-        <TrashList rows={trash()} busy={busy()} onRestore={restore} />
-      </Show>
+                return
+              }
+              open(row)
+            }}
+          />
+        </Match>
+      </Switch>
     </>
   )
 

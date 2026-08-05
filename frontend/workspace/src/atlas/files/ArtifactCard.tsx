@@ -1,7 +1,8 @@
-import { Show, createSignal, onMount, type JSX } from "solid-js"
+import { Show, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import type { StoredArtifact } from "@/artifacts/store"
 import { ArtifactThumb, type ThumbProps } from "./ArtifactThumb"
 import { bytes } from "./bytes"
+import { ago } from "./ago"
 
 export interface CardProps extends ThumbProps {
   layout: "grid" | "list"
@@ -9,13 +10,6 @@ export interface CardProps extends ThumbProps {
   onOpen: (artifact: StoredArtifact) => void
   onRename: (artifact: StoredArtifact) => void
   onTrash: (artifact: StoredArtifact) => void
-}
-
-const ago = (created: number) => {
-  const minutes = Math.max(1, Math.round((Date.now() - created) / 60_000))
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.round(minutes / 60)
-  return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`
 }
 
 export function ArtifactCard(props: CardProps): JSX.Element {
@@ -38,6 +32,23 @@ export function ArtifactCard(props: CardProps): JSX.Element {
     menu.style.left = `${Math.round(left)}px`
     menu.style.top = `${Math.round(top)}px`
     menu.style.visibility = "visible"
+  }
+
+  // Fixed coordinates do not follow a scrolling ancestor, and .artifact-surface
+  // scrolls, so a menu placed once was stranded away from its own card the
+  // moment the grid moved under it. Capture phase, because the scroll happens on
+  // that container rather than on the window.
+  const follow = (menu: HTMLDivElement) => {
+    onMount(() => {
+      place(menu)
+      const again = () => place(menu)
+      window.addEventListener("scroll", again, true)
+      window.addEventListener("resize", again)
+      onCleanup(() => {
+        window.removeEventListener("scroll", again, true)
+        window.removeEventListener("resize", again)
+      })
+    })
   }
 
   const meta = () =>
@@ -91,7 +102,7 @@ export function ArtifactCard(props: CardProps): JSX.Element {
           aria-label={`Dismiss actions for ${props.artifact.title}`}
           onClick={() => setOpen(false)}
         />
-        <div class="artifact-menu" role="menu" ref={(node) => onMount(() => place(node))}>
+        <div class="artifact-menu" role="menu" ref={follow}>
           <button type="button" role="menuitem" data-action="open" onClick={() => act(props.onOpen)}>
             Open in tab
           </button>
