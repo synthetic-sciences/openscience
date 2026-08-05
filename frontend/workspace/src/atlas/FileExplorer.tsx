@@ -1,4 +1,4 @@
-import { createMemo, createResource, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
+import { createMemo, createResource, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { Select } from "@synsci/ui/select"
@@ -8,7 +8,6 @@ import { FONT_SANS } from "@/styles/tokens"
 import type { ContextFile } from "@/atlas/store/ui"
 import { FileView } from "@/atlas/FilePreview"
 import { IconFolder } from "@/atlas/shared/Icon"
-import { normalizeStoredArtifacts } from "@/artifacts/store"
 import {
   fileSourceName,
   findFilesystemGrant,
@@ -74,36 +73,6 @@ async function revokeAccess(request: ProjectRequest, identity: FilesystemIdentit
   return request(sessionUrl(identity.sessionID, grantID), {
     method: "DELETE",
   }).then(json)
-}
-
-// FileExplorer no longer renders — FilesPane.tsx owns the Files right-pane
-// role now. This function stays only as the home for the artifacts resource
-// and its live-update listener below: Plan 2's thumbnail grid consumes both,
-// unchanged, from here.
-export function FileExplorer(): JSX.Element {
-  const sdk = useSDK()
-  const [artifacts, { refetch: refetchArtifacts }] = createResource(
-    () => sdk.directory,
-    () =>
-      Promise.all(
-        (["active", "trash"] as const).map((state) =>
-          sdk
-            .request(`/file/artifact-store?state=${state}`)
-            .then(async (response) => {
-              if (!response.ok) throw new Error(`Artifact store unavailable (${response.status})`)
-              return normalizeStoredArtifacts(await response.json())
-            })
-            .catch(() => []),
-        ),
-      ).then(([active, trash]) => ({ active, trash })),
-  )
-  onMount(() => {
-    const refresh = () => void refetchArtifacts()
-    window.addEventListener("openscience:artifacts-changed", refresh)
-    onCleanup(() => window.removeEventListener("openscience:artifacts-changed", refresh))
-  })
-
-  return null
 }
 
 export function ExternalFileAccess(props: { file: ContextFile; active: boolean; onClose: () => void }): JSX.Element {

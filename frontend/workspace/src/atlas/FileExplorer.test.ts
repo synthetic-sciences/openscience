@@ -5,15 +5,16 @@ import { fileURLToPath } from "node:url"
 const source = () => readFileSync(fileURLToPath(new URL("./FileExplorer.tsx", import.meta.url)), "utf8")
 
 // FileExplorer.tsx no longer renders the Files right-pane — FilesPane.tsx
-// (see FilesPane.test.ts) owns that role now. What remains here is the data
-// layer a later plan still needs: the grant primitives (readAccess,
-// grantAccess, revokeAccess) and ExternalFileAccess, the permission boundary
-// for files outside the session. Coverage of the retired sources screen and
-// drill-down browser (grouping, artifact rows, trash recovery, folder
-// navigation) is gone with the markup it described, not carried over —
-// FilesPane's own suite covers browsing the new pane.
+// (see FilesPane.test.ts) owns that role now. What remains here is
+// ExternalFileAccess, the permission boundary for files outside the session,
+// and the grant primitives it uses (readAccess, grantAccess, revokeAccess).
+// The artifacts resource that used to sit here moved to
+// @/artifacts/resource (resource.test.ts) once the pane actually consumed it.
+// Coverage of the retired sources screen and drill-down browser (grouping,
+// artifact rows, trash recovery, folder navigation) is gone with the markup
+// it described, not carried over — FilesPane's own suite covers the new pane.
 describe("file explorer surface", () => {
-  test("keeps the grant primitives ExternalFileAccess and a future artifacts surface depend on", () => {
+  test("keeps the grant primitives ExternalFileAccess depends on", () => {
     const value = source()
 
     expect(value).toContain('method: "POST"')
