@@ -2994,6 +2994,8 @@ export type SettingsComputeGetResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3006,6 +3008,16 @@ export type SettingsComputeGetResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3032,6 +3044,8 @@ export type SettingsComputeProviderDisconnectResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3044,6 +3058,16 @@ export type SettingsComputeProviderDisconnectResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3083,6 +3107,8 @@ export type SettingsComputeProviderConnectResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3095,11 +3121,235 @@ export type SettingsComputeProviderConnectResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
 export type SettingsComputeProviderConnectResponse =
   SettingsComputeProviderConnectResponses[keyof SettingsComputeProviderConnectResponses]
+
+export type SettingsComputeProviderEnabledData = {
+  body?: {
+    enabled: boolean
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/settings/compute/provider/{id}/enabled"
+}
+
+export type SettingsComputeProviderEnabledErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeProviderEnabledError =
+  SettingsComputeProviderEnabledErrors[keyof SettingsComputeProviderEnabledErrors]
+
+export type SettingsComputeProviderEnabledResponses = {
+  /**
+   * Updated
+   */
+  200: {
+    providers?: Array<{
+      id: string
+      name: string
+      verified: boolean
+      placeholder: string
+      hint: string
+      connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
+      connected_at: string | null
+      last_used: string | null
+    }>
+    ssh_hosts?: Array<{
+      id: string
+      label: string
+      host: string
+      user?: string
+      port?: number
+      scheduler?: "none" | "slurm" | "pbs"
+      workdir?: string
+    }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
+  }
+}
+
+export type SettingsComputeProviderEnabledResponse =
+  SettingsComputeProviderEnabledResponses[keyof SettingsComputeProviderEnabledResponses]
+
+export type SettingsComputeModalUpdateData = {
+  body?: {
+    app?: string
+    image?: string
+    network?: "unrestricted" | "none"
+    timeout_minutes?: number
+  }
+  path?: never
+  query?: never
+  url: "/settings/compute/modal"
+}
+
+export type SettingsComputeModalUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalUpdateError = SettingsComputeModalUpdateErrors[keyof SettingsComputeModalUpdateErrors]
+
+export type SettingsComputeModalUpdateResponses = {
+  /**
+   * Updated
+   */
+  200: {
+    providers?: Array<{
+      id: string
+      name: string
+      verified: boolean
+      placeholder: string
+      hint: string
+      connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
+      connected_at: string | null
+      last_used: string | null
+    }>
+    ssh_hosts?: Array<{
+      id: string
+      label: string
+      host: string
+      user?: string
+      port?: number
+      scheduler?: "none" | "slurm" | "pbs"
+      workdir?: string
+    }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
+  }
+}
+
+export type SettingsComputeModalUpdateResponse =
+  SettingsComputeModalUpdateResponses[keyof SettingsComputeModalUpdateResponses]
+
+export type SettingsComputeModalConfigureData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/compute/modal/configure"
+}
+
+export type SettingsComputeModalConfigureErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalConfigureError =
+  SettingsComputeModalConfigureErrors[keyof SettingsComputeModalConfigureErrors]
+
+export type SettingsComputeModalConfigureResponses = {
+  /**
+   * Configured
+   */
+  200: {
+    providers?: Array<{
+      id: string
+      name: string
+      verified: boolean
+      placeholder: string
+      hint: string
+      connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
+      connected_at: string | null
+      last_used: string | null
+    }>
+    ssh_hosts?: Array<{
+      id: string
+      label: string
+      host: string
+      user?: string
+      port?: number
+      scheduler?: "none" | "slurm" | "pbs"
+      workdir?: string
+    }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
+  }
+}
+
+export type SettingsComputeModalConfigureResponse =
+  SettingsComputeModalConfigureResponses[keyof SettingsComputeModalConfigureResponses]
+
+export type SettingsComputeModalCheckData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/compute/modal/check"
+}
+
+export type SettingsComputeModalCheckErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalCheckError = SettingsComputeModalCheckErrors[keyof SettingsComputeModalCheckErrors]
+
+export type SettingsComputeModalCheckResponses = {
+  /**
+   * Connection result
+   */
+  200: {
+    ok: true
+    sdk: string
+  }
+}
+
+export type SettingsComputeModalCheckResponse =
+  SettingsComputeModalCheckResponses[keyof SettingsComputeModalCheckResponses]
 
 export type SettingsComputeSshAddData = {
   body?: {
@@ -3136,6 +3386,8 @@ export type SettingsComputeSshAddResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3148,6 +3400,16 @@ export type SettingsComputeSshAddResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3211,6 +3473,8 @@ export type SettingsComputeSshRemoveResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3223,6 +3487,16 @@ export type SettingsComputeSshRemoveResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3254,6 +3528,9 @@ export type SettingsComputeJobsListResponses = {
       | {
           kind: "ssh"
           host_id: string
+        }
+      | {
+          kind: "modal"
         }
     target_label: string
     scheduler: "none" | "slurm" | "pbs"
@@ -3780,6 +4057,55 @@ export type SettingsComputeJobsListResponses = {
       network: "allow" | "deny"
       warning?: string
     }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+    }
   }>
 }
 
@@ -3798,6 +4124,9 @@ export type SettingsComputeJobsStartData = {
           kind: "ssh"
           host_id: string
         }
+      | {
+          kind: "modal"
+        }
     resources?: {
       cpus?: number
       gpus?: number
@@ -3809,6 +4138,11 @@ export type SettingsComputeJobsStartData = {
     container?: string
     artifacts?: Array<string>
     checkpoint?: string
+    uploads?: Array<string>
+    packages?: Array<string>
+    image?: string
+    gpu?: string
+    approval?: string
     sessionID: string
   }
   path?: never
@@ -3844,6 +4178,9 @@ export type SettingsComputeJobsStartResponses = {
           kind: "ssh"
           host_id: string
         }
+      | {
+          kind: "modal"
+        }
     target_label: string
     scheduler: "none" | "slurm" | "pbs"
     status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
@@ -4369,11 +4706,144 @@ export type SettingsComputeJobsStartResponses = {
       network: "allow" | "deny"
       warning?: string
     }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+    }
   }
 }
 
 export type SettingsComputeJobsStartResponse =
   SettingsComputeJobsStartResponses[keyof SettingsComputeJobsStartResponses]
+
+export type SettingsComputeJobsPlanData = {
+  body?: {
+    name: string
+    command: string
+    cwd?: string
+    target:
+      | {
+          kind: "local"
+        }
+      | {
+          kind: "ssh"
+          host_id: string
+        }
+      | {
+          kind: "modal"
+        }
+    resources?: {
+      cpus?: number
+      gpus?: number
+      memory_gb?: number
+      time_minutes?: number
+      partition?: string
+    }
+    modules?: Array<string>
+    container?: string
+    artifacts?: Array<string>
+    checkpoint?: string
+    uploads?: Array<string>
+    packages?: Array<string>
+    image?: string
+    gpu?: string
+    approval?: string
+    sessionID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/settings/compute/jobs/plan"
+}
+
+export type SettingsComputeJobsPlanErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeJobsPlanError = SettingsComputeJobsPlanErrors[keyof SettingsComputeJobsPlanErrors]
+
+export type SettingsComputeJobsPlanResponses = {
+  /**
+   * Modal run plan
+   */
+  200: {
+    digest: string
+    provider: "modal"
+    app: string
+    environment?: string
+    image: string
+    packages: Array<string>
+    gpu: string
+    resources?: {
+      cpus?: number
+      gpus?: number
+      memory_gb?: number
+    }
+    timeout_minutes: number
+    network: "unrestricted" | "none"
+    command: string
+    cwd: string
+    uploads: Array<{
+      path: string
+      size: number
+      sha256: string
+    }>
+    upload_bytes: number
+    outputs: Array<string>
+    warning: string
+  }
+}
+
+export type SettingsComputeJobsPlanResponse = SettingsComputeJobsPlanResponses[keyof SettingsComputeJobsPlanResponses]
 
 export type SettingsComputeJobsClearData = {
   body?: never
@@ -4427,6 +4897,38 @@ export type SettingsComputeJobsLogResponses = {
 
 export type SettingsComputeJobsLogResponse = SettingsComputeJobsLogResponses[keyof SettingsComputeJobsLogResponses]
 
+export type SettingsComputeJobsEventsData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/settings/compute/jobs/{id}/events"
+}
+
+export type SettingsComputeJobsEventsErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SettingsComputeJobsEventsError = SettingsComputeJobsEventsErrors[keyof SettingsComputeJobsEventsErrors]
+
+export type SettingsComputeJobsEventsResponses = {
+  /**
+   * Provider lifecycle logs
+   */
+  200: {
+    events: string
+  }
+}
+
+export type SettingsComputeJobsEventsResponse =
+  SettingsComputeJobsEventsResponses[keyof SettingsComputeJobsEventsResponses]
+
 export type SettingsComputeJobsCancelData = {
   body?: never
   path: {
@@ -4463,6 +4965,9 @@ export type SettingsComputeJobsCancelResponses = {
       | {
           kind: "ssh"
           host_id: string
+        }
+      | {
+          kind: "modal"
         }
     target_label: string
     scheduler: "none" | "slurm" | "pbs"
@@ -4988,6 +5493,55 @@ export type SettingsComputeJobsCancelResponses = {
       backend: "seatbelt" | "bubblewrap" | "none"
       network: "allow" | "deny"
       warning?: string
+    }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
     }
   }
 }

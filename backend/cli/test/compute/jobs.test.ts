@@ -237,6 +237,12 @@ describe("ComputeJobs local lifecycle", () => {
     })
     expect(finished.status).toBe("succeeded")
     expect(finished.exit_code).toBe(0)
+    expect(finished.lifecycle).toMatchObject({
+      execution: "succeeded",
+      delivery: "none",
+      resource: "closed",
+      recoverable: false,
+    })
     expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path })).toContain("alpha\nbeta")
     expect(finished.reproducibility).toMatchObject({
       platform: process.platform,
@@ -389,6 +395,7 @@ describe("ComputeJobs local lifecycle", () => {
     await ComputeJobs.cancel(job.id, { root, workspace: tmp.path })
     const cancelled = await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })
     expect(cancelled.status).toBe("cancelled")
+    expect(cancelled.lifecycle).toMatchObject({ execution: "cancelled", resource: "closed" })
   })
 
   test("cancels active jobs by owning session without touching sibling sessions", async () => {
@@ -480,6 +487,7 @@ describe("ComputeJobs local lifecycle", () => {
     const job = (await ComputeJobs.list({ root, workspace: root })).find((item) => item.id === id)
     expect(job?.status).toBe("succeeded")
     expect(job?.exit_code).toBe(0)
+    expect(job?.lifecycle).toMatchObject({ execution: "succeeded", resource: "closed" })
     expect(job?.provenance).toMatchObject({
       format: "openscience.provenance.v1",
       identity: {
@@ -514,10 +522,12 @@ describe("ComputeJobs project boundaries", () => {
     expect(await ComputeJobs.list({ data, workspace: second })).toEqual([])
     expect(await ComputeJobs.get(job.id, { data, workspace: second })).toBeUndefined()
     await expect(ComputeJobs.log(job.id, { data, workspace: second })).rejects.toThrow("was not found")
+    await expect(ComputeJobs.events(job.id, { data, workspace: second })).rejects.toThrow("was not found")
     await expect(ComputeJobs.cancel(job.id, { data, workspace: second })).rejects.toThrow("was not found")
     expect(await ComputeJobs.clear({ data, workspace: second })).toBe(0)
 
     expect(await ComputeJobs.log(job.id, { data, workspace: first })).toContain("project-one")
+    expect(await ComputeJobs.events(job.id, { data, workspace: first })).toBe("")
     expect(await ComputeJobs.clear({ data, workspace: first })).toBe(1)
   })
 

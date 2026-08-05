@@ -287,6 +287,38 @@
   background: var(--border-weak-base);
 }
 
+.workspace-composer__overflow > .workspace-composer__compute-menu {
+  z-index: 71;
+  left: 256px;
+  bottom: 0;
+  width: min(226px, calc(100vw - 24px));
+  max-height: none;
+  overflow: visible;
+}
+
+.workspace-composer__compute-label,
+.workspace-composer__compute-hint {
+  display: block;
+  padding: 5px 10px;
+  color: var(--text-weaker);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.workspace-composer__compute-label {
+  font-weight: 550;
+}
+
+.workspace-composer__compute-hint {
+  padding-top: 0;
+  white-space: normal;
+}
+
+.workspace-composer__compute-menu button:last-child {
+  justify-content: flex-start;
+  gap: 9px;
+}
+
 .workspace-composer__specialist-list {
   display: flex;
   flex-direction: column;
@@ -356,6 +388,11 @@
   .workspace-composer__overflow > div {
     left: -44px;
     max-height: min(440px, calc(100dvh - 140px));
+  }
+
+  .workspace-composer__overflow > .workspace-composer__compute-menu {
+    left: -44px;
+    bottom: calc(100% + 6px);
   }
 }
 

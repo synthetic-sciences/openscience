@@ -1,0 +1,44 @@
+import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
+import { ModalAdapter } from "../../src/compute/modal/adapter"
+
+describe("ModalAdapter image", () => {
+  test("installs approved Python packages in the Modal image layer", () => {
+    expect(ModalAdapter.layers([])).toEqual([])
+    expect(ModalAdapter.layers(["numpy==2.3.2", "scikit-learn==1.7.1"])).toEqual([
+      "RUN python -m pip install --disable-pip-version-check --no-cache-dir 'numpy==2.3.2' 'scikit-learn==1.7.1'",
+    ])
+  })
+
+  test("quotes package requirements as data instead of Docker shell syntax", () => {
+    expect(ModalAdapter.layers(["project; echo unsafe", "name's-extra"])[0]).toContain(
+      `'project; echo unsafe' 'name'\"'\"'s-extra'`,
+    )
+  })
+})
+
+describe("ModalAdapter sandbox lifecycle", () => {
+  test("keeps the sandbox alive until outputs can be collected", async () => {
+    const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-"))
+    const child = Bun.spawn(
+      ["bash", "-lc", ModalAdapter.script("printf 'completed\\n'; printf artifact > result.txt", root)],
+      { stdout: "ignore", stderr: "ignore", cwd: root },
+    )
+    await Bun.write(path.join(root, ".openscience-ready"), "approved\n")
+    const result = path.join(root, ".openscience-exit-code")
+    const wait = async (attempts = 100): Promise<string> => {
+      if (await Bun.file(result).exists()) return Bun.file(result).text()
+      if (!attempts) throw new Error("Modal wrapper did not record the command result")
+      await Bun.sleep(20)
+      return wait(attempts - 1)
+    }
+    expect(await wait()).toBe("0\n")
+    expect(await Bun.file(path.join(root, "result.txt")).text()).toBe("artifact")
+    expect(await Bun.file(path.join(root, ".openscience-run.log")).text()).toBe("completed\n")
+    expect(child.exitCode).toBeNull()
+    child.kill()
+    await child.exited
+    await fs.rm(root, { recursive: true, force: true })
+  })
+})

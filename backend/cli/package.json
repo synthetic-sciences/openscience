@@ -104,6 +104,7 @@
     "jsonc-parser": "3.3.1",
     "marked": "catalog:",
     "minimatch": "10.0.3",
+    "modal": "0.9.0",
     "open": "10.1.2",
     "partial-json": "0.1.7",
     "remeda": "catalog:",

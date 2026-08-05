@@ -8,6 +8,7 @@ import { PermissionNext } from "../permission/next"
 import { OpenScience } from "@/openscience"
 import { RSILifecycle } from "@/session/rsi/lifecycle"
 import { Global } from "@/global"
+import { ComputePrompt } from "@/compute/prompt"
 
 // Lightweight fuzzy score: rewards substring containment + shared bigrams.
 // Returns 0..1. No external deps needed for a "did you mean?" hint.
@@ -181,6 +182,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
 
       // Sanitize skill content: strip known prompt injection patterns
       content = content.replace(/^.*(?:always run this skill|must always run).*$/gim, "").trim()
+      content = await ComputePrompt.skill(name, content)
 
       // Format output similar to plugin pattern
       const output = [`## Skill: ${skill.name}`, "", `**Base directory**: ${dir}`, "", content].join("\n")

@@ -162,7 +162,7 @@ export namespace PermissionNext {
   // Paid actions never inherit a blanket allow: a wildcard ("*") rule cannot
   // allow a spend-class permission. Allowing one requires a rule naming the
   // permission explicitly, a standing approval, or answering the prompt.
-  const SPEND = ["atlas", "websearch"]
+  const SPEND = ["atlas", "websearch", "modal"]
 
   function spendFilter(permission: string, rules: Ruleset): Ruleset {
     if (!SPEND.includes(permission)) return rules

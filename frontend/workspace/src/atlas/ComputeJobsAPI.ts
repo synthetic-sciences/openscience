@@ -1,7 +1,7 @@
 import type { ProjectRequest } from "@/utils/openscience-fetch"
 
 export type Status = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
-export type Target = { kind: "local" } | { kind: "ssh"; host_id: string }
+export type Target = { kind: "local" } | { kind: "ssh"; host_id: string } | { kind: "modal" }
 
 export interface Artifact {
   path: string
@@ -59,6 +59,18 @@ export interface Job {
   checkpoint?: Artifact
   reproducibility?: Reproducibility
   capture_error?: string
+  remote_id?: string
+  modal?: {
+    app: string
+    image: string
+    gpu: string
+    network: "unrestricted" | "none"
+    timeout_minutes: number
+    uploads: { path: string; size: number; sha256: string }[]
+    upload_bytes: number
+    approval: string
+    sdk: string
+  }
 }
 
 export interface JobInput {
@@ -72,6 +84,38 @@ export interface JobInput {
   container?: string
   artifacts?: string[]
   checkpoint?: string
+  uploads?: string[]
+  image?: string
+  gpu?: string
+  approval?: string
+}
+
+export interface Plan {
+  digest: string
+  provider: "modal"
+  app: string
+  image: string
+  gpu: string
+  timeout_minutes: number
+  network: "unrestricted" | "none"
+  command: string
+  cwd: string
+  uploads: { path: string; size: number; sha256: string }[]
+  upload_bytes: number
+  outputs: string[]
+  warning: string
+}
+
+export function stableJobs(previous: Job[] | undefined, next: Job[]) {
+  if (!previous) return next
+  const index = new Map(previous.map((job) => [job.id, job]))
+  const jobs = next.map((job) => {
+    const current = index.get(job.id)
+    if (!current) return job
+    return JSON.stringify(current) === JSON.stringify(job) ? current : job
+  })
+  if (previous.length === jobs.length && previous.every((job, position) => job === jobs[position])) return previous
+  return jobs
 }
 
 export function createComputeJobsAPI(request: ProjectRequest) {
@@ -93,8 +137,10 @@ export function createComputeJobsAPI(request: ProjectRequest) {
   }
   return {
     list: () => call<Job[]>(""),
+    plan: (input: JobInput) => call<Plan>("/plan", { method: "POST", body: JSON.stringify(input) }),
     start: (input: JobInput) => call<Job>("", { method: "POST", body: JSON.stringify(input) }),
     log: (id: string) => call<{ log: string }>(`/${id}/log`),
+    events: (id: string) => call<{ events: string }>(`/${id}/events`),
     cancel: (id: string) => call<Job>(`/${id}/cancel`, { method: "POST" }),
     clear: () => call<{ cleared: number }>("/completed", { method: "DELETE" }),
   }

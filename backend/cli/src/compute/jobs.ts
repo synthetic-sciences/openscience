@@ -12,6 +12,9 @@ import { Sandbox } from "../sandbox/sandbox"
 import { Filesystem } from "../util/filesystem"
 import { ProvenanceEnvelope } from "../science/provenance/envelope"
 import { ExecutionAuthority } from "../project/execution"
+import { ComputeLifecycle } from "./lifecycle"
+import { ModalAdapter } from "./modal/adapter"
+import { ModalPlan } from "./modal/plan"
 
 export class ComputeJobsCorruptError extends Error {
   constructor(
@@ -60,6 +63,7 @@ export namespace ComputeJobs {
   export const Target = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("local") }),
     z.object({ kind: z.literal("ssh"), host_id: z.string() }),
+    z.object({ kind: z.literal("modal") }),
   ])
   export type Target = z.infer<typeof Target>
 
@@ -117,6 +121,14 @@ export namespace ComputeJobs {
     container: z.string().trim().min(1).max(2_000).optional(),
     artifacts: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
     checkpoint: z.string().trim().min(1).max(2_000).optional(),
+    uploads: z.array(z.string().trim().min(1).max(2_000)).max(100).optional(),
+    packages: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
+    image: z.string().trim().min(1).max(2_000).optional(),
+    gpu: z.string().trim().min(1).max(120).optional(),
+    approval: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
   })
   export type Input = z.infer<typeof Input>
 
@@ -170,14 +182,33 @@ export namespace ComputeJobs {
         warning: z.string().optional(),
       })
       .optional(),
+    lifecycle: ComputeLifecycle.State.optional(),
+    remote_id: z.string().optional(),
+    modal: z
+      .object({
+        app: z.string(),
+        environment: z.string().optional(),
+        image: z.string(),
+        packages: z.array(z.string()).default([]),
+        gpu: z.string(),
+        network: z.enum(["unrestricted", "none"]),
+        timeout_minutes: z.number().int().positive(),
+        uploads: z.array(z.object({ path: z.string(), size: z.number(), sha256: z.string() })),
+        upload_bytes: z.number().int().nonnegative(),
+        approval: z.string().length(64),
+        sdk: z.string(),
+      })
+      .optional(),
   })
   export type Job = z.infer<typeof Job>
 
-  type Options = {
+  export type Options = {
     data?: string
     root?: string
     workspace?: string
     hosts?: Host[]
+    modal?: ModalAdapter.Config
+    credentials?: ModalAdapter.Context
   }
 
   type Runtime = {
@@ -188,6 +219,7 @@ export namespace ComputeJobs {
     workspace: string
     id: string
     host?: Host
+    modal?: ModalAdapter.Context
   }
 
   type Scope = {
@@ -205,6 +237,11 @@ export namespace ComputeJobs {
   const locks = new Map<string, Promise<void>>()
   const terminal = new Set<Status>(["succeeded", "failed", "cancelled", "interrupted"])
 
+  function move(job: Job, event: ComputeLifecycle.Event, value: Partial<Job> = {}): Job {
+    const lifecycle = ComputeLifecycle.transition(job.lifecycle ?? ComputeLifecycle.from(job.status), event)
+    return Job.parse({ ...job, ...value, status: ComputeLifecycle.legacy(lifecycle), lifecycle })
+  }
+
   const scopeKey = (workspace: string) => crypto.createHash("sha256").update(workspace).digest("hex").slice(0, 40)
   // v1 wrote directly to `<data>/compute/jobs.json` without an owner. Never
   // auto-claim those records: cwd is optional/remote and nested projects make
@@ -214,6 +251,7 @@ export namespace ComputeJobs {
     options.root ?? path.join(options.data ?? Global.Path.data, "compute", "projects", scopeKey(workspace))
   const metaOf = (root: string) => path.join(root, "jobs.json")
   const logsOf = (root: string) => path.join(root, "jobs")
+  const eventsOf = (root: string, id: string) => path.join(logsOf(root), `${id}.events.log`)
   const exitOf = (root: string, id: string) => path.join(logsOf(root), `${id}.exit`)
   const keyOf = (root: string, id: string) => `${root}\0${id}`
 
@@ -268,6 +306,12 @@ export namespace ComputeJobs {
     })
   }
 
+  async function event(root: string, id: string, value: string) {
+    await fs.mkdir(logsOf(root), { recursive: true })
+    const message = OpenScience.redactSecrets(value).replace(/\s+$/, "")
+    await fs.appendFile(eventsOf(root, id), `[${new Date().toISOString()}] ${message}\n`, { mode: 0o600 })
+  }
+
   async function preserve(root: string, error: unknown): Promise<never> {
     if (!(error instanceof ComputeJobsCorruptError)) throw error
     const filepath = metaOf(root)
@@ -300,17 +344,6 @@ export namespace ComputeJobs {
     return task
   }
 
-  async function patch(root: string, id: string, value: Partial<Job>): Promise<Job> {
-    return change(root, (jobs) => {
-      const index = jobs.findIndex((job) => job.id === id)
-      if (index < 0) throw new Error(`Compute job ${id} was not found`)
-      const draft = Job.parse({ ...jobs[index], ...value })
-      const next = Job.parse({ ...draft, provenance: provenance(draft) })
-      jobs[index] = next
-      return next
-    })
-  }
-
   function alive(pid: number): boolean {
     try {
       process.kill(pid, 0)
@@ -320,52 +353,78 @@ export namespace ComputeJobs {
     }
   }
 
-  async function sync(root: string): Promise<void> {
+  async function sync(scope: Scope, options: Options): Promise<void> {
+    const root = scope.root
     const jobs = await read(root)
     const updates = (
       await Promise.all(
-        jobs.map(async (job): Promise<{ id: string; value: Partial<Job> } | undefined> => {
-          if (terminal.has(job.status) || active.has(keyOf(root, job.id))) return
-          if (job.status === "queued" && Date.now() - Date.parse(job.created_at) < 5_000) return
-          const marker = await Bun.file(exitOf(root, job.id))
-            .text()
-            .catch(() => undefined)
-          const exit = marker?.trim().match(/^-?\d+$/) ? Number(marker.trim()) : undefined
-          if (job.target.kind === "local" && exit !== undefined) {
+        jobs.map(
+          async (job): Promise<{ id: string; event: ComputeLifecycle.Event; value: Partial<Job> } | undefined> => {
+            if (terminal.has(job.status) || active.has(keyOf(root, job.id))) return
+            if (job.status === "queued" && Date.now() - Date.parse(job.created_at) < 5_000) return
+            if (job.target.kind === "modal") {
+              if (!options.credentials || !job.authority) return
+              const key = keyOf(root, job.id)
+              active.set(key, {
+                detached: false,
+                authority: job.authority,
+                root,
+                workspace: scope.workspace,
+                id: job.id,
+                modal: options.credentials,
+              })
+              void recoverModal(job, scope, options.credentials)
+                .catch(async (error) => {
+                  const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
+                  await fs.mkdir(logsOf(root), { recursive: true })
+                  await fs.appendFile(path.join(logsOf(root), `${job.id}.log`), `Modal recovery: ${message}\n`, {
+                    mode: 0o600,
+                  })
+                })
+                .finally(() => active.delete(key))
+              return
+            }
+            const marker = await Bun.file(exitOf(root, job.id))
+              .text()
+              .catch(() => undefined)
+            const exit = marker?.trim().match(/^-?\d+$/) ? Number(marker.trim()) : undefined
+            if (job.target.kind === "local" && exit !== undefined) {
+              return {
+                id: job.id,
+                event: { type: "finish", outcome: exit === 0 ? "succeeded" : "failed" },
+                value: {
+                  completed_at: new Date().toISOString(),
+                  exit_code: exit,
+                  pid: undefined,
+                },
+              }
+            }
+            if (job.target.kind === "local" && job.pid && alive(job.pid)) return
             return {
               id: job.id,
+              event: { type: "interrupt" },
               value: {
-                status: exit === 0 ? "succeeded" : "failed",
                 completed_at: new Date().toISOString(),
-                exit_code: exit,
+                exit_code: null,
                 pid: undefined,
+                error:
+                  job.target.kind === "ssh"
+                    ? "The app connection ended before this remote job reported a result. Check the remote scheduler before rerunning it."
+                    : "The job process ended before it could report a result.",
               },
             }
-          }
-          if (job.target.kind === "local" && job.pid && alive(job.pid)) return
-          return {
-            id: job.id,
-            value: {
-              status: "interrupted",
-              completed_at: new Date().toISOString(),
-              exit_code: null,
-              pid: undefined,
-              error:
-                job.target.kind === "ssh"
-                  ? "The app connection ended before this remote job reported a result. Check the remote scheduler before rerunning it."
-                  : "The job process ended before it could report a result.",
-            },
-          }
-        }),
+          },
+        ),
       )
-    ).filter((item): item is { id: string; value: Partial<Job> } => !!item)
+    ).filter((item): item is { id: string; event: ComputeLifecycle.Event; value: Partial<Job> } => !!item)
     if (!updates.length) return
     await change(root, (current) => {
       for (const update of updates) {
         const index = current.findIndex((job) => job.id === update.id)
         if (index < 0 || terminal.has(current[index]!.status) || active.has(keyOf(root, update.id))) continue
-        const draft = Job.parse({ ...current[index], ...update.value })
-        current[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+        const draft = move(current[index]!, update.event, update.value)
+        const closed = update.event.type === "finish" ? move(draft, { type: "close" }) : draft
+        current[index] = Job.parse({ ...closed, provenance: provenance(closed) })
       }
     })
   }
@@ -651,6 +710,69 @@ export namespace ComputeJobs {
     if (checkpoint) await outputPath(root, checkpoint, "Checkpoint path")
   }
 
+  async function modal(input: Request, cwd: string, context?: ModalAdapter.Config) {
+    if (!context) throw new Error("Modal is not enabled or connected")
+    if (!input.gpu) throw new Error("A Modal GPU type is required")
+    if (input.modules?.length) throw new Error("Environment modules are only supported by SSH compute")
+    if (input.container) throw new Error("Use the Modal image field instead of an Apptainer container")
+    if (input.resources?.partition) throw new Error("Scheduler partitions are only supported by SSH compute")
+    const timeout = input.resources?.time_minutes ?? context.timeoutMinutes
+    if (timeout > 24 * 60) throw new Error("Modal jobs are limited to 24 hours")
+    const patterns = [...(input.artifacts ?? []), ...(input.checkpoint ? [input.checkpoint] : [])]
+    await outputs(cwd, input.artifacts ?? [], input.checkpoint)
+    return ModalPlan.prepare({
+      command: input.command,
+      cwd,
+      image: input.image ?? context.image,
+      packages: input.packages ?? [],
+      gpu: input.gpu,
+      resources: input.resources
+        ? {
+            cpus: input.resources.cpus,
+            gpus: input.resources.gpus,
+            memory_gb: input.resources.memory_gb,
+          }
+        : undefined,
+      timeoutMinutes: timeout,
+      uploads: input.uploads ?? [],
+      outputs: patterns,
+      context,
+    })
+  }
+
+  function modalSpec(job: Job, files: ModalAdapter.File[], scope: Scope): ModalAdapter.Spec {
+    if (!job.modal || !job.cwd) throw new Error(`Modal job ${job.id} is missing its dispatch specification`)
+    return {
+      id: job.id,
+      project: job.cwd,
+      command: job.command,
+      image: job.modal.image,
+      packages: job.modal.packages,
+      gpu: job.modal.gpu,
+      gpus: job.resources?.gpus,
+      cpus: job.resources?.cpus,
+      memoryGb: job.resources?.memory_gb,
+      timeoutMinutes: job.modal.timeout_minutes,
+      uploads: files,
+      outputs: [...(job.artifact_patterns ?? []), ...(job.checkpoint_path ? [job.checkpoint_path] : [])],
+      staging: path.join(logsOf(scope.root), `${job.id}.modal`),
+    }
+  }
+
+  async function deliver(root: string, found: ModalAdapter.Result["outputs"]): Promise<void> {
+    for (const file of found) {
+      await outputPath(root, file.path, "Modal output")
+      const source = await Filesystem.canonical(file.staging)
+      const staging = await Filesystem.canonical(path.dirname(file.staging))
+      if (!source || !staging || !Filesystem.contains(staging, source)) {
+        throw new Error(`Modal output staging file is unavailable: ${file.path}`)
+      }
+      const target = path.resolve(root, file.path)
+      await fs.mkdir(path.dirname(target), { recursive: true })
+      await fs.copyFile(source, target)
+    }
+  }
+
   const lockfiles = [
     "bun.lock",
     "bun.lockb",
@@ -861,12 +983,14 @@ export namespace ComputeJobs {
     const started = await change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === job.id)
       if (index < 0 || terminal.has(jobs[index]!.status)) return false
-      const draft = Job.parse({
-        ...jobs[index],
-        status: "running",
-        started_at: new Date().toISOString(),
-        pid: proc.pid,
-      })
+      const draft = move(
+        jobs[index]!,
+        { type: "run" },
+        {
+          started_at: new Date().toISOString(),
+          pid: proc.pid,
+        },
+      )
       jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
       return true
     })
@@ -889,16 +1013,199 @@ export namespace ComputeJobs {
     await change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === job.id)
       if (index < 0 || terminal.has(jobs[index]!.status)) return
-      const draft = Job.parse({
-        ...jobs[index],
-        status: completed.code === 0 ? "succeeded" : "failed",
-        completed_at: new Date().toISOString(),
-        exit_code: completed.code,
-        error: completed.error,
-        ...captureResult,
-      })
-      jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+      const draft = move(
+        jobs[index]!,
+        {
+          type: "finish",
+          outcome: completed.code === 0 ? "succeeded" : "failed",
+          ...(completed.error ? { message: completed.error } : {}),
+        },
+        {
+          completed_at: new Date().toISOString(),
+          exit_code: completed.code,
+          error: completed.error,
+          ...captureResult,
+        },
+      )
+      const closed = move(draft, { type: "close" })
+      jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
     }).finally(() => active.delete(key))
+  }
+
+  async function completeModal(
+    job: Job,
+    scope: Scope,
+    context: ModalAdapter.Context,
+    result: ModalAdapter.Result,
+  ): Promise<void> {
+    const finished = await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0 || terminal.has(jobs[index]!.status)) return
+      const draft = move(
+        jobs[index]!,
+        { type: "finish", outcome: result.code === 0 ? "succeeded" : "failed" },
+        { completed_at: new Date().toISOString(), exit_code: result.code },
+      )
+      const collecting = job.artifact_patterns?.length || job.checkpoint_path ? move(draft, { type: "collect" }) : draft
+      jobs[index] = Job.parse({ ...collecting, provenance: provenance(collecting) })
+      return collecting
+    })
+    if (!finished) return
+    if (job.artifact_patterns?.length || job.checkpoint_path) {
+      const received = await deliver(job.cwd!, result.outputs)
+        .then(() => ({ ok: true as const }))
+        .catch((error) => ({ ok: false as const, error }))
+      if (!received.ok) {
+        const message = received.error instanceof Error ? received.error.message : String(received.error)
+        await change(scope.root, (jobs) => {
+          const index = jobs.findIndex((item) => item.id === job.id)
+          if (index < 0 || jobs[index]!.lifecycle?.delivery !== "pending") return
+          const draft = move(jobs[index]!, { type: "delivery_fail", message }, { capture_error: message })
+          jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+        })
+        return
+      }
+      await change(scope.root, (jobs) => {
+        const index = jobs.findIndex((item) => item.id === job.id)
+        if (index < 0 || jobs[index]!.lifecycle?.delivery !== "pending") return
+        const draft = move(jobs[index]!, { type: "deliver" })
+        jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+      })
+    }
+    const current = await get(job.id, { root: scope.root, workspace: scope.workspace })
+    if (current?.remote_id) {
+      await ModalAdapter.close(context, current.remote_id, job.id)
+      await event(scope.root, job.id, `Closed Modal sandbox ${current.remote_id}`)
+    }
+    const captured = await capture(job)
+      .then((value) => ({ ...value, capture_error: undefined }))
+      .catch((error) => ({ capture_error: error instanceof Error ? error.message : String(error) }))
+    await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0 || jobs[index]!.lifecycle?.resource === "closed") return
+      const closed = move(jobs[index]!, { type: "close" }, captured)
+      jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+    })
+    await event(scope.root, job.id, `Modal job ${result.code === 0 ? "succeeded" : "failed"}`)
+    await fs.rm(path.join(logsOf(scope.root), `${job.id}.modal`), { recursive: true, force: true })
+  }
+
+  async function executeModal(
+    job: Job,
+    files: ModalAdapter.File[],
+    scope: Scope,
+    context: ModalAdapter.Context,
+  ): Promise<void> {
+    const log = path.join(logsOf(scope.root), `${job.id}.log`)
+    await fs.mkdir(logsOf(scope.root), { recursive: true })
+    await event(scope.root, job.id, "Dispatching governed job to Modal")
+    await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0 || terminal.has(jobs[index]!.status)) return
+      const draft = move(jobs[index]!, { type: "start" }, { started_at: new Date().toISOString() })
+      jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+    })
+    const result = await ModalAdapter.run(context, modalSpec(job, files, scope), {
+      created: async (id) => {
+        const started = await change(scope.root, (jobs) => {
+          const index = jobs.findIndex((item) => item.id === job.id)
+          if (index < 0 || terminal.has(jobs[index]!.status)) return false
+          const draft = move(jobs[index]!, { type: "run" }, { remote_id: id })
+          jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+          return true
+        })
+        if (!started) throw new Error("Modal job was cancelled before its sandbox became ready")
+      },
+      log: async (value) => {
+        await event(scope.root, job.id, value)
+      },
+      output: async (value) => {
+        await fs.appendFile(log, OpenScience.redactSecrets(value), { mode: 0o600 })
+      },
+    })
+    await completeModal(job, scope, context, result)
+  }
+
+  async function recoverModal(job: Job, scope: Scope, context: ModalAdapter.Context): Promise<void> {
+    const log = path.join(logsOf(scope.root), `${job.id}.log`)
+    await fs.mkdir(logsOf(scope.root), { recursive: true })
+    await event(scope.root, job.id, "Recovering Modal job after OpenScience restart")
+    const id = job.remote_id ?? (await ModalAdapter.find(context, job.id))
+    if (!id) {
+      await failModal(job, scope, context, new Error("The Modal sandbox could not be found during recovery"))
+      return
+    }
+    if (!job.remote_id) {
+      await change(scope.root, (jobs) => {
+        const index = jobs.findIndex((item) => item.id === job.id)
+        if (index < 0 || terminal.has(jobs[index]!.status)) return
+        const current = jobs[index]!
+        const draft =
+          current.status === "queued"
+            ? move(
+                current,
+                { type: "run" },
+                { remote_id: id, started_at: current.started_at ?? new Date().toISOString() },
+              )
+            : Job.parse({ ...current, remote_id: id })
+        jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+      })
+    }
+    await fs.writeFile(log, "", { mode: 0o600 })
+    const result = await ModalAdapter.recover(context, modalSpec(job, [], scope), id, {
+      log: async (value) => {
+        await event(scope.root, job.id, value)
+      },
+      output: async (value) => {
+        await fs.appendFile(log, OpenScience.redactSecrets(value), { mode: 0o600 })
+      },
+    })
+    await completeModal(Job.parse({ ...job, remote_id: id }), scope, context, result)
+  }
+
+  async function failModal(job: Job, scope: Scope, context: ModalAdapter.Context, error: unknown): Promise<void> {
+    const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
+    await fs.mkdir(logsOf(scope.root), { recursive: true })
+    await event(scope.root, job.id, `Modal error: ${message}`)
+    await fs.appendFile(path.join(logsOf(scope.root), `${job.id}.log`), `${message}\n`, { mode: 0o600 })
+    const current = await get(job.id, { root: scope.root, workspace: scope.workspace })
+    if (!current || terminal.has(current.status)) return
+    const closed = current.remote_id
+      ? await ModalAdapter.close(context, current.remote_id, job.id).then(
+          () => true,
+          () => false,
+        )
+      : true
+    await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0 || terminal.has(jobs[index]!.status)) return
+      const draft = move(
+        jobs[index]!,
+        { type: "finish", outcome: "failed", message },
+        { completed_at: new Date().toISOString(), exit_code: null, error: message },
+      )
+      const ended = closed ? move(draft, { type: "close" }) : move(draft, { type: "lose" })
+      jobs[index] = Job.parse({ ...ended, provenance: provenance(ended) })
+    })
+  }
+
+  export async function plan(input: Request, options: Options = {}): Promise<ModalPlan.Schema> {
+    const parsed = Request.parse(input)
+    if (parsed.target.kind !== "modal") throw new Error("Only Modal jobs require an approval plan")
+    const scope = await scoped(options)
+    const authority = await ExecutionAuthority.require({
+      projectID: Instance.project.id,
+      sessionID: parsed.sessionID,
+      capability: "remote_job",
+    })
+    const requested = parsed.cwd ? path.resolve(authority.workspace, parsed.cwd) : authority.workspace
+    const cwd = await Filesystem.canonical(requested)
+    const info = cwd ? await fs.stat(cwd).catch(() => undefined) : undefined
+    if (!cwd || !info?.isDirectory() || !Filesystem.contains(authority.workspace, cwd)) {
+      throw new Error(`Modal working directory must be inside the session workspace: ${parsed.cwd ?? requested}`)
+    }
+    if (scope.workspace !== authority.workspace) throw new Error("Compute project does not match the session workspace")
+    return (await modal(parsed, cwd, options.modal)).plan
   }
 
   export async function start(input: Request, options: Options = {}): Promise<Job> {
@@ -910,7 +1217,7 @@ export namespace ComputeJobs {
     const authority = await ExecutionAuthority.require({
       projectID: Instance.project.id,
       sessionID: parsed.sessionID,
-      capability: host ? "remote_job" : "local_job",
+      capability: host || parsed.target.kind === "modal" ? "remote_job" : "local_job",
     })
     const requested = parsed.cwd ? path.resolve(authority.workspace, parsed.cwd) : authority.workspace
     const cwd = host ? parsed.cwd || host.workdir : await Filesystem.canonical(requested)
@@ -920,9 +1227,17 @@ export namespace ComputeJobs {
         `Local compute working directory must be inside the session workspace: ${parsed.cwd ?? requested}`,
       )
     }
-    if (!host) await outputs(cwd!, parsed.artifacts ?? [], parsed.checkpoint)
+    const prepared = parsed.target.kind === "modal" ? await modal(parsed, cwd!, options.modal) : undefined
+    if (prepared && parsed.approval !== prepared.plan.digest) {
+      throw new Error("The Modal run must be approved using its current plan digest")
+    }
+    if (!host && parsed.target.kind !== "modal") await outputs(cwd!, parsed.artifacts ?? [], parsed.checkpoint)
     const id = crypto.randomUUID().slice(0, 12)
-    const spec = command({ id, ...parsed, cwd }, host)
+    const spec =
+      parsed.target.kind === "modal"
+        ? { label: "Modal", scheduler: "none" as const }
+        : command({ id, ...parsed, cwd }, host)
+    const lifecycle = ComputeLifecycle.transition(ComputeLifecycle.initial(), { type: "queue" })
     const draft = Job.parse({
       id,
       name: parsed.name,
@@ -931,7 +1246,24 @@ export namespace ComputeJobs {
       target: parsed.target,
       target_label: spec.label,
       scheduler: spec.scheduler,
-      status: "queued",
+      status: ComputeLifecycle.legacy(lifecycle),
+      lifecycle,
+      remote_id: undefined,
+      modal: prepared
+        ? {
+            app: prepared.plan.app,
+            environment: prepared.plan.environment,
+            image: prepared.plan.image,
+            packages: prepared.plan.packages,
+            gpu: prepared.plan.gpu,
+            network: prepared.plan.network,
+            timeout_minutes: prepared.plan.timeout_minutes,
+            uploads: prepared.plan.uploads,
+            upload_bytes: prepared.plan.upload_bytes,
+            approval: prepared.plan.digest,
+            sdk: ModalAdapter.VERSION,
+          }
+        : undefined,
       created_at: new Date().toISOString(),
       resources: parsed.resources,
       modules: parsed.modules,
@@ -946,6 +1278,28 @@ export namespace ComputeJobs {
       },
     })
     const reproducibility = host ? undefined : await reproduce(draft, authority)
+    if (prepared) {
+      const context = options.credentials
+      if (!context) throw new Error("Modal credentials were not resolved for dispatch")
+      const base = Job.parse({ ...draft, reproducibility })
+      const job = Job.parse({ ...base, provenance: provenance(base) })
+      await change(scope.root, (jobs) => {
+        jobs.push(job)
+      })
+      const key = keyOf(scope.root, job.id)
+      active.set(key, {
+        detached: false,
+        authority,
+        root: scope.root,
+        workspace: scope.workspace,
+        id: job.id,
+        modal: context,
+      })
+      void executeModal(job, prepared.files, scope, context)
+        .catch((error) => failModal(job, scope, context, error))
+        .finally(() => active.delete(key))
+      return job
+    }
     const planned = await launch(draft, host, scope, authority).catch(async (error) => {
       if (!host) await fs.rm(exitOf(scope.root, id), { force: true })
       throw error
@@ -976,11 +1330,21 @@ export namespace ComputeJobs {
             `${error instanceof Error ? error.message : String(error)}\n`,
           )
           .catch(() => {})
-        await patch(scope.root, job.id, {
-          status: "failed",
-          completed_at: new Date().toISOString(),
-          exit_code: null,
-          error: error instanceof Error ? error.message : String(error),
+        await change(scope.root, (jobs) => {
+          const index = jobs.findIndex((item) => item.id === job.id)
+          if (index < 0 || terminal.has(jobs[index]!.status)) return
+          const message = error instanceof Error ? error.message : String(error)
+          const draft = move(
+            jobs[index]!,
+            { type: "finish", outcome: "failed", message },
+            {
+              completed_at: new Date().toISOString(),
+              exit_code: null,
+              error: message,
+            },
+          )
+          const closed = move(draft, { type: "close" })
+          jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
         }).catch(() => {})
       })
       .finally(() => active.delete(key))
@@ -989,7 +1353,7 @@ export namespace ComputeJobs {
 
   export async function list(options: Options = {}): Promise<Job[]> {
     const scope = await scoped(options)
-    await sync(scope.root)
+    await sync(scope, options)
     return (await read(scope.root)).toSorted(
       (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id),
     )
@@ -1010,27 +1374,55 @@ export namespace ComputeJobs {
     return text.slice(-Math.max(1, options.bytes ?? 256_000))
   }
 
+  export async function events(id: string, options: Options & { bytes?: number } = {}): Promise<string> {
+    const scope = await scoped(options)
+    const job = await get(id, options)
+    if (!job) throw new Error(`Compute job ${id} was not found`)
+    const text = await Bun.file(eventsOf(scope.root, job.id))
+      .text()
+      .catch(() => "")
+    return text.slice(-Math.max(1, options.bytes ?? 256_000))
+  }
+
   export async function cancel(id: string, options: Options = {}): Promise<Job> {
     const scope = await scoped(options)
+    const runtime = active.get(keyOf(scope.root, id))
+    const context = runtime?.modal ?? options.credentials
     const result = await change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === id)
       if (index < 0) throw new Error(`Compute job ${id} was not found`)
       if (terminal.has(jobs[index]!.status)) return { job: jobs[index]!, changed: false }
-      const draft = Job.parse({
-        ...jobs[index],
-        status: "cancelled",
-        completed_at: new Date().toISOString(),
-        exit_code: null,
-      })
+      if (jobs[index]!.target.kind === "modal" && !context) {
+        throw new Error("Enable Modal before cancelling this recovered job")
+      }
+      const draft = move(
+        jobs[index]!,
+        { type: "cancel" },
+        {
+          completed_at: new Date().toISOString(),
+          exit_code: null,
+        },
+      )
       const cancelled = Job.parse({ ...draft, provenance: provenance(draft) })
       jobs[index] = cancelled
       return { job: cancelled, changed: true }
     })
     const job = result.job
     if (!result.changed) return job
-    const cancelled = result.job
-    const runtime = active.get(keyOf(scope.root, id))
+    if (job.target.kind === "modal") await event(scope.root, job.id, "Cancellation requested")
     const proc = runtime?.process
+    const modalClosed =
+      job.target.kind === "modal" && job.remote_id
+        ? context
+          ? await ModalAdapter.close(context, job.remote_id, job.id).then(
+              () => true,
+              () => false,
+            )
+          : false
+        : true
+    if (job.target.kind === "modal" && job.remote_id && modalClosed) {
+      await event(scope.root, job.id, `Closed Modal sandbox ${job.remote_id}`)
+    }
     if (proc) {
       await Shell.killTree(proc, {
         detached: runtime.detached,
@@ -1074,7 +1466,13 @@ export namespace ComputeJobs {
         proc.once("exit", () => resolve())
       })
     }
-    return cancelled
+    return change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === id)
+      if (index < 0) throw new Error(`Compute job ${id} was not found`)
+      const closed = modalClosed ? move(jobs[index]!, { type: "close" }) : move(jobs[index]!, { type: "lose" })
+      jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+      return jobs[index]!
+    })
   }
 
   async function cancelActive(match: (runtime: Runtime) => boolean): Promise<number> {
@@ -1085,6 +1483,7 @@ export namespace ComputeJobs {
           root: runtime.root,
           workspace: runtime.workspace,
           hosts: runtime.host ? [runtime.host] : undefined,
+          credentials: runtime.modal,
         }),
       ),
     )
@@ -1110,6 +1509,7 @@ export namespace ComputeJobs {
     await Promise.all(
       removed.flatMap((id) => [
         fs.rm(path.join(logsOf(scope.root), `${id}.log`), { force: true }),
+        fs.rm(eventsOf(scope.root, id), { force: true }),
         fs.rm(exitOf(scope.root, id), { force: true }),
       ]),
     )
