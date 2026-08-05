@@ -196,7 +196,7 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
             </button>
           </Show>
           <button type="button" onClick={props.onClose} style={secondary()}>
-            Back to file sources
+            Back to Files
           </button>
         </div>
       </Match>

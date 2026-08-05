@@ -43,10 +43,12 @@ const errorMessage = (value: unknown) => {
   return String(value || "Request failed")
 }
 
-// FileExplorer.tsx (FileExplorer.tsx:121) keeps an equivalent readAccess as a
-// private, unexported helper — it is not available from file-sources.ts, so
-// it is reimplemented here against the same endpoint and the same
-// parseFilesystemSnapshot guard rather than imported.
+// FileExplorer.tsx:57-77 keeps equivalent readAccess/grantAccess/revokeAccess
+// helpers, but they are private, unexported, and typed against ProjectRequest
+// (which carries a .url this pane's injected transport does not). They are
+// reimplemented here against the same endpoints and the same
+// parseFilesystemSnapshot guard rather than imported. Folding the pair into
+// file-sources.ts is the obvious follow-up.
 async function readAccess(transport: Transport, identity: FilesystemIdentity): Promise<FilesystemSnapshot> {
   const value = await transport(`/session/${encodeURIComponent(identity.sessionID)}/filesystem`).then(json)
   const snapshot = parseFilesystemSnapshot(value, identity)
