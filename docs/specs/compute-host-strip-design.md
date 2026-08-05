@@ -6,7 +6,7 @@ Branch: `openscience-ui-revamp`
 
 ## Problem
 
-The Compute right-pane tab reports only what the *current session* owns. `KernelPanel` renders
+The Compute right-pane tab reports only what the _current session_ owns. `KernelPanel` renders
 `0 live · 0 running · 0 queued` and a card per session kernel; the card shows `CPU`, `MEMORY`, `GPU`, `VRAM`
 per kernel. Nothing on the surface answers the question a researcher actually asks before starting a run:
 **does this machine have room?**
@@ -28,12 +28,12 @@ not a cherry-pick.
 
 ## Scope decisions
 
-| Decision | Choice | Consequence |
-| --- | --- | --- |
-| Metric scope | Machine-wide header, session-scoped card list | Strip is context; the list stays what you act on |
-| Placement | Above the Kernels/Jobs tablist | Host capacity stays visible in both sub-views |
-| Metric source | Platform agnostic, best source per OS behind one interface | Works on Linux, macOS, Windows; no caller branches |
-| Per-kernel sampling | Extend to Windows | `ps` path stays for Linux/macOS; adds a third sampler |
+| Decision            | Choice                                                     | Consequence                                           |
+| ------------------- | ---------------------------------------------------------- | ----------------------------------------------------- |
+| Metric scope        | Machine-wide header, session-scoped card list              | Strip is context; the list stays what you act on      |
+| Placement           | Above the Kernels/Jobs tablist                             | Host capacity stays visible in both sub-views         |
+| Metric source       | Platform agnostic, best source per OS behind one interface | Works on Linux, macOS, Windows; no caller branches    |
+| Per-kernel sampling | Extend to Windows                                          | `ps` path stays for Linux/macOS; adds a third sampler |
 
 Explicitly out of scope: GPU/VRAM host totals (the reference has no such tile), replacing the Kernels/Jobs
 tabs, and any change to `ComputeJobs`.
@@ -82,8 +82,7 @@ strip and the list answer different questions and poll independently.
 `memory.kernels` and `cpu.kernels` aggregate every live kernel this server owns — `KernelRuntime.list()` with
 no session filter, each entry sampled through `KernelMetrics`. Both are **optional**: when the platform cannot
 sample a process they are omitted, never sent as `0`. This preserves the existing contract in
-`notebook/runtime.ts`: *absent fields mean the platform could not report them — render "Unavailable", never
-0.*
+`notebook/runtime.ts`: _absent fields mean the platform could not report them — render "Unavailable", never 0._
 
 No registry change is needed. `KernelRuntime.list(sessionID?)` already exists (`registry.ts:550`), and
 `GET /notebook/kernels` with no `sessionID` already enumerates every session and samples each kernel — the
@@ -99,10 +98,10 @@ Both problems have the same fix. Every platform can cheaply report **cumulative 
 bytes** for a PID. Sample those, keep the previous sample, and derive cores from the delta — the standard
 psutil formula, `cores = Δcpu_seconds / Δwall_seconds`. One algorithm, three command shapes:
 
-| Platform | Command | Yields |
-| --- | --- | --- |
-| Linux, macOS | `ps -o pid=,time=,rss= -p <pids>` | cumulative `[[dd-]hh:]mm:ss`, RSS in KB |
-| Windows | `powershell -NoProfile -NonInteractive -Command "Get-Process -Id <pids> \| …"` | `CPU` (cumulative seconds), `WorkingSet64` (bytes) |
+| Platform     | Command                                                                        | Yields                                             |
+| ------------ | ------------------------------------------------------------------------------ | -------------------------------------------------- |
+| Linux, macOS | `ps -o pid=,time=,rss= -p <pids>`                                              | cumulative `[[dd-]hh:]mm:ss`, RSS in KB            |
+| Windows      | `powershell -NoProfile -NonInteractive -Command "Get-Process -Id <pids> \| …"` | `CPU` (cumulative seconds), `WorkingSet64` (bytes) |
 
 Sampling batches every PID into **one** spawn per poll, replacing today's spawn-per-kernel `Promise.all`.
 
@@ -112,13 +111,13 @@ Each platform's stdout parser is a pure exported function taking text and return
 **The wire contract does not change.** `KernelMetrics.Sample` keeps emitting `cpu_percent` — percent of one
 core, the same units `ps %cpu` used — now computed as `100 × Δcpu_seconds / Δwall_seconds` instead of read
 straight from `ps`. `cpu_seconds` is internal to the sampler. `KernelCard`, `registry.ts`'s zod schema and
-`notebook/runtime.ts` need no edits; `cpu_percent` simply starts telling the truth about *now*. The strip
+`notebook/runtime.ts` need no edits; `cpu_percent` simply starts telling the truth about _now_. The strip
 divides by 100 to render cores.
 
 Three approaches were rejected:
 
 - **`Win32_PerfFormattedData_PerfProc_Process`** (the original plan) gives `PercentProcessorTime` directly, but
-  the whole `Win32_PerfFormattedData_*` family returns *nothing* when the performance-counter registry is
+  the whole `Win32_PerfFormattedData_*` family returns _nothing_ when the performance-counter registry is
   corrupt — a documented Windows failure needing `lodctr /R` to repair. Silent empty results on an otherwise
   healthy machine is a bad trade for avoiding one subtraction. Its `PercentProcessorTime` is also scaled to
   `100 × logical cores`, not 0–100, which is its own footgun.
@@ -178,7 +177,7 @@ ComputeSurface mounts
 - Title: `No live kernels`
 - Body: `Kernels appear here the moment this session starts computing.`
 
-The reference reads *"…any session starts computing on this machine"*, which would be false here: the list is
+The reference reads _"…any session starts computing on this machine"_, which would be false here: the list is
 session-scoped, so a kernel belonging to another session would not appear. The title matches the reference;
 the body states what the list actually shows.
 
@@ -196,19 +195,19 @@ the body states what the list actually shows.
 
 No mocks, per `AGENTS.md`.
 
-| Test | Asserts |
-| --- | --- |
-| `host.test.ts` | Real-machine invariants: `total > 0`, `0 < available ≤ total`, `cores ≥ 1`, `0 ≤ busy ≤ cores` |
-| `host.test.ts` | `MemAvailable` parsed from a fixture `/proc/meminfo` string; malformed input falls back |
-| `host.test.ts` | Two `snapshot()` calls in sequence return a `busy` from the rolling baseline, not a re-sample |
-| `metrics.test.ts` | `ps` and `Get-Process` output parsers, both against fixture stdout, on any host platform |
-| `metrics.test.ts` | `ps` elapsed-time formats parse: `0:04`, `12:34`, `1:02:03`, `2-03:04:05` |
-| `metrics.test.ts` | Unparseable output yields `{}`, not `{ cpu_percent: NaN }` |
-| `metrics.test.ts` | Cores derive from a delta: two fixture samples with known Δcpu and Δwall give the expected cores; a single sample yields no `cpu` field |
-| `metrics.test.ts` | A PID present in the first sample and gone from the second drops out without throwing |
-| `notebook.test.ts` | `GET /notebook/compute` returns the shape; `kernels` sub-fields absent rather than `0` when unsampled |
-| `ComputeSurface.test.ts` | Strip renders before the tablist in DOM order |
-| `HostStrip.test.ts` | Meter clamps; `Unavailable` on a failed load; no `0` rendered for absent fields |
+| Test                     | Asserts                                                                                                                                 |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `host.test.ts`           | Real-machine invariants: `total > 0`, `0 < available ≤ total`, `cores ≥ 1`, `0 ≤ busy ≤ cores`                                          |
+| `host.test.ts`           | `MemAvailable` parsed from a fixture `/proc/meminfo` string; malformed input falls back                                                 |
+| `host.test.ts`           | Two `snapshot()` calls in sequence return a `busy` from the rolling baseline, not a re-sample                                           |
+| `metrics.test.ts`        | `ps` and `Get-Process` output parsers, both against fixture stdout, on any host platform                                                |
+| `metrics.test.ts`        | `ps` elapsed-time formats parse: `0:04`, `12:34`, `1:02:03`, `2-03:04:05`                                                               |
+| `metrics.test.ts`        | Unparseable output yields `{}`, not `{ cpu_percent: NaN }`                                                                              |
+| `metrics.test.ts`        | Cores derive from a delta: two fixture samples with known Δcpu and Δwall give the expected cores; a single sample yields no `cpu` field |
+| `metrics.test.ts`        | A PID present in the first sample and gone from the second drops out without throwing                                                   |
+| `notebook.test.ts`       | `GET /notebook/compute` returns the shape; `kernels` sub-fields absent rather than `0` when unsampled                                   |
+| `ComputeSurface.test.ts` | Strip renders before the tablist in DOM order                                                                                           |
+| `HostStrip.test.ts`      | Meter clamps; `Unavailable` on a failed load; no `0` rendered for absent fields                                                         |
 
 ## Open risks
 
