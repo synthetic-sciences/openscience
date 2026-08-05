@@ -48,6 +48,12 @@
   font-size: 9.5px; letter-spacing: 0.04em; color: var(--color-text-muted);
 }
 .files-menu__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-muted); }
+.files-menu__revoke {
+  padding: 2px 6px; border: 1px solid var(--color-border-weak-base); border-radius: 6px;
+  font-size: 10.5px; color: var(--color-text-muted); cursor: pointer;
+}
+.files-menu__revoke:hover { border-color: var(--color-text-muted); color: var(--color-text); }
+.files-menu__revoke:focus-visible { outline: 1px solid var(--color-text); outline-offset: 1px; }
 .files-menu__sep { height: 1px; margin: 7px 8px; background: var(--color-border-weak-base); }
 
 .files-table { flex: 1; overflow-y: auto; border-top: 1px solid var(--color-border-weak-base); }

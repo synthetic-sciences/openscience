@@ -42,21 +42,32 @@ async function readAccess(transport: Transport, identity: FilesystemIdentity): P
   throw new Error("Filesystem access belongs to another session or project.")
 }
 
-export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
+async function revokeAccess(transport: Transport, identity: FilesystemIdentity, grantID: string) {
+  const url = `/session/${encodeURIComponent(identity.sessionID)}/filesystem/${encodeURIComponent(grantID)}`
+  return transport(url, { method: "DELETE" }).then(json)
+}
+
+export function FilesPane(
+  props: { request?: Transport; session?: string; directory?: string } = {},
+): JSX.Element {
   // The `request` prop is a standalone test seam (see FilesPane.test.ts) that
   // mounts with no providers at all. Key the context reads off the prop
   // itself rather than swallowing whatever throws: in production `standalone`
   // is always false, so a missing provider is a real wiring bug and throws
   // loudly instead of quietly degrading into a fake "could not be read".
+  // `session` and `directory` complete that seam: with no router or SDK there
+  // is no session id or project root to read, and without both the grant
+  // snapshot never loads. Production passes neither.
   const standalone = Boolean(props.request)
   const sdk = standalone ? undefined : useSDK()
   const sync = standalone ? undefined : useSync()
   const params = standalone ? ({} as ReturnType<typeof useParams>) : useParams()
   const transport: Transport = props.request ?? sdk!.request
 
-  const projectRoot = () => sdk?.directory || sync?.data.path.directory || sync?.project?.worktree || ""
+  const projectRoot = () =>
+    props.directory ?? (sdk?.directory || sync?.data.path.directory || sync?.project?.worktree || "")
   const projectName = () => projectRoot().split("/").filter(Boolean).at(-1) ?? "Project"
-  const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)
+  const sessionID = () => props.session ?? (params.id && params.id !== "new" ? params.id : undefined)
   const identity = (): FilesystemIdentity | undefined => {
     const session = sessionID()
     if (!session || !projectRoot()) return
@@ -68,7 +79,9 @@ export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
   const ask = (path: string, init?: RequestInit) => transport(path, init)
   const [artifacts, { refetch: refetchArtifacts }] = createArtifactsResource(ask, () => sdk?.directory ?? true)
 
-  const [snapshot] = createResource(identity, (current) => readAccess(transport, current).catch(() => undefined))
+  const [snapshot, { refetch: refetchSnapshot }] = createResource(identity, (current) =>
+    readAccess(transport, current).catch(() => undefined),
+  )
   const sources = createMemo(() =>
     buildSources({
       projectRoot: projectRoot(),
@@ -141,6 +154,31 @@ export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
     setActive(name)
   }
 
+  // A grant is a durable, possibly installation-wide, possibly writable hole
+  // in the filesystem boundary. Minting one from the pane without a way to
+  // take it back is a one-way door, so revoking lives next to the source it
+  // revokes.
+  const revoke = (target: PaneSource) => {
+    const current = identity()
+    if (!current || busy()) return
+    setBusy(true)
+    revokeAccess(transport, current, target.id)
+      .then(() => refetchSnapshot())
+      .then(() => {
+        // The revoked source is gone from the next snapshot; if it was the
+        // one being browsed, fall back to the default rather than listing a
+        // folder the session no longer has access to.
+        if (source()?.id === target.id) setSource(undefined)
+        setPath([])
+        setBusy(false)
+        setError("")
+      })
+      .catch((cause) => {
+        setBusy(false)
+        setError(errorMessage(cause))
+      })
+  }
+
   const restore = (artifact: StoredArtifact) => {
     if (busy()) return
     setBusy(true)
@@ -177,6 +215,7 @@ export function FilesPane(props: { request?: Transport } = {}): JSX.Element {
             setPath([])
             setFilter("")
           }}
+          onRevoke={revoke}
         />
       </div>
 

@@ -78,6 +78,36 @@ describe("source menu", () => {
     expect(host.querySelector('[data-source-item="ro"]')?.textContent).toContain("ro")
   })
 
+  test("offers revoke on a connected grant only, and revoking does not also pick it", () => {
+    const picked: string[] = []
+    const revoked: string[] = []
+    const host = mount(() =>
+      subject.SourceMenu({
+        sources: SOURCES,
+        active: SOURCES[1]!,
+        onPick: (s) => picked.push(s.id),
+        onRevoke: (s) => revoked.push(s.id),
+      }),
+    )
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    expect(host.querySelector('[data-source-revoke="project"]')).toBeNull()
+    expect(host.querySelector('[data-source-revoke="artifacts"]')).toBeNull()
+
+    host.querySelector<HTMLElement>('[data-source-revoke="ro"]')?.click()
+
+    expect(revoked).toEqual(["ro"])
+    expect(picked).toEqual([])
+    expect(host.querySelector("[data-source-menu]")).toBeNull()
+  })
+
+  test("hides the revoke control when no handler can act on it", () => {
+    const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {} }))
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    expect(host.querySelector('[data-source-revoke="ro"]')).toBeNull()
+  })
+
   test("constrains the menu and its paths so a long path cannot force a scrollbar", () => {
     const css = readFileSync(fileURLToPath(new URL("./FilesPane.css", import.meta.url)), "utf8")
 

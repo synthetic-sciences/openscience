@@ -74,6 +74,30 @@ const trashed = (id: string, title: string) => ({
   },
 })
 
+const DIRECTORY = "/home/keertan/proj"
+const SESSION = "ses_1"
+
+// parseFilesystemSnapshot rejects the whole payload if any field is off, so
+// this mirrors the server's shape exactly.
+const snapshot = (grants: unknown[]) => ({
+  version: 1,
+  revision: 3,
+  sessionID: SESSION,
+  projectID: "prj_1",
+  directory: DIRECTORY,
+  grants,
+  enforcement: { broker: "enforced", processWrite: "workspace_only", processRead: "policy_only" },
+})
+
+const grant = (id: string, path: string, access: "read" | "write") => ({
+  id,
+  path,
+  access,
+  scope: "project",
+  source: "api",
+  time: { created: 1 },
+})
+
 describe("files pane", () => {
   test("renders the tab strip, the picker and a table", async () => {
     const host = mount(() =>
@@ -146,5 +170,43 @@ describe("files pane", () => {
 
     expect(calls).toContainEqual({ path: "/file/artifact-store/art_1/restore", method: "POST" })
     expect(host.querySelector('[data-trash-row="art_1"]')).toBeNull()
+  })
+
+  test("revokes a connected grant from the source menu and drops it from the snapshot", async () => {
+    const calls: Array<{ path: string; method?: string }> = []
+    const store = { granted: true }
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path, init) => {
+          calls.push({ path, method: init?.method })
+          if (path.startsWith(`/session/${SESSION}/filesystem/`)) {
+            store.granted = false
+            return listing([])
+          }
+          if (path === `/session/${SESSION}/filesystem`)
+            return new Response(
+              JSON.stringify(snapshot(store.granted ? [grant("fsg_1", "/home/keertan/data/pdebench", "write")] : [])),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            )
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    expect(host.querySelector('[data-source-item="fsg_1"]')?.textContent).toContain("pdebench")
+
+    host.querySelector<HTMLElement>('[data-source-revoke="fsg_1"]')?.click()
+    await settle()
+
+    expect(calls).toContainEqual({ path: `/session/${SESSION}/filesystem/fsg_1`, method: "DELETE" })
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    expect(host.querySelector('[data-source-item="fsg_1"]')).toBeNull()
+    expect(host.querySelector('[data-source-item="project"]')).not.toBeNull()
   })
 })

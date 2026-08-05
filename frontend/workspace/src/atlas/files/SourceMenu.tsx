@@ -6,11 +6,16 @@ export function SourceMenu(props: {
   active: PaneSource
   onPick: (source: PaneSource) => void
   onAdd?: () => void
+  onRevoke?: (source: PaneSource) => void
 }): JSX.Element {
   const [open, setOpen] = createSignal(false)
   const pick = (source: PaneSource) => {
     setOpen(false)
     props.onPick(source)
+  }
+  const revoke = (source: PaneSource) => {
+    setOpen(false)
+    props.onRevoke?.(source)
   }
 
   return (
@@ -70,6 +75,32 @@ export function SourceMenu(props: {
                           </Show>
                         </span>
                         <span class="files-menu__tail">
+                          {/* A connected folder is a durable grant, so the way
+                              out sits on the row that shows it. A nested
+                              <button> is invalid inside the row button, so this
+                              mirrors FileTabs' close control: a span with the
+                              button role and its own keyboard handler. */}
+                          <Show when={source.kind === "connected" && props.onRevoke}>
+                            <span
+                              class="files-menu__revoke"
+                              role="button"
+                              tabindex="0"
+                              data-source-revoke={source.id}
+                              aria-label={`Revoke access to ${source.name}`}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                revoke(source)
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key !== "Enter" && event.key !== " ") return
+                                event.preventDefault()
+                                event.stopPropagation()
+                                revoke(source)
+                              }}
+                            >
+                              Revoke
+                            </span>
+                          </Show>
                           <Show when={source.readonly}>
                             <span class="files-menu__badge">ro</span>
                           </Show>
