@@ -52,6 +52,28 @@ describe("host strip tiles", () => {
     expect(tiles.every((tile) => tile.fill === 0 && tile.share === 0)).toBe(true)
   })
 
+  test("degrades only the tiles a partial body left out, and never throws on the render path", () => {
+    // The spec's other half: a body that arrives without a section — a version
+    // skew, a half-written response — must read Unavailable on that tile alone.
+    // Dereferencing it would throw inside HostStrip's createMemo, and the only
+    // ErrorBoundary in the app wraps the whole workspace.
+    const missing = hostTiles({
+      memory: { total: 16_000_000_000, available: 9_300_000_000, kernels: 412_000_000 },
+      cpu: { cores: 8, busy: 2.1, kernels: 0.4 },
+    })
+
+    expect(missing.map((tile) => tile.value)).toEqual(["412 MB", "0.4 cores", "Unavailable"])
+    expect(missing[2]?.caption).toBe("kernels · count unavailable")
+
+    const counted = hostTiles({ kernels: { live: 2, running: 1 } })
+
+    expect(counted.map((tile) => tile.value)).toEqual(["Unavailable", "Unavailable", "2"])
+    expect(counted[0]?.caption).toBe("kernels · capacity unavailable")
+    expect(counted[1]?.caption).toBe("by kernels · capacity unavailable")
+    expect(counted[2]?.caption).toBe("kernels · 1 running")
+    expect(counted.every((tile) => tile.fill === 0 && tile.share === 0)).toBe(true)
+  })
+
   test("clamps a racing sample instead of overflowing the meter", () => {
     const [memory, cpu] = hostTiles({
       memory: { total: 1_000, available: 2_000, kernels: 4_000 },

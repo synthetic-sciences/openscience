@@ -13,10 +13,18 @@ const ratio = (value: number, of: number) => {
 
 const cores = (value?: number) => (value === undefined ? "Unavailable" : `${value.toFixed(1)} cores`)
 
+// Takes a PARTIAL capacity, because that is what a body can really be: the
+// route omits any figure it could not measure, and a version skew or a
+// half-written response can drop a whole section. Each tile is guarded on its
+// own section so a body missing one degrades only that tile — dereferencing an
+// absent section would throw inside HostStrip's createMemo, and the nearest
+// ErrorBoundary wraps the entire workspace.
+//
 // Pure so the tiles can be asserted without mounting or a live server.
-export function hostTiles(capacity?: Capacity) {
+export function hostTiles(capacity?: Partial<Capacity>) {
   const memory = capacity?.memory
   const cpu = capacity?.cpu
+  const kernels = capacity?.kernels
   const used = memory ? memory.total - memory.available : 0
   return [
     {
@@ -41,8 +49,8 @@ export function hostTiles(capacity?: Capacity) {
     },
     {
       key: "kernels",
-      value: capacity ? `${capacity.kernels.live}` : "Unavailable",
-      caption: capacity ? `kernels · ${capacity.kernels.running} running` : "kernels · count unavailable",
+      value: kernels ? `${kernels.live}` : "Unavailable",
+      caption: kernels ? `kernels · ${kernels.running} running` : "kernels · count unavailable",
       fill: 0,
       share: 0,
     },

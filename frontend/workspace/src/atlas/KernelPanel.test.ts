@@ -121,4 +121,27 @@ describe("kernel control room", () => {
     expect(panel).toContain("Kernels appear here the moment this session starts computing.")
     expect(panel).not.toContain("on this machine")
   })
+
+  test("routes every poll through the fetcher that resolves instead of rejecting", () => {
+    const panel = source()
+
+    // The behaviour itself is asserted in KernelPanel.poll.test.ts against the
+    // real `inventory`; this pins load() to it. A fetcher that rejects leaves
+    // an errored resource for `data.latest` to re-throw on the render path,
+    // and app.tsx's ErrorBoundary — the only one in the app — replaces the
+    // entire workspace with the error page.
+    expect(panel).toContain("return inventory(")
+    expect(panel).not.toContain("throw error")
+  })
+
+  test("says the list is unreadable rather than empty when a poll failed", () => {
+    const panel = source()
+
+    // An empty list after a failed poll is not "No live kernels" — the panel
+    // does not know that. Degrading visibly is the difference between a poll
+    // that failed and a session that is genuinely idle.
+    expect(panel).toContain('{view.error ? "Kernel inventory unavailable" : "No live kernels"}')
+    expect(panel).toContain("The last poll could not read this session's kernels")
+    expect(panel).toContain("Kernel inventory unavailable. ${view.error}")
+  })
 })

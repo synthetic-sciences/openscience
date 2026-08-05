@@ -29,6 +29,29 @@ type KernelPanelProps = {
   request?: (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
 }
 
+// A poll that fails resolves to no inventory instead of rejecting. An errored
+// resource re-throws wherever it is read — `data.latest` below — and the
+// nearest ErrorBoundary wraps the entire workspace (app.tsx), so a server
+// restart, a sleep/wake, or one 503 would swap the whole app for the error
+// page every 2.5s in every session. HostStrip's fetcher already degrades this
+// way; this is the same rule for the panel that sits beneath it.
+//
+// Exported rather than inlined because the panel itself cannot be mounted in a
+// test: useExecutionAuthority calls useSDK() unconditionally and useParams()
+// needs a Router, so this is the seam where the degraded path is reachable.
+export function inventory<T>(request: Promise<T>, settled: (error: string) => void) {
+  return request.then(
+    (value) => {
+      settled("")
+      return value
+    },
+    (error) => {
+      settled(error instanceof Error ? error.message : String(error))
+      return undefined
+    },
+  )
+}
+
 export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   const transport = props.request ?? useSDK().request
   const params = useParams()
@@ -60,15 +83,8 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   }
   const load = () => {
     if (!params.id || params.id === "new") return Promise.resolve({ kernels: [] })
-    return request<KernelsPayload>("/notebook/kernels", undefined, { sessionID: params.id }).then(
-      (value) => {
-        setView({ error: "", updated: Date.now() })
-        return value
-      },
-      (error) => {
-        setView("error", error instanceof Error ? error.message : String(error))
-        throw error
-      },
+    return inventory(request<KernelsPayload>("/notebook/kernels", undefined, { sessionID: params.id }), (error) =>
+      setView(error ? { error } : { error: "", updated: Date.now() }),
     )
   }
   const [data, api] = createResource(load)
@@ -304,8 +320,16 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
               <span aria-hidden="true">
                 <IconCpu size={15} strokeWidth={1.4} />
               </span>
-              <strong>No live kernels</strong>
-              <p>Kernels appear here the moment this session starts computing.</p>
+              {/* A failed poll leaves nothing to list, and "No live kernels"
+                  would then state as fact something this panel does not know.
+                  The alert above carries the detail; this says what the empty
+                  list means. */}
+              <strong>{view.error ? "Kernel inventory unavailable" : "No live kernels"}</strong>
+              <p>
+                {view.error
+                  ? "The last poll could not read this session's kernels, so this is not a count of what is running."
+                  : "Kernels appear here the moment this session starts computing."}
+              </p>
             </div>
           }
         >
