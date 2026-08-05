@@ -137,7 +137,8 @@ describe("harness quality-cost reports", () => {
       metrics: { score: 0.8, robustness: 0.7 },
     })
     const search = HarnessSearch.State.parse({
-      schemaVersion: 2,
+      schemaVersion: 3,
+      proposalPolicy: "leased-v3",
       runID: multi.runID,
       sessionID: multi.sessionID,
       objective: multi.objective,

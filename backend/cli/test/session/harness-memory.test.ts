@@ -60,10 +60,13 @@ async function candidate(input: {
   stage?: HarnessMemory.Stage
 }) {
   await bind(input.sessionID, input.scope)
-  await HarnessSearch.initialize({ sessionID: input.sessionID, candidates: 2 })
+  const search = await HarnessSearch.initialize({ sessionID: input.sessionID, candidates: 2 })
+  const recommendation = HarnessSearch.recommend(search)
   const added = await HarnessSearch.add({
     sessionID: input.sessionID,
-    parentIDs: [],
+    recommendationID: recommendation.id,
+    parentIDs: recommendation.parentIDs,
+    inspirationIDs: recommendation.inspirationIDs,
     branch: "baseline",
     proposal: input.proposal,
     artifact: { uri: `candidate://${input.sessionID}`, sha256: hash(input.sessionID) },
@@ -95,10 +98,13 @@ async function candidate(input: {
 describe("verified retrospective memory", () => {
   test("rejects self-reported candidate observations", async () => {
     await bind("memory-observed", "observed")
-    await HarnessSearch.initialize({ sessionID: "memory-observed", candidates: 2 })
+    const search = await HarnessSearch.initialize({ sessionID: "memory-observed", candidates: 2 })
+    const recommendation = HarnessSearch.recommend(search)
     const added = await HarnessSearch.add({
       sessionID: "memory-observed",
-      parentIDs: [],
+      recommendationID: recommendation.id,
+      parentIDs: recommendation.parentIDs,
+      inspirationIDs: recommendation.inspirationIDs,
       branch: "baseline",
       proposal: "the agent claims this works",
       artifact: { uri: "candidate://observed", sha256: hash("observed") },

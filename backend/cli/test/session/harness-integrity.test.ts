@@ -278,10 +278,13 @@ describe("trace-backed benchmark runtime integrity", () => {
 
   test("binds candidate receipts to exact artifacts and prevents cross-subject reuse", async () => {
     const contract = await HarnessAdapter.bind(task("integrity-candidate"))
-    await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 2 })
+    const search = await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 2 })
+    const recommendation = HarnessSearch.recommend(search)
     const added = await HarnessSearch.add({
       sessionID: contract.sessionID,
-      parentIDs: [],
+      recommendationID: recommendation.id,
+      parentIDs: recommendation.parentIDs,
+      inspirationIDs: recommendation.inspirationIDs,
       branch: "lineage-safe",
       proposal: "Use only the assigned base model and public training corpus",
       artifact: { uri: "artifact:candidate", sha256: hash("candidate") },

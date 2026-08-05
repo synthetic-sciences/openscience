@@ -191,15 +191,32 @@ describe("harness tool", () => {
     await bind()
     const tool = await HarnessTool.init()
     const started = await tool.execute({ action: "start", stall: 2 }, context)
-    expect(JSON.parse(started.output)).toMatchObject({
+    const snapshot = JSON.parse(started.output)
+    expect(snapshot).toMatchObject({
       status: "active",
+      proposalPolicy: "leased-v3",
       budget: { candidates: 2, wallTimeMs: 60_000, stall: 2 },
       used: 0,
+      recommendation: { strategy: "seed", mode: "single-pass", contextIDs: [] },
+      recommendationContext: [],
     })
+
+    const invalid = await tool.execute(
+      {
+        action: "propose",
+        branch: "baseline",
+        proposal: "proposal without a lease",
+        artifact_uri: "artifact://invalid",
+        artifact_sha256: hash("invalid"),
+      },
+      context,
+    )
+    expect(invalid.title).toBe("Invalid proposal")
 
     const proposed = await tool.execute(
       {
         action: "propose",
+        recommendation_id: snapshot.recommendation.id,
         branch: "baseline",
         proposal: "baseline candidate",
         artifact_uri: "artifact://baseline",
@@ -213,6 +230,7 @@ describe("harness tool", () => {
     const duplicate = await tool.execute(
       {
         action: "propose",
+        recommendation_id: snapshot.recommendation.id,
         parent_ids: [hash("fabricated-parent")],
         inspiration_ids: [hash("fabricated-inspiration")],
         branch: "renamed",
@@ -252,18 +270,70 @@ describe("harness tool", () => {
           score: 999,
           metrics: { proxy: 999 },
           feedback: "provisional feedback stays visibly unverified",
+          lease: { id: snapshot.recommendation.id, mode: "single-pass", contextIDs: [] },
         },
       ],
     })
   })
 
-  test("surfaces external hindsight only after backend verification", async () => {
+  test("returns exact verified trajectory payloads with an adaptive recommendation", async () => {
     await bind()
     const tool = await HarnessTool.init()
-    await tool.execute({ action: "start" }, context)
+    const started = JSON.parse((await tool.execute({ action: "start" }, context)).output)
     const proposed = await tool.execute(
       {
         action: "propose",
+        recommendation_id: started.recommendation.id,
+        branch: "baseline",
+        proposal: "candidate retained for focused refinement",
+        artifact_uri: "artifact://trajectory",
+        artifact_sha256: hash("trajectory"),
+      },
+      context,
+    )
+    const candidateID = proposed.metadata.candidateID as string
+    await HarnessEvaluation.record({
+      schemaVersion: 1,
+      runID: "run-harness-tool",
+      sessionID,
+      subject: { type: "candidate", id: candidateID },
+      evaluator: { name: "official-evaluator", version: "1", source: "benchmark" },
+      status: "passed",
+      score: 0.8,
+      metrics: { score: 0.8, stability: 0.7 },
+      checks: [{ id: "official", status: "passed", blocking: true, evidence: ["metric:score"] }],
+      evidence: ["report:trajectory"],
+      evaluatedAt: Date.now(),
+      notes: "improve the boundary residual",
+    })
+    await HarnessSearch.verify({ sessionID, candidateID })
+    const checkpoint = JSON.parse((await tool.execute({ action: "status" }, context)).output)
+    expect(checkpoint.recommendation).toMatchObject({
+      strategy: "exploit",
+      mode: "diff",
+      parentIDs: [candidateID],
+      contextIDs: [candidateID],
+    })
+    expect(checkpoint.recommendationContext).toEqual([
+      expect.objectContaining({
+        id: candidateID,
+        artifact: { uri: "artifact://trajectory", sha256: hash("trajectory") },
+        score: 0.8,
+        metrics: { score: 0.8, stability: 0.7 },
+        feedback: "improve the boundary residual",
+      }),
+    ])
+  })
+
+  test("surfaces external hindsight only after backend verification", async () => {
+    await bind()
+    const tool = await HarnessTool.init()
+    const started = await tool.execute({ action: "start" }, context)
+    const recommendation = JSON.parse(started.output).recommendation
+    const proposed = await tool.execute(
+      {
+        action: "propose",
+        recommendation_id: recommendation.id,
         branch: "stable",
         proposal: "conservative spectral step",
         artifact_uri: "artifact://spectral",

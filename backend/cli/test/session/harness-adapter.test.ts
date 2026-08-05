@@ -172,10 +172,13 @@ describe("benchmark adapters", () => {
       ],
       objectiveAudit,
     })
-    await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 3 })
+    const search = await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 3 })
+    const recommendation = HarnessSearch.recommend(search)
     const candidate = await HarnessSearch.add({
       sessionID: contract.sessionID,
-      parentIDs: [],
+      recommendationID: recommendation.id,
+      parentIDs: recommendation.parentIDs,
+      inspirationIDs: recommendation.inspirationIDs,
       branch: "multi-metric",
       proposal: "Preserve an evaluator-verified tradeoff",
       artifact: { uri: "artifact:multi-metric", sha256: "3".repeat(64) },
@@ -300,10 +303,13 @@ describe("benchmark adapters", () => {
 
   test("journals and promotes multiple candidate evaluations without overwriting", async () => {
     const contract = await HarnessAdapter.bind(task("mle", "adapter-search"))
-    await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 3 })
+    const search = await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 3 })
+    const recommendation = HarnessSearch.recommend(search)
     const first = await HarnessSearch.add({
       sessionID: contract.sessionID,
-      parentIDs: [],
+      recommendationID: recommendation.id,
+      parentIDs: recommendation.parentIDs,
+      inspirationIDs: recommendation.inspirationIDs,
       branch: "seed",
       proposal: "Reproducible baseline",
       artifact: { uri: "artifact:seed", sha256: "1".repeat(64) },
@@ -311,9 +317,12 @@ describe("benchmark adapters", () => {
     const one = await HarnessAdapter.ingest(evaluation(contract, first.id))
     expect(one.search?.bestID).toBe(first.id)
 
+    const choice = HarnessSearch.recommend(one.search!)
     const second = await HarnessSearch.add({
       sessionID: contract.sessionID,
-      parentIDs: [first.id],
+      recommendationID: choice.id,
+      parentIDs: choice.parentIDs,
+      inspirationIDs: choice.inspirationIDs,
       branch: "feature",
       proposal: "Leakage-safe feature change",
       artifact: { uri: "artifact:feature", sha256: "2".repeat(64) },
@@ -340,10 +349,13 @@ describe("benchmark adapters", () => {
       { id: "official", final: true, maxWallTimeMs: 300_000 },
     ]
     const contract = await HarnessAdapter.bind(input)
-    await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 3 })
+    const search = await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 3 })
+    const recommendation = HarnessSearch.recommend(search)
     const first = await HarnessSearch.add({
       sessionID: contract.sessionID,
-      parentIDs: [],
+      recommendationID: recommendation.id,
+      parentIDs: recommendation.parentIDs,
+      inspirationIDs: recommendation.inspirationIDs,
       branch: "baseline",
       proposal: "Screen a deterministic baseline before the official evaluator",
       artifact: { uri: "artifact:fidelity-baseline", sha256: "3".repeat(64) },
@@ -390,6 +402,7 @@ describe("benchmark adapters", () => {
     await expect(
       HarnessSearch.add({
         sessionID: contract.sessionID,
+        recommendationID: HarnessSearch.recommend(screen.search).id,
         parentIDs: [first.id],
         branch: "premature-child",
         proposal: "Should not descend from a screened candidate",
@@ -405,9 +418,12 @@ describe("benchmark adapters", () => {
     expect(final.search?.candidates[first.id]?.result).toMatchObject({ source: "verified", score: 0.8 })
     expect(final.search?.bestID).toBe(first.id)
 
+    const choice = HarnessSearch.recommend(final.search!)
     const second = await HarnessSearch.add({
       sessionID: contract.sessionID,
-      parentIDs: [],
+      recommendationID: choice.id,
+      parentIDs: choice.parentIDs,
+      inspirationIDs: choice.inspirationIDs,
       branch: "alternative",
       proposal: "Cull a weak independent strategy after screening",
       artifact: { uri: "artifact:fidelity-alternative", sha256: "5".repeat(64) },

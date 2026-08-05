@@ -211,10 +211,13 @@ describe("contract-bound simulator validation", () => {
 
   test("binds candidate receipts to the exact content-addressed artifact", async () => {
     const contract = await HarnessAdapter.bind(task("simulation-candidate", true))
-    await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 2 })
+    const search = await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 2 })
+    const recommendation = HarnessSearch.recommend(search)
     const candidate = await HarnessSearch.add({
       sessionID: contract.sessionID,
-      parentIDs: [],
+      recommendationID: recommendation.id,
+      parentIDs: recommendation.parentIDs,
+      inspirationIDs: recommendation.inspirationIDs,
       branch: "finite-volume",
       proposal: "Validate the finite-volume implementation",
       artifact: { uri: "artifact:solver-candidate", sha256: hash("candidate-artifact") },

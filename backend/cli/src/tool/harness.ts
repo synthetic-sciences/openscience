@@ -34,6 +34,11 @@ const Parameters = z.object({
     .max(2)
     .optional()
     .describe("For propose: verified inspirations returned by a migration recommendation"),
+  recommendation_id: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional()
+    .describe("For propose: current content-addressed recommendation lease returned by start or status"),
   branch: z.string().min(1).max(120).optional().describe("For propose: stable diversity branch label"),
   proposal: z.string().min(1).max(4_000).optional().describe("For propose: concise description of the change"),
   artifact_uri: z.string().min(1).max(2_048).optional().describe("For propose: immutable candidate artifact reference"),
@@ -125,41 +130,49 @@ const result = (title: string, output: unknown, metadata: Record<string, unknown
   metadata,
 })
 
-const summary = (state: HarnessSearch.State) => ({
-  runID: state.runID,
-  status: state.status,
-  stopReason: state.stopReason,
-  metric: state.metric,
-  direction: state.direction,
-  target: state.target,
-  population: state.population,
-  budget: state.budget,
-  used: Object.keys(state.candidates).length,
-  bestID: state.bestID,
-  archiveIDs: state.archiveIDs,
-  stalled: state.stalled,
-  revision: state.revision,
-  recommendation: state.status === "active" ? HarnessSearch.recommend(state) : undefined,
-  candidates: Object.values(state.candidates)
-    .toSorted((a, b) => b.createdAt - a.createdAt)
-    .slice(0, 20)
-    .map((candidate) => ({
-      id: candidate.id,
-      parentIDs: candidate.parentIDs,
-      inspirationIDs: candidate.inspirationIDs,
-      branch: candidate.branch,
-      generation: candidate.generation,
-      island: candidate.island,
-      ordinal: candidate.ordinal,
-      proposal: candidate.proposal.slice(0, 1_000),
-      artifact: candidate.artifact,
-      source: candidate.result?.source,
-      status: candidate.result?.status,
-      score: candidate.result?.score,
-      metrics: candidate.result?.metrics,
-      feedback: candidate.result?.feedback?.slice(0, 2_000),
-    })),
+const view = (candidate: HarnessSearch.Candidate) => ({
+  id: candidate.id,
+  parentIDs: candidate.parentIDs,
+  inspirationIDs: candidate.inspirationIDs,
+  branch: candidate.branch,
+  generation: candidate.generation,
+  island: candidate.island,
+  ordinal: candidate.ordinal,
+  proposal: candidate.proposal.slice(0, 1_000),
+  artifact: candidate.artifact,
+  lease: candidate.lease,
+  source: candidate.result?.source,
+  status: candidate.result?.status,
+  score: candidate.result?.score,
+  metrics: candidate.result?.metrics,
+  feedback: candidate.result?.feedback?.slice(0, 2_000),
 })
+
+const summary = (state: HarnessSearch.State) => {
+  const recommendation = state.status === "active" ? HarnessSearch.recommend(state) : undefined
+  return {
+    runID: state.runID,
+    status: state.status,
+    stopReason: state.stopReason,
+    metric: state.metric,
+    direction: state.direction,
+    target: state.target,
+    population: state.population,
+    proposalPolicy: state.proposalPolicy,
+    budget: state.budget,
+    used: Object.keys(state.candidates).length,
+    bestID: state.bestID,
+    archiveIDs: state.archiveIDs,
+    stalled: state.stalled,
+    revision: state.revision,
+    recommendation,
+    recommendationContext: recommendation?.contextIDs.map((id) => view(state.candidates[id]!)),
+    candidates: Object.values(state.candidates)
+      .toSorted((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 20)
+      .map(view),
+  }
+}
 
 const coalition = (state: HarnessOrchestrator.State) => ({
   runID: state.runID,
@@ -308,11 +321,21 @@ export const HarnessTool = Tool.define("harness", {
     }
 
     if (params.action === "propose") {
-      if (!params.branch || !params.proposal || !params.artifact_uri || !params.artifact_sha256) {
-        return result("Invalid proposal", "propose requires branch, proposal, artifact_uri, and artifact_sha256")
+      if (
+        !params.recommendation_id ||
+        !params.branch ||
+        !params.proposal ||
+        !params.artifact_uri ||
+        !params.artifact_sha256
+      ) {
+        return result(
+          "Invalid proposal",
+          "propose requires recommendation_id, branch, proposal, artifact_uri, and artifact_sha256",
+        )
       }
       const added = await HarnessSearch.add({
         sessionID: ctx.sessionID,
+        recommendationID: params.recommendation_id,
         parentIDs: params.parent_ids ?? [],
         inspirationIDs: params.inspiration_ids ?? [],
         branch: params.branch,

@@ -72,15 +72,23 @@ async function setup(
     target?: number
     direction?: "maximize" | "minimize"
     objectives?: HarnessContract.Objectives
+    leased?: boolean
   },
 ) {
   await contract(sessionID, { direction: input?.direction, objectives: input?.objectives })
-  return HarnessSearch.initialize({
+  const state = await HarnessSearch.initialize({
     sessionID,
     candidates: input?.candidates ?? 8,
     stall: input?.stall,
     target: input?.target,
   })
+  if (input?.leased) return state
+  const target = path.join(Global.Path.data, "harness", "search", `${encodeURIComponent(sessionID)}.json`)
+  const advisory = JSON.parse(await fs.readFile(target, "utf8"))
+  advisory.schemaVersion = 2
+  delete advisory.proposalPolicy
+  await fs.writeFile(target, JSON.stringify(advisory))
+  return HarnessSearch.read(sessionID)
 }
 
 async function add(
@@ -153,6 +161,167 @@ describe("harness candidate graph", () => {
     )
   })
 
+  test("leases adaptive generation modes and bounded verified trajectory context", async () => {
+    const initial = await setup("search-leased", { candidates: 8, leased: true })
+    const seed = HarnessSearch.recommend(initial)
+    expect(initial.proposalPolicy).toBe("leased-v3")
+    expect(seed).toMatchObject({
+      revision: 0,
+      strategy: "seed",
+      mode: "single-pass",
+      parentIDs: [],
+      inspirationIDs: [],
+      targetIsland: 0,
+      contextIDs: [],
+    })
+    await expect(
+      HarnessSearch.add({
+        sessionID: "search-leased",
+        parentIDs: [],
+        branch: "missing-lease",
+        proposal: "bypass the server recommendation",
+        artifact: artifact("missing-lease"),
+      }),
+    ).rejects.toThrow("recommendation_id is required")
+
+    const first = await HarnessSearch.add({
+      sessionID: "search-leased",
+      recommendationID: seed.id,
+      parentIDs: seed.parentIDs,
+      inspirationIDs: seed.inspirationIDs,
+      branch: "baseline",
+      proposal: "establish a direct baseline",
+      artifact: artifact("leased-seed"),
+    })
+    expect(first.state.candidates[first.id]?.lease).toEqual({
+      id: seed.id,
+      revision: seed.revision,
+      strategy: seed.strategy,
+      mode: seed.mode,
+      targetIsland: seed.targetIsland,
+      contextIDs: seed.contextIDs,
+    })
+    await evaluate("search-leased", first.id, 0.9)
+    const explore = HarnessSearch.recommend(await HarnessSearch.read("search-leased"))
+    expect(explore).toMatchObject({ strategy: "explore", mode: "stepwise", parentIDs: [], contextIDs: [] })
+
+    await expect(
+      HarnessSearch.add({
+        sessionID: "search-leased",
+        recommendationID: seed.id,
+        parentIDs: [],
+        branch: "stale",
+        proposal: "race an obsolete state revision",
+        artifact: artifact("stale-lease"),
+      }),
+    ).rejects.toThrow("stale")
+    await expect(
+      HarnessSearch.add({
+        sessionID: "search-leased",
+        recommendationID: explore.id,
+        parentIDs: [first.id],
+        branch: "off-policy",
+        proposal: "replace the leased independent root with a local edit",
+        artifact: artifact("off-policy"),
+      }),
+    ).rejects.toThrow("does not match")
+
+    const alternate = await HarnessSearch.add({
+      sessionID: "search-leased",
+      recommendationID: explore.id,
+      parentIDs: explore.parentIDs,
+      inspirationIDs: explore.inspirationIDs,
+      branch: "alternate",
+      proposal: "plan and implement an independent approach",
+      artifact: artifact("leased-alternate"),
+    })
+    await evaluate("search-leased", alternate.id, 0.8)
+    const migrate = HarnessSearch.recommend(await HarnessSearch.read("search-leased"))
+    expect(migrate).toMatchObject({
+      strategy: "migrate",
+      mode: "stepwise",
+      parentIDs: [alternate.id],
+      inspirationIDs: [first.id],
+      contextIDs: [alternate.id, first.id],
+    })
+    const moved = await HarnessSearch.add({
+      sessionID: "search-leased",
+      recommendationID: migrate.id,
+      parentIDs: migrate.parentIDs,
+      inspirationIDs: migrate.inspirationIDs,
+      branch: "alternate",
+      proposal: "transfer the verified source insight into the target lineage",
+      artifact: artifact("leased-migration"),
+    })
+    const next = HarnessSearch.recommend(moved.state)
+    expect(next.contextIDs).not.toContain(moved.id)
+    expect(next.contextIDs.every((id) => moved.state.candidates[id]?.result?.source === "verified")).toBe(true)
+  })
+
+  test("requests focused diffs for exploitation and serializes recommendation races", async () => {
+    const initial = await setup("search-lease-race", { candidates: 2, leased: true })
+    const seed = HarnessSearch.recommend(initial)
+    const attempts = await Promise.allSettled(
+      ["a", "b"].map((name) =>
+        HarnessSearch.add({
+          sessionID: "search-lease-race",
+          recommendationID: seed.id,
+          parentIDs: seed.parentIDs,
+          inspirationIDs: seed.inspirationIDs,
+          branch: name,
+          proposal: `concurrent proposal ${name}`,
+          artifact: artifact(`lease-race-${name}`),
+        }),
+      ),
+    )
+    expect(attempts.filter((item) => item.status === "fulfilled")).toHaveLength(1)
+    expect(attempts.filter((item) => item.status === "rejected")).toHaveLength(1)
+    const state = await HarnessSearch.read("search-lease-race")
+    const first = Object.values(state.candidates)[0]!
+    await evaluate("search-lease-race", first.id, 0.5)
+    const exploit = HarnessSearch.recommend(await HarnessSearch.read("search-lease-race"))
+    expect(exploit).toMatchObject({ strategy: "exploit", mode: "diff", parentIDs: [first.id] })
+    expect(exploit.contextIDs).toEqual([first.id])
+  })
+
+  test("fails closed when leased recommendation provenance is edited", async () => {
+    const initial = await setup("search-lease-tamper", { leased: true })
+    const recommendation = HarnessSearch.recommend(initial)
+    const seed = await HarnessSearch.add({
+      sessionID: "search-lease-tamper",
+      recommendationID: recommendation.id,
+      parentIDs: recommendation.parentIDs,
+      inspirationIDs: recommendation.inspirationIDs,
+      branch: "baseline",
+      proposal: "baseline",
+      artifact: artifact("lease-tamper"),
+    })
+    const file = path.join(Global.Path.data, "harness", "search", "search-lease-tamper.json")
+    const state = JSON.parse(await fs.readFile(file, "utf8"))
+    state.candidates[seed.id].lease.mode = "diff"
+    await fs.writeFile(file, JSON.stringify(state))
+    await expect(HarnessSearch.read("search-lease-tamper")).rejects.toThrow("identity does not match")
+  })
+
+  test("caps deep trajectory context without admitting unverified state", async () => {
+    await setup("search-context-cap", { candidates: 20 })
+    const seed = await add("search-context-cap", "seed", [], "line")
+    await evaluate("search-context-cap", seed.id, 0.1)
+    const nodes = [seed]
+    for (const index of Array.from({ length: 7 }, (_, index) => index)) {
+      const parent = nodes.at(-1)!
+      const child = await add("search-context-cap", `child-${index}`, [parent.id], "line")
+      await evaluate("search-context-cap", child.id, 0.2 + index / 10)
+      nodes.push(child)
+    }
+    const state = await HarnessSearch.read("search-context-cap")
+    const recommendation = HarnessSearch.recommend(state)
+    expect(recommendation.mode).toBe("diff")
+    expect(recommendation.contextIDs).toHaveLength(6)
+    expect(recommendation.contextIDs[0]).toBe(nodes.at(-1)!.id)
+    expect(recommendation.contextIDs.every((id) => state.candidates[id]?.result?.source === "verified")).toBe(true)
+  })
+
   test("content-addresses candidates and deduplicates without spending budget", async () => {
     await setup("search-dedupe", { candidates: 2 })
     const first = await add("search-dedupe", "seed")
@@ -221,11 +390,13 @@ describe("harness candidate graph", () => {
     await evaluate("search-migrate", source.id, 0.9)
     const target = await add("search-migrate", "target", [], "target")
     const state = await evaluate("search-migrate", target.id, 0.8)
-    expect(HarnessSearch.recommend(state)).toEqual({
+    expect(HarnessSearch.recommend(state)).toMatchObject({
       strategy: "migrate",
+      mode: "stepwise",
       parentIDs: [target.id],
       inspirationIDs: [source.id],
       targetIsland: 1,
+      contextIDs: [target.id, source.id],
       reasons: ["candidates:2", "ring:0->1", "verified-inspiration", "new-artifact-required"],
     })
 
@@ -438,7 +609,8 @@ describe("harness candidate graph", () => {
     delete legacy.candidates[seed.id].ordinal
     await fs.writeFile(file, JSON.stringify(legacy))
     const state = await HarnessSearch.read("search-pareto-legacy")
-    expect(state.schemaVersion).toBe(2)
+    expect(state.schemaVersion).toBe(3)
+    expect(state.proposalPolicy).toBe("advisory-v2")
     expect(state.population).toEqual({ mode: "legacy", count: 1, topology: "ring", migrationInterval: 1 })
     expect(state.objectives).toEqual([])
     expect(state.archiveIDs).toEqual([seed.id])

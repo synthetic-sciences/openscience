@@ -260,10 +260,13 @@ describe("active committed-probe audit", () => {
       contamination: { policy: "hidden probes remain external", hiddenTestsAccessible: false },
       createdAt: Date.now(),
     })
-    await HarnessSearch.initialize({ sessionID })
+    const search = await HarnessSearch.initialize({ sessionID })
+    const recommendation = HarnessSearch.recommend(search)
     const added = await HarnessSearch.add({
       sessionID,
-      parentIDs: [],
+      recommendationID: recommendation.id,
+      parentIDs: recommendation.parentIDs,
+      inspirationIDs: recommendation.inspirationIDs,
       branch: "baseline",
       proposal: "frozen baseline",
       artifact: { uri: "artifact://candidate", sha256: hash("candidate-artifact") },

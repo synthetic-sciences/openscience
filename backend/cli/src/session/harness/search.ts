@@ -10,6 +10,12 @@ export namespace HarnessSearch {
   export const Stop = z.enum(["budget_exhausted", "objective_met", "no_improvement", "user_cancelled", "runtime_error"])
   export type Stop = z.infer<typeof Stop>
 
+  export const Strategy = z.enum(["seed", "explore", "exploit", "fuse", "migrate", "diverge"])
+  export type Strategy = z.infer<typeof Strategy>
+
+  export const Mode = z.enum(["single-pass", "stepwise", "diff"])
+  export type Mode = z.infer<typeof Mode>
+
   export const Artifact = z
     .object({
       uri: z.string().min(1).max(2_048),
@@ -41,6 +47,21 @@ export namespace HarnessSearch {
     .strict()
   export type Result = z.infer<typeof Result>
 
+  export const Lease = z
+    .object({
+      id: z.string().regex(/^[a-f0-9]{64}$/),
+      revision: z.number().int().nonnegative(),
+      strategy: Strategy,
+      mode: Mode,
+      targetIsland: z.number().int().nonnegative(),
+      contextIDs: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .max(6)
+        .refine((ids) => new Set(ids).size === ids.length, "Recommendation context must be unique"),
+    })
+    .strict()
+  export type Lease = z.infer<typeof Lease>
+
   export const Candidate = z
     .object({
       id: z.string().regex(/^[a-f0-9]{64}$/),
@@ -59,6 +80,7 @@ export namespace HarnessSearch {
       ordinal: z.number().int().nonnegative().optional(),
       proposal: z.string().min(1).max(4_000),
       artifact: Artifact,
+      lease: Lease.optional(),
       result: Result.optional(),
       createdAt: z.number().int().positive(),
     })
@@ -77,7 +99,8 @@ export namespace HarnessSearch {
 
   export const State = z
     .object({
-      schemaVersion: z.literal(2),
+      schemaVersion: z.literal(3),
+      proposalPolicy: z.enum(["advisory-v2", "leased-v3"]),
       runID: z.string().min(1),
       sessionID: z.string().min(1),
       objective: z.string().min(1),
@@ -113,13 +136,13 @@ export namespace HarnessSearch {
     .strict()
   export type State = z.infer<typeof State>
 
-  export type Recommendation = {
-    strategy: "seed" | "explore" | "exploit" | "fuse" | "migrate" | "diverge"
+  export type Recommendation = Lease & {
     parentIDs: string[]
     inspirationIDs: string[]
-    targetIsland: number
     reasons: string[]
   }
+
+  type Route = Omit<Recommendation, "id" | "revision" | "mode" | "contextIDs">
 
   const root = path.join(Global.Path.data, "harness", "search")
   const file = (sessionID: string) => path.join(root, `${encodeURIComponent(sessionID)}.json`)
@@ -129,13 +152,29 @@ export namespace HarnessSearch {
   const verified = (candidate: Candidate) =>
     candidate.result?.source === "verified" && candidate.result.status === "passed"
 
-  const identity = (input: Pick<Candidate, "parentIDs" | "inspirationIDs" | "branch" | "proposal" | "artifact">) =>
+  const identity = (
+    input: Pick<Candidate, "parentIDs" | "inspirationIDs" | "branch" | "proposal" | "artifact" | "lease">,
+  ) =>
     digest({
       parentIDs: input.parentIDs.toSorted(),
       inspirationIDs: input.inspirationIDs.toSorted(),
       branch: input.branch,
       proposal: input.proposal,
       artifact: input.artifact,
+      ...(input.lease ? { lease: input.lease } : {}),
+    })
+
+  const leaseID = (state: Pick<State, "runID" | "sessionID">, input: Omit<Recommendation, "id" | "reasons">) =>
+    digest({
+      runID: state.runID,
+      sessionID: state.sessionID,
+      revision: input.revision,
+      strategy: input.strategy,
+      mode: input.mode,
+      parentIDs: input.parentIDs.toSorted(),
+      inspirationIDs: input.inspirationIDs.toSorted(),
+      targetIsland: input.targetIsland,
+      contextIDs: input.contextIDs,
     })
 
   function order(state: State, left: Candidate, right: Candidate) {
@@ -222,6 +261,9 @@ export namespace HarnessSearch {
   })
 
   function topology(state: State) {
+    if (state.proposalPolicy === "leased-v3" && state.population.mode !== "islands") {
+      throw new Error(`Leased search state must use the server-derived island policy`)
+    }
     if (state.population.mode === "legacy") {
       if (candidates(state).some((candidate) => candidate.ordinal !== undefined || candidate.island !== 0)) {
         throw new Error(`Legacy search state cannot contain island assignments`)
@@ -256,6 +298,28 @@ export namespace HarnessSearch {
       if (candidate.inspirationIDs.some((id) => candidate.parentIDs.includes(id))) {
         throw new Error(`Candidate inspirations must be distinct from parents`)
       }
+      if (state.proposalPolicy === "leased-v3") {
+        if (!candidate.lease) throw new Error(`Leased search candidate is missing recommendation provenance`)
+        if (candidate.lease.targetIsland !== candidate.island) {
+          throw new Error(`Persisted recommendation target does not match candidate island`)
+        }
+        const context = candidate.lease.contextIDs.map((id) => seen.get(id))
+        if (context.some((item) => !item || !verified(item))) {
+          throw new Error(`Persisted recommendation context must reference earlier verified passing candidates`)
+        }
+        const expected = leaseID(state, {
+          revision: candidate.lease.revision,
+          strategy: candidate.lease.strategy,
+          mode: candidate.lease.mode,
+          parentIDs: candidate.parentIDs,
+          inspirationIDs: candidate.inspirationIDs,
+          targetIsland: candidate.lease.targetIsland,
+          contextIDs: candidate.lease.contextIDs,
+        })
+        if (candidate.lease.id !== expected) {
+          throw new Error(`Persisted recommendation identity does not match its content`)
+        }
+      }
       const least = Math.min(...counts)
       const expected = parents.length
         ? parents.toSorted((a, b) => order(state, a!, b!))[0]!.island
@@ -277,10 +341,13 @@ export namespace HarnessSearch {
       data.schemaVersion === 1
         ? {
             ...data,
-            schemaVersion: 2,
+            schemaVersion: 3,
+            proposalPolicy: "advisory-v2",
             population: { mode: "legacy", count: 1, topology: "ring", migrationInterval: 1 },
           }
-        : data
+        : data.schemaVersion === 2
+          ? { ...data, schemaVersion: 3, proposalPolicy: "advisory-v2" }
+          : data
     const parsed = State.parse(migrated)
     const expected = archive(parsed).map((item) => item.id)
     const state = "archiveIDs" in data ? parsed : State.parse({ ...parsed, archiveIDs: expected })
@@ -324,7 +391,8 @@ export namespace HarnessSearch {
     }
     const now = Date.now()
     const initial: State = {
-      schemaVersion: 2,
+      schemaVersion: 3,
+      proposalPolicy: "leased-v3",
       runID: contract.runID,
       sessionID: input.sessionID,
       objective: contract.objective,
@@ -376,6 +444,7 @@ export namespace HarnessSearch {
 
   export async function add(input: {
     sessionID: string
+    recommendationID?: string
     parentIDs: string[]
     inspirationIDs?: string[]
     branch: string
@@ -385,14 +454,14 @@ export namespace HarnessSearch {
     const artifact = Artifact.parse(input.artifact)
     const parents = input.parentIDs.toSorted()
     const inspirations = (input.inspirationIDs ?? []).toSorted()
-    const id = identity({
+    const initial = identity({
       parentIDs: parents,
       inspirationIDs: inspirations,
       branch: input.branch,
       proposal: input.proposal,
       artifact,
     })
-    const out = { accepted: false, deduplicated: false, id }
+    const out = { accepted: false, deduplicated: false, id: initial }
     await JsonStore.update(file(input.sessionID), (data) => {
       const state = parse(data)
       const existing = candidates(state).find((candidate) => candidate.artifact.sha256 === artifact.sha256)
@@ -424,6 +493,20 @@ export namespace HarnessSearch {
       if (sources.some((item) => !verified(item!))) {
         throw new Error(`Candidates may only use externally verified passing inspirations`)
       }
+      const recommendation = state.proposalPolicy === "leased-v3" ? recommend(state) : undefined
+      if (recommendation && !input.recommendationID) {
+        throw new Error(`A current recommendation_id is required by the leased proposal policy`)
+      }
+      if (recommendation && recommendation.id !== input.recommendationID) {
+        throw new Error(`Recommendation lease is stale or belongs to a different search state`)
+      }
+      if (
+        recommendation &&
+        (JSON.stringify(parents) !== JSON.stringify(recommendation.parentIDs.toSorted()) ||
+          JSON.stringify(inspirations) !== JSON.stringify(recommendation.inspirationIDs.toSorted()))
+      ) {
+        throw new Error(`Proposal lineage does not match the leased recommendation`)
+      }
       if (!parents.length && candidates(state).length) {
         const roots = candidates(state).filter(
           (candidate) =>
@@ -439,6 +522,27 @@ export namespace HarnessSearch {
       }
       const generation = ancestors.length ? Math.max(...ancestors.map((parent) => parent!.generation)) + 1 : 0
       const island = ancestors.length ? ancestors.toSorted((a, b) => order(state, a!, b!))[0]!.island : vacancy(state)
+      if (recommendation && island !== recommendation.targetIsland) {
+        throw new Error(`Server island assignment does not match the leased recommendation`)
+      }
+      const lease = recommendation
+        ? Lease.parse({
+            id: recommendation.id,
+            revision: recommendation.revision,
+            strategy: recommendation.strategy,
+            mode: recommendation.mode,
+            targetIsland: recommendation.targetIsland,
+            contextIDs: recommendation.contextIDs,
+          })
+        : undefined
+      const id = identity({
+        parentIDs: parents,
+        inspirationIDs: inspirations,
+        branch: input.branch,
+        proposal: input.proposal,
+        artifact,
+        lease,
+      })
       const candidate: Candidate = Candidate.parse({
         id,
         parentIDs: parents,
@@ -449,9 +553,11 @@ export namespace HarnessSearch {
         ...(state.population.mode === "legacy" ? {} : { ordinal: candidates(state).length }),
         proposal: input.proposal,
         artifact,
+        lease,
         createdAt: now,
       })
       out.accepted = true
+      out.id = id
       return {
         ...state,
         candidates: { ...state.candidates, [id]: candidate },
@@ -628,7 +734,7 @@ export namespace HarnessSearch {
     return read(sessionID)
   }
 
-  export function recommend(state: State): Recommendation {
+  function route(state: State): Route {
     const pool = ranked(state)
     if (!pool.length) {
       return {
@@ -747,5 +853,45 @@ export namespace HarnessSearch {
         ...(state.objectives.length ? [`pareto-frontier:${pareto.length}`] : []),
       ],
     }
+  }
+
+  const trail = (state: State, id: string) => {
+    const found: string[] = []
+    const visit = (key: string) => {
+      const candidate = state.candidates[key]
+      if (!candidate || !verified(candidate) || found.includes(key)) return
+      found.push(key)
+      for (const parent of candidate.parentIDs) visit(parent)
+    }
+    visit(id)
+    return found
+  }
+
+  export function recommend(state: State): Recommendation {
+    const choice = route(State.parse(state))
+    const mode: Mode =
+      choice.strategy === "seed"
+        ? "single-pass"
+        : choice.strategy === "exploit" || (choice.strategy === "explore" && choice.parentIDs.length)
+          ? "diff"
+          : "stepwise"
+    const roots = [...choice.parentIDs, ...choice.inspirationIDs]
+    const trails = roots.map((id) => trail(state, id))
+    const depth = Math.max(0, ...trails.map((items) => items.length))
+    const contextIDs = Array.from({ length: depth }, (_, index) => trails.map((items) => items[index]))
+      .flat()
+      .filter((id): id is string => !!id)
+      .filter((id, index, items) => items.indexOf(id) === index)
+      .slice(0, 6)
+    const body = {
+      revision: state.revision,
+      strategy: choice.strategy,
+      mode,
+      parentIDs: choice.parentIDs,
+      inspirationIDs: choice.inspirationIDs,
+      targetIsland: choice.targetIsland,
+      contextIDs,
+    }
+    return { id: leaseID(state, body), ...body, reasons: choice.reasons }
   }
 }
