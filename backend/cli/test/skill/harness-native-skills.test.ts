@@ -2131,3 +2131,108 @@ test("run-topic-aware-failure-discovery salts definitions and emits a bindable p
     await fs.rm(dir, { recursive: true, force: true })
   }
 })
+
+test("run-clean-room-synthesis hides answer facts and emits a bindable factuality protocol", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-clean-room-synthesis-"))
+  const script = "research/run-clean-room-synthesis/scripts/preflight.ts"
+  const manifestFile = path.join(dir, "manifest.json")
+  const salt = "private-random-salt-material-00000000000000000000000000000000"
+  const reference = "The private systematic-review conclusion must never enter the candidate process."
+  const facts = [
+    { id: "fact-1", text: "The intervention reduced the primary endpoint." },
+    { id: "fact-2", text: "The evidence certainty was moderate." },
+  ]
+  const names = ["decomposer", "precision", "recall"]
+  const identity = (name: string) => ({
+    name,
+    version: "1",
+    promptPath: `${name}.prompt.txt`,
+    configPath: `${name}.config.json`,
+  })
+  const manifest = {
+    query: "What conclusion follows from the pre-cutoff evidence?",
+    referenceTextPath: "reference.txt",
+    referenceFacts: facts,
+    factSaltPath: "salt.txt",
+    cutoff: "2026-01-31",
+    tools: ["google_search", "paper_search", "web_browse"],
+    traceSchemaPath: "trace.schema.json",
+    filterPolicyPath: "filter.policy.json",
+    maxToolEvents: 40,
+    decomposer: identity("decomposer"),
+    judges: { precision: identity("precision"), recall: identity("recall") },
+    minGeneratedFacts: 2,
+    minPrecision: 0.4,
+    minRecall: 0.4,
+    minF1: 0.4,
+  }
+  try {
+    await Promise.all([
+      Bun.write(path.join(dir, "reference.txt"), reference),
+      Bun.write(path.join(dir, "salt.txt"), salt),
+      Bun.write(path.join(dir, "trace.schema.json"), JSON.stringify({ type: "array", owner: "evaluator" })),
+      Bun.write(path.join(dir, "filter.policy.json"), JSON.stringify({ forbidden: ["cochrane.org"] })),
+      ...names.flatMap((name) => [
+        Bun.write(path.join(dir, `${name}.prompt.txt`), `private ${name} prompt`),
+        Bun.write(path.join(dir, `${name}.config.json`), JSON.stringify({ actor: name, seed: 19 })),
+      ]),
+      Bun.write(manifestFile, JSON.stringify(manifest)),
+    ])
+    const valid = await bun(script, [manifestFile])
+    expect(valid.code).toBe(0)
+    const payload = JSON.parse(valid.stdout)
+    expect(HarnessContract.ScientificSynthesis.parse(payload.protocol)).toEqual(payload.protocol)
+    expect(payload.referenceManifest).toHaveLength(2)
+    expect(payload.referenceManifest.map((fact: { id: string }) => fact.id)).toEqual(["fact-1", "fact-2"])
+    for (const secret of [
+      reference,
+      salt,
+      ...facts.map((fact) => fact.text),
+      ...names.flatMap((name) => [`private ${name} prompt`, JSON.stringify({ actor: name, seed: 19 })]),
+    ]) {
+      expect(valid.stdout).not.toContain(secret)
+    }
+
+    await Bun.write(path.join(dir, "salt.txt"), "different-private-random-salt-material-000000000000000000000000")
+    const salted = await bun(script, [manifestFile])
+    expect(salted.code).toBe(0)
+    expect(JSON.parse(salted.stdout).referenceManifest).not.toEqual(payload.referenceManifest)
+
+    await Bun.write(path.join(dir, "salt.txt"), "too-short")
+    const short = await bun(script, [manifestFile])
+    expect(short.code).toBe(1)
+    expect(short.stderr).toContain("at least 32 bytes")
+
+    await Bun.write(path.join(dir, "salt.txt"), salt)
+    await Bun.write(manifestFile, JSON.stringify({ ...manifest, cutoff: "2026-02-31" }))
+    const date = await bun(script, [manifestFile])
+    expect(date.code).toBe(1)
+    expect(date.stderr).toContain("ISO calendar date")
+
+    await Bun.write(
+      manifestFile,
+      JSON.stringify({
+        ...manifest,
+        judges: { precision: identity("precision"), recall: identity("precision") },
+      }),
+    )
+    const duplicate = await bun(script, [manifestFile])
+    expect(duplicate.code).toBe(1)
+    expect(duplicate.stderr).toContain("distinct prompt commitments")
+
+    await Bun.write(manifestFile, JSON.stringify({ ...manifest, evaluatorToken: "must-not-touch-disk" }))
+    const unknown = await bun(script, [manifestFile])
+    expect(unknown.code).toBe(1)
+    expect(unknown.stderr).toContain("unknown fields: evaluatorToken")
+
+    await Bun.write(
+      manifestFile,
+      JSON.stringify({ ...manifest, referenceFacts: [{ id: "__proto__", text: facts[0]!.text }, facts[1]] }),
+    )
+    const unsafe = await bun(script, [manifestFile])
+    expect(unsafe.code).toBe(1)
+    expect(unsafe.stderr).toContain("opaque safe identifier")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})

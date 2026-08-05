@@ -828,6 +828,70 @@ export namespace HarnessContract {
     .strict()
   export type SemanticAudit = z.infer<typeof SemanticAudit>
 
+  export const SynthesisTool = z.enum(["google_search", "paper_search", "web_browse"])
+  export type SynthesisTool = z.infer<typeof SynthesisTool>
+
+  const SynthesisIdentity = z
+    .object({
+      name: z.string().min(1).max(200),
+      version: z.string().min(1).max(200),
+      promptSHA256: Hash,
+      configSHA256: Hash,
+    })
+    .strict()
+
+  export const ScientificSynthesis = z
+    .object({
+      protocolVersion: z.literal("scientific-synthesis-v1"),
+      querySHA256: Hash,
+      referenceSHA256: Hash,
+      referenceFactsSHA256: Hash,
+      referenceFactCount: z.number().int().min(1).max(2_048),
+      cutoff: z.iso.date(),
+      tools: z
+        .array(SynthesisTool)
+        .min(1)
+        .max(SynthesisTool.options.length)
+        .refine((items) => new Set(items).size === items.length, "Scientific synthesis tools must be unique")
+        .refine(
+          (items) =>
+            items.every(
+              (item, index) =>
+                !index || SynthesisTool.options.indexOf(items[index - 1]!) < SynthesisTool.options.indexOf(item),
+            ),
+          "Scientific synthesis tools must use canonical order",
+        ),
+      traceSchemaSHA256: Hash,
+      filterPolicySHA256: Hash,
+      maxToolEvents: z.number().int().min(1).max(10_000),
+      decomposer: SynthesisIdentity,
+      judges: z
+        .object({
+          precision: SynthesisIdentity,
+          recall: SynthesisIdentity,
+        })
+        .strict(),
+      minGeneratedFacts: z.number().int().min(1).max(512),
+      minPrecision: z.number().min(0).max(1),
+      minRecall: z.number().min(0).max(1),
+      minF1: z.number().min(0).max(1),
+      cleanRoomRequired: z.literal(true),
+      judgeFailurePolicy: z.literal("inconclusive"),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      const identities = [value.decomposer, value.judges.precision, value.judges.recall]
+      const prompts = identities.map((item) => item.promptSHA256)
+      if (new Set(prompts).size !== prompts.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["judges"],
+          message: "Decomposition, precision, and recall require distinct prompt commitments",
+        })
+      }
+    })
+  export type ScientificSynthesis = z.infer<typeof ScientificSynthesis>
+
   export const ReplicationEstimator = z.enum(["mean", "median", "iqm", "pass_rate"])
   export type ReplicationEstimator = z.infer<typeof ReplicationEstimator>
 
@@ -1074,6 +1138,7 @@ export namespace HarnessContract {
       simulation: Simulation.optional(),
       evaluatorAudit: EvaluatorAudit.optional(),
       semanticAudit: SemanticAudit.optional(),
+      synthesis: ScientificSynthesis.optional(),
       replication: Replication.optional(),
       confirmation: Confirmation.optional(),
       packs: z
@@ -1184,6 +1249,7 @@ export namespace HarnessContract {
           value.simulation ||
           value.evaluatorAudit ||
           value.semanticAudit ||
+          value.synthesis ||
           value.replication ||
           value.confirmation) &&
         !value.benchmark.evaluatorVersion
@@ -1228,6 +1294,7 @@ export namespace HarnessContract {
           value.simulation ||
           value.evaluatorAudit ||
           value.semanticAudit ||
+          value.synthesis ||
           value.replication ||
           value.confirmation) &&
         !value.benchmark.evaluatorSource
@@ -1401,6 +1468,54 @@ export namespace HarnessContract {
           code: "custom",
           path: ["semanticAudit", "reviewer"],
           message: "Semantic review and evaluator qualification require distinct identities",
+        })
+      }
+      if (value.synthesis && value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Clean-room synthesis requires a capability-authenticated evaluator source",
+        })
+      }
+      if (value.synthesis && (value.benchmark.metric !== "factual_f1" || value.benchmark.direction !== "maximize")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "metric"],
+          message: "Scientific synthesis requires factual_f1 as a maximized primary metric",
+        })
+      }
+      if (value.synthesis && !value.evaluatorAudit) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["evaluatorAudit"],
+          message: "Scientific synthesis requires independent evaluator qualification",
+        })
+      }
+      if (
+        value.synthesis &&
+        value.evaluatorAudit &&
+        ["wrong_answer", "unsupported_claim", "data_leakage"].some(
+          (fault) => !value.evaluatorAudit?.requiredFaults.includes(fault as EvaluatorFault),
+        )
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["evaluatorAudit", "requiredFaults"],
+          message: "Scientific synthesis qualification must test wrong answers, unsupported claims, and data leakage",
+        })
+      }
+      if (value.synthesis && value.contamination.publicDataCutoff !== value.synthesis.cutoff) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["contamination", "publicDataCutoff"],
+          message: "Scientific synthesis cutoff must match the frozen contamination policy",
+        })
+      }
+      if (value.synthesis && value.synthesis.tools.some((tool) => !value.tools.includes(tool))) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["tools"],
+          message: "Scientific synthesis retrieval tools must be present in the run tool allowlist",
         })
       }
       if (

@@ -22,6 +22,7 @@ import { HarnessRecipe } from "@/session/harness/recipe"
 import { HarnessSimulation } from "@/session/harness/simulation"
 import { HarnessSemantic } from "@/session/harness/semantic"
 import { HarnessSkill } from "@/session/harness/skill"
+import { HarnessSynthesis } from "@/session/harness/synthesis"
 import { errors } from "../error"
 
 const SessionID = z.object({ sessionID: z.string().min(1) })
@@ -595,6 +596,49 @@ export const HarnessRoutes = lazy(() =>
             requirePassed: false,
           }),
         )
+      },
+    )
+    .post(
+      "/syntheses/receipts",
+      describeRoute({
+        summary: "Record an evaluator-authenticated clean-room synthesis",
+        description:
+          "Binds a complete retrieval trace and hidden atomic-fact manifest, rejects clean-room policy drift, and derives factual precision, recall, contradiction penalty, and F1 without trusting caller-authored metrics.",
+        operationId: "harness.synthesis.record",
+        responses: {
+          200: {
+            description: "Immutable scientific synthesis receipt",
+            content: { "application/json": { schema: resolver(HarnessSynthesis.Receipt) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessSynthesis.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessSynthesis.record(input, contract))
+      },
+    )
+    .post(
+      "/syntheses/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected scientific synthesis receipt",
+        operationId: "harness.synthesis.receipt",
+        responses: {
+          200: {
+            description: "Canonical scientific synthesis receipt",
+            content: { "application/json": { schema: resolver(HarnessSynthesis.Receipt) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessSynthesis.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessSynthesis.read(c.req.valid("param").receiptID, contract))
       },
     )
     .post(

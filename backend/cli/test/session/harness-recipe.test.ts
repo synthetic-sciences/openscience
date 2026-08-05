@@ -256,9 +256,14 @@ describe("source-verified benchmark recipes", () => {
       status: "blocked_upstream",
       anchor: "evaluate_all_results.py",
     })
+    expect(HarnessBenchmark.catalog.sciconbench.recipe).toMatchObject({
+      status: "blocked_upstream",
+      anchor: "evaluate.py",
+    })
     expect(() => HarnessRecipe.resolve("corebench")).toThrow("No source-verified execution recipe")
     expect(() => HarnessRecipe.resolve("critpt")).toThrow("No source-verified execution recipe")
     expect(() => HarnessRecipe.resolve("posttrain")).toThrow("No source-verified execution recipe")
     expect(() => HarnessRecipe.resolve("weather")).toThrow("No source-verified execution recipe")
+    expect(() => HarnessRecipe.resolve("sciconbench")).toThrow("No source-verified execution recipe")
   })
 })

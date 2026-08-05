@@ -60,6 +60,10 @@ export namespace HarnessMemory {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          synthesisSHA256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
           replicationSHA256: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
@@ -84,6 +88,8 @@ export namespace HarnessMemory {
     contract.semanticAudit ? digest(JSON.stringify(contract.semanticAudit)) : undefined
   const replication = (contract: HarnessContract.Info) =>
     contract.replication ? digest(JSON.stringify(contract.replication)) : undefined
+  const synthesis = (contract: HarnessContract.Info) =>
+    contract.synthesis ? digest(JSON.stringify(contract.synthesis)) : undefined
   const confirmation = (contract: HarnessContract.Info) =>
     contract.confirmation ? digest(JSON.stringify(contract.confirmation)) : undefined
   const key = (contract: HarnessContract.Info) => {
@@ -91,8 +97,10 @@ export namespace HarnessMemory {
     const scope = semantic(contract)
     const repeat = replication(contract)
     const prior = repeat ? `${base}\0${scope ?? "no-semantic-audit"}\0${repeat}` : scope ? `${base}\0${scope}` : base
+    const factuality = synthesis(contract)
+    const scientific = factuality ? `${prior}\0${factuality}` : prior
     const sealed = confirmation(contract)
-    return digest(sealed ? `${prior}\0${sealed}` : prior)
+    return digest(sealed ? `${scientific}\0${sealed}` : scientific)
   }
   const file = (contract: HarnessContract.Info) => path.join(root, `${key(contract)}.json`)
   const clip = (value: string, max = 1_000) =>
@@ -113,6 +121,7 @@ export namespace HarnessMemory {
 
   function empty(contract: HarnessContract.Info): State {
     const scope = semantic(contract)
+    const factuality = synthesis(contract)
     const repeat = replication(contract)
     const sealed = confirmation(contract)
     return {
@@ -123,6 +132,7 @@ export namespace HarnessMemory {
         taskID: contract.benchmark.taskID,
         evaluator: contract.benchmark.evaluator,
         ...(scope ? { semanticAuditSHA256: scope } : {}),
+        ...(factuality ? { synthesisSHA256: factuality } : {}),
         ...(repeat ? { replicationSHA256: repeat } : {}),
         ...(sealed ? { confirmationSHA256: sealed } : {}),
       },

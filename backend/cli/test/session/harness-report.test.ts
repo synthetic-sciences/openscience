@@ -316,6 +316,80 @@ describe("harness quality-cost reports", () => {
     expect(() => HarnessReport.compare([plain, report], plain.runID)).toThrow("only comparable")
   })
 
+  test("keeps scientific synthesis protocols and factuality receipts in report provenance", () => {
+    const hash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
+    const identity = (name: string) => ({
+      name,
+      version: "1",
+      promptSHA256: hash(`${name}-prompt`),
+      configSHA256: hash(`${name}-config`),
+    })
+    const audit = HarnessContract.EvaluatorAudit.parse({
+      protocolVersion: "evaluator-audit-v1",
+      auditor: { name: "meta-evaluator", version: "1", source: "external" },
+      suite: { name: "synthesis-suite", version: "1", commitmentSHA256: hash("suite") },
+      minCleanCases: 2,
+      minCasesPerFault: 2,
+      requiredFaults: ["wrong_answer", "unsupported_claim", "data_leakage"],
+      minSensitivity: 0.8,
+      minSpecificity: 0.8,
+      minBalancedAccuracy: 0.8,
+      minFaultRecall: 0.8,
+      maxBrierScore: 0.15,
+    })
+    const synthesis = HarnessContract.ScientificSynthesis.parse({
+      protocolVersion: "scientific-synthesis-v1",
+      querySHA256: hash("query"),
+      referenceSHA256: hash("reference"),
+      referenceFactsSHA256: hash("facts"),
+      referenceFactCount: 2,
+      cutoff: "2026-01-01",
+      tools: ["paper_search"],
+      traceSchemaSHA256: hash("trace"),
+      filterPolicySHA256: hash("filter"),
+      maxToolEvents: 20,
+      decomposer: identity("decomposer"),
+      judges: { precision: identity("precision"), recall: identity("recall") },
+      minGeneratedFacts: 2,
+      minPrecision: 0.4,
+      minRecall: 0.4,
+      minF1: 0.4,
+      cleanRoomRequired: true,
+      judgeFailurePolicy: "inconclusive",
+    })
+    const build = (runID: string, protocol = synthesis) =>
+      HarnessContract.Info.parse({
+        ...contract(runID),
+        tools: ["paper_search"],
+        benchmark: {
+          ...contract(runID).benchmark,
+          split: "validation",
+          metric: "factual_f1",
+          target: 0.4,
+        },
+        contamination: {
+          policy: "reference and post-cutoff evidence stay private",
+          hiddenTestsAccessible: false,
+          publicDataCutoff: "2026-01-01",
+        },
+        evaluatorAudit: audit,
+        synthesis: protocol,
+      })
+    const first = build("synthesis-report-one")
+    const second = build("synthesis-report-two", { ...synthesis, referenceSHA256: hash("different-reference") })
+    const receiptID = "f".repeat(64)
+    const result = HarnessEvaluation.Info.parse({
+      ...evaluation(first, 0.8),
+      metrics: { factual_f1: 0.8 },
+      synthesisReceiptID: receiptID,
+    })
+    const report = HarnessReport.compile({ contract: first, evaluations: [result], generatedAt: 3 })
+    const other = HarnessReport.compile({ contract: second, evaluations: [evaluation(second, 0.8)], generatedAt: 3 })
+    expect(report.quality.synthesisReceiptID).toBe(receiptID)
+    expect(report.comparisonKey).not.toBe(other.comparisonKey)
+    expect(() => HarnessReport.compare([report, other], first.runID)).toThrow("only comparable")
+  })
+
   test("refuses comparisons across different evaluator qualification protocols", () => {
     const audit = HarnessContract.EvaluatorAudit.parse({
       protocolVersion: "evaluator-audit-v1",

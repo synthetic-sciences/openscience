@@ -101,6 +101,10 @@ export namespace HarnessReport {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          synthesisReceiptID: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
           confirmationReceiptID: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
@@ -226,6 +230,7 @@ export namespace HarnessReport {
       replication: contract.replication,
       audit: contract.audit,
       failureDiscovery: contract.failureDiscovery,
+      synthesis: contract.synthesis,
       confirmation: contract.confirmation,
       contamination: contract.contamination,
     })
@@ -307,6 +312,7 @@ export namespace HarnessReport {
         replicationReceiptID: contract.confirmation ? undefined : evaluation?.replicationReceiptID,
         auditReceiptID: contract.confirmation ? undefined : evaluation?.auditReceiptID,
         failureDiscoveryReceiptID: contract.confirmation ? undefined : evaluation?.failureDiscoveryReceiptID,
+        synthesisReceiptID: contract.confirmation ? undefined : evaluation?.synthesisReceiptID,
         confirmationReceiptID: confirmation?.receiptID,
         evaluations: evaluations.length,
       },

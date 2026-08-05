@@ -14603,6 +14603,7 @@
                           "ale",
                           "weather",
                           "researchclaw",
+                          "sciconbench",
                           "astabench",
                           "paperbench",
                           "corebench",
@@ -15013,6 +15014,7 @@
                         "ale",
                         "weather",
                         "researchclaw",
+                        "sciconbench",
                         "astabench",
                         "paperbench",
                         "corebench",
@@ -22307,6 +22309,7 @@
                                 "simulation",
                                 "evaluator_audit",
                                 "semantic_audit",
+                                "synthesis",
                                 "replication",
                                 "fidelities",
                                 "skill",
@@ -22523,6 +22526,7 @@
                                 "simulation",
                                 "evaluator_audit",
                                 "semantic_audit",
+                                "synthesis",
                                 "replication",
                                 "fidelities",
                                 "skill",
@@ -22792,6 +22796,7 @@
                           "simulation",
                           "evaluator_audit",
                           "semantic_audit",
+                          "synthesis",
                           "replication",
                           "fidelities",
                           "skill",
@@ -22958,6 +22963,7 @@
                                 "simulation",
                                 "evaluator_audit",
                                 "semantic_audit",
+                                "synthesis",
                                 "replication",
                                 "fidelities",
                                 "skill",
@@ -23174,6 +23180,7 @@
                                 "simulation",
                                 "evaluator_audit",
                                 "semantic_audit",
+                                "synthesis",
                                 "replication",
                                 "fidelities",
                                 "skill",
@@ -31228,6 +31235,1336 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.semantic.receipt({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/syntheses/receipts": {
+      "post": {
+        "operationId": "harness.synthesis.record",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Record an evaluator-authenticated clean-room synthesis",
+        "description": "Binds a complete retrieval trace and hidden atomic-fact manifest, rejects clean-room policy drift, and derives factual precision, recall, contradiction penalty, and F1 without trusting caller-authored metrics.",
+        "responses": {
+          "200": {
+            "description": "Immutable scientific synthesis receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "scientific-synthesis-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "run",
+                            "candidate"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "conclusionSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "evaluatorAuditReceiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "traceSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "events": {
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "tool": {
+                            "type": "string",
+                            "enum": [
+                              "google_search",
+                              "paper_search",
+                              "web_browse"
+                            ]
+                          },
+                          "requestSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "responseSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "sourceSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "publishedAt": {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "matches": {
+                            "type": "object",
+                            "properties": {
+                              "forbiddenDomain": {
+                                "type": "boolean"
+                              },
+                              "referenceTitle": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "forbiddenDomain",
+                              "referenceTitle"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "decision": {
+                            "type": "string",
+                            "enum": [
+                              "allowed",
+                              "blocked"
+                            ]
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "eventID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "violations": {
+                            "maxItems": 5,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "forbidden_domain",
+                                "reference_title",
+                                "post_cutoff",
+                                "unknown_date",
+                                "duplicate_output"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "sequence",
+                          "tool",
+                          "requestSHA256",
+                          "responseSHA256",
+                          "sourceSHA256",
+                          "matches",
+                          "decision",
+                          "evidence",
+                          "eventID",
+                          "violations"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "decomposition": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed"
+                          ]
+                        },
+                        "outputSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "generatedFacts": {
+                      "maxItems": 512,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,239}$"
+                          },
+                          "commitment": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "verdict": {
+                            "type": "string",
+                            "enum": [
+                              "supported",
+                              "contradicted",
+                              "unsupported",
+                              "judge_error"
+                            ]
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "commitment",
+                          "verdict",
+                          "evidence"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "referenceFacts": {
+                      "minItems": 1,
+                      "maxItems": 2048,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,239}$"
+                          },
+                          "commitment": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "coverage": {
+                            "type": "string",
+                            "enum": [
+                              "covered",
+                              "missed",
+                              "judge_error"
+                            ]
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "commitment",
+                          "coverage",
+                          "evidence"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "metrics": {
+                      "type": "object",
+                      "properties": {
+                        "toolEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "allowedSources": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "blockedSources": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "violations": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "enum": [
+                              "forbidden_domain",
+                              "reference_title",
+                              "post_cutoff",
+                              "unknown_date",
+                              "duplicate_output"
+                            ]
+                          },
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "generatedFacts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "supported": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "contradicted": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unsupported": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "precisionJudgeErrors": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "referenceFacts": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "covered": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "missed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "recallJudgeErrors": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "precision": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "recall": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "f1": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        }
+                      },
+                      "required": [
+                        "toolEvents",
+                        "allowedSources",
+                        "blockedSources",
+                        "violations",
+                        "generatedFacts",
+                        "supported",
+                        "contradicted",
+                        "unsupported",
+                        "precisionJudgeErrors",
+                        "referenceFacts",
+                        "covered",
+                        "missed",
+                        "recallJudgeErrors"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "failures": {
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "protocolSHA256",
+                    "subject",
+                    "conclusionSHA256",
+                    "evaluatorAuditReceiptID",
+                    "traceSHA256",
+                    "events",
+                    "decomposition",
+                    "generatedFacts",
+                    "referenceFacts",
+                    "metrics",
+                    "status",
+                    "failures",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "subject": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "run",
+                          "candidate"
+                        ]
+                      },
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "conclusionSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "evaluatorAuditReceiptID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "trace": {
+                    "type": "object",
+                    "properties": {
+                      "owner": {
+                        "type": "string",
+                        "const": "evaluator_runtime"
+                      },
+                      "complete": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "schemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "filterPolicySHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "events": {
+                        "maxItems": 10000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "sequence": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "tool": {
+                              "type": "string",
+                              "enum": [
+                                "google_search",
+                                "paper_search",
+                                "web_browse"
+                              ]
+                            },
+                            "requestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "responseSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sourceSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "publishedAt": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                            },
+                            "matches": {
+                              "type": "object",
+                              "properties": {
+                                "forbiddenDomain": {
+                                  "type": "boolean"
+                                },
+                                "referenceTitle": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "forbiddenDomain",
+                                "referenceTitle"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "decision": {
+                              "type": "string",
+                              "enum": [
+                                "allowed",
+                                "blocked"
+                              ]
+                            },
+                            "evidence": {
+                              "minItems": 1,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              }
+                            }
+                          },
+                          "required": [
+                            "sequence",
+                            "tool",
+                            "requestSHA256",
+                            "responseSHA256",
+                            "sourceSHA256",
+                            "matches",
+                            "decision",
+                            "evidence"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "owner",
+                      "complete",
+                      "schemaSHA256",
+                      "filterPolicySHA256",
+                      "events"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "decomposition": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed"
+                        ]
+                      },
+                      "outputSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "evidence": {
+                        "minItems": 1,
+                        "maxItems": 32,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000
+                        }
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "evidence"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "generatedFacts": {
+                    "maxItems": 512,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,239}$"
+                        },
+                        "commitment": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "verdict": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "contradicted",
+                            "unsupported",
+                            "judge_error"
+                          ]
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "commitment",
+                        "verdict",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "referenceFacts": {
+                    "minItems": 1,
+                    "maxItems": 2048,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,239}$"
+                        },
+                        "commitment": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "coverage": {
+                          "type": "string",
+                          "enum": [
+                            "covered",
+                            "missed",
+                            "judge_error"
+                          ]
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "commitment",
+                        "coverage",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "evaluatedAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken",
+                  "subject",
+                  "conclusionSHA256",
+                  "evaluatorAuditReceiptID",
+                  "trace",
+                  "decomposition",
+                  "generatedFacts",
+                  "referenceFacts",
+                  "evaluatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.synthesis.record({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/syntheses/receipts/{receiptID}": {
+      "post": {
+        "operationId": "harness.synthesis.receipt",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receiptID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a capability-protected scientific synthesis receipt",
+        "responses": {
+          "200": {
+            "description": "Canonical scientific synthesis receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "scientific-synthesis-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "run",
+                            "candidate"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "conclusionSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "evaluatorAuditReceiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "traceSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "events": {
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "tool": {
+                            "type": "string",
+                            "enum": [
+                              "google_search",
+                              "paper_search",
+                              "web_browse"
+                            ]
+                          },
+                          "requestSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "responseSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "sourceSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "publishedAt": {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "matches": {
+                            "type": "object",
+                            "properties": {
+                              "forbiddenDomain": {
+                                "type": "boolean"
+                              },
+                              "referenceTitle": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "forbiddenDomain",
+                              "referenceTitle"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "decision": {
+                            "type": "string",
+                            "enum": [
+                              "allowed",
+                              "blocked"
+                            ]
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "eventID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "violations": {
+                            "maxItems": 5,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "forbidden_domain",
+                                "reference_title",
+                                "post_cutoff",
+                                "unknown_date",
+                                "duplicate_output"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "sequence",
+                          "tool",
+                          "requestSHA256",
+                          "responseSHA256",
+                          "sourceSHA256",
+                          "matches",
+                          "decision",
+                          "evidence",
+                          "eventID",
+                          "violations"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "decomposition": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed"
+                          ]
+                        },
+                        "outputSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "evidence"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "generatedFacts": {
+                      "maxItems": 512,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,239}$"
+                          },
+                          "commitment": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "verdict": {
+                            "type": "string",
+                            "enum": [
+                              "supported",
+                              "contradicted",
+                              "unsupported",
+                              "judge_error"
+                            ]
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "commitment",
+                          "verdict",
+                          "evidence"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "referenceFacts": {
+                      "minItems": 1,
+                      "maxItems": 2048,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,239}$"
+                          },
+                          "commitment": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "coverage": {
+                            "type": "string",
+                            "enum": [
+                              "covered",
+                              "missed",
+                              "judge_error"
+                            ]
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "commitment",
+                          "coverage",
+                          "evidence"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "metrics": {
+                      "type": "object",
+                      "properties": {
+                        "toolEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "allowedSources": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "blockedSources": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "violations": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "enum": [
+                              "forbidden_domain",
+                              "reference_title",
+                              "post_cutoff",
+                              "unknown_date",
+                              "duplicate_output"
+                            ]
+                          },
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "generatedFacts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "supported": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "contradicted": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unsupported": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "precisionJudgeErrors": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "referenceFacts": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "covered": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "missed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "recallJudgeErrors": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "precision": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "recall": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "f1": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        }
+                      },
+                      "required": [
+                        "toolEvents",
+                        "allowedSources",
+                        "blockedSources",
+                        "violations",
+                        "generatedFacts",
+                        "supported",
+                        "contradicted",
+                        "unsupported",
+                        "precisionJudgeErrors",
+                        "referenceFacts",
+                        "covered",
+                        "missed",
+                        "recallJudgeErrors"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "failures": {
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "protocolSHA256",
+                    "subject",
+                    "conclusionSHA256",
+                    "evaluatorAuditReceiptID",
+                    "traceSHA256",
+                    "events",
+                    "decomposition",
+                    "generatedFacts",
+                    "referenceFacts",
+                    "metrics",
+                    "status",
+                    "failures",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.synthesis.receipt({\n  ...\n})"
           }
         ]
       }
@@ -40706,6 +42043,7 @@
                             "ale",
                             "weather",
                             "researchclaw",
+                            "sciconbench",
                             "astabench",
                             "paperbench",
                             "corebench",
@@ -42138,6 +43476,212 @@
                         "scope",
                         "minReviewers",
                         "minConfidence"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "synthesis": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "scientific-synthesis-v1"
+                        },
+                        "querySHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "referenceSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "referenceFactsSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "referenceFactCount": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 2048
+                        },
+                        "cutoff": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        "tools": {
+                          "minItems": 1,
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "google_search",
+                              "paper_search",
+                              "web_browse"
+                            ]
+                          }
+                        },
+                        "traceSchemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "filterPolicySHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "maxToolEvents": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000
+                        },
+                        "decomposer": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "promptSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "configSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "promptSHA256",
+                            "configSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "judges": {
+                          "type": "object",
+                          "properties": {
+                            "precision": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "promptSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "configSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "promptSHA256",
+                                "configSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "recall": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "promptSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "configSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "promptSHA256",
+                                "configSHA256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "precision",
+                            "recall"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minGeneratedFacts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 512
+                        },
+                        "minPrecision": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "minRecall": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "minF1": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "cleanRoomRequired": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "judgeFailurePolicy": {
+                          "type": "string",
+                          "const": "inconclusive"
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "querySHA256",
+                        "referenceSHA256",
+                        "referenceFactsSHA256",
+                        "referenceFactCount",
+                        "cutoff",
+                        "tools",
+                        "traceSchemaSHA256",
+                        "filterPolicySHA256",
+                        "maxToolEvents",
+                        "decomposer",
+                        "judges",
+                        "minGeneratedFacts",
+                        "minPrecision",
+                        "minRecall",
+                        "minF1",
+                        "cleanRoomRequired",
+                        "judgeFailurePolicy"
                       ],
                       "additionalProperties": false
                     },
@@ -44404,6 +45948,212 @@
                     ],
                     "additionalProperties": false
                   },
+                  "synthesis": {
+                    "type": "object",
+                    "properties": {
+                      "protocolVersion": {
+                        "type": "string",
+                        "const": "scientific-synthesis-v1"
+                      },
+                      "querySHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "referenceSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "referenceFactsSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "referenceFactCount": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2048
+                      },
+                      "cutoff": {
+                        "type": "string",
+                        "format": "date",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                      },
+                      "tools": {
+                        "minItems": 1,
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "google_search",
+                            "paper_search",
+                            "web_browse"
+                          ]
+                        }
+                      },
+                      "traceSchemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "filterPolicySHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "maxToolEvents": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000
+                      },
+                      "decomposer": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "promptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "configSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "version",
+                          "promptSHA256",
+                          "configSHA256"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "judges": {
+                        "type": "object",
+                        "properties": {
+                          "precision": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "promptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "configSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "version",
+                              "promptSHA256",
+                              "configSHA256"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "recall": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "promptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "configSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "version",
+                              "promptSHA256",
+                              "configSHA256"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "precision",
+                          "recall"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minGeneratedFacts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 512
+                      },
+                      "minPrecision": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "minRecall": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "minF1": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "cleanRoomRequired": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "judgeFailurePolicy": {
+                        "type": "string",
+                        "const": "inconclusive"
+                      }
+                    },
+                    "required": [
+                      "protocolVersion",
+                      "querySHA256",
+                      "referenceSHA256",
+                      "referenceFactsSHA256",
+                      "referenceFactCount",
+                      "cutoff",
+                      "tools",
+                      "traceSchemaSHA256",
+                      "filterPolicySHA256",
+                      "maxToolEvents",
+                      "decomposer",
+                      "judges",
+                      "minGeneratedFacts",
+                      "minPrecision",
+                      "minRecall",
+                      "minF1",
+                      "cleanRoomRequired",
+                      "judgeFailurePolicy"
+                    ],
+                    "additionalProperties": false
+                  },
                   "replication": {
                     "type": "object",
                     "properties": {
@@ -45213,6 +46963,10 @@
                     "pattern": "^[a-f0-9]{64}$"
                   },
                   "failureDiscoveryReceiptID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "synthesisReceiptID": {
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
@@ -47470,6 +49224,7 @@
                                 "ale",
                                 "weather",
                                 "researchclaw",
+                                "sciconbench",
                                 "astabench",
                                 "paperbench",
                                 "corebench",
@@ -48905,6 +50660,212 @@
                           ],
                           "additionalProperties": false
                         },
+                        "synthesis": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "scientific-synthesis-v1"
+                            },
+                            "querySHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "referenceSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "referenceFactsSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "referenceFactCount": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2048
+                            },
+                            "cutoff": {
+                              "type": "string",
+                              "format": "date",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                            },
+                            "tools": {
+                              "minItems": 1,
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "google_search",
+                                  "paper_search",
+                                  "web_browse"
+                                ]
+                              }
+                            },
+                            "traceSchemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "filterPolicySHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "maxToolEvents": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000
+                            },
+                            "decomposer": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "promptSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "configSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "promptSHA256",
+                                "configSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "judges": {
+                              "type": "object",
+                              "properties": {
+                                "precision": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "promptSHA256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    },
+                                    "configSHA256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "version",
+                                    "promptSHA256",
+                                    "configSHA256"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "recall": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "promptSHA256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    },
+                                    "configSHA256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "version",
+                                    "promptSHA256",
+                                    "configSHA256"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "precision",
+                                "recall"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "minGeneratedFacts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 512
+                            },
+                            "minPrecision": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "minRecall": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "minF1": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "cleanRoomRequired": {
+                              "type": "boolean",
+                              "const": true
+                            },
+                            "judgeFailurePolicy": {
+                              "type": "string",
+                              "const": "inconclusive"
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "querySHA256",
+                            "referenceSHA256",
+                            "referenceFactsSHA256",
+                            "referenceFactCount",
+                            "cutoff",
+                            "tools",
+                            "traceSchemaSHA256",
+                            "filterPolicySHA256",
+                            "maxToolEvents",
+                            "decomposer",
+                            "judges",
+                            "minGeneratedFacts",
+                            "minPrecision",
+                            "minRecall",
+                            "minF1",
+                            "cleanRoomRequired",
+                            "judgeFailurePolicy"
+                          ],
+                          "additionalProperties": false
+                        },
                         "replication": {
                           "type": "object",
                           "properties": {
@@ -49605,6 +51566,10 @@
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
                       },
+                      "synthesisReceiptID": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
                       "evaluator": {
                         "type": "object",
                         "properties": {
@@ -49850,6 +51815,7 @@
                             "ale",
                             "weather",
                             "researchclaw",
+                            "sciconbench",
                             "astabench",
                             "paperbench",
                             "corebench",
@@ -50045,6 +52011,10 @@
                           "pattern": "^[a-f0-9]{64}$"
                         },
                         "failureDiscoveryReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "synthesisReceiptID": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },

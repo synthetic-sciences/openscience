@@ -28,6 +28,7 @@ async function bind(
   objective = "Improve spectral PDE accuracy",
   semantic = false,
   replication = false,
+  synthesis = false,
 ) {
   sessions.add(sessionID)
   return HarnessContract.bind({
@@ -43,9 +44,9 @@ async function bind(
       evaluator: "official-evaluator",
       evaluatorVersion: "1",
       evaluatorSource: "benchmark",
-      metric: "score",
+      metric: synthesis ? "factual_f1" : "score",
       direction: "maximize",
-      target: replication ? 0.8 : undefined,
+      target: replication ? 0.8 : synthesis ? 0.4 : undefined,
     },
     profile: "optimize",
     semanticAudit: semantic
@@ -61,6 +62,61 @@ async function bind(
           },
           minReviewers: 2,
           minConfidence: 0.8,
+        }
+      : undefined,
+    evaluatorAudit: synthesis
+      ? {
+          protocolVersion: "evaluator-audit-v1",
+          auditor: { name: "memory-synthesis-auditor", version: "1", source: "external" },
+          suite: { name: "memory-synthesis-suite", version: "1", commitmentSHA256: hash("memory-suite") },
+          minCleanCases: 2,
+          minCasesPerFault: 2,
+          requiredFaults: ["wrong_answer", "unsupported_claim", "data_leakage"],
+          minSensitivity: 0.8,
+          minSpecificity: 0.8,
+          minBalancedAccuracy: 0.8,
+          minFaultRecall: 0.8,
+          maxBrierScore: 0.15,
+        }
+      : undefined,
+    synthesis: synthesis
+      ? {
+          protocolVersion: "scientific-synthesis-v1",
+          querySHA256: hash("memory-query"),
+          referenceSHA256: hash("memory-reference"),
+          referenceFactsSHA256: hash("memory-facts"),
+          referenceFactCount: 2,
+          cutoff: "2026-01-01",
+          tools: ["paper_search"],
+          traceSchemaSHA256: hash("memory-trace"),
+          filterPolicySHA256: hash("memory-filter"),
+          maxToolEvents: 20,
+          decomposer: {
+            name: "memory-decomposer",
+            version: "1",
+            promptSHA256: hash("memory-decomposer-prompt"),
+            configSHA256: hash("memory-decomposer-config"),
+          },
+          judges: {
+            precision: {
+              name: "memory-precision",
+              version: "1",
+              promptSHA256: hash("memory-precision-prompt"),
+              configSHA256: hash("memory-precision-config"),
+            },
+            recall: {
+              name: "memory-recall",
+              version: "1",
+              promptSHA256: hash("memory-recall-prompt"),
+              configSHA256: hash("memory-recall-config"),
+            },
+          },
+          minGeneratedFacts: 2,
+          minPrecision: 0.4,
+          minRecall: 0.4,
+          minF1: 0.4,
+          cleanRoomRequired: true,
+          judgeFailurePolicy: "inconclusive",
         }
       : undefined,
     replication: replication
@@ -90,12 +146,16 @@ async function bind(
         }
       : undefined,
     model: { provider: "test", name: "model" },
-    tools: [],
+    tools: synthesis ? ["paper_search"] : [],
     skills: [],
     budget: { steps: 10 },
     seed: 1,
     intervention: "autonomous",
-    contamination: { policy: "hidden tests stay hidden", hiddenTestsAccessible: false },
+    contamination: {
+      policy: "hidden tests stay hidden",
+      hiddenTestsAccessible: false,
+      publicDataCutoff: synthesis ? "2026-01-01" : undefined,
+    },
     createdAt: Date.now(),
   })
 }
@@ -245,6 +305,22 @@ describe("verified retrospective memory", () => {
     await bind("memory-replication-query", "replication", "Improve spectral PDE accuracy", false, true)
     expect(
       await HarnessMemory.retrieve({ sessionID: "memory-replication-query", query: "single lucky seed method" }),
+    ).toEqual([])
+  })
+
+  test("does not reuse ordinary hindsight inside a frozen hidden-fact synthesis scope", async () => {
+    await candidate({
+      sessionID: "memory-synthesis-source",
+      scope: "synthesis",
+      proposal: "answer-shaped conclusion from an unrelated reference",
+      score: 0.99,
+    })
+    await bind("memory-synthesis-query", "synthesis", "Synthesize the scientific conclusion", false, false, true)
+    expect(
+      await HarnessMemory.retrieve({
+        sessionID: "memory-synthesis-query",
+        query: "answer-shaped conclusion from an unrelated reference",
+      }),
     ).toEqual([])
   })
 

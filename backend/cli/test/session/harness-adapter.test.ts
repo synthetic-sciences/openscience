@@ -92,17 +92,17 @@ describe("benchmark adapters", () => {
       expect(HarnessBenchmark.resolve(manifest.title).id).toBe(manifest.id)
     }
     const sources = Object.values(HarnessBenchmark.catalog).map((manifest) => manifest.source.status)
-    expect(sources.filter((status) => status === "official_open")).toHaveLength(20)
+    expect(sources.filter((status) => status === "official_open")).toHaveLength(21)
     expect(sources.filter((status) => status === "official_subset")).toHaveLength(1)
     expect(sources.filter((status) => status === "methodology_only")).toHaveLength(3)
     const paths = Object.values(HarnessBenchmark.catalog).flatMap((manifest) =>
       manifest.source.status === "methodology_only" ? [] : manifest.source.requiredPaths,
     )
-    expect(paths).toHaveLength(127)
+    expect(paths).toHaveLength(137)
     const recipes = Object.values(HarnessBenchmark.catalog).map((manifest) => manifest.recipe.status)
     expect(recipes.filter((status) => status === "source_verified")).toHaveLength(16)
     expect(recipes.filter((status) => status === "pending_source_verification")).toHaveLength(0)
-    expect(recipes.filter((status) => status === "blocked_upstream")).toHaveLength(5)
+    expect(recipes.filter((status) => status === "blocked_upstream")).toHaveLength(6)
     expect(recipes.filter((status) => status === "not_applicable")).toHaveLength(3)
   })
 
@@ -112,6 +112,7 @@ describe("benchmark adapters", () => {
     expect(HarnessBenchmark.resolve("BioMni Bench").id).toBe("biomni")
     expect(HarnessBenchmark.resolve("ResearchClawBench").id).toBe("researchclaw")
     expect(HarnessBenchmark.resolve("AstaBench").id).toBe("astabench")
+    expect(HarnessBenchmark.resolve("SciConBench").id).toBe("sciconbench")
     expect(() => HarnessBenchmark.resolve("imaginary-bench")).toThrow("Unsupported benchmark adapter")
   })
 

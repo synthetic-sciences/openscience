@@ -7497,6 +7497,7 @@ export type HarnessBenchmarksResponses = {
       | "ale"
       | "weather"
       | "researchclaw"
+      | "sciconbench"
       | "astabench"
       | "paperbench"
       | "corebench"
@@ -7618,6 +7619,7 @@ export type HarnessBenchmarkRecipeResponses = {
       | "ale"
       | "weather"
       | "researchclaw"
+      | "sciconbench"
       | "astabench"
       | "paperbench"
       | "corebench"
@@ -9181,6 +9183,7 @@ export type HarnessAblationInitializeData = {
         | "simulation"
         | "evaluator_audit"
         | "semantic_audit"
+        | "synthesis"
         | "replication"
         | "fidelities"
         | "skill"
@@ -9235,6 +9238,7 @@ export type HarnessAblationInitializeResponses = {
           | "simulation"
           | "evaluator_audit"
           | "semantic_audit"
+          | "synthesis"
           | "replication"
           | "fidelities"
           | "skill"
@@ -9285,6 +9289,7 @@ export type HarnessAblationInitializeResponses = {
           | "simulation"
           | "evaluator_audit"
           | "semantic_audit"
+          | "synthesis"
           | "replication"
           | "fidelities"
           | "skill"
@@ -9381,6 +9386,7 @@ export type HarnessAblationAssessResponses = {
           | "simulation"
           | "evaluator_audit"
           | "semantic_audit"
+          | "synthesis"
           | "replication"
           | "fidelities"
           | "skill"
@@ -9431,6 +9437,7 @@ export type HarnessAblationAssessResponses = {
           | "simulation"
           | "evaluator_audit"
           | "semantic_audit"
+          | "synthesis"
           | "replication"
           | "fidelities"
           | "skill"
@@ -11175,6 +11182,260 @@ export type HarnessSemanticReceiptResponses = {
 }
 
 export type HarnessSemanticReceiptResponse = HarnessSemanticReceiptResponses[keyof HarnessSemanticReceiptResponses]
+
+export type HarnessSynthesisRecordData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    conclusionSHA256: string
+    evaluatorAuditReceiptID: string
+    trace: {
+      owner: "evaluator_runtime"
+      complete: true
+      schemaSHA256: string
+      filterPolicySHA256: string
+      events: Array<{
+        sequence: number
+        tool: "google_search" | "paper_search" | "web_browse"
+        requestSHA256: string
+        responseSHA256: string
+        sourceSHA256: string
+        publishedAt?: string
+        matches: {
+          forbiddenDomain: boolean
+          referenceTitle: boolean
+        }
+        decision: "allowed" | "blocked"
+        evidence: Array<string>
+      }>
+    }
+    decomposition: {
+      status: "passed" | "failed"
+      outputSHA256?: string
+      evidence: Array<string>
+    }
+    generatedFacts: Array<{
+      id: string
+      commitment: string
+      verdict: "supported" | "contradicted" | "unsupported" | "judge_error"
+      evidence: Array<string>
+    }>
+    referenceFacts: Array<{
+      id: string
+      commitment: string
+      coverage: "covered" | "missed" | "judge_error"
+      evidence: Array<string>
+    }>
+    evaluatedAt: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/syntheses/receipts"
+}
+
+export type HarnessSynthesisRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessSynthesisRecordError = HarnessSynthesisRecordErrors[keyof HarnessSynthesisRecordErrors]
+
+export type HarnessSynthesisRecordResponses = {
+  /**
+   * Immutable scientific synthesis receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "scientific-synthesis-receipt-v1"
+    receiptID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    protocolSHA256: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    conclusionSHA256: string
+    evaluatorAuditReceiptID: string
+    traceSHA256: string
+    events: Array<{
+      sequence: number
+      tool: "google_search" | "paper_search" | "web_browse"
+      requestSHA256: string
+      responseSHA256: string
+      sourceSHA256: string
+      publishedAt?: string
+      matches: {
+        forbiddenDomain: boolean
+        referenceTitle: boolean
+      }
+      decision: "allowed" | "blocked"
+      evidence: Array<string>
+      eventID: string
+      violations: Array<"forbidden_domain" | "reference_title" | "post_cutoff" | "unknown_date" | "duplicate_output">
+    }>
+    decomposition: {
+      status: "passed" | "failed"
+      outputSHA256?: string
+      evidence: Array<string>
+    }
+    generatedFacts: Array<{
+      id: string
+      commitment: string
+      verdict: "supported" | "contradicted" | "unsupported" | "judge_error"
+      evidence: Array<string>
+    }>
+    referenceFacts: Array<{
+      id: string
+      commitment: string
+      coverage: "covered" | "missed" | "judge_error"
+      evidence: Array<string>
+    }>
+    metrics: {
+      toolEvents: number
+      allowedSources: number
+      blockedSources: number
+      violations: {
+        [key: string]: number
+      }
+      generatedFacts: number
+      supported: number
+      contradicted: number
+      unsupported: number
+      precisionJudgeErrors: number
+      referenceFacts: number
+      covered: number
+      missed: number
+      recallJudgeErrors: number
+      precision?: number
+      recall?: number
+      f1?: number
+    }
+    status: "passed" | "failed" | "inconclusive"
+    failures: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessSynthesisRecordResponse = HarnessSynthesisRecordResponses[keyof HarnessSynthesisRecordResponses]
+
+export type HarnessSynthesisReceiptData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/syntheses/receipts/{receiptID}"
+}
+
+export type HarnessSynthesisReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessSynthesisReceiptError = HarnessSynthesisReceiptErrors[keyof HarnessSynthesisReceiptErrors]
+
+export type HarnessSynthesisReceiptResponses = {
+  /**
+   * Canonical scientific synthesis receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "scientific-synthesis-receipt-v1"
+    receiptID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    protocolSHA256: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    conclusionSHA256: string
+    evaluatorAuditReceiptID: string
+    traceSHA256: string
+    events: Array<{
+      sequence: number
+      tool: "google_search" | "paper_search" | "web_browse"
+      requestSHA256: string
+      responseSHA256: string
+      sourceSHA256: string
+      publishedAt?: string
+      matches: {
+        forbiddenDomain: boolean
+        referenceTitle: boolean
+      }
+      decision: "allowed" | "blocked"
+      evidence: Array<string>
+      eventID: string
+      violations: Array<"forbidden_domain" | "reference_title" | "post_cutoff" | "unknown_date" | "duplicate_output">
+    }>
+    decomposition: {
+      status: "passed" | "failed"
+      outputSHA256?: string
+      evidence: Array<string>
+    }
+    generatedFacts: Array<{
+      id: string
+      commitment: string
+      verdict: "supported" | "contradicted" | "unsupported" | "judge_error"
+      evidence: Array<string>
+    }>
+    referenceFacts: Array<{
+      id: string
+      commitment: string
+      coverage: "covered" | "missed" | "judge_error"
+      evidence: Array<string>
+    }>
+    metrics: {
+      toolEvents: number
+      allowedSources: number
+      blockedSources: number
+      violations: {
+        [key: string]: number
+      }
+      generatedFacts: number
+      supported: number
+      contradicted: number
+      unsupported: number
+      precisionJudgeErrors: number
+      referenceFacts: number
+      covered: number
+      missed: number
+      recallJudgeErrors: number
+      precision?: number
+      recall?: number
+      f1?: number
+    }
+    status: "passed" | "failed" | "inconclusive"
+    failures: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessSynthesisReceiptResponse = HarnessSynthesisReceiptResponses[keyof HarnessSynthesisReceiptResponses]
 
 export type HarnessLaunchRecordData = {
   body?: {
@@ -13691,6 +13952,44 @@ export type HarnessBindData = {
       }
       token: string
     }
+    synthesis?: {
+      protocolVersion: "scientific-synthesis-v1"
+      querySHA256: string
+      referenceSHA256: string
+      referenceFactsSHA256: string
+      referenceFactCount: number
+      cutoff: string
+      tools: Array<"google_search" | "paper_search" | "web_browse">
+      traceSchemaSHA256: string
+      filterPolicySHA256: string
+      maxToolEvents: number
+      decomposer: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      judges: {
+        precision: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        recall: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+      }
+      minGeneratedFacts: number
+      minPrecision: number
+      minRecall: number
+      minF1: number
+      cleanRoomRequired: true
+      judgeFailurePolicy: "inconclusive"
+    }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
       validatorSHA256: string
@@ -14071,6 +14370,7 @@ export type HarnessBindResponses = {
         | "ale"
         | "weather"
         | "researchclaw"
+        | "sciconbench"
         | "astabench"
         | "paperbench"
         | "corebench"
@@ -14363,6 +14663,44 @@ export type HarnessBindResponses = {
       minReviewers: number
       minConfidence: number
     }
+    synthesis?: {
+      protocolVersion: "scientific-synthesis-v1"
+      querySHA256: string
+      referenceSHA256: string
+      referenceFactsSHA256: string
+      referenceFactCount: number
+      cutoff: string
+      tools: Array<"google_search" | "paper_search" | "web_browse">
+      traceSchemaSHA256: string
+      filterPolicySHA256: string
+      maxToolEvents: number
+      decomposer: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      judges: {
+        precision: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        recall: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+      }
+      minGeneratedFacts: number
+      minPrecision: number
+      minRecall: number
+      minF1: number
+      cleanRoomRequired: true
+      judgeFailurePolicy: "inconclusive"
+    }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
       validatorSHA256: string
@@ -14488,6 +14826,7 @@ export type HarnessEvaluateData = {
     replicationReceiptID?: string
     auditReceiptID?: string
     failureDiscoveryReceiptID?: string
+    synthesisReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
     metrics?: {
@@ -15069,6 +15408,7 @@ export type HarnessContractResponses = {
         | "ale"
         | "weather"
         | "researchclaw"
+        | "sciconbench"
         | "astabench"
         | "paperbench"
         | "corebench"
@@ -15361,6 +15701,44 @@ export type HarnessContractResponses = {
       minReviewers: number
       minConfidence: number
     }
+    synthesis?: {
+      protocolVersion: "scientific-synthesis-v1"
+      querySHA256: string
+      referenceSHA256: string
+      referenceFactsSHA256: string
+      referenceFactCount: number
+      cutoff: string
+      tools: Array<"google_search" | "paper_search" | "web_browse">
+      traceSchemaSHA256: string
+      filterPolicySHA256: string
+      maxToolEvents: number
+      decomposer: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      judges: {
+        precision: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        recall: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+      }
+      minGeneratedFacts: number
+      minPrecision: number
+      minRecall: number
+      minF1: number
+      cleanRoomRequired: true
+      judgeFailurePolicy: "inconclusive"
+    }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
       validatorSHA256: string
@@ -15514,6 +15892,7 @@ export type HarnessEvaluationsResponses = {
     replicationReceiptID?: string
     auditReceiptID?: string
     failureDiscoveryReceiptID?: string
+    synthesisReceiptID?: string
     evaluator: {
       name: string
       version: string
@@ -15595,6 +15974,7 @@ export type HarnessReportResponses = {
         | "ale"
         | "weather"
         | "researchclaw"
+        | "sciconbench"
         | "astabench"
         | "paperbench"
         | "corebench"
@@ -15641,6 +16021,7 @@ export type HarnessReportResponses = {
       replicationReceiptID?: string
       auditReceiptID?: string
       failureDiscoveryReceiptID?: string
+      synthesisReceiptID?: string
       confirmationReceiptID?: string
       evaluations: number
     }

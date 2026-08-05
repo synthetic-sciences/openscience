@@ -186,6 +186,10 @@ import type {
   HarnessSkillProposeErrors,
   HarnessSkillProposeResponses,
   HarnessSkillsResponses,
+  HarnessSynthesisReceiptErrors,
+  HarnessSynthesisReceiptResponses,
+  HarnessSynthesisRecordErrors,
+  HarnessSynthesisRecordResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -4252,6 +4256,7 @@ export class Ablation extends HeyApiClient {
           | "simulation"
           | "evaluator_audit"
           | "semantic_audit"
+          | "synthesis"
           | "replication"
           | "fidelities"
           | "skill"
@@ -5115,6 +5120,142 @@ export class Semantic extends HeyApiClient {
       ThrowOnError
     >({
       url: "/harness/semantics/receipts/{receiptID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Synthesis extends HeyApiClient {
+  /**
+   * Record an evaluator-authenticated clean-room synthesis
+   *
+   * Binds a complete retrieval trace and hidden atomic-fact manifest, rejects clean-room policy drift, and derives factual precision, recall, contradiction penalty, and F1 without trusting caller-authored metrics.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+      subject?: {
+        type: "run" | "candidate"
+        id: string
+      }
+      conclusionSHA256?: string
+      evaluatorAuditReceiptID?: string
+      trace?: {
+        owner: "evaluator_runtime"
+        complete: true
+        schemaSHA256: string
+        filterPolicySHA256: string
+        events: Array<{
+          sequence: number
+          tool: "google_search" | "paper_search" | "web_browse"
+          requestSHA256: string
+          responseSHA256: string
+          sourceSHA256: string
+          publishedAt?: string
+          matches: {
+            forbiddenDomain: boolean
+            referenceTitle: boolean
+          }
+          decision: "allowed" | "blocked"
+          evidence: Array<string>
+        }>
+      }
+      decomposition?: {
+        status: "passed" | "failed"
+        outputSHA256?: string
+        evidence: Array<string>
+      }
+      generatedFacts?: Array<{
+        id: string
+        commitment: string
+        verdict: "supported" | "contradicted" | "unsupported" | "judge_error"
+        evidence: Array<string>
+      }>
+      referenceFacts?: Array<{
+        id: string
+        commitment: string
+        coverage: "covered" | "missed" | "judge_error"
+        evidence: Array<string>
+      }>
+      evaluatedAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "conclusionSHA256" },
+            { in: "body", key: "evaluatorAuditReceiptID" },
+            { in: "body", key: "trace" },
+            { in: "body", key: "decomposition" },
+            { in: "body", key: "generatedFacts" },
+            { in: "body", key: "referenceFacts" },
+            { in: "body", key: "evaluatedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessSynthesisRecordResponses,
+      HarnessSynthesisRecordErrors,
+      ThrowOnError
+    >({
+      url: "/harness/syntheses/receipts",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected scientific synthesis receipt
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessSynthesisReceiptResponses,
+      HarnessSynthesisReceiptErrors,
+      ThrowOnError
+    >({
+      url: "/harness/syntheses/receipts/{receiptID}",
       ...options,
       ...params,
       headers: {
@@ -6512,6 +6653,44 @@ export class Harness extends HeyApiClient {
         }
         token: string
       }
+      synthesis?: {
+        protocolVersion: "scientific-synthesis-v1"
+        querySHA256: string
+        referenceSHA256: string
+        referenceFactsSHA256: string
+        referenceFactCount: number
+        cutoff: string
+        tools: Array<"google_search" | "paper_search" | "web_browse">
+        traceSchemaSHA256: string
+        filterPolicySHA256: string
+        maxToolEvents: number
+        decomposer: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        judges: {
+          precision: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+          recall: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+        }
+        minGeneratedFacts: number
+        minPrecision: number
+        minRecall: number
+        minF1: number
+        cleanRoomRequired: true
+        judgeFailurePolicy: "inconclusive"
+      }
       replication?: {
         protocolVersion: "replicated-evaluation-v1"
         validatorSHA256: string
@@ -6670,6 +6849,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "simulation" },
             { in: "body", key: "evaluatorAudit" },
             { in: "body", key: "semanticAudit" },
+            { in: "body", key: "synthesis" },
             { in: "body", key: "replication" },
             { in: "body", key: "confirmation" },
             { in: "body", key: "extraPacks" },
@@ -6725,6 +6905,7 @@ export class Harness extends HeyApiClient {
       replicationReceiptID?: string
       auditReceiptID?: string
       failureDiscoveryReceiptID?: string
+      synthesisReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
       metrics?: {
@@ -6770,6 +6951,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "replicationReceiptID" },
             { in: "body", key: "auditReceiptID" },
             { in: "body", key: "failureDiscoveryReceiptID" },
+            { in: "body", key: "synthesisReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
             { in: "body", key: "metrics" },
@@ -6975,6 +7157,11 @@ export class Harness extends HeyApiClient {
   private _semantic?: Semantic
   get semantic(): Semantic {
     return (this._semantic ??= new Semantic({ client: this.client }))
+  }
+
+  private _synthesis?: Synthesis
+  get synthesis(): Synthesis {
+    return (this._synthesis ??= new Synthesis({ client: this.client }))
   }
 
   private _launch?: Launch

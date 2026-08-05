@@ -17,6 +17,7 @@ export namespace HarnessBenchmark {
     "ale",
     "weather",
     "researchclaw",
+    "sciconbench",
     "astabench",
     "paperbench",
     "corebench",
@@ -199,6 +200,11 @@ export namespace HarnessBenchmark {
       reason:
         "The official two-phase runner invokes the default root solve project with uv --frozen, but the pinned repository omits the root uv.lock and explicitly ignores it, so the unchanged published entrypoint cannot resolve a reproducible solve environment.",
       anchor: "scripts/eval_then_score.sh",
+    },
+    sciconbench: {
+      reason:
+        "The pinned end-to-end evaluate.py owns model/provider execution and demonstrates three internal configurations, but exposes no unchanged entrypoint that accepts an external agent conclusion and emits one stable machine-readable official score artifact.",
+      anchor: "evaluate.py",
     },
   } as const
   const item = (input: Omit<Manifest, "execution" | "recipe">) => {
@@ -495,6 +501,34 @@ export namespace HarnessBenchmark {
         "https://huggingface.co/datasets/InternScience/ResearchClawBench",
       ),
       task: "General research execution with benchmark-specific packs added without silently changing the evaluator.",
+    }),
+    sciconbench: item({
+      id: "sciconbench",
+      title: "SciConBench",
+      family: "generalist",
+      aliases: ["sciconbench", "sci-con-bench", "scientific-conclusion-synthesis"],
+      profile: "reproduce",
+      profiles: ["react", "reproduce", "optimize"],
+      packs: ["biology", "statistics"],
+      source: source(
+        "https://github.com/hayoungjungg/SciConBench",
+        "30b0c6d3ccfac844651db137dbd48e053b424e51",
+        "https://arxiv.org/abs/2606.11337",
+        [
+          "README.md",
+          "pyproject.toml",
+          "evaluate.py",
+          "sciconharness/harness.py",
+          "sciconharness/cli_scripts/query_batch.py",
+          "sciconharness/mcp_client/filters/cochrane.py",
+          "scripts/data_preprocessing/atomic_fact_generation/generate_atomic_facts.py",
+          "scripts/data_labeling/factual_precision_analyzer.py",
+          "scripts/data_labeling/factual_recall_analyzer.py",
+          "scripts/data_labeling/utils/precision_equations.py",
+        ],
+        "https://huggingface.co/datasets/hayoungjung/SciConBench",
+      ),
+      task: "Synthesize long-form scientific conclusions from open-web evidence under a time-bounded clean room, then measure atomic factual precision, coverage, contradiction, and F1.",
     }),
     astabench: item({
       id: "astabench",

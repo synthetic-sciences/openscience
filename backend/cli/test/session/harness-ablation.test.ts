@@ -41,7 +41,7 @@ async function run(input: {
   createdAt: number
   model?: string
   direction?: "maximize" | "minimize"
-  factor?: "orchestration" | "search" | "evaluator_audit" | "semantic_audit" | "replication"
+  factor?: "orchestration" | "search" | "evaluator_audit" | "semantic_audit" | "synthesis" | "replication"
 }) {
   const sessionID = `${input.prefix}-${input.seed}-${input.role}`
   sessions.add(sessionID)
@@ -63,7 +63,7 @@ async function run(input: {
         ? { topology: "solo", maxWorkers: 1, maxRounds: 1, minIndependentVerifiers: 1 }
         : undefined,
     evaluatorAudit:
-      input.role === "arm" && input.factor === "evaluator_audit"
+      input.factor === "synthesis" || (input.role === "arm" && input.factor === "evaluator_audit")
         ? {
             token: auditor,
             protocol: {
@@ -72,13 +72,55 @@ async function run(input: {
               suite: { name: "ablation-suite", version: "1", commitmentSHA256: hash("ablation-suite") },
               minCleanCases: 2,
               minCasesPerFault: 1,
-              requiredFaults: ["wrong_answer"],
+              requiredFaults:
+                input.factor === "synthesis" ? ["wrong_answer", "unsupported_claim", "data_leakage"] : ["wrong_answer"],
               minSensitivity: 0.8,
               minSpecificity: 0.8,
               minBalancedAccuracy: 0.8,
               minFaultRecall: 0.8,
               maxBrierScore: 0.15,
             },
+          }
+        : undefined,
+    synthesis:
+      input.role === "arm" && input.factor === "synthesis"
+        ? {
+            protocolVersion: "scientific-synthesis-v1",
+            querySHA256: hash("ablation-synthesis-query"),
+            referenceSHA256: hash("ablation-synthesis-reference"),
+            referenceFactsSHA256: hash("ablation-synthesis-facts"),
+            referenceFactCount: 2,
+            cutoff: "2026-01-01",
+            tools: ["paper_search"],
+            traceSchemaSHA256: hash("ablation-synthesis-trace"),
+            filterPolicySHA256: hash("ablation-synthesis-filter"),
+            maxToolEvents: 20,
+            decomposer: {
+              name: "ablation-decomposer",
+              version: "1",
+              promptSHA256: hash("ablation-decomposer-prompt"),
+              configSHA256: hash("ablation-decomposer-config"),
+            },
+            judges: {
+              precision: {
+                name: "ablation-precision",
+                version: "1",
+                promptSHA256: hash("ablation-precision-prompt"),
+                configSHA256: hash("ablation-precision-config"),
+              },
+              recall: {
+                name: "ablation-recall",
+                version: "1",
+                promptSHA256: hash("ablation-recall-prompt"),
+                configSHA256: hash("ablation-recall-config"),
+              },
+            },
+            minGeneratedFacts: 2,
+            minPrecision: 0.4,
+            minRecall: 0.4,
+            minF1: 0.4,
+            cleanRoomRequired: true,
+            judgeFailurePolicy: "inconclusive",
           }
         : undefined,
     semanticAudit:
@@ -132,12 +174,12 @@ async function run(input: {
           }
         : undefined,
     metric: {
-      name: "score",
+      name: input.factor === "synthesis" ? "factual_f1" : "score",
       direction: input.direction ?? "maximize",
-      target: input.factor === "replication" ? 0.5 : undefined,
+      target: input.factor === "replication" ? 0.5 : input.factor === "synthesis" ? 0.4 : undefined,
     },
     model: { provider: "test", name: input.model ?? "model" },
-    tools: ["read", "bash"],
+    tools: input.factor === "synthesis" ? ["read", "bash", "paper_search"] : ["read", "bash"],
     skills: [],
     budget: {
       steps: 30,
@@ -147,7 +189,11 @@ async function run(input: {
     },
     seed: input.seed,
     intervention: "autonomous",
-    contamination: { policy: "hidden outcomes remain evaluator-private", hiddenTestsAccessible: false },
+    contamination: {
+      policy: "hidden outcomes remain evaluator-private",
+      hiddenTestsAccessible: false,
+      publicDataCutoff: input.factor === "synthesis" ? "2026-01-01" : undefined,
+    },
     createdAt: input.createdAt,
   })
   await launchReady(contract, token)
@@ -158,7 +204,13 @@ async function study(
   prefix: string,
   drift = false,
   direction: "maximize" | "minimize" = "maximize",
-  factor: "orchestration" | "search" | "evaluator_audit" | "semantic_audit" | "replication" = "orchestration",
+  factor:
+    | "orchestration"
+    | "search"
+    | "evaluator_audit"
+    | "semantic_audit"
+    | "synthesis"
+    | "replication" = "orchestration",
 ) {
   const createdAt = Date.now()
   const pairs = await Promise.all(
@@ -306,6 +358,15 @@ describe("matched scientific ablations", () => {
     if (!initialized) throw new Error("Expected an initialized ablation")
     plans.add(initialized.plan.planID)
     expect(initialized.plan.factor.kind).toBe("replication")
+    expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
+  })
+
+  test("isolates clean-room scientific synthesis as its own ablatable protocol factor", async () => {
+    const input = await study("ablation-synthesis", false, "maximize", "synthesis")
+    const initialized = await HarnessAblation.initialize(input.plan)
+    if (!initialized) throw new Error("Expected an initialized ablation")
+    plans.add(initialized.plan.planID)
+    expect(initialized.plan.factor.kind).toBe("synthesis")
     expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
   })
 

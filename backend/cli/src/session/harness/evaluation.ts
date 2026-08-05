@@ -100,6 +100,10 @@ export namespace HarnessEvaluation {
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
+      synthesisReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       evaluator: z
         .object({
           name: z.string().min(1).max(200),
@@ -423,6 +427,24 @@ export namespace HarnessEvaluation {
         subject: evaluation.subject ?? { type: "run", id: evaluation.runID },
         evaluatedAt: evaluation.evaluatedAt,
         recordedAt: evaluation.recordedAt!,
+      })
+    }
+    if (evaluation.synthesisReceiptID && !contract.synthesis) {
+      throw new Error(`Evaluation references a synthesis receipt without a bound scientific synthesis protocol`)
+    }
+    if (contract.synthesis && evaluation.status === "passed" && final(evaluation) && !evaluation.synthesisReceiptID) {
+      throw new Error(`A passing final evaluation must reference a scientific synthesis receipt`)
+    }
+    if (evaluation.synthesisReceiptID) {
+      const { HarnessSynthesis } = await import("./synthesis")
+      await HarnessSynthesis.assert({
+        contract,
+        receiptID: evaluation.synthesisReceiptID,
+        subject: evaluation.subject ?? { type: "run", id: evaluation.runID },
+        score: evaluation.score,
+        evaluatedAt: evaluation.evaluatedAt,
+        recordedAt: evaluation.recordedAt!,
+        requirePassed: evaluation.status === "passed" && final(evaluation),
       })
     }
     if (evaluation.status === "passed" && final(evaluation)) {
