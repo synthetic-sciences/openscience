@@ -102,6 +102,7 @@ describe("compute jobs surface", () => {
     expect(source).toContain("<IconChevronDown")
     expect(source).toContain("<IconChevronRight")
     expect(source).not.toContain('"max-height": "216px"')
+    expect(source.slice(details, source.indexOf("style={commandBox}", details))).not.toContain("{job().name}")
   })
 
   test("keeps header and empty-state copy user-facing and transport-neutral", () => {
@@ -146,6 +147,8 @@ describe("compute jobs surface", () => {
     expect(output).toBeGreaterThan(logs)
     expect(source).toContain("No Modal lifecycle logs were captured.")
     expect(source).toContain("Waiting for Modal…")
+    expect(source).toContain('job().status === "cancelled"')
+    expect(source).toContain('"Run cancelled."')
     expect(source).not.toContain('events.loading ? "Syncing…"')
     expect(source).not.toContain('output.loading ? "Syncing…"')
   })
@@ -164,6 +167,16 @@ describe("compute jobs surface", () => {
     expect(source).toContain('job().target.kind !== "ssh"')
     expect(source).toContain("Remote dispatch is unavailable")
     expect(source).toContain("none (CPU only), T4, L4, A10G, A100, H100")
+  })
+
+  test("reveals dispatch only after the current command is reviewed", () => {
+    const review = source.indexOf("<Show when={!approved()}>")
+    const gate = source.indexOf("<Show when={approved()}>", review)
+    const dispatch = source.indexOf('{busy() ? "Dispatching…" : "Dispatch"}', gate)
+
+    expect(review).toBeGreaterThan(-1)
+    expect(gate).toBeGreaterThan(review)
+    expect(dispatch).toBeGreaterThan(gate)
   })
 
   test("discovers external jobs without resource-driven background flicker", () => {

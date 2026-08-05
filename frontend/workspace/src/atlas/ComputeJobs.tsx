@@ -690,14 +690,16 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
                 {target() === "modal" && busy() ? "Preparing plan…" : "Review command"}
               </button>
             </Show>
-            <button
-              type="submit"
-              style={primaryButton}
-              title={authority.message() ?? (approved() ? undefined : "Review the exact command before dispatching")}
-              disabled={!ready() || !authority.allowed()}
-            >
-              {busy() ? "Dispatching…" : "Dispatch"}
-            </button>
+            <Show when={approved()}>
+              <button
+                type="submit"
+                style={primaryButton}
+                title={authority.message()}
+                disabled={!ready() || !authority.allowed()}
+              >
+                {busy() ? "Dispatching…" : "Dispatch"}
+              </button>
+            </Show>
           </div>
         </form>
       </Show>
@@ -795,36 +797,17 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
                       <Show when={selected() === item.id}>
                         <div id={`compute-run-${item.id}`} style={detail}>
                           <div style={{ display: "flex", "align-items": "flex-start", gap: "12px" }}>
-                            <div
+                            <span
                               style={{
-                                display: "flex",
-                                "flex-direction": "column",
-                                gap: "4px",
+                                color: "var(--color-text-faint)",
+                                "font-family": FONT_MONO,
+                                "font-size": "11px",
                                 flex: 1,
                                 "min-width": 0,
                               }}
                             >
-                              <span
-                                style={{
-                                  color: "var(--color-text)",
-                                  "font-family": FONT_SANS,
-                                  "font-size": "15px",
-                                  "font-weight": 650,
-                                  "line-height": 1.25,
-                                }}
-                              >
-                                {job().name}
-                              </span>
-                              <span
-                                style={{
-                                  color: "var(--color-text-faint)",
-                                  "font-family": FONT_MONO,
-                                  "font-size": "11px",
-                                }}
-                              >
-                                {job().id} · {duration(job())}
-                              </span>
-                            </div>
+                              {job().id} · {duration(job())}
+                            </span>
                             <Show when={!terminal.has(job().status) && job().target.kind !== "ssh"}>
                               <Action title="Cancel job" onClick={() => void cancel(job())}>
                                 <IconStop size={16} />
@@ -998,7 +981,11 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
                           </div>
                           <pre style={log} aria-busy={outputBusy()}>
                             {output() ||
-                              (terminal.has(job().status) ? "No output was captured." : "Waiting for output…")}
+                              (job().status === "cancelled"
+                                ? "Run cancelled."
+                                : terminal.has(job().status)
+                                  ? "No output was captured."
+                                  : "Waiting for output…")}
                           </pre>
                           <Show when={job().error}>
                             <div style={errorBox}>{job().error}</div>
