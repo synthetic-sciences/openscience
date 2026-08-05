@@ -68,6 +68,13 @@ describe("ComputeLifecycle", () => {
     })
     expect(() => ComputeLifecycle.transition(failed, { type: "close" })).toThrow("only recoverable copy")
 
+    const retrying = ComputeLifecycle.transition(failed, { type: "retry_delivery" })
+    expect(retrying).toMatchObject({ delivery: "pending", recoverable: true })
+    expect(ComputeLifecycle.transition(retrying, { type: "deliver" })).toMatchObject({
+      delivery: "complete",
+      recoverable: false,
+    })
+
     const abandoned = ComputeLifecycle.transition(failed, { type: "abandon" })
     expect(ComputeLifecycle.transition(abandoned, { type: "close" }).resource).toBe("closed")
   })

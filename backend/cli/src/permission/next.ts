@@ -159,14 +159,14 @@ export namespace PermissionNext {
     return merge(asRules(s.standing.global), asRules(s.standing.project), s.session[sessionID] ?? [])
   }
 
-  // Paid actions never inherit a blanket allow: a wildcard ("*") rule cannot
-  // allow a spend-class permission. Allowing one requires a rule naming the
-  // permission explicitly, a standing approval, or answering the prompt.
+  // Paid actions never inherit an allow through wildcard matching. Allowing
+  // one requires a rule naming the permission exactly, a standing approval,
+  // or answering the prompt. Deny rules remain applicable at every scope.
   const SPEND = ["atlas", "websearch", "modal"]
 
   function spendFilter(permission: string, rules: Ruleset): Ruleset {
     if (!SPEND.includes(permission)) return rules
-    return rules.filter((rule) => !(rule.permission === "*" && rule.action === "allow"))
+    return rules.filter((rule) => rule.action !== "allow" || rule.permission === permission)
   }
 
   async function persist(s: State) {

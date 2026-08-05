@@ -19,6 +19,17 @@ describe("ModalAdapter image", () => {
 })
 
 describe("ModalAdapter sandbox lifecycle", () => {
+  test("assigns each governed job durable storage without exposing its project path", () => {
+    const first = ModalAdapter.volume("/work/research/private-project", "job-one")
+    const repeat = ModalAdapter.volume("/work/research/private-project", "job-one")
+    const second = ModalAdapter.volume("/work/research/private-project", "job-two")
+
+    expect(first).toBe(repeat)
+    expect(first).not.toBe(second)
+    expect(first).toMatch(/^openscience-job-[a-f0-9]{32}$/)
+    expect(first).not.toContain("private-project")
+  })
+
   test("keeps the sandbox alive until outputs can be collected", async () => {
     const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-"))
     const child = Bun.spawn(

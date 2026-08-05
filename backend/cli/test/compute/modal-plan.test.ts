@@ -60,10 +60,34 @@ describe("ModalPlan", () => {
   test("denies secrets, control directories, and paths outside the project", async () => {
     const root = await project()
     await fs.writeFile(path.join(root, ".env"), "MODAL_TOKEN_SECRET=secret\n")
+    await fs.writeFile(path.join(root, ".modal.toml"), "token_secret = 'secret'\n")
 
     await expect(ModalPlan.prepare({ ...input(root), uploads: [".env"] })).rejects.toThrow("Modal upload policy denied")
+    await expect(ModalPlan.prepare({ ...input(root), uploads: [".modal.toml"] })).rejects.toThrow(
+      "Modal upload policy denied",
+    )
     await expect(ModalPlan.prepare({ ...input(root), uploads: ["../*"] })).rejects.toThrow(
       "must stay inside the project",
     )
+  })
+
+  test("a symlink alias cannot disguise a denied credential file", async () => {
+    const root = await project()
+    await fs.writeFile(path.join(root, ".env"), "PRIVATE_TOKEN=secret\n")
+    await fs.symlink(path.join(root, ".env"), path.join(root, "src", "settings.py"))
+
+    await expect(ModalPlan.prepare({ ...input(root), uploads: ["src/**/*.py"] })).rejects.toThrow(
+      "Modal upload policy denied",
+    )
+  })
+
+  test("does not upload files excluded by the project's gitignore", async () => {
+    const root = await project()
+    await fs.writeFile(path.join(root, ".gitignore"), "src/private.py\n")
+    await fs.writeFile(path.join(root, "src", "private.py"), "TOKEN = 'private'\n")
+
+    const prepared = await ModalPlan.prepare({ ...input(root), uploads: ["src/**/*.py"] })
+
+    expect(prepared.plan.uploads.map((file) => file.path)).toEqual(["src/train.py"])
   })
 })

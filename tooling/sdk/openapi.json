@@ -1568,7 +1568,8 @@
                         "app": "openscience",
                         "image": "python:3.12-slim",
                         "network": "none",
-                        "timeout_minutes": 60
+                        "timeout_minutes": 60,
+                        "concurrency": 10
                       },
                       "type": "object",
                       "properties": {
@@ -1595,6 +1596,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 1440
+                        },
+                        "concurrency": {
+                          "default": 10,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       }
                     },
@@ -1766,7 +1773,8 @@
                         "app": "openscience",
                         "image": "python:3.12-slim",
                         "network": "none",
-                        "timeout_minutes": 60
+                        "timeout_minutes": 60,
+                        "concurrency": 10
                       },
                       "type": "object",
                       "properties": {
@@ -1793,6 +1801,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 1440
+                        },
+                        "concurrency": {
+                          "default": 10,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       }
                     },
@@ -2000,7 +2014,8 @@
                         "app": "openscience",
                         "image": "python:3.12-slim",
                         "network": "none",
-                        "timeout_minutes": 60
+                        "timeout_minutes": 60,
+                        "concurrency": 10
                       },
                       "type": "object",
                       "properties": {
@@ -2027,6 +2042,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 1440
+                        },
+                        "concurrency": {
+                          "default": 10,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       }
                     },
@@ -2208,7 +2229,8 @@
                         "app": "openscience",
                         "image": "python:3.12-slim",
                         "network": "none",
-                        "timeout_minutes": 60
+                        "timeout_minutes": 60,
+                        "concurrency": 10
                       },
                       "type": "object",
                       "properties": {
@@ -2235,6 +2257,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 1440
+                        },
+                        "concurrency": {
+                          "default": 10,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       }
                     },
@@ -2443,7 +2471,8 @@
                         "app": "openscience",
                         "image": "python:3.12-slim",
                         "network": "none",
-                        "timeout_minutes": 60
+                        "timeout_minutes": 60,
+                        "concurrency": 10
                       },
                       "type": "object",
                       "properties": {
@@ -2470,6 +2499,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 1440
+                        },
+                        "concurrency": {
+                          "default": 10,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       }
                     },
@@ -2536,6 +2571,12 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 1440
+                  },
+                  "concurrency": {
+                    "default": 10,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
                   }
                 }
               }
@@ -2686,7 +2727,8 @@
                         "app": "openscience",
                         "image": "python:3.12-slim",
                         "network": "none",
-                        "timeout_minutes": 60
+                        "timeout_minutes": 60,
+                        "concurrency": 10
                       },
                       "type": "object",
                       "properties": {
@@ -2713,6 +2755,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 1440
+                        },
+                        "concurrency": {
+                          "default": 10,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       }
                     },
@@ -2941,7 +2989,8 @@
                         "app": "openscience",
                         "image": "python:3.12-slim",
                         "network": "none",
-                        "timeout_minutes": 60
+                        "timeout_minutes": 60,
+                        "concurrency": 10
                       },
                       "type": "object",
                       "properties": {
@@ -2968,6 +3017,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 1440
+                        },
+                        "concurrency": {
+                          "default": 10,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       }
                     },
@@ -3275,7 +3330,8 @@
                         "app": "openscience",
                         "image": "python:3.12-slim",
                         "network": "none",
-                        "timeout_minutes": 60
+                        "timeout_minutes": 60,
+                        "concurrency": 10
                       },
                       "type": "object",
                       "properties": {
@@ -3302,6 +3358,12 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 1440
+                        },
+                        "concurrency": {
+                          "default": 10,
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         }
                       }
                     },
@@ -5354,6 +5416,9 @@
                             "maxLength": 64
                           },
                           "sdk": {
+                            "type": "string"
+                          },
+                          "volume": {
                             "type": "string"
                           }
                         },
@@ -7408,6 +7473,9 @@
                         },
                         "sdk": {
                           "type": "string"
+                        },
+                        "volume": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -8122,6 +8190,2091 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.compute.jobs.events({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/compute/jobs/{id}/retry": {
+      "post": {
+        "operationId": "settings.compute.jobs.retry",
+        "summary": "Retry delivery from a retained Modal resource",
+        "responses": {
+          "200": {
+            "description": "Recovery started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "cwd": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "local"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "ssh"
+                            },
+                            "host_id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "host_id"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "modal"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        }
+                      ]
+                    },
+                    "target_label": {
+                      "type": "string"
+                    },
+                    "scheduler": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "slurm",
+                        "pbs"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed",
+                        "cancelled",
+                        "interrupted"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "started_at": {
+                      "type": "string"
+                    },
+                    "completed_at": {
+                      "type": "string"
+                    },
+                    "exit_code": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "pid": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "resources": {
+                      "type": "object",
+                      "properties": {
+                        "cpus": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1024
+                        },
+                        "gpus": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 128
+                        },
+                        "memory_gb": {
+                          "type": "number",
+                          "minimum": 0.1,
+                          "maximum": 100000
+                        },
+                        "time_minutes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 43200
+                        },
+                        "partition": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        }
+                      }
+                    },
+                    "modules": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "container": {
+                      "type": "string"
+                    },
+                    "artifact_patterns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "artifacts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "modified_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "size",
+                          "sha256",
+                          "modified_at"
+                        ]
+                      }
+                    },
+                    "checkpoint_path": {
+                      "type": "string"
+                    },
+                    "checkpoint": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "modified_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "size",
+                        "sha256",
+                        "modified_at"
+                      ]
+                    },
+                    "reproducibility": {
+                      "type": "object",
+                      "properties": {
+                        "captured_at": {
+                          "type": "string"
+                        },
+                        "command": {
+                          "type": "string"
+                        },
+                        "cwd": {
+                          "type": "string"
+                        },
+                        "platform": {
+                          "type": "string"
+                        },
+                        "arch": {
+                          "type": "string"
+                        },
+                        "bun": {
+                          "type": "string"
+                        },
+                        "node": {
+                          "type": "string"
+                        },
+                        "python": {
+                          "type": "string"
+                        },
+                        "git": {
+                          "type": "object",
+                          "properties": {
+                            "repository": {
+                              "type": "string"
+                            },
+                            "branch": {
+                              "type": "string"
+                            },
+                            "commit": {
+                              "type": "string"
+                            },
+                            "dirty": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "dirty"
+                          ]
+                        },
+                        "lockfiles": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "size": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "modified_at": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "size",
+                              "sha256",
+                              "modified_at"
+                            ]
+                          }
+                        },
+                        "resources": {
+                          "type": "object",
+                          "properties": {
+                            "cpus": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1024
+                            },
+                            "gpus": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 128
+                            },
+                            "memory_gb": {
+                              "type": "number",
+                              "minimum": 0.1,
+                              "maximum": 100000
+                            },
+                            "time_minutes": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 43200
+                            },
+                            "partition": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            }
+                          }
+                        }
+                      },
+                      "required": [
+                        "captured_at",
+                        "command",
+                        "cwd",
+                        "platform",
+                        "arch",
+                        "bun",
+                        "node",
+                        "lockfiles"
+                      ]
+                    },
+                    "provenance": {
+                      "type": "object",
+                      "properties": {
+                        "format": {
+                          "type": "string",
+                          "const": "openscience.provenance.v1"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "kernel",
+                            "local_compute",
+                            "remote_compute",
+                            "artifact_version"
+                          ]
+                        },
+                        "identity": {
+                          "type": "object",
+                          "properties": {
+                            "project_id": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
+                            "session_id": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
+                            "run_id": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "project_id",
+                            "session_id",
+                            "run_id"
+                          ]
+                        },
+                        "input": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
+                            "cwd": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
+                            "code_state": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "object",
+                                      "properties": {
+                                        "repository": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "available"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "unavailable"
+                                                },
+                                                "reason": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "not_applicable",
+                                                    "not_captured",
+                                                    "not_implemented",
+                                                    "not_published",
+                                                    "not_versioned",
+                                                    "remote_unverified"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "reason"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "branch": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "available"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "unavailable"
+                                                },
+                                                "reason": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "not_applicable",
+                                                    "not_captured",
+                                                    "not_implemented",
+                                                    "not_published",
+                                                    "not_versioned",
+                                                    "remote_unverified"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "reason"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "commit": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "available"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "unavailable"
+                                                },
+                                                "reason": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "not_applicable",
+                                                    "not_captured",
+                                                    "not_implemented",
+                                                    "not_published",
+                                                    "not_versioned",
+                                                    "remote_unverified"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "reason"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "dirty": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "available"
+                                                },
+                                                "value": {
+                                                  "type": "boolean"
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "unavailable"
+                                                },
+                                                "reason": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "not_applicable",
+                                                    "not_captured",
+                                                    "not_implemented",
+                                                    "not_published",
+                                                    "not_versioned",
+                                                    "remote_unverified"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "reason"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "repository",
+                                        "branch",
+                                        "commit",
+                                        "dirty"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "cwd",
+                            "code_state"
+                          ]
+                        },
+                        "environment": {
+                          "type": "object",
+                          "properties": {
+                            "host": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "object",
+                                      "properties": {
+                                        "platform": {
+                                          "type": "string"
+                                        },
+                                        "arch": {
+                                          "type": "string"
+                                        },
+                                        "runtimes": {
+                                          "type": "object",
+                                          "propertyNames": {
+                                            "type": "string"
+                                          },
+                                          "additionalProperties": {
+                                            "type": "string"
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "platform",
+                                        "arch",
+                                        "runtimes"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
+                            "kernel": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string"
+                                        },
+                                        "language": {
+                                          "type": "string"
+                                        },
+                                        "incarnation": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "available"
+                                                },
+                                                "value": {
+                                                  "type": "integer",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 9007199254740991
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "unavailable"
+                                                },
+                                                "reason": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "not_applicable",
+                                                    "not_captured",
+                                                    "not_implemented",
+                                                    "not_published",
+                                                    "not_versioned",
+                                                    "remote_unverified"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "reason"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "process_id": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "available"
+                                                },
+                                                "value": {
+                                                  "type": "integer",
+                                                  "exclusiveMinimum": 0,
+                                                  "maximum": 9007199254740991
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "unavailable"
+                                                },
+                                                "reason": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "not_applicable",
+                                                    "not_captured",
+                                                    "not_implemented",
+                                                    "not_published",
+                                                    "not_versioned",
+                                                    "remote_unverified"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "reason"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "process_started_at": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "available"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "value"
+                                              ]
+                                            },
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "status": {
+                                                  "type": "string",
+                                                  "const": "unavailable"
+                                                },
+                                                "reason": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "not_applicable",
+                                                    "not_captured",
+                                                    "not_implemented",
+                                                    "not_published",
+                                                    "not_versioned",
+                                                    "remote_unverified"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "reason"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "language",
+                                        "incarnation",
+                                        "process_id",
+                                        "process_started_at"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "host",
+                            "kernel"
+                          ]
+                        },
+                        "outputs": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "running",
+                                "succeeded",
+                                "failed",
+                                "cancelled",
+                                "interrupted",
+                                "inconclusive"
+                              ]
+                            },
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "stream",
+                                      "display",
+                                      "result",
+                                      "error",
+                                      "artifact",
+                                      "checkpoint"
+                                    ]
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "artifact_id": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "status": {
+                                            "type": "string",
+                                            "const": "available"
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "value"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "status": {
+                                            "type": "string",
+                                            "const": "unavailable"
+                                          },
+                                          "reason": {
+                                            "type": "string",
+                                            "enum": [
+                                              "not_applicable",
+                                              "not_captured",
+                                              "not_implemented",
+                                              "not_published",
+                                              "not_versioned",
+                                              "remote_unverified"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "reason"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "path": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "status": {
+                                            "type": "string",
+                                            "const": "available"
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "value"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "status": {
+                                            "type": "string",
+                                            "const": "unavailable"
+                                          },
+                                          "reason": {
+                                            "type": "string",
+                                            "enum": [
+                                              "not_applicable",
+                                              "not_captured",
+                                              "not_implemented",
+                                              "not_published",
+                                              "not_versioned",
+                                              "remote_unverified"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "reason"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "version_id": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "status": {
+                                            "type": "string",
+                                            "const": "available"
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "value"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "status": {
+                                            "type": "string",
+                                            "const": "unavailable"
+                                          },
+                                          "reason": {
+                                            "type": "string",
+                                            "enum": [
+                                              "not_applicable",
+                                              "not_captured",
+                                              "not_implemented",
+                                              "not_published",
+                                              "not_versioned",
+                                              "remote_unverified"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "reason"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "version": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "status": {
+                                            "type": "string",
+                                            "const": "available"
+                                          },
+                                          "value": {
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 9007199254740991
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "value"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "status": {
+                                            "type": "string",
+                                            "const": "unavailable"
+                                          },
+                                          "reason": {
+                                            "type": "string",
+                                            "enum": [
+                                              "not_applicable",
+                                              "not_captured",
+                                              "not_implemented",
+                                              "not_published",
+                                              "not_versioned",
+                                              "remote_unverified"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "reason"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "created_at": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "status": {
+                                            "type": "string",
+                                            "const": "available"
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "value"
+                                        ]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "status": {
+                                            "type": "string",
+                                            "const": "unavailable"
+                                          },
+                                          "reason": {
+                                            "type": "string",
+                                            "enum": [
+                                              "not_applicable",
+                                              "not_captured",
+                                              "not_implemented",
+                                              "not_published",
+                                              "not_versioned",
+                                              "remote_unverified"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "reason"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "label",
+                                  "artifact_id",
+                                  "path",
+                                  "sha256",
+                                  "size",
+                                  "version_id",
+                                  "version",
+                                  "created_at"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "items"
+                          ]
+                        },
+                        "timestamps": {
+                          "type": "object",
+                          "properties": {
+                            "created_at": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
+                            "started_at": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
+                            "completed_at": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "created_at",
+                            "started_at",
+                            "completed_at"
+                          ]
+                        },
+                        "handoff": {
+                          "type": "object",
+                          "properties": {
+                            "atlas_compute_id": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            },
+                            "atlas_run_id": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "available"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "value"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "const": "unavailable"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_applicable",
+                                        "not_captured",
+                                        "not_implemented",
+                                        "not_published",
+                                        "not_versioned",
+                                        "remote_unverified"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "atlas_compute_id",
+                            "atlas_run_id"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "format",
+                        "kind",
+                        "identity",
+                        "input",
+                        "environment",
+                        "outputs",
+                        "timestamps",
+                        "handoff"
+                      ]
+                    },
+                    "capture_error": {
+                      "type": "string"
+                    },
+                    "session_id": {
+                      "type": "string",
+                      "pattern": "^ses_.*"
+                    },
+                    "authority": {
+                      "type": "object",
+                      "properties": {
+                        "allowed": {
+                          "type": "boolean"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "allowed",
+                            "project_untrusted",
+                            "sandbox_unavailable"
+                          ]
+                        },
+                        "capability": {
+                          "type": "string",
+                          "enum": [
+                            "terminal",
+                            "kernel",
+                            "shell",
+                            "local_job",
+                            "remote_job",
+                            "package_install",
+                            "project_plugin",
+                            "project_mcp",
+                            "project_formatter",
+                            "project_lsp",
+                            "provider_token_command"
+                          ]
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "read_only",
+                            "sandboxed",
+                            "host"
+                          ]
+                        },
+                        "projectID": {
+                          "type": "string"
+                        },
+                        "sessionID": {
+                          "type": "string"
+                        },
+                        "trustRevision": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "grantRevision": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "generation": {
+                          "type": "string"
+                        },
+                        "workspace": {
+                          "type": "string"
+                        },
+                        "writable": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "sandbox": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "network": {
+                              "type": "string",
+                              "enum": [
+                                "allow",
+                                "deny"
+                              ]
+                            },
+                            "allowWrite": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "onUnavailable": {
+                              "type": "string",
+                              "enum": [
+                                "warn",
+                                "error",
+                                "allow"
+                              ]
+                            },
+                            "backend": {
+                              "type": "string",
+                              "enum": [
+                                "seatbelt",
+                                "bubblewrap",
+                                "none"
+                              ]
+                            },
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "enforced": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "network",
+                            "allowWrite",
+                            "onUnavailable",
+                            "backend",
+                            "available",
+                            "enforced"
+                          ]
+                        },
+                        "remediation": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "const": "trust_project_required"
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "method": {
+                              "type": "string",
+                              "const": "PUT"
+                            },
+                            "path": {
+                              "type": "string"
+                            },
+                            "body": {
+                              "type": "object",
+                              "properties": {
+                                "trusted": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
+                                "root": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "trusted",
+                                "root"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message",
+                            "method",
+                            "path",
+                            "body"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "allowed",
+                        "reason",
+                        "capability",
+                        "mode",
+                        "projectID",
+                        "sessionID",
+                        "trustRevision",
+                        "grantRevision",
+                        "generation",
+                        "workspace",
+                        "writable",
+                        "sandbox"
+                      ]
+                    },
+                    "scope": {
+                      "type": "object",
+                      "properties": {
+                        "directory": {
+                          "type": "string"
+                        },
+                        "key": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "directory",
+                        "key"
+                      ]
+                    },
+                    "sandbox": {
+                      "type": "object",
+                      "properties": {
+                        "requested": {
+                          "type": "boolean"
+                        },
+                        "enforced": {
+                          "type": "boolean"
+                        },
+                        "backend": {
+                          "type": "string",
+                          "enum": [
+                            "seatbelt",
+                            "bubblewrap",
+                            "none"
+                          ]
+                        },
+                        "network": {
+                          "type": "string",
+                          "enum": [
+                            "allow",
+                            "deny"
+                          ]
+                        },
+                        "warning": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requested",
+                        "enforced",
+                        "backend",
+                        "network"
+                      ]
+                    },
+                    "lifecycle": {
+                      "type": "object",
+                      "properties": {
+                        "execution": {
+                          "type": "string",
+                          "enum": [
+                            "planned",
+                            "awaiting_approval",
+                            "queued",
+                            "starting",
+                            "running",
+                            "succeeded",
+                            "failed",
+                            "timed_out",
+                            "cancelled",
+                            "interrupted"
+                          ]
+                        },
+                        "delivery": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "pending",
+                            "complete",
+                            "rejected",
+                            "failed"
+                          ]
+                        },
+                        "resource": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "starting",
+                            "active",
+                            "closed",
+                            "unknown"
+                          ]
+                        },
+                        "recoverable": {
+                          "type": "boolean"
+                        },
+                        "error_kind": {
+                          "type": "string",
+                          "enum": [
+                            "provider_disabled",
+                            "image_build_failed",
+                            "unauthorized",
+                            "quota_exhausted",
+                            "rate_limited",
+                            "ownership_mismatch",
+                            "result_rejected",
+                            "harvest_failed",
+                            "input_changed",
+                            "session_concurrency_full",
+                            "invalid_request",
+                            "not_found"
+                          ]
+                        },
+                        "system_hint": {
+                          "type": "string"
+                        },
+                        "deadline_fired": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "execution",
+                        "delivery",
+                        "resource",
+                        "recoverable"
+                      ]
+                    },
+                    "remote_id": {
+                      "type": "string"
+                    },
+                    "modal": {
+                      "type": "object",
+                      "properties": {
+                        "app": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "image": {
+                          "type": "string"
+                        },
+                        "packages": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "gpu": {
+                          "type": "string"
+                        },
+                        "network": {
+                          "type": "string",
+                          "enum": [
+                            "unrestricted",
+                            "none"
+                          ]
+                        },
+                        "timeout_minutes": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "uploads": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "size": {
+                                "type": "number"
+                              },
+                              "sha256": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "size",
+                              "sha256"
+                            ]
+                          }
+                        },
+                        "upload_bytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "approval": {
+                          "type": "string",
+                          "minLength": 64,
+                          "maxLength": 64
+                        },
+                        "sdk": {
+                          "type": "string"
+                        },
+                        "volume": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "app",
+                        "image",
+                        "gpu",
+                        "network",
+                        "timeout_minutes",
+                        "uploads",
+                        "upload_bytes",
+                        "approval",
+                        "sdk"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "command",
+                    "target",
+                    "target_label",
+                    "scheduler",
+                    "status",
+                    "created_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.compute.jobs.retry({\n  ...\n})"
           }
         ]
       }
@@ -10131,6 +12284,9 @@
                           "maxLength": 64
                         },
                         "sdk": {
+                          "type": "string"
+                        },
+                        "volume": {
                           "type": "string"
                         }
                       },

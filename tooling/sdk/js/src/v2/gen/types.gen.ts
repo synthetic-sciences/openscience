@@ -3013,6 +3013,7 @@ export type SettingsComputeGetResponses = {
       image?: string
       network?: "unrestricted" | "none"
       timeout_minutes?: number
+      concurrency?: number
     }
     modal_file: {
       found: boolean
@@ -3063,6 +3064,7 @@ export type SettingsComputeProviderDisconnectResponses = {
       image?: string
       network?: "unrestricted" | "none"
       timeout_minutes?: number
+      concurrency?: number
     }
     modal_file: {
       found: boolean
@@ -3126,6 +3128,7 @@ export type SettingsComputeProviderConnectResponses = {
       image?: string
       network?: "unrestricted" | "none"
       timeout_minutes?: number
+      concurrency?: number
     }
     modal_file: {
       found: boolean
@@ -3189,6 +3192,7 @@ export type SettingsComputeProviderEnabledResponses = {
       image?: string
       network?: "unrestricted" | "none"
       timeout_minutes?: number
+      concurrency?: number
     }
     modal_file: {
       found: boolean
@@ -3206,6 +3210,7 @@ export type SettingsComputeModalUpdateData = {
     image?: string
     network?: "unrestricted" | "none"
     timeout_minutes?: number
+    concurrency?: number
   }
   path?: never
   query?: never
@@ -3252,6 +3257,7 @@ export type SettingsComputeModalUpdateResponses = {
       image?: string
       network?: "unrestricted" | "none"
       timeout_minutes?: number
+      concurrency?: number
     }
     modal_file: {
       found: boolean
@@ -3311,6 +3317,7 @@ export type SettingsComputeModalConfigureResponses = {
       image?: string
       network?: "unrestricted" | "none"
       timeout_minutes?: number
+      concurrency?: number
     }
     modal_file: {
       found: boolean
@@ -3405,6 +3412,7 @@ export type SettingsComputeSshAddResponses = {
       image?: string
       network?: "unrestricted" | "none"
       timeout_minutes?: number
+      concurrency?: number
     }
     modal_file: {
       found: boolean
@@ -3492,6 +3500,7 @@ export type SettingsComputeSshRemoveResponses = {
       image?: string
       network?: "unrestricted" | "none"
       timeout_minutes?: number
+      concurrency?: number
     }
     modal_file: {
       found: boolean
@@ -4105,6 +4114,7 @@ export type SettingsComputeJobsListResponses = {
       upload_bytes: number
       approval: string
       sdk: string
+      volume?: string
     }
   }>
 }
@@ -4754,6 +4764,7 @@ export type SettingsComputeJobsStartResponses = {
       upload_bytes: number
       approval: string
       sdk: string
+      volume?: string
     }
   }
 }
@@ -4928,6 +4939,631 @@ export type SettingsComputeJobsEventsResponses = {
 
 export type SettingsComputeJobsEventsResponse =
   SettingsComputeJobsEventsResponses[keyof SettingsComputeJobsEventsResponses]
+
+export type SettingsComputeJobsRetryData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/settings/compute/jobs/{id}/retry"
+}
+
+export type SettingsComputeJobsRetryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SettingsComputeJobsRetryError = SettingsComputeJobsRetryErrors[keyof SettingsComputeJobsRetryErrors]
+
+export type SettingsComputeJobsRetryResponses = {
+  /**
+   * Recovery started
+   */
+  200: {
+    id: string
+    name: string
+    command: string
+    cwd?: string
+    target:
+      | {
+          kind: "local"
+        }
+      | {
+          kind: "ssh"
+          host_id: string
+        }
+      | {
+          kind: "modal"
+        }
+    target_label: string
+    scheduler: "none" | "slurm" | "pbs"
+    status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
+    created_at: string
+    started_at?: string
+    completed_at?: string
+    exit_code?: number | null
+    pid?: number
+    error?: string
+    resources?: {
+      cpus?: number
+      gpus?: number
+      memory_gb?: number
+      time_minutes?: number
+      partition?: string
+    }
+    modules?: Array<string>
+    container?: string
+    artifact_patterns?: Array<string>
+    artifacts?: Array<{
+      path: string
+      size: number
+      sha256: string
+      modified_at: string
+    }>
+    checkpoint_path?: string
+    checkpoint?: {
+      path: string
+      size: number
+      sha256: string
+      modified_at: string
+    }
+    reproducibility?: {
+      captured_at: string
+      command: string
+      cwd: string
+      platform: string
+      arch: string
+      bun: string
+      node: string
+      python?: string
+      git?: {
+        repository?: string
+        branch?: string
+        commit?: string
+        dirty: boolean
+      }
+      lockfiles: Array<{
+        path: string
+        size: number
+        sha256: string
+        modified_at: string
+      }>
+      resources?: {
+        cpus?: number
+        gpus?: number
+        memory_gb?: number
+        time_minutes?: number
+        partition?: string
+      }
+    }
+    provenance?: {
+      format: "openscience.provenance.v1"
+      kind: "kernel" | "local_compute" | "remote_compute" | "artifact_version"
+      identity: {
+        project_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        session_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        run_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      input: {
+        code:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        cwd:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        code_state:
+          | {
+              status: "available"
+              value: {
+                repository:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                branch:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                commit:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                dirty:
+                  | {
+                      status: "available"
+                      value: boolean
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+              }
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      environment: {
+        host:
+          | {
+              status: "available"
+              value: {
+                platform: string
+                arch: string
+                runtimes: {
+                  [key: string]: string
+                }
+              }
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        kernel:
+          | {
+              status: "available"
+              value: {
+                id: string
+                language: string
+                incarnation:
+                  | {
+                      status: "available"
+                      value: number
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                process_id:
+                  | {
+                      status: "available"
+                      value: number
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                process_started_at:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+              }
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      outputs: {
+        status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted" | "inconclusive"
+        items: Array<{
+          kind: "stream" | "display" | "result" | "error" | "artifact" | "checkpoint"
+          label: string
+          artifact_id:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          path:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          sha256: string
+          size: number
+          version_id:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          version:
+            | {
+                status: "available"
+                value: number
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          created_at:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+        }>
+      }
+      timestamps: {
+        created_at:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        started_at:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        completed_at:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      handoff: {
+        atlas_compute_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        atlas_run_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+    }
+    capture_error?: string
+    session_id?: string
+    authority?: {
+      allowed: boolean
+      reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      capability:
+        | "terminal"
+        | "kernel"
+        | "shell"
+        | "local_job"
+        | "remote_job"
+        | "package_install"
+        | "project_plugin"
+        | "project_mcp"
+        | "project_formatter"
+        | "project_lsp"
+        | "provider_token_command"
+      mode: "read_only" | "sandboxed" | "host"
+      projectID: string
+      sessionID: string
+      trustRevision: number
+      grantRevision: number
+      generation: string
+      workspace: string
+      writable: Array<string>
+      sandbox: {
+        enabled: boolean
+        network: "allow" | "deny"
+        allowWrite: Array<string>
+        onUnavailable: "warn" | "error" | "allow"
+        backend: "seatbelt" | "bubblewrap" | "none"
+        available: boolean
+        enforced: boolean
+      }
+      remediation?: {
+        code: "trust_project_required"
+        message: string
+        method: "PUT"
+        path: string
+        body: {
+          trusted: true
+          root: string
+        }
+      }
+    }
+    scope?: {
+      directory: string
+      key: string
+    }
+    sandbox?: {
+      requested: boolean
+      enforced: boolean
+      backend: "seatbelt" | "bubblewrap" | "none"
+      network: "allow" | "deny"
+      warning?: string
+    }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+      volume?: string
+    }
+  }
+}
+
+export type SettingsComputeJobsRetryResponse =
+  SettingsComputeJobsRetryResponses[keyof SettingsComputeJobsRetryResponses]
 
 export type SettingsComputeJobsCancelData = {
   body?: never
@@ -5542,6 +6178,7 @@ export type SettingsComputeJobsCancelResponses = {
       upload_bytes: number
       approval: string
       sdk: string
+      volume?: string
     }
   }
 }

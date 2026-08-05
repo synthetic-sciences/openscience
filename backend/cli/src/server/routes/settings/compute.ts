@@ -152,6 +152,7 @@ export namespace ComputeSettings {
       .min(1)
       .max(24 * 60)
       .default(60),
+    concurrency: z.number().int().min(1).max(100).default(10),
   })
   export type Modal = z.infer<typeof Modal>
 
@@ -160,6 +161,7 @@ export namespace ComputeSettings {
     image: Modal.shape.image.optional(),
     network: Modal.shape.network.optional(),
     timeout_minutes: Modal.shape.timeout_minutes.optional(),
+    concurrency: Modal.shape.concurrency.optional(),
   })
   export type ModalPatch = z.infer<typeof ModalPatch>
 
@@ -201,6 +203,10 @@ export namespace ComputeSettings {
       image: typeof legacy.image === "string" && legacy.image.trim() ? legacy.image : undefined,
       network: legacy.network === "unrestricted" || legacy.network === "allow" ? "unrestricted" : "none",
       timeout_minutes: timeout === undefined ? undefined : Math.max(1, Math.min(24 * 60, Math.round(timeout))),
+      concurrency:
+        typeof legacy.concurrency === "number" && Number.isFinite(legacy.concurrency)
+          ? Math.max(1, Math.min(100, Math.round(legacy.concurrency)))
+          : undefined,
     }
   }, Modal)
   const Stored = z.object({
@@ -409,6 +415,7 @@ export namespace ComputeSettings {
       environment: undefined,
       network: stored.modal.network,
       timeoutMinutes: stored.modal.timeout_minutes,
+      concurrency: stored.modal.concurrency,
     }
   }
 
@@ -737,6 +744,30 @@ export const ComputeSettingsRoutes = lazy(() =>
           const job = await ComputeJobs.get(c.req.valid("param").id)
           if (!job) return c.json({ error: "Compute job not found" }, 404)
           return c.json({ events: await ComputeJobs.events(job.id) })
+        })
+      },
+    )
+    .post(
+      "/jobs/:id/retry",
+      describeRoute({
+        summary: "Retry delivery from a retained Modal resource",
+        operationId: "settings.compute.jobs.retry",
+        responses: {
+          200: {
+            description: "Recovery started",
+            content: { "application/json": { schema: resolver(ComputeJobs.Job) } },
+          },
+          ...errors(400, 404, 409),
+        },
+      }),
+      validator("param", z.object({ id: z.string() })),
+      validator("query", Directory),
+      async (c) => {
+        return project(c, async () => {
+          const job = await ComputeJobs.get(c.req.valid("param").id)
+          if (!job) return c.json({ error: "Compute job not found" }, 404)
+          const credentials = await ComputeSettings.modalContext()
+          return c.json(await ComputeJobs.retry(job.id, { credentials }))
         })
       },
     )

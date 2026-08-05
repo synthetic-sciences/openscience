@@ -35,6 +35,7 @@ describe("compute jobs surface", () => {
       { log: "ok\n" },
       { events: "sandbox ready\n" },
       { id: "job_1" },
+      { id: "job_1" },
       { cleared: 1 },
     ]
     const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -58,6 +59,7 @@ describe("compute jobs surface", () => {
     })
     await api.log("job_1")
     await api.events("job_1")
+    await api.retry("job_1")
     await api.cancel("job_1")
     await api.clear()
 
@@ -66,6 +68,7 @@ describe("compute jobs surface", () => {
       "POST /settings/compute/jobs",
       "GET /settings/compute/jobs/job_1/log",
       "GET /settings/compute/jobs/job_1/events",
+      "POST /settings/compute/jobs/job_1/retry",
       "POST /settings/compute/jobs/job_1/cancel",
       "DELETE /settings/compute/jobs/completed",
     ])
@@ -125,6 +128,7 @@ describe("compute jobs surface", () => {
     expect(source).not.toContain("directory=${encodeURIComponent(sdk.directory)}")
     expect(apiSource).toContain('call<Job[]>("")')
     expect(apiSource).toContain('call<Job>("", { method: "POST"')
+    expect(apiSource).toContain("call<Job>(`/${id}/retry`")
     expect(apiSource).toContain("call<Job>(`/${id}/cancel`")
     expect(apiSource).toContain("`/${id}/log`")
     expect(apiSource).toContain("`/${id}/events`")
@@ -155,6 +159,8 @@ describe("compute jobs surface", () => {
     expect(source).toContain("!authority.allowed()")
     expect(source).toContain('title="Cancel job"')
     expect(source).toContain("api.cancel(job.id)")
+    expect(source).toContain("api.retry(job.id)")
+    expect(source).toContain("Retry delivery")
     expect(source).toContain('job().target.kind !== "ssh"')
     expect(source).toContain("Remote dispatch is unavailable")
     expect(source).toContain("none (CPU only), T4, L4, A10G, A100, H100")

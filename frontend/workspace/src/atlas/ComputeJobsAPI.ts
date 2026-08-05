@@ -60,6 +60,14 @@ export interface Job {
   reproducibility?: Reproducibility
   capture_error?: string
   remote_id?: string
+  lifecycle?: {
+    execution: string
+    delivery: string
+    resource: "none" | "starting" | "active" | "closed" | "unknown"
+    recoverable: boolean
+    error_kind?: string
+    system_hint?: string
+  }
   modal?: {
     app: string
     image: string
@@ -70,6 +78,7 @@ export interface Job {
     upload_bytes: number
     approval: string
     sdk: string
+    volume?: string
   }
 }
 
@@ -141,6 +150,7 @@ export function createComputeJobsAPI(request: ProjectRequest) {
     start: (input: JobInput) => call<Job>("", { method: "POST", body: JSON.stringify(input) }),
     log: (id: string) => call<{ log: string }>(`/${id}/log`),
     events: (id: string) => call<{ events: string }>(`/${id}/events`),
+    retry: (id: string) => call<Job>(`/${id}/retry`, { method: "POST" }),
     cancel: (id: string) => call<Job>(`/${id}/cancel`, { method: "POST" }),
     clear: () => call<{ cleared: number }>("/completed", { method: "DELETE" }),
   }

@@ -253,6 +253,8 @@ import type {
   SettingsComputeJobsLogResponses,
   SettingsComputeJobsPlanErrors,
   SettingsComputeJobsPlanResponses,
+  SettingsComputeJobsRetryErrors,
+  SettingsComputeJobsRetryResponses,
   SettingsComputeJobsStartErrors,
   SettingsComputeJobsStartResponses,
   SettingsComputeModalCheckErrors,
@@ -919,6 +921,7 @@ export class Modal extends HeyApiClient {
       image?: string
       network?: "unrestricted" | "none"
       timeout_minutes?: number
+      concurrency?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -931,6 +934,7 @@ export class Modal extends HeyApiClient {
             { in: "body", key: "image" },
             { in: "body", key: "network" },
             { in: "body", key: "timeout_minutes" },
+            { in: "body", key: "concurrency" },
           ],
         },
       ],
@@ -1315,6 +1319,38 @@ export class Jobs extends HeyApiClient {
       ThrowOnError
     >({
       url: "/settings/compute/jobs/{id}/events",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Retry delivery from a retained Modal resource
+   */
+  public retry<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SettingsComputeJobsRetryResponses,
+      SettingsComputeJobsRetryErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/jobs/{id}/retry",
       ...options,
       ...params,
     })

@@ -1,11 +1,12 @@
 import path from "path"
 import fs from "fs/promises"
 import z from "zod"
+import ignore from "ignore"
 import { Filesystem } from "../../util/filesystem"
 import type { ModalAdapter } from "./adapter"
 
 export namespace ModalPlan {
-  const DENY = new Set([".git", "node_modules", ".openscience"])
+  const DENY = new Set([".git", "node_modules", ".openscience", ".modal.toml", ".ssh"])
   const SECRET = /(^|\/)(?:\.env(?:\..*)?|.*\.(?:pem|key|p12|pfx))$/i
 
   export const Schema = z.object({
@@ -67,8 +68,22 @@ export namespace ModalPlan {
     return segments.some((part) => DENY.has(part)) || SECRET.test(file)
   }
 
+  async function ignored(root: string) {
+    const [project, local] = await Promise.all([
+      Bun.file(path.join(root, ".gitignore"))
+        .text()
+        .catch(() => ""),
+      Bun.file(path.join(root, ".git", "info", "exclude"))
+        .text()
+        .catch(() => ""),
+    ])
+    const matcher = ignore().add(project).add(local)
+    return (file: string) => matcher.ignores(file)
+  }
+
   async function inputs(root: string, patterns: string[]) {
     const files = new Map<string, ModalAdapter.File>()
+    const excludes = await ignored(root)
     for (const pattern of patterns) {
       if (path.isAbsolute(pattern) || pattern.split(/[\\/]/).includes("..")) {
         throw new Error(`Modal upload pattern must stay inside the project: ${pattern}`)
@@ -76,14 +91,18 @@ export namespace ModalPlan {
       const scan = new Bun.Glob(pattern).scan({ cwd: root, dot: true, onlyFiles: true, followSymlinks: true })
       for await (const found of scan) {
         const relative = posix(found)
+        if (excludes(relative)) continue
         if (forbidden(relative)) throw new Error(`Modal upload policy denied: ${relative}`)
         const canonical = await Filesystem.canonical(path.resolve(root, found))
         if (!canonical || !Filesystem.contains(root, canonical)) {
           throw new Error(`Modal upload escaped the project: ${relative}`)
         }
+        const resolved = posix(path.relative(root, canonical))
+        if (excludes(resolved)) continue
+        if (forbidden(resolved)) throw new Error(`Modal upload policy denied: ${relative}`)
         const info = await fs.stat(canonical)
         files.set(canonical, {
-          path: posix(path.relative(root, canonical)),
+          path: resolved,
           canonical,
           size: info.size,
           sha256: await hash(canonical),

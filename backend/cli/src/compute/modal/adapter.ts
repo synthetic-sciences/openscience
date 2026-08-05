@@ -16,6 +16,7 @@ export namespace ModalAdapter {
     environment?: string
     network: "unrestricted" | "none"
     timeoutMinutes: number
+    concurrency: number
   }
 
   export type Context = Config & {
@@ -44,6 +45,7 @@ export namespace ModalAdapter {
     uploads: File[]
     outputs: string[]
     staging: string
+    volume: string
   }
 
   export type Result = {
@@ -55,6 +57,11 @@ export namespace ModalAdapter {
     created: (id: string) => Promise<void>
     log: (value: string) => Promise<void>
     output: (value: string) => Promise<void>
+  }
+
+  export function volume(project: string, id: string) {
+    const digest = crypto.createHash("sha256").update(`${project}\0${id}`).digest("hex").slice(0, 32)
+    return `openscience-job-${digest}`
   }
 
   const clean = (value: string) => value.split(path.sep).join("/").replace(/^\.\//, "")
@@ -155,6 +162,40 @@ export namespace ModalAdapter {
     )
   }
 
+  async function harvest(
+    modal: ModalClient,
+    context: Context,
+    spec: Spec,
+    app: Awaited<ReturnType<ModalClient["apps"]["fromName"]>>,
+    image: Awaited<ReturnType<ReturnType<ModalClient["images"]["fromRegistry"]>["build"]>>,
+  ) {
+    const volume = await modal.volumes.fromName(spec.volume, {
+      environment: context.environment,
+      createIfMissing: false,
+    })
+    const sandbox = await modal.sandboxes.create(app, image, {
+      command: ["bash", "-lc", "while :; do sleep 3600; done"],
+      workdir: ROOT,
+      timeoutMs: 10 * 60_000,
+      blockNetwork: true,
+      volumes: { [ROOT]: volume.withMountOptions({ readOnly: true }) },
+      tags: {
+        openscience: "true",
+        openscience_job: spec.id,
+        openscience_project: crypto.createHash("sha256").update(spec.project).digest("hex").slice(0, 20),
+        openscience_role: "harvest",
+      },
+    })
+    return Promise.resolve()
+      .then(async () => {
+        const saved = await sandbox.filesystem.readText(EXIT_CODE)
+        const code = Number.parseInt(saved.trim(), 10)
+        if (!Number.isInteger(code)) throw new Error("Modal output volume has no completed command result")
+        return { code, outputs: await collect(sandbox, spec), log: await sandbox.filesystem.readText(RUN_LOG) }
+      })
+      .finally(() => sandbox.terminate().catch(() => undefined))
+  }
+
   async function upload(sandbox: Sandbox, spec: Spec) {
     await sandbox.filesystem.makeDirectory(ROOT)
     for (const file of spec.uploads) {
@@ -168,9 +209,10 @@ export namespace ModalAdapter {
     await sandbox.filesystem.writeText("approved\n", path.posix.join(ROOT, ".openscience-ready"))
   }
 
-  async function own(sandbox: Sandbox, id: string) {
+  async function own(sandbox: Sandbox, id: string, project: string) {
     const tags = await sandbox.getTags()
-    if (tags.openscience !== "true" || tags.openscience_job !== id) {
+    const owner = crypto.createHash("sha256").update(project).digest("hex").slice(0, 20)
+    if (tags.openscience !== "true" || tags.openscience_job !== id || tags.openscience_project !== owner) {
       throw new Error(`Modal sandbox ${sandbox.sandboxId} is not owned by OpenScience job ${id}`)
     }
   }
@@ -207,6 +249,10 @@ export namespace ModalAdapter {
             : `Resolving image ${spec.image}`,
         )
         const ready = await image.build(app)
+        const volume = await modal.volumes.fromName(spec.volume, {
+          environment: context.environment,
+          createIfMissing: true,
+        })
         await hooks.log(`Image ready: ${ready.imageId}`)
         await hooks.log(`Creating ${gpu === "none" ? "CPU" : gpu} sandbox`)
         const sandbox = await modal.sandboxes.create(app, ready, {
@@ -217,6 +263,7 @@ export namespace ModalAdapter {
           memoryMiB: spec.memoryGb ? Math.ceil(spec.memoryGb * 1024) : undefined,
           timeoutMs: (spec.timeoutMinutes ?? context.timeoutMinutes) * 60_000,
           blockNetwork: context.network === "none",
+          volumes: { [ROOT]: volume },
           name: `os-${spec.id}`,
           tags: {
             openscience: "true",
@@ -236,38 +283,76 @@ export namespace ModalAdapter {
         await hooks.log(`Running command: ${spec.command}`)
         const code = await outcome(sandbox, hooks.output)
         await hooks.log(`Command exited with code ${code}`)
-        const outputs = await collect(sandbox, spec)
+        const outputs = await collect(sandbox, spec).catch(async () => {
+          await hooks.log(`Execution sandbox unavailable; harvesting durable volume ${spec.volume}`)
+          const recovered = await harvest(modal, context, spec, app, ready)
+          return recovered.outputs
+        })
         await hooks.log(`Collected ${outputs.length} output file${outputs.length === 1 ? "" : "s"}`)
         return { code, outputs }
       })
       .finally(() => modal.close())
   }
 
-  export async function recover(context: Context, spec: Spec, sandboxId: string, hooks: Pick<Hooks, "log" | "output">) {
+  export async function recover(
+    context: Context,
+    spec: Spec,
+    sandboxId: string | undefined,
+    hooks: Pick<Hooks, "log" | "output">,
+  ) {
     const modal = client(context)
     return Promise.resolve()
       .then(async () => {
-        const sandbox = await modal.sandboxes.fromId(sandboxId)
-        await own(sandbox, spec.id)
+        const app = await modal.apps.fromName(context.app, {
+          environment: context.environment,
+          createIfMissing: false,
+        })
+        const base = modal.images.fromRegistry(spec.image)
+        const commands = layers(spec.packages)
+        const image = await (commands.length ? base.dockerfileCommands(commands) : base).build(app)
+        const sandbox = sandboxId ? await modal.sandboxes.fromId(sandboxId).catch(() => undefined) : undefined
+        if (!sandbox) {
+          await hooks.log(
+            sandboxId
+              ? `Sandbox ${sandboxId} ended; harvesting durable volume ${spec.volume}`
+              : `No live sandbox found; harvesting durable volume ${spec.volume}`,
+          )
+          const recovered = await harvest(modal, context, spec, app, image)
+          if (recovered.log) await hooks.output(recovered.log)
+          await hooks.log(`Recovered command exit code ${recovered.code}`)
+          await hooks.log(
+            `Recovered ${recovered.outputs.length} output file${recovered.outputs.length === 1 ? "" : "s"}`,
+          )
+          return recovered
+        }
+        await own(sandbox, spec.id, spec.project)
         await hooks.log(`Reattached to sandbox ${sandboxId}`)
         const code = await outcome(sandbox, hooks.output)
         await hooks.log(`Recovered command exit code ${code}`)
-        const outputs = await collect(sandbox, spec)
+        const outputs = await collect(sandbox, spec).catch(async () => {
+          const recovered = await harvest(modal, context, spec, app, image)
+          return recovered.outputs
+        })
         await hooks.log(`Recovered ${outputs.length} output file${outputs.length === 1 ? "" : "s"}`)
         return { code, outputs }
       })
       .finally(() => modal.close())
   }
 
-  export async function find(context: Context, jobId: string) {
+  export async function find(context: Context, jobId: string, project: string) {
     const modal = client(context)
     return Promise.resolve()
       .then(async () => {
+        const owner = crypto.createHash("sha256").update(project).digest("hex").slice(0, 20)
         for await (const sandbox of modal.sandboxes.list({
           environment: context.environment,
-          tags: { openscience: "true", openscience_job: jobId },
+          tags: {
+            openscience: "true",
+            openscience_job: jobId,
+            openscience_project: owner,
+          },
         })) {
-          await own(sandbox, jobId)
+          await own(sandbox, jobId, project)
           return sandbox.sandboxId
         }
         return undefined
@@ -275,13 +360,32 @@ export namespace ModalAdapter {
       .finally(() => modal.close())
   }
 
-  export async function close(context: Context, sandboxId: string, jobId: string) {
+  export async function close(context: Context, sandboxId: string, jobId: string, project: string) {
     const modal = client(context)
     return Promise.resolve()
       .then(async () => {
         const sandbox = await modal.sandboxes.fromId(sandboxId)
-        await own(sandbox, jobId)
+        await own(sandbox, jobId, project)
         await sandbox.terminate()
+      })
+      .finally(() => modal.close())
+  }
+
+  export async function release(context: Context, spec: Pick<Spec, "id" | "project" | "volume">, sandboxId?: string) {
+    const expected = volume(spec.project, spec.id)
+    if (spec.volume !== expected)
+      throw new Error(`Modal volume ${spec.volume} is not owned by OpenScience job ${spec.id}`)
+    const modal = client(context)
+    return Promise.resolve()
+      .then(async () => {
+        if (sandboxId) {
+          const sandbox = await modal.sandboxes.fromId(sandboxId).catch(() => undefined)
+          if (sandbox) {
+            await own(sandbox, spec.id, spec.project)
+            await sandbox.terminate()
+          }
+        }
+        await modal.volumes.delete(spec.volume, { environment: context.environment, allowMissing: true })
       })
       .finally(() => modal.close())
   }

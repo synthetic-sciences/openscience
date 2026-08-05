@@ -19,6 +19,7 @@ On another platform, use the matching directory under `backend/cli/dist/@synsci/
 4. If there is no usable active profile, enter the token ID and secret separately, save them, and turn **Enable Modal** on.
 5. Select **test connection**. A successful check reports the JavaScript SDK version.
 6. Keep the default `python:3.12-slim` image, blocked network, and a short timeout for the smoke test.
+7. Set **Concurrent jobs** to the maximum number of Modal sandboxes OpenScience may dispatch for this project at once.
 
 OpenScience follows Modal's active-profile convention: the selected TOML table must contain `active = true`, `token_id`, and `token_secret`. It exposes only `found`/`ready` state to the UI. The trusted adapter reads credentials only after Modal is enabled and only for Modal control-plane operations.
 
@@ -50,4 +51,10 @@ Select **Review command**. Verify the app, image, GPU, network policy, timeout, 
 
 A successful run should show `nvidia-smi` in the streamed log and copy `outputs/modal-smoke.txt` into the project with its checksum in **Captured outputs**.
 
+Every governed job mounts a named per-job Modal Volume at `/workspace`. The volume name is recorded with the job without exposing the local project path. If the execution sandbox exits before collection, OpenScience creates a short-lived, network-blocked harvest sandbox, mounts the same Volume read-only, and recovers the command result and declared outputs. The Volume is deleted only after local delivery succeeds and the execution sandbox is closed.
+
+If local output delivery fails, the finished run remains visible with **Retry delivery**. That action reattaches to the existing sandbox or mounts the retained Volume in a harvest sandbox; it does not rerun the approved command. **Clear finished** keeps the record until delivery succeeds or the retained resource is explicitly cleaned up.
+
 To test cancellation, dispatch `sleep 300`, wait for the job to become running, then select **Cancel job**. Modal should terminate the tagged sandbox and the job should become cancelled.
+
+If Modal does not confirm termination, the run remains visible with an explicit billing warning and **Retry cleanup**. Finished records whose remote resource is unknown or still holds recoverable output are not removed by **Clear finished**.

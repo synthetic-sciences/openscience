@@ -30,6 +30,7 @@ type Modal = {
   image: string
   network: "unrestricted" | "none"
   timeout_minutes: number
+  concurrency: number
 }
 type Info = {
   providers: Provider[]
@@ -82,6 +83,7 @@ const Compute: Component = () => {
   const [image, setImage] = createSignal("")
   const [network, setNetwork] = createSignal<Modal["network"]>("none")
   const [timeout, setTimeout] = createSignal("60")
+  const [concurrency, setConcurrency] = createSignal("10")
   const [connection, setConnection] = createSignal<Notice>()
   const [defaults, setDefaults] = createSignal<Notice>()
   const modal = () => data()?.providers.find((item) => item.id === "modal")
@@ -92,7 +94,8 @@ const Compute: Component = () => {
       app().trim() !== value.app ||
       image().trim() !== value.image ||
       network() !== value.network ||
-      timeout().trim() !== String(value.timeout_minutes)
+      timeout().trim() !== String(value.timeout_minutes) ||
+      concurrency().trim() !== String(value.concurrency)
     )
   }
   const connectionNotice = (): Notice | undefined => {
@@ -135,6 +138,7 @@ const Compute: Component = () => {
     setImage(value.image)
     setNetwork(value.network)
     setTimeout(String(value.timeout_minutes))
+    setConcurrency(String(value.concurrency))
   })
 
   const connect = async () => {
@@ -244,11 +248,27 @@ const Compute: Component = () => {
       showToast({ title: "Invalid Modal timeout", description: "Use a whole number from 1 to 1440 minutes." })
       return
     }
+    const limit = Number(concurrency())
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      setDefaults({
+        tone: "error",
+        title: "Defaults not saved",
+        detail: "Use a whole-number concurrent job limit from 1 to 100.",
+      })
+      showToast({ title: "Invalid Modal concurrency", description: "Use a whole number from 1 to 100." })
+      return
+    }
     setBusy("modal:save")
     setDefaults({ tone: "neutral", title: "Saving Modal defaults…" })
     const next = await call<Info>("/modal", {
       method: "PATCH",
-      body: JSON.stringify({ app: app().trim(), image: image().trim(), network: network(), timeout_minutes: minutes }),
+      body: JSON.stringify({
+        app: app().trim(),
+        image: image().trim(),
+        network: network(),
+        timeout_minutes: minutes,
+        concurrency: limit,
+      }),
     }).catch((error) => {
       const detail = message(error)
       setDefaults({ tone: "error", title: "Defaults not saved", detail })
@@ -448,6 +468,13 @@ const Compute: Component = () => {
                     placeholder="60"
                     inputMode="numeric"
                     onInput={setTimeout}
+                  />
+                  <Field
+                    label="Concurrent jobs"
+                    value={concurrency()}
+                    placeholder="10"
+                    inputMode="numeric"
+                    onInput={setConcurrency}
                   />
                 </div>
                 <Show when={defaultsNotice()}>{(notice) => <NoticeBox notice={notice()} />}</Show>

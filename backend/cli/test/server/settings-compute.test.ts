@@ -179,6 +179,7 @@ test("configuring Modal migrates legacy compute defaults", async () => {
     image: "python:3.12-slim",
     network: "none",
     timeout_minutes: 720,
+    concurrency: 10,
   })
   expect(info.providers.find((item) => item.id === "modal")).toMatchObject({
     connected: true,

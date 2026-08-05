@@ -321,6 +321,23 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
     void streams(job.id)
   }
 
+  const retry = async (job: Job) => {
+    setBusy(true)
+    const next = await api.retry(job.id).catch((error) => {
+      toast.error("output recovery did not start", error instanceof Error ? error.message : String(error))
+      return undefined
+    })
+    setBusy(false)
+    if (!next) return
+    jobsApi.mutate((list) => {
+      const value = list?.map((item) => (item.id === next.id ? next : item))
+      cache.value = value
+      return value
+    })
+    void streams(job.id)
+    void refresh()
+  }
+
   const rerun = (job: Job) => {
     if (job.target.kind === "ssh") {
       toast.error(
@@ -812,6 +829,39 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
                               <Action title="Cancel job" onClick={() => void cancel(job())}>
                                 <IconStop size={16} />
                               </Action>
+                            </Show>
+                            <Show
+                              when={
+                                job().target.kind === "modal" &&
+                                terminal.has(job().status) &&
+                                job().lifecycle?.recoverable
+                              }
+                            >
+                              <button
+                                type="button"
+                                style={secondaryButton}
+                                title="Retry collecting and delivering outputs from the retained Modal volume"
+                                onClick={() => void retry(job())}
+                              >
+                                Retry delivery
+                              </button>
+                            </Show>
+                            <Show
+                              when={
+                                job().target.kind === "modal" &&
+                                terminal.has(job().status) &&
+                                !job().lifecycle?.recoverable &&
+                                job().lifecycle?.resource === "unknown"
+                              }
+                            >
+                              <button
+                                type="button"
+                                style={secondaryButton}
+                                title="Retry stopping the Modal sandbox and releasing its volume"
+                                onClick={() => void cancel(job())}
+                              >
+                                Retry cleanup
+                              </button>
                             </Show>
                             <button
                               type="button"
