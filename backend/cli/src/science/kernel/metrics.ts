@@ -8,29 +8,48 @@ import { $ } from "bun"
 // average over a process's entire lifetime, which is wrong for a live meter.
 //
 // Platforms or processes that cannot report a value simply omit the field —
-// the UI shows "Unavailable", never 0.
+// the UI shows "Unavailable", never 0. A field that IS reported as 0 means the
+// sampler measured exactly nothing, which an idle kernel genuinely does.
 export namespace KernelMetrics {
   export interface Sample {
     cpu_percent?: number
     memory_bytes?: number
   }
 
-  // One kernel's whole process group as of a single poll: cumulative processor
-  // seconds PER MEMBER pid, plus the group's memory footprint.
+  // One process inside a kernel's group, with the resident size `ps` reported
+  // for it. The per-member resident figure is kept — rather than only the
+  // group's sum — because a member whose PSS cannot be read but whose RSS is
+  // measurably 0 holds nothing and can be skipped, while one with real RSS
+  // cannot (see `proportional`).
+  export interface Member {
+    pid: number
+    memory_bytes?: number
+  }
+
+  // One kernel's whole process group as of a single poll.
   //
-  // CPU stays per-pid instead of being summed here because the sum of a group's
-  // CUMULATIVE counters is not monotonic across a membership change: when a
-  // forked worker is reaped its accumulated seconds leave the total, so the
-  // next delta reads near zero — or negative — while the group is still pegging
-  // a core. `derive` therefore sums per-process deltas, which only the
-  // per-member breakdown makes possible.
+  // `seconds` is the group's CUMULATIVE processor time, and `reaped` states
+  // whether that total also accounts for descendants that have already exited
+  // and been waited for. On Linux it does — /proc/<pid>/stat's `cutime`/`cstime`
+  // hold the time of a process's reaped children, recursively — so the total is
+  // monotonic across a membership change by construction: a worker that was
+  // forked and reaped entirely inside one poll window has not vanished from the
+  // sum, its time moved into its parent's counters.
+  //
+  // Where nothing accumulates reaped time (macOS `ps`, Windows `Get-Process`),
+  // `reaped` is false and `derive` refuses any window a member left, because
+  // that member's whole lifetime left the sum with it. An unmeasurable window is
+  // reported as unmeasurable; it is never floored to 0.
   export interface Reading {
-    cpu: Map<number, number>
+    members: Member[]
+    seconds: number
+    reaped: boolean
     memory_bytes?: number
   }
 
   export interface Mark {
-    cpu: Map<number, number>
+    seconds: number
+    members: number[]
     at: number
   }
 
@@ -53,37 +72,39 @@ export namespace KernelMetrics {
   // uses to decide a rolling baseline is too old to average meaningfully.
   export const stale = 30_000
 
-  // Processor seconds the group burned between two samples: the sum of the
-  // per-pid deltas for pids present in BOTH. A member that was reaped
-  // contributes nothing further, and one that appeared since the last poll
-  // starts accumulating from this poll, so every term is a non-negative
-  // per-process delta and the aggregate is monotonic by construction.
+  // Processor seconds the group burned between two samples.
   //
-  // No overlap at all means no window to measure across (nothing was), and a
-  // counter that went backwards for a pid present in both means the OS recycled
-  // it — both yield no reading rather than a fabricated number.
-  const burned = (previous: Map<number, number>, current: Map<number, number>) => {
-    const shared = [...current].filter(([pid]) => previous.has(pid))
-    if (!shared.length) return
-    if (shared.some(([pid, seconds]) => seconds < (previous.get(pid) ?? 0))) return
-    return shared.reduce((sum, [pid, seconds]) => sum + (seconds - (previous.get(pid) ?? 0)), 0)
+  // A total that went BACKWARDS is refused: the counter lost work it had
+  // already counted (a member reparented outside the group and reaped by init,
+  // a stat unreadable this poll, a recycled pid). That is an unmeasurable
+  // window, not an idle one.
+  //
+  // Without a reaped-descendant accumulator, a member LEAVING the group takes
+  // its whole lifetime out of the sum, so a delta that still looks non-negative
+  // may understate the window by an unknown amount — refused for the same
+  // reason. A member that ARRIVED is safe either way: it was forked inside the
+  // window, so every second it carries was burned inside the window.
+  const burned = (previous: Mark, reading: Reading) => {
+    if (reading.seconds < previous.seconds) return
+    const members = new Set(reading.members.map((member) => member.pid))
+    if (!reading.reaped && previous.members.some((pid) => !members.has(pid))) return
+    return reading.seconds - previous.seconds
   }
 
   // The delta arithmetic on its own, so a known cpu delta across a known window
   // can be asserted exactly instead of against a wall clock. cpu_percent is
   // percent of ONE core, so a group pinning three cores reads 300. A window
-  // that has not advanced, or one whose members cannot be compared, yields no
+  // that has not advanced, or one whose total cannot be compared, yields no
   // cpu_percent at all — never a 0 the UI would render as an idle kernel.
   //
-  // `ps -o time=` has whole-second resolution, so a window under 1s quantises
-  // to either a fabricated 0 or a wild multiple — two clients on the same
-  // scoped route polling milliseconds apart would otherwise corrupt each
-  // other's reading. A window that short is floored to unmeasurable rather
-  // than trusted, and one longer than `stale` is refused for the reason given
-  // there.
+  // A window under a second is floored to unmeasurable rather than trusted:
+  // /proc counts in 10ms ticks and `ps -o time=` in whole seconds, so two
+  // clients on the same scoped route polling milliseconds apart would otherwise
+  // read either a fabricated 0 or a wild multiple. A window longer than `stale`
+  // is refused for the reason given there.
   export function derive(previous: Mark | undefined, reading: Reading, at: number) {
     const elapsed = previous ? at - previous.at : 0
-    const used = previous && elapsed >= 1_000 && elapsed <= stale ? burned(previous.cpu, reading.cpu) : undefined
+    const used = previous && elapsed >= 1_000 && elapsed <= stale ? burned(previous, reading) : undefined
     return {
       ...(used === undefined ? {} : { cpu_percent: (used / (elapsed / 1_000)) * 100 }),
       ...(reading.memory_bytes === undefined ? {} : { memory_bytes: reading.memory_bytes }),
@@ -99,6 +120,57 @@ export namespace KernelMetrics {
     if (!Number.isFinite(days) || parts.length < 2 || parts.some((part) => !Number.isFinite(part))) return
     const [hours, minutes, rest] = parts.length === 3 ? parts : [0, parts[0], parts[1]]
     return days * 86_400 + (hours ?? 0) * 3_600 + (minutes ?? 0) * 60 + (rest ?? 0)
+  }
+
+  // Cumulative processor TICKS for a process AND every descendant it has
+  // already waited for: /proc/<pid>/stat fields `utime`, `stime`, `cutime`,
+  // `cstime`. The `c*` pair is the whole point — when a child is reaped its
+  // accumulated time does not disappear, the kernel adds it to the parent's
+  // `cutime`/`cstime` (recursively, so a grandchild's time reaches the parent
+  // through the child it was reaped by). A worker that was forked, burned a
+  // core and was reaped entirely between two polls is therefore still counted.
+  //
+  // Field 2 is `comm`, the executable name in parentheses, and it may itself
+  // contain spaces and parentheses — a process really can be named `foo (bar)`.
+  // Splitting after the LAST ')' is the only parse that survives that; the
+  // remaining fields start at `state` (field 3), so `utime` (field 14) is index
+  // 11, `stime` 12, `cutime` 13, `cstime` 14.
+  export function ticks(text: string) {
+    const close = text.lastIndexOf(")")
+    if (close < 0) return
+    const fields = text
+      .slice(close + 1)
+      .trim()
+      .split(/\s+/)
+    const values = [11, 12, 13, 14].map((index) => Number.parseInt(fields[index] ?? "", 10))
+    if (values.some((value) => !Number.isFinite(value))) return
+    return values.reduce((sum, value) => sum + value, 0)
+  }
+
+  // The tick rate those counters are expressed in — `sysconf(_SC_CLK_TCK)`.
+  // glibc answers that call from the AT_CLKTCK entry of the auxiliary vector,
+  // which /proc/self/auxv exposes verbatim as an array of (type, value) pairs
+  // of `unsigned long`, terminated by a zero type. Reading it is a file read,
+  // not a spawn and not an FFI call, so the divisor is measured rather than
+  // assumed.
+  //
+  // The parse assumes 64-bit little-endian words, which is every target Bun
+  // ships for. A different layout parses as nonsense rather than silently
+  // wrong values, so implausible readings are rejected and the caller falls
+  // back to 100 — the value on every architecture in that set, and on every
+  // Linux architecture except alpha and ia64.
+  export function hertz(auxv: ArrayBuffer) {
+    const usable = auxv.byteLength - (auxv.byteLength % 8)
+    const words = new BigUint64Array(auxv.slice(0, usable))
+    for (const [index, word] of words.entries()) {
+      if (index % 2 === 1) continue
+      if (word === 0n) return
+      if (word !== 17n) continue
+      const value = Number(words[index + 1] ?? 0n)
+      if (value > 0 && value <= 1_000_000) return value
+      return
+    }
+    return
   }
 
   export function unix(text: string) {
@@ -129,6 +201,12 @@ export namespace KernelMetrics {
   // bleed into each other's reading — pure and spawn-free, so it is testable
   // against fixture rows alone.
   //
+  // `reaped` is false here: `ps -o time=` reports a process's own time only, so
+  // this sum loses a member's whole lifetime the moment it is reaped. On Linux
+  // `read` replaces `seconds` with the /proc total, which does not (see
+  // `absorbed`); macOS has no equivalent and keeps this figure, which `derive`
+  // then refuses to difference across a shrinking group.
+  //
   // Memory IS summed here, which double-counts pages shared between members;
   // `read` replaces it with the proportional figure where the kernel can
   // report one (see `proportional`).
@@ -137,10 +215,14 @@ export namespace KernelMetrics {
     const readings = new Map<number, Reading>()
     for (const row of rows) {
       if (!wanted.has(row.pgid)) continue
-      const current = readings.get(row.pgid) ?? { cpu: new Map<number, number>() }
-      current.cpu.set(row.pid, row.cpu_seconds)
+      const current = readings.get(row.pgid) ?? { members: [], seconds: 0, reaped: false }
       readings.set(row.pgid, {
-        cpu: current.cpu,
+        members: [
+          ...current.members,
+          { pid: row.pid, ...(row.memory_bytes === undefined ? {} : { memory_bytes: row.memory_bytes }) },
+        ],
+        seconds: current.seconds + row.cpu_seconds,
+        reaped: false,
         ...(current.memory_bytes === undefined && row.memory_bytes === undefined
           ? {}
           : { memory_bytes: (current.memory_bytes ?? 0) + (row.memory_bytes ?? 0) }),
@@ -161,10 +243,8 @@ export namespace KernelMetrics {
       const used = Number.parseFloat(cpu ?? "")
       const resident = Number.parseInt(ws ?? "", 10)
       if (!Number.isFinite(pid) || !Number.isFinite(used)) continue
-      readings.set(pid, {
-        cpu: new Map([[pid, used]]),
-        ...(Number.isFinite(resident) ? { memory_bytes: resident } : {}),
-      })
+      const bytes = Number.isFinite(resident) ? { memory_bytes: resident } : {}
+      readings.set(pid, { members: [{ pid, ...bytes }], seconds: used, reaped: false, ...bytes })
     }
     return readings
   }
@@ -183,35 +263,82 @@ export namespace KernelMetrics {
     return value * 1024
   }
 
-  // The group's proportional footprint, or nothing if ANY member's rollup is
-  // unreadable — mixing PSS for some members with RSS for others would report a
-  // figure that is neither. Nothing here means the caller keeps the summed RSS,
-  // which OVERCOUNTS every page shared between members (a 300 MB leader plus
-  // three forked children reads as roughly 1.2 GB). That overcount is the
-  // deliberate fallback for hosts without smaps_rollup — macOS, kernels before
-  // 4.14, or a process this user may not inspect — because a wrong-but-real
-  // number beats omitting a figure the machine genuinely holds.
-  const proportional = async (pids: Iterable<number>) => {
+  // The group's proportional footprint, or nothing if a member that actually
+  // holds pages cannot be read — mixing PSS for some members with RSS for
+  // others would report a figure that is neither. Nothing here means the caller
+  // keeps the summed RSS, which OVERCOUNTS every page shared between members (a
+  // 300 MB leader plus three forked children reads as roughly 1.2 GB). That
+  // overcount is the deliberate fallback for hosts without smaps_rollup —
+  // macOS, kernels before 4.14, or a process this user may not inspect —
+  // because a wrong-but-real number beats omitting a figure the machine
+  // genuinely holds.
+  //
+  // A member whose rollup is unreadable but whose resident size is measurably
+  // ZERO is skipped instead of triggering that fallback. A zombie has no
+  // address space, so its rollup is unreadable for as long as it stays unreaped
+  // — indefinitely, for a routine that leaves one behind — and letting it force
+  // the fallback silently restored the 4x overcount for the whole group. Zero
+  // is zero in PSS and in RSS alike, so dropping a member that measurably holds
+  // nothing mixes no units. Only a measured 0 qualifies: a member whose
+  // resident size ps could not report might hold anything, and still falls back.
+  const proportional = async (members: Member[]) => {
     const values = await Promise.all(
-      [...pids].map((pid) =>
-        Bun.file(`/proc/${pid}/smaps_rollup`)
+      members.map(async (member) => ({
+        member,
+        bytes: await Bun.file(`/proc/${member.pid}/smaps_rollup`)
           .text()
           .then(pss)
           .catch(() => undefined),
-      ),
+      })),
     )
-    const bytes = values.flatMap((value) => (value === undefined ? [] : [value]))
-    if (!values.length || bytes.length !== values.length) return
+    const bytes: number[] = []
+    for (const value of values) {
+      if (value.bytes !== undefined) bytes.push(value.bytes)
+      if (value.bytes === undefined && value.member.memory_bytes !== 0) return
+    }
+    if (!bytes.length) return
     return bytes.reduce((sum, value) => sum + value, 0)
   }
 
-  const shared = async (readings: Map<number, Reading>) => {
-    const resolved = new Map<number, Reading>()
-    for (const [pgid, reading] of readings) {
-      const bytes = await proportional(reading.cpu.keys())
-      resolved.set(pgid, bytes === undefined ? reading : { ...reading, memory_bytes: bytes })
-    }
-    return resolved
+  const stat = (pid: number) =>
+    Bun.file(`/proc/${pid}/stat`)
+      .text()
+      .then(ticks)
+      .catch(() => undefined)
+
+  // Replaces the `ps`-derived sum with the /proc total for the same members:
+  // monotonic across reaping, and quantised to 10ms ticks rather than `ps -o
+  // time=`'s whole seconds. The resolution matters as much as the monotonicity
+  // — a whole second over a 2.5s poll is 0.4 cores, so everything below that
+  // read as an exact 0; ticks put the floor near 0.004 cores.
+  //
+  // Every live member contributes its own time AND its reaped descendants', not
+  // just the leader's. There is no double counting: a process's `cutime` only
+  // ever holds the time of processes that have terminated and been waited for,
+  // which are by definition absent from the live member list, and a terminated
+  // process was waited for exactly once. Counting only the leader would instead
+  // hide every worker an intermediate member reaped until that member itself
+  // died — the production shape exactly, where the group leader is the sandbox
+  // wrapper and the Python interpreter that reaps the workers is its child.
+  //
+  // If no member's stat could be read the `ps` figure stands; that group is
+  // about to drop out of the poll entirely.
+  const absorbed = async (reading: Reading, rate: number) => {
+    const values = await Promise.all(reading.members.map((member) => stat(member.pid)))
+    const read = values.flatMap((value) => (value === undefined ? [] : [value]))
+    if (!read.length) return reading
+    return { ...reading, seconds: read.reduce((sum, value) => sum + value, 0) / rate, reaped: true }
+  }
+
+  let rate: number | undefined
+
+  const clock = async () => {
+    rate ??=
+      (await Bun.file("/proc/self/auxv")
+        .arrayBuffer()
+        .then(hertz)
+        .catch(() => undefined)) ?? 100
+    return rate
   }
 
   // Plain space-separated lines, so Windows and unix share one output shape.
@@ -248,17 +375,29 @@ export namespace KernelMetrics {
       .text()
       .catch(() => "")
     const readings = group(unix(output), pids)
-    // /proc reads, not spawns — still one spawn per poll. macOS has no
-    // smaps_rollup, so it keeps the summed RSS.
+    // /proc reads, not spawns — still one spawn per poll. macOS has neither
+    // smaps_rollup nor a reaped-descendant counter, so it keeps the summed RSS
+    // and the summed `ps` seconds; `derive` refuses to difference the latter
+    // across a group that lost a member rather than reporting an undercount as
+    // if it were a measurement.
     if (process.platform !== "linux") return readings
-    return shared(readings)
+    const ticked = await clock()
+    const resolved = new Map<number, Reading>()
+    for (const [pgid, reading] of readings) {
+      const counted = await absorbed(reading, ticked)
+      const bytes = await proportional(reading.members)
+      resolved.set(pgid, bytes === undefined ? counted : { ...counted, memory_bytes: bytes })
+    }
+    return resolved
   }
 
   // Keyed by caller scope AND pid. Independent pollers watch the same pids on
   // their own cadence — the Compute strip polls /notebook/compute while the
-  // Kernels panel polls /notebook/kernels — and a shared per-pid entry would
-  // make each poll measure the gap to the OTHER caller's poll. Interleaved by
-  // milliseconds that yields a fabricated 0 or a wildly inflated percentage.
+  // Kernels panel polls /notebook/kernels, and two browser tabs each poll the
+  // strip's route on their own offset — and a shared per-pid entry would make
+  // each poll measure the gap to the OTHER caller's poll. Interleaved by
+  // milliseconds that gap falls under the one-second floor, so whichever caller
+  // polls first takes the window and the others are refused indefinitely.
   const baseline = new Map<string, Mark>()
 
   const key = (scope: string, pid: number) => `${scope}:${pid}`
@@ -276,9 +415,11 @@ export namespace KernelMetrics {
   // Drops every mark older than `stale`, whoever owns it. Death-eviction below
   // only reaches pids the caller named, and a stopped kernel drops out of the
   // route's pid list entirely — nobody ever names it again, so without an age
-  // sweep its entry lives as long as the process does. Scoped entries belonging
-  // to a live poller are refreshed every 2.5s, so the sweep can never take one
-  // out from under an active surface the way an unscoped prune would.
+  // sweep its entry lives as long as the process does. The same sweep bounds
+  // per-client scopes: a closed browser tab stops polling and its whole scope
+  // ages out. Scoped entries belonging to a live poller are refreshed every
+  // 2.5s, so the sweep can never take one out from under an active surface the
+  // way an unscoped prune would.
   const evict = (now: number) => {
     for (const [id, mark] of baseline) if (now - mark.at > stale) baseline.delete(id)
   }
@@ -293,7 +434,11 @@ export namespace KernelMetrics {
     const at = Date.now()
     for (const [pid, reading] of readings) {
       const previous = baseline.get(key(scope, pid))
-      baseline.set(key(scope, pid), { cpu: reading.cpu, at })
+      baseline.set(key(scope, pid), {
+        seconds: reading.seconds,
+        members: reading.members.map((member) => member.pid),
+        at,
+      })
       samples.set(pid, derive(previous, reading, at))
     }
     // Prune only pids THIS call asked about. Iterating the whole baseline would
