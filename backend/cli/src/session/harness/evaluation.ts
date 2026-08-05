@@ -11,6 +11,7 @@ import { HarnessEvolution } from "./evolution"
 import { HarnessIntervention } from "./intervention"
 import { HarnessSimulation } from "./simulation"
 import { HarnessSemantic } from "./semantic"
+import { HarnessReplication } from "./replication"
 
 export namespace HarnessEvaluation {
   export const Status = z.enum(["passed", "failed", "inconclusive"])
@@ -84,6 +85,10 @@ export namespace HarnessEvaluation {
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
       semanticReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      replicationReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -344,6 +349,31 @@ export namespace HarnessEvaluation {
           evaluation.subject?.type === "candidate"
             ? { type: "candidate", id: evaluation.subject.id }
             : { type: "run", id: contract.runID },
+        evaluatedAt: evaluation.evaluatedAt,
+        recordedAt: evaluation.recordedAt!,
+        requirePassed: evaluation.status === "passed" && final(evaluation),
+      })
+    }
+    if (evaluation.replicationReceiptID && !contract.replication) {
+      throw new Error(`Evaluation references a replication receipt without a bound replicated evaluation protocol`)
+    }
+    if (
+      contract.replication &&
+      evaluation.status === "passed" &&
+      final(evaluation) &&
+      !evaluation.replicationReceiptID
+    ) {
+      throw new Error(`A passing final evaluation must reference a replicated evaluation receipt`)
+    }
+    if (evaluation.replicationReceiptID) {
+      await HarnessReplication.assert({
+        contract,
+        receiptID: evaluation.replicationReceiptID,
+        subject:
+          evaluation.subject?.type === "candidate"
+            ? { type: "candidate", id: evaluation.subject.id }
+            : { type: "run", id: contract.runID },
+        score: evaluation.score,
         evaluatedAt: evaluation.evaluatedAt,
         recordedAt: evaluation.recordedAt!,
         requirePassed: evaluation.status === "passed" && final(evaluation),

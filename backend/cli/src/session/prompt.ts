@@ -68,6 +68,7 @@ import { HarnessMemory } from "./harness/memory"
 import { HarnessClaims } from "./harness/claims"
 import { HarnessDomain } from "./harness/domain"
 import { HarnessSemantic } from "./harness/semantic"
+import { HarnessReplication } from "./harness/replication"
 import { SessionTraceStore } from "./trace-store"
 
 // @ts-ignore
@@ -840,6 +841,7 @@ export namespace SessionPrompt {
       const domain = await HarnessDomain.resolve({ sessionID, agent: agent.name, profile: profile.id, text: request })
       const methodology = HarnessDomain.prompt(domain)
       const semantics = await HarnessSemantic.context(sessionID).catch(() => "")
+      const replication = await HarnessReplication.context(sessionID).catch(() => "")
       await SessionTraceStore.recordProfile({
         sessionID,
         messageID: lastUser.id,
@@ -897,6 +899,7 @@ export namespace SessionPrompt {
         ...(claims ? [claims] : []),
         ...(methodology ? [methodology] : []),
         ...(semantics ? [semantics] : []),
+        ...(replication ? [replication] : []),
         ...artifactContext,
       ]
 

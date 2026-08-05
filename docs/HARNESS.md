@@ -27,6 +27,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 19. **Evolution is replayable, not inferred from score.** An optional optimization protocol freezes source roots, extensions, bounds, manifest schema, and an evaluator-owned validator. Every passing final candidate must cite an immutable receipt for its exact artifact and all declared parents. OpenScience recomputes parent deltas and ancestral line reintroductions; these diagnostics never become fitness or proof of novelty.
 20. **Structural improvement must survive controlled intervention.** An optional evaluator-owned study is frozen after evolution tracing and before final evaluation. Exact same-condition replay, retuning or component interventions, and model/context/evaluator/split transfers alter only their declared factor. OpenScience derives paired effects and uncertainty from immutable observations; a required study gates promotion but never supplies fitness.
 21. **Search compute follows verified progress, not a clock.** Numeric optimization contracts automatically pin `adaptive-search-v1`. OpenScience replays direction-aware improvement signals only from final evaluator events, adapts exploration intensity per island, routes candidate budget with decayed-reward UCB, opens new islands under measured global stagnation, and escalates to meta-guidance only after those controls fail. Every controller snapshot is revision-bound into the candidate lease.
+22. **A lucky run cannot authorize promotion.** An optional replicated-evaluation protocol freezes the validator, environment, stratum and independent-cluster commitments, estimator, 95% interval, seed, target, and precision limit. OpenScience requires the complete crossed grid, recomputes mean, median, IQM, or pass rate, and promotes only when the conservative confidence endpoint clears the target. Each subject can freeze only one canonical receipt, so failed units, unfavorable repeats, and alternate retries cannot be selected away.
 
 ## System boundary
 
@@ -50,6 +51,8 @@ flowchart LR
     Y["Evolution trace receipt\nreplay + cycle diagnostics"]
     D["Evaluator-owned intervention runner\nfrozen one-difference pairs"]
     Z["Controlled intervention receipt\nstability + causal/transfer diagnostics"]
+    P["Evaluator-owned replication runner\nfrozen tasks + independent clusters"]
+    B["Replicated evaluation receipt\nrobust estimate + conservative bound"]
     J["Immutable evaluation journal"]
     M["Verified hindsight memory"]
     K["Scientific claim ledger"]
@@ -85,6 +88,11 @@ flowchart LR
     O --> D
     D -->|authenticated paired outcomes| Z
     Z -->|optional promotion gate| E
+    C -->|frozen uncertainty protocol| P
+    G -->|candidate artifact| P
+    O --> P
+    P -->|complete committed grid| B
+    B -->|required conservative receipt| E
     E -->|authenticated result| J
     J --> G
     J --> M
@@ -468,7 +476,15 @@ The bound evaluator submits level measurements and evidence to `POST /harness/si
 
 A candidate receipt must name the candidate's exact artifact URI and SHA-256 from the search graph. A run receipt binds its output artifact to the run. A final passing evaluation under a simulation contract must cite a passing receipt for the same run or candidate; a missing, failed, wrong-contract, or wrong-artifact receipt blocks promotion. The capability and hidden reference outputs remain outside the agent process.
 
-### 8. Verify with domain packs
+### 8. Promote only replicated conservative bounds
+
+`replicated-evaluation-v1` is an opt-in final-promotion gate for benchmarks whose official score is noisy across tasks, seeds, trials, sites, laboratories, or other independent execution clusters. The contract freezes an exact Cartesian product of sorted stratum and cluster IDs, a SHA-256 commitment for every axis configuration, one runtime/environment commitment, the evaluator validator, estimator, 95% interval method, resampling seed, target, and optional maximum interval width. Numeric mean, median, and IQM protocols require at least five clusters and use a stratified percentile bootstrap; publication runs can predeclare up to 50,000 resamples. Pass-rate protocols require one Bernoulli stratum, at least three independent clusters, and a Wilson score interval. Multi-task binary rates use numeric zero/one scores with the stratified-bootstrap mean instead of falsely treating correlated cells as independent Bernoulli trials.
+
+The evaluator uses `run-replicated-evaluation` outside the candidate process, executes every frozen `stratum × cluster` unit exactly once, and submits the matching axis commitments, environment hash, immutable output hash, status, score when admissible, timestamp, and evidence. `POST /harness/replications/receipts` rejects missing, duplicate, extra, substituted, drifted, future, pre-subject, or score-bearing failed units. OpenScience draws strata with replacement and clusters independently within each sampled stratum, uses numerically scaled compensated aggregation, and derives the point estimate, interval, width, conservative endpoint, and status without trusting a submitted summary. Numeric failed or inconclusive units fail closed without an aggregate; pass-rate inconclusive units remain inconclusive.
+
+For maximized and pass-rate metrics, the lower endpoint must clear the frozen target; for minimized metrics, the upper endpoint must clear it. The final evaluation score must exactly equal the backend estimate. A best seed, favorable subset, point estimate, or self-authored replication statement cannot pass. The first valid receipt freezes the subject's canonical attempt; byte-identical retries are idempotent and changed retries are rejected. Receipts are content-addressed, contract/session/subject/metric/time bound, re-derived on read, and must exist before the subject's final evaluation. Replication is also part of report comparability, verified-memory scope, learned-skill comparison, and matched harness ablation.
+
+### 9. Verify with domain packs
 
 Final passing results must contain evidence-backed receipts for every blocking check selected by the adapter.
 
@@ -484,13 +500,13 @@ Final passing results must contain evidence-backed receipts for every blocking c
 
 An adapter can require no universal pack when the benchmark spans incompatible task types; the orchestrator may add task-specific packs at bind time. Pack selection is frozen in the contract and comparison key.
 
-### 9. Reuse only verified hindsight
+### 10. Reuse only verified hindsight
 
 Retrospective entries are scoped by benchmark name, version, task, and evaluator. They contain the exact candidate artifact reference, branch, generation, external outcome, score, metrics, evidence references, evaluator feedback, and evaluation usage.
 
 Retrieval combines query overlap, task affinity, and workflow stage. It deliberately returns a relevant contrasting failure beside a success when possible. Retrieved text is escaped, length-bounded, and explicitly labeled as precedent data rather than instructions.
 
-### 10. Keep claims separate from execution reports
+### 11. Keep claims separate from execution reports
 
 The claim ledger supports descriptive, statistical, causal, mechanistic, theoretical, and performance claims. Status is derived from verified evidence, never assigned by the agent.
 
@@ -501,7 +517,7 @@ The claim ledger supports descriptive, statistical, causal, mechanistic, theoret
 - Clean replay, independent implementation, and independent derivation require a separate verifier session, fresh process, clean workspace, and exact source hash.
 - Independent implementation/derivation additionally withhold the producer's output and require independent code or reasoning.
 
-### 11. Promote skills only after held-out qualification
+### 12. Promote skills only after held-out qualification
 
 `/learn` and RSI distillation write inert proposals under `learned-skill-proposals`; skill discovery reads only promoted content under `learned-skills`.
 
@@ -519,7 +535,7 @@ Before a proposal exists, OpenScience checks its frontmatter, runtime-risk patte
 
 If later evidence introduces a regression before promotion, qualification returns to pending. Promoted content cannot accept more evidence; changes require a new versioned proposal.
 
-### 12. Execute benchmark-native protocol skills
+### 13. Execute benchmark-native protocol skills
 
 The bundled skill catalog includes executable protocols for work that is otherwise easy to describe but hard to audit:
 
@@ -536,12 +552,13 @@ The bundled skill catalog includes executable protocols for work that is otherwi
 | `trace-evolutionary-candidate` | Captures a canonical evaluator-owned source manifest, verifies exact parent snapshots, writes deterministic parent deltas, and builds the token-free input for backend-derived replay and ancestral-cycle diagnostics. |
 | `design-replay-interventions`  | Validates evaluator-owned exact one-difference replay, retuning, ablation/repair, and transfer matrices, then emits a token-free frozen plan and execution ledger.                                                     |
 | `operate-adaptive-search`      | Validates an `adaptive-search-v1` lease, interprets its verified controller snapshot, and turns seed/explore/exploit/migrate/fuse/diverge plus an agentic variation mandate into one compliant candidate artifact.     |
+| `run-replicated-evaluation`    | Preflights the exact frozen task-by-independent-cluster grid, commitment and environment binding, score/status rules, token isolation, and evidence required for a backend-derived conservative receipt.               |
 
 Their scripts return machine-readable JSON and nonzero failure codes, so an orchestrator can use them as blocking gates instead of relying on prompt compliance. They validate the protocol and reported measurements; they do not manufacture hidden data, run an unavailable simulator, or turn an internal result into official benchmark evidence.
 
-### 13. Attribute gains with matched ablations
+### 14. Attribute gains with matched ablations
 
-`POST /harness/ablations` freezes a server-timestamped study before any paired evaluation exists. A study supports `profile`, `orchestration`, adaptive `search`, active `audit`, `simulation`, `evaluator_audit`, `fidelities`, and named `skill` or `tool` factors. It requires at least three distinct seeds on a held-out or release split. Within each seed, baseline and arm must have identical objectives, benchmark/evaluator protocol, packs, model, remaining tools/skills, budget, intervention, contamination policy, and seed after removing exactly the declared factor. Across pairs, every non-seed field and both factor values must remain identical.
+`POST /harness/ablations` freezes a server-timestamped study before any paired evaluation exists. A study supports `profile`, `orchestration`, adaptive `search`, active `audit`, `simulation`, `evaluator_audit`, `semantic_audit`, `replication`, `fidelities`, and named `skill` or `tool` factors. It requires at least three distinct seeds on a held-out or release split. Within each seed, baseline and arm must have identical objectives, benchmark/evaluator protocol, packs, model, remaining tools/skills, budget, intervention, contamination policy, and seed after removing exactly the declared factor. Across pairs, every non-seed field and both factor values must remain identical.
 
 The plan stores contract fingerprints plus hashes of the baseline value, arm value, and matched context; evaluator capabilities are never persisted. Initialization fails if any paired session already has an evaluation. Every accepted evaluation receives a server-owned receipt time, and assessment rejects receipts older than the plan, closing concurrent initialization races without trusting evaluator-supplied clocks.
 
@@ -549,7 +566,7 @@ After all runs settle, `POST /harness/ablations/:planID/assessment` reauthentica
 
 The resulting content-addressed receipt establishes matched evidence for one declared harness mechanism. It does not by itself establish benchmark SOTA, generalize beyond the bound task, or rescue an incompatible official comparison.
 
-### 14. Qualify the evaluator before trusting a pass
+### 15. Qualify the evaluator before trusting a pass
 
 Authentication proves who submitted an evaluation; it does not prove that evaluator is competent. A run can therefore bind an `evaluatorAudit` protocol with an auditor identity and bearer capability distinct from the evaluator, a hidden-suite commitment, minimum clean and per-fault case counts, required fault classes, and thresholds for sensitivity, specificity, balanced accuracy, Brier score, and recall for every required fault.
 
@@ -559,9 +576,9 @@ A passing final evaluation under this protocol must cite a passing receipt recor
 
 This mechanism does not claim that a finite meta-evaluation suite makes a judge infallible. It prevents an authenticated but untested judge from silently becoming ground truth and makes evaluator quality a versioned, ablatable part of the benchmark protocol.
 
-### 15. Compare only compatible runs
+### 16. Compare only compatible runs
 
-Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, adaptive-search, launch, runtime-integrity, evolution, controlled-intervention, simulation, evaluator-audit and objective-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface controller telemetry alongside the launch, integrity, evolution, controlled-intervention, simulation, and evaluator-audit receipts used by the selected final evaluation.
+Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, adaptive-search, launch, runtime-integrity, evolution, controlled-intervention, simulation, evaluator-audit, semantic-audit, replicated-evaluation and objective-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface controller telemetry alongside the launch, integrity, evolution, controlled-intervention, replicated-evaluation, simulation, and evaluator-audit receipts used by the selected final evaluation.
 
 Cost and wall time include both the agent trace and evaluator-reported stage usage. Direction-aware score deltas and the Pareto frontier are available through `POST /harness/compare`.
 
@@ -610,6 +627,8 @@ Every adapter is version-agnostic. A development/validation run must still bind 
 | `POST` | `/harness/interventions/:candidateID/status`         | Read capability-protected intervention state                  |
 | `POST` | `/harness/simulations/receipts`                      | Recompute and record a simulator validation receipt           |
 | `POST` | `/harness/simulations/receipts/:id`                  | Read a capability-protected simulator validation receipt      |
+| `POST` | `/harness/replications/receipts`                     | Recompute and freeze a conservative replicated result         |
+| `POST` | `/harness/replications/receipts/:id`                 | Read a capability-protected replicated evaluation receipt     |
 | `POST` | `/harness/evaluations`                               | Record a staged evaluator-authenticated result                |
 | `GET`  | `/harness/runs/:sessionID/contract`                  | Inspect the bound protocol                                    |
 | `GET`  | `/harness/runs/:sessionID/evaluations`               | Inspect the immutable evaluation journal                      |
@@ -632,6 +651,8 @@ The implementation borrows principles, not source code, from the following prima
 | [AdaEvolve](https://arxiv.org/abs/2602.20133) and [released implementation](https://github.com/skydiscover-ai/skydiscover) | Couple per-island improvement EMA, decayed-reward UCB resource routing, dynamic populations, and stagnation-triggered tactics; OpenScience adds evaluator-only events and revision-replayable leases. |
 | [Google DeepMind Co-Scientist](https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/) | Generate diverse hypotheses, critique/rank them, combine strong ideas, and spend substantial compute on verification.                                                                                 |
 | [ProEval](https://deepmind.google/research/publications/238239/)                                                           | Actively discover failure regions and estimate capability from a small, strategically chosen evaluation subset.                                                                                       |
+| [RLiable](https://arxiv.org/abs/2108.13264)                                                                                | Treat finite-run aggregate scores as random variables; report robust IQM and stratified-bootstrap uncertainty instead of only point estimates or favorable runs.                                      |
+| [Structured Scaling for LLM-Based Optimization](https://arxiv.org/abs/2604.19341)                                          | Evaluation-driven search can exploit a surrogate evaluator; keep promotion behind a frozen external validation protocol and conservative evidence.                                                    |
 | [TRACE: Towards Structural Understanding of LLM Overthinking](https://deepmind.google/research/publications/203490/)       | Detect verification and exploration that continue after their marginal utility has collapsed; stop against a predeclared control rule.                                                                |
 | [Towards a Science of Scaling Agent Systems](https://arxiv.org/abs/2512.08296)                                             | Add agents conditionally: coordination can hurt sequential and tool-heavy work, while centralized structures control error amplification.                                                             |
 | [Gram](https://deepmind.google/research/publications/252981/)                                                              | Audit autonomous agents for sabotage, overeagerness, and hidden side effects with an investigator distinct from the producer.                                                                         |
@@ -664,6 +685,6 @@ The harness is ready for benchmark integration, but architecture alone does not 
 3. Qualify any learned or hybrid evaluator against a separately controlled, committed meta-evaluation suite; retain official deterministic runners as the preferred ground truth where available.
 4. Reproduce the strongest public baseline under exactly that contract.
 5. Run ablations for profile routing, the complete adaptive-search controller, its local-intensity/global-routing/meta-guidance levels, multi-root search, fidelity screening, hindsight, fusion, replay diagnostics, domain packs, runtime integrity, evaluator qualification, and learned skills.
-6. Use multiple seeds or the benchmark's prescribed repeat protocol.
+6. Bind the benchmark's prescribed repeat protocol—or a frozen task-by-independent-cluster replication contract—and require its conservative receipt instead of selecting the best seed or point estimate.
 7. Publish every final run, failed run, cost report, artifact hash, evaluator receipt, and contamination statement.
 8. Call a result SOTA only when the official metric improves under a comparison the benchmark owners would accept.

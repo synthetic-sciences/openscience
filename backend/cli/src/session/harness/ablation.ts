@@ -23,6 +23,7 @@ export namespace HarnessAblation {
         "simulation",
         "evaluator_audit",
         "semantic_audit",
+        "replication",
         "fidelities",
         "skill",
         "tool",
@@ -217,6 +218,7 @@ export namespace HarnessAblation {
     if (factor.kind === "simulation") return contract.simulation ?? null
     if (factor.kind === "evaluator_audit") return contract.evaluatorAudit ?? null
     if (factor.kind === "semantic_audit") return contract.semanticAudit ?? null
+    if (factor.kind === "replication") return contract.replication ?? null
     if (factor.kind === "fidelities") return contract.benchmark.fidelities ?? null
     if (factor.kind === "skill") return contract.skills.find((item) => item.name === factor.name) ?? null
     return contract.tools.includes(factor.name!)
@@ -251,6 +253,7 @@ export namespace HarnessAblation {
       ...(factor.kind === "simulation" ? {} : { simulation: contract.simulation }),
       ...(factor.kind === "evaluator_audit" ? {} : { evaluatorAudit: contract.evaluatorAudit }),
       ...(factor.kind === "semantic_audit" ? {} : { semanticAudit: contract.semanticAudit }),
+      ...(factor.kind === "replication" ? {} : { replication: contract.replication }),
       packs: (contract.packs ?? []).toSorted(),
       model: contract.model,
       tools: contract.tools.filter((item) => factor.kind !== "tool" || item !== factor.name).toSorted(),

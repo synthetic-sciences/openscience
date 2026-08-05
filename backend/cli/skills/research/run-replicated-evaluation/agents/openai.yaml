@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run Replicated Evaluation"
+  short_description: "Freeze units and promote conservative bounds"
+  default_prompt: "Use $run-replicated-evaluation to prepare and validate a complete uncertainty-aware benchmark receipt."

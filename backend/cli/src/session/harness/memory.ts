@@ -60,6 +60,10 @@ export namespace HarnessMemory {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          replicationSHA256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
         })
         .strict(),
       entries: z.record(z.string(), Entry),
@@ -74,10 +78,13 @@ export namespace HarnessMemory {
   const digest = (input: string) => new Bun.CryptoHasher("sha256").update(input).digest("hex")
   const semantic = (contract: HarnessContract.Info) =>
     contract.semanticAudit ? digest(JSON.stringify(contract.semanticAudit)) : undefined
+  const replication = (contract: HarnessContract.Info) =>
+    contract.replication ? digest(JSON.stringify(contract.replication)) : undefined
   const key = (contract: HarnessContract.Info) => {
     const base = `${contract.benchmark.name}\0${contract.benchmark.version}\0${contract.benchmark.taskID}\0${contract.benchmark.evaluator}`
     const scope = semantic(contract)
-    return digest(scope ? `${base}\0${scope}` : base)
+    const repeat = replication(contract)
+    return digest(repeat ? `${base}\0${scope ?? "no-semantic-audit"}\0${repeat}` : scope ? `${base}\0${scope}` : base)
   }
   const file = (contract: HarnessContract.Info) => path.join(root, `${key(contract)}.json`)
   const clip = (value: string, max = 1_000) =>
@@ -98,6 +105,7 @@ export namespace HarnessMemory {
 
   function empty(contract: HarnessContract.Info): State {
     const scope = semantic(contract)
+    const repeat = replication(contract)
     return {
       schemaVersion: 1,
       scope: {
@@ -106,6 +114,7 @@ export namespace HarnessMemory {
         taskID: contract.benchmark.taskID,
         evaluator: contract.benchmark.evaluator,
         ...(scope ? { semanticAuditSHA256: scope } : {}),
+        ...(repeat ? { replicationSHA256: repeat } : {}),
       },
       entries: {},
       revision: 0,

@@ -1047,6 +1047,89 @@ test("audit-scientific-meaning derives status without persisting review capabili
   }
 })
 
+test("run-replicated-evaluation preflights the exact frozen independent-unit grid", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-replicated-evaluation-"))
+  const script = "research/run-replicated-evaluation/scripts/preflight.py"
+  const contractFile = path.join(dir, "contract.json")
+  const observationsFile = path.join(dir, "observations.json")
+  const contract = {
+    sessionID: "replicated-session",
+    runID: "replicated-run",
+    replication: {
+      protocolVersion: "replicated-evaluation-v1",
+      environmentSHA256: hash("locked-environment"),
+      sampling: {
+        strata: [{ id: "task-a", commitmentSHA256: hash("task-a") }],
+        clusters: ["seed-a", "seed-b", "seed-c", "seed-d", "seed-e"].map((id) => ({
+          id,
+          commitmentSHA256: hash(id),
+        })),
+      },
+      estimator: "iqm",
+    },
+  }
+  const observations = contract.replication.sampling.clusters.map((cluster, index) => ({
+    stratumID: "task-a",
+    clusterID: cluster.id,
+    stratumSHA256: contract.replication.sampling.strata[0]!.commitmentSHA256,
+    clusterSHA256: cluster.commitmentSHA256,
+    status: "passed",
+    score: index + 1,
+    outputSHA256: hash(`${cluster.id}:output`),
+    environmentSHA256: hash("locked-environment"),
+    evidence: [`artifact:${cluster.id}.json`],
+    evaluatedAt: Date.now(),
+  }))
+  try {
+    await Promise.all([
+      Bun.write(contractFile, JSON.stringify(contract)),
+      Bun.write(
+        observationsFile,
+        JSON.stringify({
+          sessionID: contract.sessionID,
+          subject: { type: "run", id: contract.runID },
+          observations,
+        }),
+      ),
+    ])
+    const valid = await run(script, [contractFile, observationsFile])
+    expect(valid.code).toBe(0)
+    expect(JSON.parse(valid.stdout)).toEqual({
+      valid: true,
+      units: 5,
+      strata: 1,
+      clusters: 5,
+      estimator: "iqm",
+      statuses: { passed: 5, failed: 0, inconclusive: 0 },
+    })
+
+    await Bun.write(observationsFile, JSON.stringify({ observations: observations.slice(1) }))
+    const missing = await run(script, [contractFile, observationsFile])
+    expect(missing.code).toBe(1)
+    expect(missing.stderr).toContain("frozen grid mismatch")
+
+    await Bun.write(observationsFile, JSON.stringify({ evaluatorToken: "must-not-touch-disk", observations }))
+    const token = await run(script, [contractFile, observationsFile])
+    expect(token.code).toBe(1)
+    expect(token.stderr).toContain("token-free")
+
+    await Bun.write(
+      observationsFile,
+      JSON.stringify({
+        observations: [
+          { ...observations[0], environmentSHA256: hash("drifted-environment") },
+          ...observations.slice(1),
+        ],
+      }),
+    )
+    const drift = await run(script, [contractFile, observationsFile])
+    expect(drift.code).toBe(1)
+    expect(drift.stderr).toContain("frozen environment")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("design-replay-interventions freezes exact one-difference evaluator pairs", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-interventions-"))
   const script = "research/design-replay-interventions/scripts/design_interventions.py"

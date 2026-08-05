@@ -41,7 +41,7 @@ async function run(input: {
   createdAt: number
   model?: string
   direction?: "maximize" | "minimize"
-  factor?: "orchestration" | "search" | "evaluator_audit" | "semantic_audit"
+  factor?: "orchestration" | "search" | "evaluator_audit" | "semantic_audit" | "replication"
 }) {
   const sessionID = `${input.prefix}-${input.seed}-${input.role}`
   sessions.add(sessionID)
@@ -100,7 +100,42 @@ async function run(input: {
             },
           }
         : undefined,
-    metric: { name: "score", direction: input.direction ?? "maximize" },
+    replication:
+      input.role === "arm" && input.factor === "replication"
+        ? {
+            protocolVersion: "replicated-evaluation-v1",
+            validatorSHA256: hash("ablation-replication-validator"),
+            environmentSHA256: hash("ablation-replication-environment"),
+            sampling: {
+              design: "crossed-stratified-cluster-v1",
+              stratumKind: "task",
+              clusterKind: "seed",
+              strata: [{ id: "task-0", commitmentSHA256: hash("ablation-task-0") }],
+              clusters: [0, 1, 2, 3, 4].map((seed) => ({
+                id: `seed-${seed}`,
+                commitmentSHA256: hash(`ablation-seed-${seed}`),
+              })),
+            },
+            estimator: "iqm",
+            interval: {
+              method: "stratified-bootstrap-percentile-v1",
+              confidence: 0.95,
+              resamples: 1_000,
+              seed: 91,
+            },
+            decision: {
+              rule: "conservative-bound-v1",
+              direction: input.direction ?? "maximize",
+              target: 0.5,
+            },
+            failurePolicy: "fail-closed",
+          }
+        : undefined,
+    metric: {
+      name: "score",
+      direction: input.direction ?? "maximize",
+      target: input.factor === "replication" ? 0.5 : undefined,
+    },
     model: { provider: "test", name: input.model ?? "model" },
     tools: ["read", "bash"],
     skills: [],
@@ -123,7 +158,7 @@ async function study(
   prefix: string,
   drift = false,
   direction: "maximize" | "minimize" = "maximize",
-  factor: "orchestration" | "search" | "evaluator_audit" | "semantic_audit" = "orchestration",
+  factor: "orchestration" | "search" | "evaluator_audit" | "semantic_audit" | "replication" = "orchestration",
 ) {
   const createdAt = Date.now()
   const pairs = await Promise.all(
@@ -262,6 +297,15 @@ describe("matched scientific ablations", () => {
     if (!initialized) throw new Error("Expected an initialized ablation")
     plans.add(initialized.plan.planID)
     expect(initialized.plan.factor.kind).toBe("semantic_audit")
+    expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
+  })
+
+  test("isolates conservative replicated evaluation as its own ablatable protocol factor", async () => {
+    const input = await study("ablation-replication", false, "maximize", "replication")
+    const initialized = await HarnessAblation.initialize(input.plan)
+    if (!initialized) throw new Error("Expected an initialized ablation")
+    plans.add(initialized.plan.planID)
+    expect(initialized.plan.factor.kind).toBe("replication")
     expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
   })
 

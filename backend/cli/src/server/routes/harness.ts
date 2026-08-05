@@ -15,6 +15,7 @@ import { HarnessIntegrity } from "@/session/harness/integrity"
 import { HarnessIntervention } from "@/session/harness/intervention"
 import { HarnessOrchestrator } from "@/session/harness/orchestrator"
 import { HarnessReport } from "@/session/harness/report"
+import { HarnessReplication } from "@/session/harness/replication"
 import { HarnessRecipe } from "@/session/harness/recipe"
 import { HarnessSimulation } from "@/session/harness/simulation"
 import { HarnessSemantic } from "@/session/harness/semantic"
@@ -303,6 +304,61 @@ export const HarnessRoutes = lazy(() =>
           await HarnessJudge.assert({
             contract,
             receiptID: c.req.valid("param").receiptID,
+            recordedAt: Date.now(),
+            requirePassed: false,
+          }),
+        )
+      },
+    )
+    .post(
+      "/replications/receipts",
+      describeRoute({
+        summary: "Record an evaluator-authenticated replicated evaluation",
+        description:
+          "Requires the complete frozen stratum-by-cluster grid, then recomputes a robust estimate, uncertainty interval, and conservative promotion verdict.",
+        operationId: "harness.replication.record",
+        responses: {
+          200: {
+            description: "Immutable replicated evaluation receipt",
+            content: { "application/json": { schema: resolver(HarnessReplication.Receipt) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessReplication.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessReplication.record(input, contract))
+      },
+    )
+    .post(
+      "/replications/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected replicated evaluation receipt",
+        operationId: "harness.replication.receipt",
+        responses: {
+          200: {
+            description: "Replicated evaluation receipt",
+            content: { "application/json": { schema: resolver(HarnessReplication.Receipt) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessReplication.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        const receipt = await HarnessReplication.read(c.req.valid("param").receiptID)
+        if (!receipt) throw new Error(`Unknown or corrupt replicated evaluation receipt`)
+        return c.json(
+          await HarnessReplication.assert({
+            contract,
+            receiptID: receipt.receiptID,
+            subject: receipt.subject,
+            score: receipt.statistics.estimate,
+            evaluatedAt: Date.now(),
             recordedAt: Date.now(),
             requirePassed: false,
           }),

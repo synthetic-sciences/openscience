@@ -17443,6 +17443,7 @@
                                 "simulation",
                                 "evaluator_audit",
                                 "semantic_audit",
+                                "replication",
                                 "fidelities",
                                 "skill",
                                 "tool"
@@ -17658,6 +17659,7 @@
                                 "simulation",
                                 "evaluator_audit",
                                 "semantic_audit",
+                                "replication",
                                 "fidelities",
                                 "skill",
                                 "tool"
@@ -17926,6 +17928,7 @@
                           "simulation",
                           "evaluator_audit",
                           "semantic_audit",
+                          "replication",
                           "fidelities",
                           "skill",
                           "tool"
@@ -18091,6 +18094,7 @@
                                 "simulation",
                                 "evaluator_audit",
                                 "semantic_audit",
+                                "replication",
                                 "fidelities",
                                 "skill",
                                 "tool"
@@ -18306,6 +18310,7 @@
                                 "simulation",
                                 "evaluator_audit",
                                 "semantic_audit",
+                                "replication",
                                 "fidelities",
                                 "skill",
                                 "tool"
@@ -22781,6 +22786,1188 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.judge.receipt({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/replications/receipts": {
+      "post": {
+        "operationId": "harness.replication.record",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Record an evaluator-authenticated replicated evaluation",
+        "description": "Requires the complete frozen stratum-by-cluster grid, then recomputes a robust estimate, uncertainty interval, and conservative promotion verdict.",
+        "responses": {
+          "200": {
+            "description": "Immutable replicated evaluation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "replicated-evaluation-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "contractSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "run",
+                            "candidate"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "metric": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "protocol": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "replicated-evaluation-v1"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "environmentSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "sampling": {
+                          "type": "object",
+                          "properties": {
+                            "design": {
+                              "type": "string",
+                              "const": "crossed-stratified-cluster-v1"
+                            },
+                            "stratumKind": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "clusterKind": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "strata": {
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "commitmentSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "commitmentSHA256"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "clusters": {
+                              "minItems": 3,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "commitmentSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "commitmentSHA256"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "design",
+                            "stratumKind",
+                            "clusterKind",
+                            "strata",
+                            "clusters"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "estimator": {
+                          "type": "string",
+                          "enum": [
+                            "mean",
+                            "median",
+                            "iqm",
+                            "pass_rate"
+                          ]
+                        },
+                        "interval": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "method": {
+                                  "type": "string",
+                                  "const": "stratified-bootstrap-percentile-v1"
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "const": 0.95
+                                },
+                                "resamples": {
+                                  "type": "integer",
+                                  "minimum": 1000,
+                                  "maximum": 50000
+                                },
+                                "seed": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 4294967295
+                                }
+                              },
+                              "required": [
+                                "method",
+                                "confidence",
+                                "resamples",
+                                "seed"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "method": {
+                                  "type": "string",
+                                  "const": "wilson-score-v1"
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "const": 0.95
+                                }
+                              },
+                              "required": [
+                                "method",
+                                "confidence"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "decision": {
+                          "type": "object",
+                          "properties": {
+                            "rule": {
+                              "type": "string",
+                              "const": "conservative-bound-v1"
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": [
+                                "maximize",
+                                "minimize",
+                                "pass"
+                              ]
+                            },
+                            "target": {
+                              "type": "number"
+                            },
+                            "maxIntervalWidth": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "rule",
+                            "direction",
+                            "target"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "failurePolicy": {
+                          "type": "string",
+                          "const": "fail-closed"
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "validatorSHA256",
+                        "environmentSHA256",
+                        "sampling",
+                        "estimator",
+                        "interval",
+                        "decision",
+                        "failurePolicy"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "observations": {
+                      "minItems": 3,
+                      "maxItems": 512,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "stratumID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "clusterID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "stratumSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "clusterSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "passed",
+                              "failed",
+                              "inconclusive"
+                            ]
+                          },
+                          "score": {
+                            "type": "number"
+                          },
+                          "outputSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "environmentSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "evaluatedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "stratumID",
+                          "clusterID",
+                          "stratumSHA256",
+                          "clusterSHA256",
+                          "status",
+                          "outputSHA256",
+                          "environmentSHA256",
+                          "evidence",
+                          "evaluatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "statistics": {
+                      "type": "object",
+                      "properties": {
+                        "units": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "passed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "failed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "inconclusive": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "estimator": {
+                          "type": "string",
+                          "enum": [
+                            "mean",
+                            "median",
+                            "iqm",
+                            "pass_rate"
+                          ]
+                        },
+                        "estimate": {
+                          "type": "number"
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "const": 0.95
+                        },
+                        "interval": {
+                          "type": "array",
+                          "prefixItems": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "intervalWidth": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "conservativeBound": {
+                          "type": "number"
+                        },
+                        "method": {
+                          "type": "string",
+                          "enum": [
+                            "stratified-bootstrap-percentile-v1",
+                            "wilson-score-v1"
+                          ]
+                        },
+                        "resamples": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "units",
+                        "passed",
+                        "failed",
+                        "inconclusive",
+                        "estimator",
+                        "confidence",
+                        "method"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "failures": {
+                      "maxItems": 1024,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 16384,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "protocolSHA256",
+                    "contractSHA256",
+                    "sourceSessionID",
+                    "subject",
+                    "metric",
+                    "protocol",
+                    "observations",
+                    "statistics",
+                    "status",
+                    "failures",
+                    "evidence",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "subject": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "run",
+                          "candidate"
+                        ]
+                      },
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "observations": {
+                    "minItems": 3,
+                    "maxItems": 512,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "stratumID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "clusterID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "stratumSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "clusterSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed",
+                            "inconclusive"
+                          ]
+                        },
+                        "score": {
+                          "type": "number"
+                        },
+                        "outputSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "environmentSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "evaluatedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "stratumID",
+                        "clusterID",
+                        "stratumSHA256",
+                        "clusterSHA256",
+                        "status",
+                        "outputSHA256",
+                        "environmentSHA256",
+                        "evidence",
+                        "evaluatedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken",
+                  "subject",
+                  "observations"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.replication.record({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/replications/receipts/{receiptID}": {
+      "post": {
+        "operationId": "harness.replication.receipt",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receiptID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a capability-protected replicated evaluation receipt",
+        "responses": {
+          "200": {
+            "description": "Replicated evaluation receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "replicated-evaluation-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "contractSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "run",
+                            "candidate"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "metric": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "protocol": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "replicated-evaluation-v1"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "environmentSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "sampling": {
+                          "type": "object",
+                          "properties": {
+                            "design": {
+                              "type": "string",
+                              "const": "crossed-stratified-cluster-v1"
+                            },
+                            "stratumKind": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "clusterKind": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "strata": {
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "commitmentSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "commitmentSHA256"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "clusters": {
+                              "minItems": 3,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "commitmentSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "commitmentSHA256"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "design",
+                            "stratumKind",
+                            "clusterKind",
+                            "strata",
+                            "clusters"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "estimator": {
+                          "type": "string",
+                          "enum": [
+                            "mean",
+                            "median",
+                            "iqm",
+                            "pass_rate"
+                          ]
+                        },
+                        "interval": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "method": {
+                                  "type": "string",
+                                  "const": "stratified-bootstrap-percentile-v1"
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "const": 0.95
+                                },
+                                "resamples": {
+                                  "type": "integer",
+                                  "minimum": 1000,
+                                  "maximum": 50000
+                                },
+                                "seed": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 4294967295
+                                }
+                              },
+                              "required": [
+                                "method",
+                                "confidence",
+                                "resamples",
+                                "seed"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "method": {
+                                  "type": "string",
+                                  "const": "wilson-score-v1"
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "const": 0.95
+                                }
+                              },
+                              "required": [
+                                "method",
+                                "confidence"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "decision": {
+                          "type": "object",
+                          "properties": {
+                            "rule": {
+                              "type": "string",
+                              "const": "conservative-bound-v1"
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": [
+                                "maximize",
+                                "minimize",
+                                "pass"
+                              ]
+                            },
+                            "target": {
+                              "type": "number"
+                            },
+                            "maxIntervalWidth": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "rule",
+                            "direction",
+                            "target"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "failurePolicy": {
+                          "type": "string",
+                          "const": "fail-closed"
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "validatorSHA256",
+                        "environmentSHA256",
+                        "sampling",
+                        "estimator",
+                        "interval",
+                        "decision",
+                        "failurePolicy"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "observations": {
+                      "minItems": 3,
+                      "maxItems": 512,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "stratumID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "clusterID": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "stratumSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "clusterSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "passed",
+                              "failed",
+                              "inconclusive"
+                            ]
+                          },
+                          "score": {
+                            "type": "number"
+                          },
+                          "outputSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "environmentSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "evaluatedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "stratumID",
+                          "clusterID",
+                          "stratumSHA256",
+                          "clusterSHA256",
+                          "status",
+                          "outputSHA256",
+                          "environmentSHA256",
+                          "evidence",
+                          "evaluatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "statistics": {
+                      "type": "object",
+                      "properties": {
+                        "units": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "passed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "failed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "inconclusive": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "estimator": {
+                          "type": "string",
+                          "enum": [
+                            "mean",
+                            "median",
+                            "iqm",
+                            "pass_rate"
+                          ]
+                        },
+                        "estimate": {
+                          "type": "number"
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "const": 0.95
+                        },
+                        "interval": {
+                          "type": "array",
+                          "prefixItems": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "intervalWidth": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "conservativeBound": {
+                          "type": "number"
+                        },
+                        "method": {
+                          "type": "string",
+                          "enum": [
+                            "stratified-bootstrap-percentile-v1",
+                            "wilson-score-v1"
+                          ]
+                        },
+                        "resamples": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "units",
+                        "passed",
+                        "failed",
+                        "inconclusive",
+                        "estimator",
+                        "confidence",
+                        "method"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "failures": {
+                      "maxItems": 1024,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 16384,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "protocolSHA256",
+                    "contractSHA256",
+                    "sourceSessionID",
+                    "subject",
+                    "metric",
+                    "protocol",
+                    "observations",
+                    "statistics",
+                    "status",
+                    "failures",
+                    "evidence",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.replication.receipt({\n  ...\n})"
           }
         ]
       }
@@ -34526,6 +35713,204 @@
                       ],
                       "additionalProperties": false
                     },
+                    "replication": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "replicated-evaluation-v1"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "environmentSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "sampling": {
+                          "type": "object",
+                          "properties": {
+                            "design": {
+                              "type": "string",
+                              "const": "crossed-stratified-cluster-v1"
+                            },
+                            "stratumKind": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "clusterKind": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "strata": {
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "commitmentSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "commitmentSHA256"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "clusters": {
+                              "minItems": 3,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "commitmentSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "commitmentSHA256"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "design",
+                            "stratumKind",
+                            "clusterKind",
+                            "strata",
+                            "clusters"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "estimator": {
+                          "type": "string",
+                          "enum": [
+                            "mean",
+                            "median",
+                            "iqm",
+                            "pass_rate"
+                          ]
+                        },
+                        "interval": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "method": {
+                                  "type": "string",
+                                  "const": "stratified-bootstrap-percentile-v1"
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "const": 0.95
+                                },
+                                "resamples": {
+                                  "type": "integer",
+                                  "minimum": 1000,
+                                  "maximum": 50000
+                                },
+                                "seed": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 4294967295
+                                }
+                              },
+                              "required": [
+                                "method",
+                                "confidence",
+                                "resamples",
+                                "seed"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "method": {
+                                  "type": "string",
+                                  "const": "wilson-score-v1"
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "const": 0.95
+                                }
+                              },
+                              "required": [
+                                "method",
+                                "confidence"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "decision": {
+                          "type": "object",
+                          "properties": {
+                            "rule": {
+                              "type": "string",
+                              "const": "conservative-bound-v1"
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": [
+                                "maximize",
+                                "minimize",
+                                "pass"
+                              ]
+                            },
+                            "target": {
+                              "type": "number"
+                            },
+                            "maxIntervalWidth": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "rule",
+                            "direction",
+                            "target"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "failurePolicy": {
+                          "type": "string",
+                          "const": "fail-closed"
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "validatorSHA256",
+                        "environmentSHA256",
+                        "sampling",
+                        "estimator",
+                        "interval",
+                        "decision",
+                        "failurePolicy"
+                      ],
+                      "additionalProperties": false
+                    },
                     "packs": {
                       "maxItems": 7,
                       "type": "array",
@@ -36086,6 +37471,204 @@
                     ],
                     "additionalProperties": false
                   },
+                  "replication": {
+                    "type": "object",
+                    "properties": {
+                      "protocolVersion": {
+                        "type": "string",
+                        "const": "replicated-evaluation-v1"
+                      },
+                      "validatorSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "environmentSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "sampling": {
+                        "type": "object",
+                        "properties": {
+                          "design": {
+                            "type": "string",
+                            "const": "crossed-stratified-cluster-v1"
+                          },
+                          "stratumKind": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "clusterKind": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "strata": {
+                            "minItems": 1,
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120
+                                },
+                                "commitmentSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "commitmentSHA256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "clusters": {
+                            "minItems": 3,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120
+                                },
+                                "commitmentSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "commitmentSHA256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "design",
+                          "stratumKind",
+                          "clusterKind",
+                          "strata",
+                          "clusters"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "estimator": {
+                        "type": "string",
+                        "enum": [
+                          "mean",
+                          "median",
+                          "iqm",
+                          "pass_rate"
+                        ]
+                      },
+                      "interval": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "method": {
+                                "type": "string",
+                                "const": "stratified-bootstrap-percentile-v1"
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "const": 0.95
+                              },
+                              "resamples": {
+                                "type": "integer",
+                                "minimum": 1000,
+                                "maximum": 50000
+                              },
+                              "seed": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 4294967295
+                              }
+                            },
+                            "required": [
+                              "method",
+                              "confidence",
+                              "resamples",
+                              "seed"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "method": {
+                                "type": "string",
+                                "const": "wilson-score-v1"
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "const": 0.95
+                              }
+                            },
+                            "required": [
+                              "method",
+                              "confidence"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "decision": {
+                        "type": "object",
+                        "properties": {
+                          "rule": {
+                            "type": "string",
+                            "const": "conservative-bound-v1"
+                          },
+                          "direction": {
+                            "type": "string",
+                            "enum": [
+                              "maximize",
+                              "minimize",
+                              "pass"
+                            ]
+                          },
+                          "target": {
+                            "type": "number"
+                          },
+                          "maxIntervalWidth": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "rule",
+                          "direction",
+                          "target"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "failurePolicy": {
+                        "type": "string",
+                        "const": "fail-closed"
+                      }
+                    },
+                    "required": [
+                      "protocolVersion",
+                      "validatorSHA256",
+                      "environmentSHA256",
+                      "sampling",
+                      "estimator",
+                      "interval",
+                      "decision",
+                      "failurePolicy"
+                    ],
+                    "additionalProperties": false
+                  },
                   "extraPacks": {
                     "default": [],
                     "maxItems": 7,
@@ -36483,6 +38066,10 @@
                     "pattern": "^[a-f0-9]{64}$"
                   },
                   "semanticReceiptID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "replicationReceiptID": {
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
@@ -39857,6 +41444,204 @@
                           ],
                           "additionalProperties": false
                         },
+                        "replication": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "replicated-evaluation-v1"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "environmentSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sampling": {
+                              "type": "object",
+                              "properties": {
+                                "design": {
+                                  "type": "string",
+                                  "const": "crossed-stratified-cluster-v1"
+                                },
+                                "stratumKind": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120
+                                },
+                                "clusterKind": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 120
+                                },
+                                "strata": {
+                                  "minItems": 1,
+                                  "maxItems": 64,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 120
+                                      },
+                                      "commitmentSHA256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "commitmentSHA256"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "clusters": {
+                                  "minItems": 3,
+                                  "maxItems": 32,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 120
+                                      },
+                                      "commitmentSHA256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "commitmentSHA256"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "design",
+                                "stratumKind",
+                                "clusterKind",
+                                "strata",
+                                "clusters"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "estimator": {
+                              "type": "string",
+                              "enum": [
+                                "mean",
+                                "median",
+                                "iqm",
+                                "pass_rate"
+                              ]
+                            },
+                            "interval": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "method": {
+                                      "type": "string",
+                                      "const": "stratified-bootstrap-percentile-v1"
+                                    },
+                                    "confidence": {
+                                      "type": "number",
+                                      "const": 0.95
+                                    },
+                                    "resamples": {
+                                      "type": "integer",
+                                      "minimum": 1000,
+                                      "maximum": 50000
+                                    },
+                                    "seed": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 4294967295
+                                    }
+                                  },
+                                  "required": [
+                                    "method",
+                                    "confidence",
+                                    "resamples",
+                                    "seed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "method": {
+                                      "type": "string",
+                                      "const": "wilson-score-v1"
+                                    },
+                                    "confidence": {
+                                      "type": "number",
+                                      "const": 0.95
+                                    }
+                                  },
+                                  "required": [
+                                    "method",
+                                    "confidence"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "decision": {
+                              "type": "object",
+                              "properties": {
+                                "rule": {
+                                  "type": "string",
+                                  "const": "conservative-bound-v1"
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": [
+                                    "maximize",
+                                    "minimize",
+                                    "pass"
+                                  ]
+                                },
+                                "target": {
+                                  "type": "number"
+                                },
+                                "maxIntervalWidth": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "rule",
+                                "direction",
+                                "target"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "failurePolicy": {
+                              "type": "string",
+                              "const": "fail-closed"
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "validatorSHA256",
+                            "environmentSHA256",
+                            "sampling",
+                            "estimator",
+                            "interval",
+                            "decision",
+                            "failurePolicy"
+                          ],
+                          "additionalProperties": false
+                        },
                         "packs": {
                           "maxItems": 7,
                           "type": "array",
@@ -40157,6 +41942,10 @@
                         "pattern": "^[a-f0-9]{64}$"
                       },
                       "semanticReceiptID": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "replicationReceiptID": {
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
                       },
@@ -40578,6 +42367,10 @@
                           "pattern": "^[a-f0-9]{64}$"
                         },
                         "semanticReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "replicationReceiptID": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },

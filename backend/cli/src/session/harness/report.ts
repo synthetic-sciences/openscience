@@ -86,6 +86,10 @@ export namespace HarnessReport {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          replicationReceiptID: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
           evaluations: z.number().int().nonnegative(),
         })
         .strict(),
@@ -197,6 +201,7 @@ export namespace HarnessReport {
       search: contract.search,
       evaluatorAudit: contract.evaluatorAudit,
       semanticAudit: contract.semanticAudit,
+      replication: contract.replication,
       contamination: contract.contamination,
     })
     const tokens = input.trace
@@ -266,6 +271,7 @@ export namespace HarnessReport {
         interventionReceiptID: evaluation?.interventionReceiptID,
         evaluatorAuditReceiptID: evaluation?.evaluatorAuditReceiptID,
         semanticReceiptID: evaluation?.semanticReceiptID,
+        replicationReceiptID: evaluation?.replicationReceiptID,
         evaluations: evaluations.length,
       },
       efficiency: {

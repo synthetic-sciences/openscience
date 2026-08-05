@@ -8126,6 +8126,7 @@ export type HarnessAblationInitializeData = {
         | "simulation"
         | "evaluator_audit"
         | "semantic_audit"
+        | "replication"
         | "fidelities"
         | "skill"
         | "tool"
@@ -8179,6 +8180,7 @@ export type HarnessAblationInitializeResponses = {
           | "simulation"
           | "evaluator_audit"
           | "semantic_audit"
+          | "replication"
           | "fidelities"
           | "skill"
           | "tool"
@@ -8228,6 +8230,7 @@ export type HarnessAblationInitializeResponses = {
           | "simulation"
           | "evaluator_audit"
           | "semantic_audit"
+          | "replication"
           | "fidelities"
           | "skill"
           | "tool"
@@ -8323,6 +8326,7 @@ export type HarnessAblationAssessResponses = {
           | "simulation"
           | "evaluator_audit"
           | "semantic_audit"
+          | "replication"
           | "fidelities"
           | "skill"
           | "tool"
@@ -8372,6 +8376,7 @@ export type HarnessAblationAssessResponses = {
           | "simulation"
           | "evaluator_audit"
           | "semantic_audit"
+          | "replication"
           | "fidelities"
           | "skill"
           | "tool"
@@ -9376,6 +9381,250 @@ export type HarnessJudgeReceiptResponses = {
 }
 
 export type HarnessJudgeReceiptResponse = HarnessJudgeReceiptResponses[keyof HarnessJudgeReceiptResponses]
+
+export type HarnessReplicationRecordData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    observations: Array<{
+      stratumID: string
+      clusterID: string
+      stratumSHA256: string
+      clusterSHA256: string
+      status: "passed" | "failed" | "inconclusive"
+      score?: number
+      outputSHA256: string
+      environmentSHA256: string
+      evidence: Array<string>
+      evaluatedAt: number
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/replications/receipts"
+}
+
+export type HarnessReplicationRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessReplicationRecordError = HarnessReplicationRecordErrors[keyof HarnessReplicationRecordErrors]
+
+export type HarnessReplicationRecordResponses = {
+  /**
+   * Immutable replicated evaluation receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "replicated-evaluation-receipt-v1"
+    receiptID: string
+    protocolSHA256: string
+    contractSHA256: string
+    sourceSessionID: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    metric: string
+    protocol: {
+      protocolVersion: "replicated-evaluation-v1"
+      validatorSHA256: string
+      environmentSHA256: string
+      sampling: {
+        design: "crossed-stratified-cluster-v1"
+        stratumKind: string
+        clusterKind: string
+        strata: Array<{
+          id: string
+          commitmentSHA256: string
+        }>
+        clusters: Array<{
+          id: string
+          commitmentSHA256: string
+        }>
+      }
+      estimator: "mean" | "median" | "iqm" | "pass_rate"
+      interval:
+        | {
+            method: "stratified-bootstrap-percentile-v1"
+            confidence: 0.95
+            resamples: number
+            seed: number
+          }
+        | {
+            method: "wilson-score-v1"
+            confidence: 0.95
+          }
+      decision: {
+        rule: "conservative-bound-v1"
+        direction: "maximize" | "minimize" | "pass"
+        target: number
+        maxIntervalWidth?: number
+      }
+      failurePolicy: "fail-closed"
+    }
+    observations: Array<{
+      stratumID: string
+      clusterID: string
+      stratumSHA256: string
+      clusterSHA256: string
+      status: "passed" | "failed" | "inconclusive"
+      score?: number
+      outputSHA256: string
+      environmentSHA256: string
+      evidence: Array<string>
+      evaluatedAt: number
+    }>
+    statistics: {
+      units: number
+      passed: number
+      failed: number
+      inconclusive: number
+      estimator: "mean" | "median" | "iqm" | "pass_rate"
+      estimate?: number
+      confidence: 0.95
+      interval?: [number, number]
+      intervalWidth?: number
+      conservativeBound?: number
+      method: "stratified-bootstrap-percentile-v1" | "wilson-score-v1"
+      resamples?: number
+    }
+    status: "passed" | "failed" | "inconclusive"
+    failures: Array<string>
+    evidence: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessReplicationRecordResponse =
+  HarnessReplicationRecordResponses[keyof HarnessReplicationRecordResponses]
+
+export type HarnessReplicationReceiptData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/replications/receipts/{receiptID}"
+}
+
+export type HarnessReplicationReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessReplicationReceiptError = HarnessReplicationReceiptErrors[keyof HarnessReplicationReceiptErrors]
+
+export type HarnessReplicationReceiptResponses = {
+  /**
+   * Replicated evaluation receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "replicated-evaluation-receipt-v1"
+    receiptID: string
+    protocolSHA256: string
+    contractSHA256: string
+    sourceSessionID: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    metric: string
+    protocol: {
+      protocolVersion: "replicated-evaluation-v1"
+      validatorSHA256: string
+      environmentSHA256: string
+      sampling: {
+        design: "crossed-stratified-cluster-v1"
+        stratumKind: string
+        clusterKind: string
+        strata: Array<{
+          id: string
+          commitmentSHA256: string
+        }>
+        clusters: Array<{
+          id: string
+          commitmentSHA256: string
+        }>
+      }
+      estimator: "mean" | "median" | "iqm" | "pass_rate"
+      interval:
+        | {
+            method: "stratified-bootstrap-percentile-v1"
+            confidence: 0.95
+            resamples: number
+            seed: number
+          }
+        | {
+            method: "wilson-score-v1"
+            confidence: 0.95
+          }
+      decision: {
+        rule: "conservative-bound-v1"
+        direction: "maximize" | "minimize" | "pass"
+        target: number
+        maxIntervalWidth?: number
+      }
+      failurePolicy: "fail-closed"
+    }
+    observations: Array<{
+      stratumID: string
+      clusterID: string
+      stratumSHA256: string
+      clusterSHA256: string
+      status: "passed" | "failed" | "inconclusive"
+      score?: number
+      outputSHA256: string
+      environmentSHA256: string
+      evidence: Array<string>
+      evaluatedAt: number
+    }>
+    statistics: {
+      units: number
+      passed: number
+      failed: number
+      inconclusive: number
+      estimator: "mean" | "median" | "iqm" | "pass_rate"
+      estimate?: number
+      confidence: 0.95
+      interval?: [number, number]
+      intervalWidth?: number
+      conservativeBound?: number
+      method: "stratified-bootstrap-percentile-v1" | "wilson-score-v1"
+      resamples?: number
+    }
+    status: "passed" | "failed" | "inconclusive"
+    failures: Array<string>
+    evidence: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessReplicationReceiptResponse =
+  HarnessReplicationReceiptResponses[keyof HarnessReplicationReceiptResponses]
 
 export type HarnessSemanticRecordData = {
   body?: {
@@ -12025,6 +12274,43 @@ export type HarnessBindData = {
       }
       token: string
     }
+    replication?: {
+      protocolVersion: "replicated-evaluation-v1"
+      validatorSHA256: string
+      environmentSHA256: string
+      sampling: {
+        design: "crossed-stratified-cluster-v1"
+        stratumKind: string
+        clusterKind: string
+        strata: Array<{
+          id: string
+          commitmentSHA256: string
+        }>
+        clusters: Array<{
+          id: string
+          commitmentSHA256: string
+        }>
+      }
+      estimator: "mean" | "median" | "iqm" | "pass_rate"
+      interval:
+        | {
+            method: "stratified-bootstrap-percentile-v1"
+            confidence: 0.95
+            resamples: number
+            seed: number
+          }
+        | {
+            method: "wilson-score-v1"
+            confidence: 0.95
+          }
+      decision: {
+        rule: "conservative-bound-v1"
+        direction: "maximize" | "minimize" | "pass"
+        target: number
+        maxIntervalWidth?: number
+      }
+      failurePolicy: "fail-closed"
+    }
     extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     metric?: {
       name?: string
@@ -12543,6 +12829,43 @@ export type HarnessBindResponses = {
       minReviewers: number
       minConfidence: number
     }
+    replication?: {
+      protocolVersion: "replicated-evaluation-v1"
+      validatorSHA256: string
+      environmentSHA256: string
+      sampling: {
+        design: "crossed-stratified-cluster-v1"
+        stratumKind: string
+        clusterKind: string
+        strata: Array<{
+          id: string
+          commitmentSHA256: string
+        }>
+        clusters: Array<{
+          id: string
+          commitmentSHA256: string
+        }>
+      }
+      estimator: "mean" | "median" | "iqm" | "pass_rate"
+      interval:
+        | {
+            method: "stratified-bootstrap-percentile-v1"
+            confidence: 0.95
+            resamples: number
+            seed: number
+          }
+        | {
+            method: "wilson-score-v1"
+            confidence: 0.95
+          }
+      decision: {
+        rule: "conservative-bound-v1"
+        direction: "maximize" | "minimize" | "pass"
+        target: number
+        maxIntervalWidth?: number
+      }
+      failurePolicy: "fail-closed"
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string
@@ -12592,6 +12915,7 @@ export type HarnessEvaluateData = {
     interventionReceiptID?: string
     evaluatorAuditReceiptID?: string
     semanticReceiptID?: string
+    replicationReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
     metrics?: {
@@ -13387,6 +13711,43 @@ export type HarnessContractResponses = {
       minReviewers: number
       minConfidence: number
     }
+    replication?: {
+      protocolVersion: "replicated-evaluation-v1"
+      validatorSHA256: string
+      environmentSHA256: string
+      sampling: {
+        design: "crossed-stratified-cluster-v1"
+        stratumKind: string
+        clusterKind: string
+        strata: Array<{
+          id: string
+          commitmentSHA256: string
+        }>
+        clusters: Array<{
+          id: string
+          commitmentSHA256: string
+        }>
+      }
+      estimator: "mean" | "median" | "iqm" | "pass_rate"
+      interval:
+        | {
+            method: "stratified-bootstrap-percentile-v1"
+            confidence: 0.95
+            resamples: number
+            seed: number
+          }
+        | {
+            method: "wilson-score-v1"
+            confidence: 0.95
+          }
+      decision: {
+        rule: "conservative-bound-v1"
+        direction: "maximize" | "minimize" | "pass"
+        target: number
+        maxIntervalWidth?: number
+      }
+      failurePolicy: "fail-closed"
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string
@@ -13464,6 +13825,7 @@ export type HarnessEvaluationsResponses = {
     interventionReceiptID?: string
     evaluatorAuditReceiptID?: string
     semanticReceiptID?: string
+    replicationReceiptID?: string
     evaluator: {
       name: string
       version: string
@@ -13586,6 +13948,7 @@ export type HarnessReportResponses = {
       interventionReceiptID?: string
       evaluatorAuditReceiptID?: string
       semanticReceiptID?: string
+      replicationReceiptID?: string
       evaluations: number
     }
     efficiency: {

@@ -684,6 +684,138 @@ export namespace HarnessContract {
     .strict()
   export type SemanticAudit = z.infer<typeof SemanticAudit>
 
+  export const ReplicationEstimator = z.enum(["mean", "median", "iqm", "pass_rate"])
+  export type ReplicationEstimator = z.infer<typeof ReplicationEstimator>
+
+  const ReplicationAxis = z
+    .object({
+      id: z.string().min(1).max(120),
+      commitmentSHA256: Hash,
+    })
+    .strict()
+
+  const ReplicationInterval = z.discriminatedUnion("method", [
+    z
+      .object({
+        method: z.literal("stratified-bootstrap-percentile-v1"),
+        confidence: z.literal(0.95),
+        resamples: z.number().int().min(1_000).max(50_000),
+        seed: z.number().int().min(0).max(0xffffffff),
+      })
+      .strict(),
+    z
+      .object({
+        method: z.literal("wilson-score-v1"),
+        confidence: z.literal(0.95),
+      })
+      .strict(),
+  ])
+
+  export const Replication = z
+    .object({
+      protocolVersion: z.literal("replicated-evaluation-v1"),
+      validatorSHA256: Hash,
+      environmentSHA256: Hash,
+      sampling: z
+        .object({
+          design: z.literal("crossed-stratified-cluster-v1"),
+          stratumKind: z.string().min(1).max(120),
+          clusterKind: z.string().min(1).max(120),
+          strata: z
+            .array(ReplicationAxis)
+            .min(1)
+            .max(64)
+            .refine(
+              (items) => new Set(items.map((item) => item.id)).size === items.length,
+              "Replication strata must be unique",
+            )
+            .refine(
+              (items) => new Set(items.map((item) => item.commitmentSHA256)).size === items.length,
+              "Replication stratum commitments must be unique",
+            )
+            .refine(
+              (items) =>
+                JSON.stringify(items.map((item) => item.id)) ===
+                JSON.stringify(items.map((item) => item.id).toSorted()),
+              "Replication strata must be sorted",
+            ),
+          clusters: z
+            .array(ReplicationAxis)
+            .min(3)
+            .max(32)
+            .refine(
+              (items) => new Set(items.map((item) => item.id)).size === items.length,
+              "Replication clusters must be unique",
+            )
+            .refine(
+              (items) => new Set(items.map((item) => item.commitmentSHA256)).size === items.length,
+              "Replication cluster commitments must be unique",
+            )
+            .refine(
+              (items) =>
+                JSON.stringify(items.map((item) => item.id)) ===
+                JSON.stringify(items.map((item) => item.id).toSorted()),
+              "Replication clusters must be sorted",
+            ),
+        })
+        .strict()
+        .refine(
+          (value) => value.strata.length * value.clusters.length <= 512,
+          "A replicated evaluation may contain at most 512 frozen units",
+        ),
+      estimator: ReplicationEstimator,
+      interval: ReplicationInterval,
+      decision: z
+        .object({
+          rule: z.literal("conservative-bound-v1"),
+          direction: z.enum(["maximize", "minimize", "pass"]),
+          target: z.number().finite(),
+          maxIntervalWidth: z.number().finite().nonnegative().optional(),
+        })
+        .strict(),
+      failurePolicy: z.literal("fail-closed"),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      const pass = value.estimator === "pass_rate"
+      if (pass !== (value.interval.method === "wilson-score-v1")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["interval", "method"],
+          message: "Pass-rate replication requires Wilson intervals; numeric estimators require stratified bootstrap",
+        })
+      }
+      if (pass !== (value.decision.direction === "pass")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["decision", "direction"],
+          message: "Pass-rate replication requires pass direction; numeric estimators require maximize or minimize",
+        })
+      }
+      if (!pass && value.sampling.clusters.length < 5) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["sampling", "clusters"],
+          message: "Numeric stratified bootstrap requires at least five independent clusters",
+        })
+      }
+      if (pass && (value.decision.target < 0 || value.decision.target > 1)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["decision", "target"],
+          message: "Pass-rate replication target must be between zero and one",
+        })
+      }
+      if (pass && value.sampling.strata.length !== 1) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["sampling", "strata"],
+          message: "Wilson pass-rate intervals require one stratum of independent Bernoulli clusters",
+        })
+      }
+    })
+  export type Replication = z.infer<typeof Replication>
+
   export const Split = z.enum(["development", "validation", "held_out", "release"])
   export type Split = z.infer<typeof Split>
 
@@ -738,6 +870,7 @@ export namespace HarnessContract {
       simulation: Simulation.optional(),
       evaluatorAudit: EvaluatorAudit.optional(),
       semanticAudit: SemanticAudit.optional(),
+      replication: Replication.optional(),
       packs: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -844,7 +977,8 @@ export namespace HarnessContract {
           value.interventions ||
           value.simulation ||
           value.evaluatorAudit ||
-          value.semanticAudit) &&
+          value.semanticAudit ||
+          value.replication) &&
         !value.benchmark.evaluatorVersion
       ) {
         ctx.addIssue({
@@ -860,7 +994,8 @@ export namespace HarnessContract {
           value.interventions ||
           value.simulation ||
           value.evaluatorAudit ||
-          value.semanticAudit) &&
+          value.semanticAudit ||
+          value.replication) &&
         !value.benchmark.evaluatorSource
       ) {
         ctx.addIssue({
@@ -1032,6 +1167,34 @@ export namespace HarnessContract {
           code: "custom",
           path: ["semanticAudit", "reviewer"],
           message: "Semantic review and evaluator qualification require distinct identities",
+        })
+      }
+      if (
+        value.replication &&
+        (!value.benchmark.metric || value.benchmark.direction === undefined || value.benchmark.target === undefined)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["replication"],
+          message: "Replicated evaluation requires a benchmark metric, direction, and target",
+        })
+      }
+      if (
+        value.replication &&
+        (value.replication.decision.direction !== value.benchmark.direction ||
+          value.replication.decision.target !== value.benchmark.target)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["replication", "decision"],
+          message: "Replicated evaluation decision must match the bound benchmark direction and target",
+        })
+      }
+      if (value.replication && value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Replicated evaluation requires a capability-authenticated evaluator source",
         })
       }
     })

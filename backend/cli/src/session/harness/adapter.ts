@@ -56,6 +56,7 @@ export namespace HarnessAdapter {
         })
         .strict()
         .optional(),
+      replication: HarnessContract.Replication.optional(),
       extraPacks: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -197,6 +198,10 @@ export namespace HarnessAdapter {
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
       semanticReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      replicationReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -418,6 +423,7 @@ export namespace HarnessAdapter {
       simulation: task.simulation,
       evaluatorAudit: task.evaluatorAudit?.protocol,
       semanticAudit: task.semanticAudit?.protocol,
+      replication: task.replication,
       packs,
       model: task.model,
       tools: task.tools,
@@ -532,6 +538,7 @@ export namespace HarnessAdapter {
       interventionReceiptID: value.interventionReceiptID,
       evaluatorAuditReceiptID: value.evaluatorAuditReceiptID,
       semanticReceiptID: value.semanticReceiptID,
+      replicationReceiptID: value.replicationReceiptID,
       evaluator: binding.evaluator,
       status: value.status,
       score: value.score,

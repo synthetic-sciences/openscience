@@ -22,7 +22,13 @@ afterEach(async () => {
   sessions.clear()
 })
 
-async function bind(sessionID: string, scope: string, objective = "Improve spectral PDE accuracy", semantic = false) {
+async function bind(
+  sessionID: string,
+  scope: string,
+  objective = "Improve spectral PDE accuracy",
+  semantic = false,
+  replication = false,
+) {
   sessions.add(sessionID)
   return HarnessContract.bind({
     schemaVersion: 1,
@@ -39,6 +45,7 @@ async function bind(sessionID: string, scope: string, objective = "Improve spect
       evaluatorSource: "benchmark",
       metric: "score",
       direction: "maximize",
+      target: replication ? 0.8 : undefined,
     },
     profile: "optimize",
     semanticAudit: semantic
@@ -54,6 +61,32 @@ async function bind(sessionID: string, scope: string, objective = "Improve spect
           },
           minReviewers: 2,
           minConfidence: 0.8,
+        }
+      : undefined,
+    replication: replication
+      ? {
+          protocolVersion: "replicated-evaluation-v1",
+          validatorSHA256: hash("memory-replication-validator"),
+          environmentSHA256: hash("memory-replication-environment"),
+          sampling: {
+            design: "crossed-stratified-cluster-v1",
+            stratumKind: "task",
+            clusterKind: "seed",
+            strata: [{ id: "task-0", commitmentSHA256: hash("memory-task-0") }],
+            clusters: [0, 1, 2, 3, 4].map((seed) => ({
+              id: `seed-${seed}`,
+              commitmentSHA256: hash(`memory-seed-${seed}`),
+            })),
+          },
+          estimator: "iqm",
+          interval: {
+            method: "stratified-bootstrap-percentile-v1",
+            confidence: 0.95,
+            resamples: 1_000,
+            seed: 31,
+          },
+          decision: { rule: "conservative-bound-v1", direction: "maximize", target: 0.8 },
+          failurePolicy: "fail-closed",
         }
       : undefined,
     model: { provider: "test", name: "model" },
@@ -200,6 +233,19 @@ describe("verified retrospective memory", () => {
     })
     await bind("memory-semantic-query", "semantic", "Improve spectral PDE accuracy", true)
     expect(await HarnessMemory.retrieve({ sessionID: "memory-semantic-query", query: "score-only method" })).toEqual([])
+  })
+
+  test("does not reuse score-only hindsight inside a stricter replication scope", async () => {
+    await candidate({
+      sessionID: "memory-replication-source",
+      scope: "replication",
+      proposal: "single lucky seed method",
+      score: 0.99,
+    })
+    await bind("memory-replication-query", "replication", "Improve spectral PDE accuracy", false, true)
+    expect(
+      await HarnessMemory.retrieve({ sessionID: "memory-replication-query", query: "single lucky seed method" }),
+    ).toEqual([])
   })
 
   test("ranks lexical and stage-relevant precedents ahead of generic ones", async () => {

@@ -147,6 +147,10 @@ import type {
   HarnessOrchestrationStartResponses,
   HarnessOrchestrationStatusErrors,
   HarnessOrchestrationStatusResponses,
+  HarnessReplicationReceiptErrors,
+  HarnessReplicationReceiptResponses,
+  HarnessReplicationRecordErrors,
+  HarnessReplicationRecordResponses,
   HarnessReportErrors,
   HarnessReportResponses,
   HarnessSemanticReceiptErrors,
@@ -3931,6 +3935,7 @@ export class Ablation extends HeyApiClient {
           | "simulation"
           | "evaluator_audit"
           | "semantic_audit"
+          | "replication"
           | "fidelities"
           | "skill"
           | "tool"
@@ -4423,6 +4428,108 @@ export class Judge extends HeyApiClient {
         },
       },
     )
+  }
+}
+
+export class Replication extends HeyApiClient {
+  /**
+   * Record an evaluator-authenticated replicated evaluation
+   *
+   * Requires the complete frozen stratum-by-cluster grid, then recomputes a robust estimate, uncertainty interval, and conservative promotion verdict.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+      subject?: {
+        type: "run" | "candidate"
+        id: string
+      }
+      observations?: Array<{
+        stratumID: string
+        clusterID: string
+        stratumSHA256: string
+        clusterSHA256: string
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        outputSHA256: string
+        environmentSHA256: string
+        evidence: Array<string>
+        evaluatedAt: number
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "observations" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessReplicationRecordResponses,
+      HarnessReplicationRecordErrors,
+      ThrowOnError
+    >({
+      url: "/harness/replications/receipts",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected replicated evaluation receipt
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessReplicationReceiptResponses,
+      HarnessReplicationReceiptErrors,
+      ThrowOnError
+    >({
+      url: "/harness/replications/receipts/{receiptID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
   }
 }
 
@@ -5847,6 +5954,43 @@ export class Harness extends HeyApiClient {
         }
         token: string
       }
+      replication?: {
+        protocolVersion: "replicated-evaluation-v1"
+        validatorSHA256: string
+        environmentSHA256: string
+        sampling: {
+          design: "crossed-stratified-cluster-v1"
+          stratumKind: string
+          clusterKind: string
+          strata: Array<{
+            id: string
+            commitmentSHA256: string
+          }>
+          clusters: Array<{
+            id: string
+            commitmentSHA256: string
+          }>
+        }
+        estimator: "mean" | "median" | "iqm" | "pass_rate"
+        interval:
+          | {
+              method: "stratified-bootstrap-percentile-v1"
+              confidence: 0.95
+              resamples: number
+              seed: number
+            }
+          | {
+              method: "wilson-score-v1"
+              confidence: 0.95
+            }
+        decision: {
+          rule: "conservative-bound-v1"
+          direction: "maximize" | "minimize" | "pass"
+          target: number
+          maxIntervalWidth?: number
+        }
+        failurePolicy: "fail-closed"
+      }
       extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
       metric?: {
         name?: string
@@ -5928,6 +6072,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "simulation" },
             { in: "body", key: "evaluatorAudit" },
             { in: "body", key: "semanticAudit" },
+            { in: "body", key: "replication" },
             { in: "body", key: "extraPacks" },
             { in: "body", key: "metric" },
             { in: "body", key: "objectives" },
@@ -5978,6 +6123,7 @@ export class Harness extends HeyApiClient {
       interventionReceiptID?: string
       evaluatorAuditReceiptID?: string
       semanticReceiptID?: string
+      replicationReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
       metrics?: {
@@ -6020,6 +6166,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "interventionReceiptID" },
             { in: "body", key: "evaluatorAuditReceiptID" },
             { in: "body", key: "semanticReceiptID" },
+            { in: "body", key: "replicationReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
             { in: "body", key: "metrics" },
@@ -6205,6 +6352,11 @@ export class Harness extends HeyApiClient {
   private _judge?: Judge
   get judge(): Judge {
     return (this._judge ??= new Judge({ client: this.client }))
+  }
+
+  private _replication?: Replication
+  get replication(): Replication {
+    return (this._replication ??= new Replication({ client: this.client }))
   }
 
   private _semantic?: Semantic

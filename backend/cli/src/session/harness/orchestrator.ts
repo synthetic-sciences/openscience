@@ -6,6 +6,7 @@ import { HarnessBenchmark } from "./benchmark"
 import { HarnessContract } from "./contract"
 import { HarnessLaunch } from "./launch"
 import { HarnessSemantic } from "./semantic"
+import { HarnessReplication } from "./replication"
 
 export namespace HarnessOrchestrator {
   const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
@@ -1035,6 +1036,7 @@ export namespace HarnessOrchestrator {
         `<scientific-coalition role="${role}" topology="${selection.topology}" round="${round}"${lane ? ` lane="${lane}"` : ""}>`,
         `Objective: ${contract.objective}`,
         ...(contract.semanticAudit ? [HarnessSemantic.prompt(contract)] : []),
+        ...(contract.replication ? [HarnessReplication.prompt(contract)] : []),
         instruction(role),
         ...(lane
           ? [

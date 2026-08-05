@@ -326,6 +326,45 @@ describe("harness quality-cost reports", () => {
     expect(() => HarnessReport.compare([a, b], "intervention-one")).toThrow("only comparable")
   })
 
+  test("refuses comparisons across different replicated evaluation protocols", () => {
+    const replication = HarnessContract.Replication.parse({
+      protocolVersion: "replicated-evaluation-v1",
+      validatorSHA256: "a".repeat(64),
+      environmentSHA256: "e".repeat(64),
+      sampling: {
+        design: "crossed-stratified-cluster-v1",
+        stratumKind: "task",
+        clusterKind: "seed",
+        strata: [{ id: "task-0", commitmentSHA256: "b".repeat(64) }],
+        clusters: [0, 1, 2, 3, 4].map((seed) => ({
+          id: `seed-${seed}`,
+          commitmentSHA256: seed.toString(16).repeat(64),
+        })),
+      },
+      estimator: "iqm",
+      interval: {
+        method: "stratified-bootstrap-percentile-v1",
+        confidence: 0.95,
+        resamples: 1_000,
+        seed: 17,
+      },
+      decision: { rule: "conservative-bound-v1", direction: "maximize", target: 0.9 },
+      failurePolicy: "fail-closed",
+    })
+    const first = HarnessContract.Info.parse({ ...contract("replication-one"), replication })
+    const second = HarnessContract.Info.parse({
+      ...contract("replication-two"),
+      replication: {
+        ...replication,
+        interval: { ...replication.interval, seed: 18 },
+      },
+    })
+    const a = HarnessReport.compile({ contract: first, evaluations: [evaluation(first, 0.91)], generatedAt: 3 })
+    const b = HarnessReport.compile({ contract: second, evaluations: [evaluation(second, 0.92)], generatedAt: 3 })
+    expect(a.comparisonKey).not.toBe(b.comparisonKey)
+    expect(() => HarnessReport.compare([a, b], "replication-one")).toThrow("only comparable")
+  })
+
   test("reports only final fidelity scores even when a later screening record is present", () => {
     const staged = HarnessContract.Info.parse({
       ...contract("staged"),
