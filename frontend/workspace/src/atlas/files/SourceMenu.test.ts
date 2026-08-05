@@ -36,8 +36,23 @@ const mount = (view: () => JSX.Element) => {
 
 const SOURCES = [
   { id: "artifacts", group: "Artifacts" as const, name: "All artifacts", root: "", kind: "artifacts" as const },
-  { id: "project", group: "This computer" as const, name: "openscience-demoo", sub: "/home/keertan/codes/openscience-demoo", root: "/p", kind: "project" as const },
-  { id: "ro", group: "This computer" as const, name: "pdebench", sub: "/home/keertan/data/pdebench", root: "/d", kind: "connected" as const, readonly: true },
+  {
+    id: "project",
+    group: "This computer" as const,
+    name: "openscience-demoo",
+    sub: "/home/keertan/codes/openscience-demoo",
+    root: "/p",
+    kind: "project" as const,
+  },
+  {
+    id: "ro",
+    group: "This computer" as const,
+    name: "pdebench",
+    sub: "/home/keertan/data/pdebench",
+    root: "/d",
+    kind: "connected" as const,
+    readonly: true,
+  },
 ]
 
 describe("source menu", () => {

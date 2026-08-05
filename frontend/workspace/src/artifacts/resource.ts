@@ -25,9 +25,9 @@ async function listArtifacts(request: ArtifactsRequest, state: "active" | "trash
  * only the active listing is broken, and the reverse.
  */
 export function loadStoredArtifacts(request: ArtifactsRequest): Promise<ArtifactsSnapshot> {
-  return Promise.all(
-    (["active", "trash"] as const).map((state) => listArtifacts(request, state).catch(() => [])),
-  ).then(([active, trash]) => ({ active, trash }))
+  return Promise.all((["active", "trash"] as const).map((state) => listArtifacts(request, state).catch(() => []))).then(
+    ([active, trash]) => ({ active, trash }),
+  )
 }
 
 /** Undo a trash: POST /file/artifact-store/:id/restore (routes/file.ts:491). */

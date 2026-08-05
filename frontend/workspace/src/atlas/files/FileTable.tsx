@@ -19,7 +19,8 @@ const bytes = (value?: number) => {
   if (value === undefined) return "—"
   if (value < 1_024) return `${Math.round(value)} B`
   if (value < 1_024 * 1_024) return `${(value / 1_024).toFixed(value < 10 * 1_024 ? 1 : 0)} KB`
-  if (value < 1_024 * 1_024 * 1_024) return `${(value / (1_024 * 1_024)).toFixed(value < 10 * 1_024 * 1_024 ? 1 : 0)} MB`
+  if (value < 1_024 * 1_024 * 1_024)
+    return `${(value / (1_024 * 1_024)).toFixed(value < 10 * 1_024 * 1_024 ? 1 : 0)} MB`
   return `${(value / (1_024 * 1_024 * 1_024)).toFixed(1)} GB`
 }
 
@@ -39,16 +40,15 @@ export function FileTable(props: {
     <div class="files-table">
       <Show when={props.depth > 0}>
         <button type="button" class="files-row files-row--up" data-file-up onClick={() => props.onUp()}>
-          <span class="files-row__glyph" aria-hidden="true">↑</span>
+          <span class="files-row__glyph" aria-hidden="true">
+            ↑
+          </span>
           <span class="files-row__name">..</span>
           <span class="files-row__size" />
         </button>
       </Show>
 
-      <Show
-        when={sorted().length > 0}
-        fallback={<div class="files-empty">This folder is empty.</div>}
-      >
+      <Show when={sorted().length > 0} fallback={<div class="files-empty">This folder is empty.</div>}>
         <For each={sorted()}>
           {(row) => (
             <button
@@ -58,8 +58,12 @@ export function FileTable(props: {
               data-file-row={row.name}
               onClick={() => props.onOpen(row)}
             >
-              <span class="files-row__glyph" aria-hidden="true">{row.type === "directory" ? "▭" : "▫"}</span>
-              <span class="files-row__name" data-file-name>{row.name}</span>
+              <span class="files-row__glyph" aria-hidden="true">
+                {row.type === "directory" ? "▭" : "▫"}
+              </span>
+              <span class="files-row__name" data-file-name>
+                {row.name}
+              </span>
               <span class="files-row__size" data-file-size>
                 {row.type === "directory" ? "—" : bytes(row.size)}
               </span>

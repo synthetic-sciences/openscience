@@ -17,7 +17,9 @@ export function FileTabs(props: {
         aria-selected={props.active === "files"}
         onClick={() => props.onSelect("files")}
       >
-        <span class="files-tab__label" data-tab-label>Files</span>
+        <span class="files-tab__label" data-tab-label>
+          Files
+        </span>
       </button>
 
       <For each={props.open}>
@@ -31,7 +33,9 @@ export function FileTabs(props: {
             title={name}
             onClick={() => props.onSelect(name)}
           >
-            <span class="files-tab__label" data-tab-label>{middle(name, 22)}</span>
+            <span class="files-tab__label" data-tab-label>
+              {middle(name, 22)}
+            </span>
             <span
               class="files-tab__close"
               role="button"

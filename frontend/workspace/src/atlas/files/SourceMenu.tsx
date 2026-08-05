@@ -128,8 +128,12 @@ export function SourceMenu(props: {
                   props.onAdd?.()
                 }}
               >
-                <span class="files-menu__glyph" aria-hidden="true">+</span>
-                <span><span class="files-menu__label">Add folder…</span></span>
+                <span class="files-menu__glyph" aria-hidden="true">
+                  +
+                </span>
+                <span>
+                  <span class="files-menu__label">Add folder…</span>
+                </span>
                 <span class="files-menu__tail" />
               </button>
             </Show>

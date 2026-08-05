@@ -70,10 +70,14 @@ describe("file table", () => {
   test("offers a parent row only below the root, and reports both actions", () => {
     const opened: string[] = []
     let ups = 0
-    const root = mount(() => subject.FileTable({ rows: ROWS, depth: 0, onOpen: (r) => opened.push(r.name), onUp: () => ups++ }))
+    const root = mount(() =>
+      subject.FileTable({ rows: ROWS, depth: 0, onOpen: (r) => opened.push(r.name), onUp: () => ups++ }),
+    )
     expect(root.querySelector("[data-file-up]")).toBeNull()
 
-    const deep = mount(() => subject.FileTable({ rows: ROWS, depth: 2, onOpen: (r) => opened.push(r.name), onUp: () => ups++ }))
+    const deep = mount(() =>
+      subject.FileTable({ rows: ROWS, depth: 2, onOpen: (r) => opened.push(r.name), onUp: () => ups++ }),
+    )
     deep.querySelector<HTMLButtonElement>("[data-file-up]")?.click()
     deep.querySelector<HTMLButtonElement>('[data-file-row="train_lr.py"]')?.click()
 
