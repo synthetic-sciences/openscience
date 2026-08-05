@@ -35,6 +35,19 @@ const mount = (view: () => JSX.Element) => {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+// Loading a shiki grammar takes longer than a microtask and longer on a cold
+// machine than a warm one, so the real-highlighter test waits for the condition
+// rather than for a duration it would have to guess at.
+const waitFor = async <T>(read: () => T | null | undefined, timeout = 15_000) => {
+  const until = Date.now() + timeout
+  for (;;) {
+    const value = read()
+    if (value) return value
+    if (Date.now() > until) return undefined
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+}
+
 const artifact = (over: { filename: string; mimeType?: string; size?: number }) =>
   ({
     schemaVersion: 1,
@@ -143,4 +156,22 @@ describe("artifact thumbnail", () => {
     expect(reads).toBe(0)
     expect(host.querySelector("[data-thumb-chip]")?.textContent).toBe("md")
   })
+
+  // Every other test injects `highlight`, which would let a wrong export name or
+  // a wrong module specifier pass the suite and fail only in a browser. This one
+  // runs the real shared highlighter, so the wiring itself is under test.
+  test("tints with the shared highlighter when none is injected", async () => {
+    const host = mount(() =>
+      subject.ArtifactThumb({
+        artifact: artifact({ filename: "train.py" }),
+        url: () => "",
+        read: async () => 'import numpy as np\nname = "x"\n',
+      }),
+    )
+
+    const tinted = await waitFor(() => host.querySelector("[data-thumb-text] span[style*='--syntax-']"))
+
+    expect(tinted).toBeTruthy()
+    expect(host.querySelector("[data-thumb-text]")?.textContent).toContain("import numpy as np")
+  }, 20_000)
 })
