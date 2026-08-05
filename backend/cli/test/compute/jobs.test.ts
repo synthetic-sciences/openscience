@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { ComputeJobs, ComputeJobsCorruptError } from "../../src/compute/jobs"
+import { ModalAdapter } from "../../src/compute/modal/adapter"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { OpenScience } from "../../src/openscience"
@@ -818,6 +819,91 @@ describe("ComputeJobs Modal governance", () => {
     expect(recovered.status).toBe("succeeded")
     expect(recovered.lifecycle).toMatchObject({ delivery: "complete", resource: "closed", recoverable: false })
     expect(await Bun.file(path.join(tmp.path, "result.txt")).text()).toBe("recovered")
+    expect(calls).toEqual({ run: 1, recover: 1, release: 1 })
+  })
+
+  test("retains a completed Modal Volume when its first control-plane download fails", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const calls = { run: 0, recover: 0, release: 0 }
+    const provider = {
+      volume: (project: string, id: string) => `test-${Bun.hash(`${project}\0${id}`)}`,
+      run: async (
+        _context: Parameters<ComputeJobs.ModalProvider["run"]>[0],
+        spec: Parameters<ComputeJobs.ModalProvider["run"]>[1],
+        hooks: Parameters<ComputeJobs.ModalProvider["run"]>[2],
+      ) => {
+        calls.run++
+        await hooks.created(`sandbox-${spec.id}`)
+        throw new ModalAdapter.HarvestError(0, new Error("control plane unavailable"))
+      },
+      recover: async () => {
+        calls.recover++
+        return { code: 0, outputs: [] }
+      },
+      find: async () => undefined,
+      close: async () => undefined,
+      release: async () => {
+        calls.release++
+      },
+    } satisfies ComputeJobs.ModalProvider
+    const modal = {
+      app: "openscience-test",
+      image: "python:3.12-slim",
+      network: "none" as const,
+      timeoutMinutes: 10,
+      concurrency: 1,
+    }
+    const credentials = { ...modal, tokenId: "ak-test", tokenSecret: "as-test" }
+    const request = {
+      name: "recover direct volume",
+      command: "true",
+      target: { kind: "modal" as const },
+      gpu: "none",
+    }
+    const prepared = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const plan = await ComputeJobs.plan({ ...request, sessionID: session.id }, { root, workspace: tmp.path, modal })
+        return { session, plan }
+      },
+    })
+    const job = await Instance.provide({
+      directory: tmp.path,
+      fn: () =>
+        ComputeJobs.start(
+          { ...request, sessionID: prepared.session.id, approval: prepared.plan.digest },
+          { root, workspace: tmp.path, modal, credentials, provider },
+        ),
+    })
+    const delivery = async (attempts = 100): Promise<ComputeJobs.Job> => {
+      const current = await ComputeJobs.get(job.id, { root, workspace: tmp.path })
+      if (current?.lifecycle?.delivery === "failed") return current
+      if (!attempts) throw new Error("Timed out waiting for recoverable Modal Volume")
+      await Bun.sleep(20)
+      return delivery(attempts - 1)
+    }
+    const failed = await delivery()
+
+    expect(failed.status).toBe("succeeded")
+    expect(failed.exit_code).toBe(0)
+    expect(failed.lifecycle).toMatchObject({ delivery: "failed", resource: "unknown", recoverable: true })
+    expect(calls).toEqual({ run: 1, recover: 0, release: 0 })
+
+    await ComputeJobs.retry(job.id, { root, workspace: tmp.path, credentials, provider })
+    const complete = async (attempts = 100): Promise<ComputeJobs.Job> => {
+      const current = await ComputeJobs.get(job.id, { root, workspace: tmp.path })
+      if (current?.lifecycle?.resource === "closed") return current
+      if (!attempts) throw new Error("Timed out waiting for direct Modal Volume recovery")
+      await Bun.sleep(20)
+      return complete(attempts - 1)
+    }
+    const recovered = await complete()
+
+    expect(recovered.status).toBe("succeeded")
+    expect(recovered.lifecycle).toMatchObject({ delivery: "complete", resource: "closed", recoverable: false })
     expect(calls).toEqual({ run: 1, recover: 1, release: 1 })
   })
 })

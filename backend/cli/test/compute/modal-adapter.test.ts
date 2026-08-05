@@ -30,7 +30,7 @@ describe("ModalAdapter sandbox lifecycle", () => {
     expect(first).not.toContain("private-project")
   })
 
-  test("keeps the sandbox alive until outputs can be collected", async () => {
+  test("exits immediately after recording the durable result", async () => {
     const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-"))
     const child = Bun.spawn(
       ["bash", "-lc", ModalAdapter.script("printf 'completed\\n'; printf artifact > result.txt", root)],
@@ -47,9 +47,7 @@ describe("ModalAdapter sandbox lifecycle", () => {
     expect(await wait()).toBe("0\n")
     expect(await Bun.file(path.join(root, "result.txt")).text()).toBe("artifact")
     expect(await Bun.file(path.join(root, ".openscience-run.log")).text()).toBe("completed\n")
-    expect(child.exitCode).toBeNull()
-    child.kill()
-    await child.exited
+    expect(await child.exited).toBe(0)
     await fs.rm(root, { recursive: true, force: true })
   })
 })

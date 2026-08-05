@@ -1083,6 +1083,12 @@ export namespace ComputeJobs {
         jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
       })
     }
+    await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0 || jobs[index]!.lifecycle?.delivery !== "pending") return
+      const draft = move(jobs[index]!, { type: "deliver" })
+      jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+    })
     const current = await get(job.id, { root: scope.root, workspace: scope.workspace })
     if (!current) return
     const spec = modalSpec(current, [], scope)
@@ -1234,6 +1240,26 @@ export namespace ComputeJobs {
       const ended =
         closed && !jobs[index]!.modal?.volume ? move(draft, { type: "close" }) : move(draft, { type: "lose" })
       jobs[index] = Job.parse({ ...ended, provenance: provenance(ended) })
+    })
+  }
+
+  async function deferModal(job: Job, scope: Scope, error: ModalAdapter.HarvestError): Promise<void> {
+    const cause = error.cause instanceof Error ? error.cause.message : String(error.cause)
+    const message = OpenScience.redactSecrets(`${error.message}. ${cause}`)
+    await event(scope.root, job.id, `Modal result recovery pending: ${message}`)
+    await fs.appendFile(path.join(logsOf(scope.root), `${job.id}.log`), `${message}\n`, { mode: 0o600 })
+    await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0 || terminal.has(jobs[index]!.status)) return
+      const finished = move(
+        jobs[index]!,
+        { type: "finish", outcome: error.code === 0 ? "succeeded" : "failed" },
+        { completed_at: new Date().toISOString(), exit_code: error.code },
+      )
+      const collecting = move(finished, { type: "collect" })
+      const failed = move(collecting, { type: "delivery_fail", message }, { capture_error: message })
+      const recoverable = move(failed, { type: "lose" })
+      jobs[index] = Job.parse({ ...recoverable, provenance: provenance(recoverable) })
     })
   }
 
@@ -1393,7 +1419,11 @@ export namespace ComputeJobs {
             provider,
           })
           void executeModal(job, prepared.files, scope, context, provider)
-            .catch((error) => failModal(job, scope, context, error, provider))
+            .catch((error) =>
+              error instanceof ModalAdapter.HarvestError
+                ? deferModal(job, scope, error)
+                : failModal(job, scope, context, error, provider),
+            )
             .finally(() => active.delete(key))
           return job
         })

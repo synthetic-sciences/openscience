@@ -1,8 +1,8 @@
-import fs from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { ModalClient, type Sandbox } from "modal"
 import { Filesystem } from "../../util/filesystem"
+import { ModalVolume } from "./volume"
 
 export namespace ModalAdapter {
   export const VERSION = "0.9.0"
@@ -59,6 +59,16 @@ export namespace ModalAdapter {
     output: (value: string) => Promise<void>
   }
 
+  export class HarvestError extends Error {
+    constructor(
+      readonly code: number,
+      cause: unknown,
+    ) {
+      super(`Modal command exited with code ${code}, but its durable Volume could not be downloaded`, { cause })
+      this.name = "ModalHarvestError"
+    }
+  }
+
   export function volume(project: string, id: string) {
     const digest = crypto.createHash("sha256").update(`${project}\0${id}`).digest("hex").slice(0, 32)
     return `openscience-job-${digest}`
@@ -87,7 +97,7 @@ export namespace ModalAdapter {
       `bash -lc ${quote(command)} 2>&1 | tee -a ${quote(log)}`,
       "code=${PIPESTATUS[0]}",
       `printf '%s\\n' "$code" > ${quote(code)}`,
-      "while :; do sleep 3600; done",
+      'exit "$code"',
     ].join("; ")
   }
 
@@ -114,86 +124,50 @@ export namespace ModalAdapter {
       if (value) await output(value)
     }
     for (;;) {
-      const [saved, status] = await Promise.all([
-        sandbox.filesystem.readText(EXIT_CODE).catch(() => ""),
-        sandbox.poll(),
-      ])
+      const status = await sandbox.poll()
       await emit()
-      const code = Number.parseInt(saved.trim(), 10)
-      if (Number.isInteger(code)) {
+      if (status !== null) {
         await Bun.sleep(100)
         await emit()
-        return code
+        return { code: status, streamed: state.size }
       }
-      if (status !== null) throw new Error(`Modal sandbox exited before recording the command result (code ${status})`)
       await Bun.sleep(250)
     }
   }
 
-  async function files(sandbox: Sandbox, root = ROOT): Promise<{ path: string; size: number }[]> {
-    const entries = await sandbox.filesystem.listFiles(root)
-    const nested = await Promise.all(
-      entries.map(async (entry) => {
-        if (entry.type === "directory") return files(sandbox, entry.path)
-        if (entry.type !== "file") return []
-        return [{ path: entry.path, size: entry.size }]
-      }),
+  async function harvest(context: Context, spec: Spec, attempts = 20): Promise<Result & { log: string }> {
+    const entries = await ModalVolume.list(context, spec.volume, "/", true)
+    const codePath = path.posix.basename(EXIT_CODE)
+    const logPath = path.posix.basename(RUN_LOG)
+    const complete = entries.some((entry) => entry.type === "file" && entry.path === codePath)
+    if (!complete) {
+      if (!attempts) throw new Error("Modal output Volume has no completed command result")
+      await Bun.sleep(500)
+      return harvest(context, spec, attempts - 1)
+    }
+    const patterns = spec.outputs.map((pattern) => new Bun.Glob(pattern))
+    const selected = entries.filter(
+      (entry) => entry.type === "file" && patterns.some((pattern) => pattern.match(clean(entry.path))),
     )
-    return nested.flat()
-  }
-
-  async function collect(sandbox: Sandbox, spec: Spec) {
-    if (!spec.outputs.length) return []
-    const entries = await files(sandbox)
-    const selected = entries.filter((entry) => {
-      const relative = clean(path.posix.relative(ROOT, entry.path))
-      return spec.outputs.some((pattern) => new Bun.Glob(pattern).match(relative))
-    })
     const total = selected.reduce((sum, entry) => sum + entry.size, 0)
     if (total > 20 * 1024 * 1024 * 1024) throw new Error("Modal outputs exceed the 20 GiB recovery limit")
-    await fs.mkdir(spec.staging, { recursive: true })
-    return Promise.all(
-      selected.map(async (entry) => {
-        const relative = clean(path.posix.relative(ROOT, entry.path))
-        const target = path.join(spec.staging, ...relative.split("/"))
-        await sandbox.filesystem.copyToLocal(entry.path, target)
-        return { path: relative, staging: target, size: entry.size }
-      }),
-    )
-  }
-
-  async function harvest(
-    modal: ModalClient,
-    context: Context,
-    spec: Spec,
-    app: Awaited<ReturnType<ModalClient["apps"]["fromName"]>>,
-    image: Awaited<ReturnType<ReturnType<ModalClient["images"]["fromRegistry"]>["build"]>>,
-  ) {
-    const volume = await modal.volumes.fromName(spec.volume, {
-      environment: context.environment,
-      createIfMissing: false,
+    const paths = [...new Set([codePath, logPath, ...selected.map((entry) => clean(entry.path))])]
+    const downloaded = await ModalVolume.download(context, spec.volume, paths, spec.staging)
+    const files = new Map(downloaded.map((entry) => [entry.path, entry]))
+    const saved = files.get(codePath)
+    const logged = files.get(logPath)
+    if (!saved || !logged) throw new Error("Modal output Volume is missing its result metadata")
+    const code = Number.parseInt((await Bun.file(saved.staging).text()).trim(), 10)
+    if (!Number.isInteger(code)) throw new Error("Modal output Volume has an invalid command result")
+    const outputs = selected.map((entry) => {
+      const file = files.get(clean(entry.path))
+      if (!file) throw new Error(`Modal output Volume did not download ${entry.path}`)
+      return file
     })
-    const sandbox = await modal.sandboxes.create(app, image, {
-      command: ["bash", "-lc", "while :; do sleep 3600; done"],
-      workdir: ROOT,
-      timeoutMs: 10 * 60_000,
-      blockNetwork: true,
-      volumes: { [ROOT]: volume.withMountOptions({ readOnly: true }) },
-      tags: {
-        openscience: "true",
-        openscience_job: spec.id,
-        openscience_project: crypto.createHash("sha256").update(spec.project).digest("hex").slice(0, 20),
-        openscience_role: "harvest",
-      },
-    })
-    return Promise.resolve()
-      .then(async () => {
-        const saved = await sandbox.filesystem.readText(EXIT_CODE)
-        const code = Number.parseInt(saved.trim(), 10)
-        if (!Number.isInteger(code)) throw new Error("Modal output volume has no completed command result")
-        return { code, outputs: await collect(sandbox, spec), log: await sandbox.filesystem.readText(RUN_LOG) }
-      })
-      .finally(() => sandbox.terminate().catch(() => undefined))
+    if (outputs.reduce((sum, entry) => sum + entry.size, 0) > 20 * 1024 * 1024 * 1024) {
+      throw new Error("Modal outputs exceed the 20 GiB recovery limit")
+    }
+    return { code, outputs, log: await Bun.file(logged.staging).text() }
   }
 
   async function upload(sandbox: Sandbox, spec: Spec) {
@@ -233,6 +207,8 @@ export namespace ModalAdapter {
     const modal = client(context)
     return Promise.resolve()
       .then(async () => {
+        const bridge = await ModalVolume.check(context)
+        await hooks.log(`Local Modal Volume bridge ready: Python SDK ${bridge}`)
         await hooks.log(`Resolving Modal app ${context.app}`)
         const app = await modal.apps.fromName(context.app, {
           environment: context.environment,
@@ -281,15 +257,19 @@ export namespace ModalAdapter {
           `Uploaded ${spec.uploads.length} input file${spec.uploads.length === 1 ? "" : "s"} (${spec.uploads.reduce((sum, file) => sum + file.size, 0)} bytes)`,
         )
         await hooks.log(`Running command: ${spec.command}`)
-        const code = await outcome(sandbox, hooks.output)
-        await hooks.log(`Command exited with code ${code}`)
-        const outputs = await collect(sandbox, spec).catch(async () => {
-          await hooks.log(`Execution sandbox unavailable; harvesting durable volume ${spec.volume}`)
-          const recovered = await harvest(modal, context, spec, app, ready)
-          return recovered.outputs
+        const settled = await outcome(sandbox, hooks.output)
+        await hooks.log(`Command exited with code ${settled.code}; GPU sandbox released`)
+        const recovered = await harvest(context, spec).catch((error) => {
+          throw new HarvestError(settled.code, error)
         })
-        await hooks.log(`Collected ${outputs.length} output file${outputs.length === 1 ? "" : "s"}`)
-        return { code, outputs }
+        if (recovered.log.length > settled.streamed) await hooks.output(recovered.log.slice(settled.streamed))
+        if (recovered.code !== settled.code) {
+          throw new Error(`Modal sandbox exit ${settled.code} disagrees with durable result ${recovered.code}`)
+        }
+        await hooks.log(
+          `Downloaded ${recovered.outputs.length} output file${recovered.outputs.length === 1 ? "" : "s"} directly from Modal Volume`,
+        )
+        return recovered
       })
       .finally(() => modal.close())
   }
@@ -299,17 +279,10 @@ export namespace ModalAdapter {
     spec: Spec,
     sandboxId: string | undefined,
     hooks: Pick<Hooks, "log" | "output">,
-  ) {
+  ): Promise<Result> {
     const modal = client(context)
     return Promise.resolve()
       .then(async () => {
-        const app = await modal.apps.fromName(context.app, {
-          environment: context.environment,
-          createIfMissing: false,
-        })
-        const base = modal.images.fromRegistry(spec.image)
-        const commands = layers(spec.packages)
-        const image = await (commands.length ? base.dockerfileCommands(commands) : base).build(app)
         const sandbox = sandboxId ? await modal.sandboxes.fromId(sandboxId).catch(() => undefined) : undefined
         if (!sandbox) {
           await hooks.log(
@@ -317,7 +290,7 @@ export namespace ModalAdapter {
               ? `Sandbox ${sandboxId} ended; harvesting durable volume ${spec.volume}`
               : `No live sandbox found; harvesting durable volume ${spec.volume}`,
           )
-          const recovered = await harvest(modal, context, spec, app, image)
+          const recovered = await harvest(context, spec)
           if (recovered.log) await hooks.output(recovered.log)
           await hooks.log(`Recovered command exit code ${recovered.code}`)
           await hooks.log(
@@ -327,14 +300,17 @@ export namespace ModalAdapter {
         }
         await own(sandbox, spec.id, spec.project)
         await hooks.log(`Reattached to sandbox ${sandboxId}`)
-        const code = await outcome(sandbox, hooks.output)
-        await hooks.log(`Recovered command exit code ${code}`)
-        const outputs = await collect(sandbox, spec).catch(async () => {
-          const recovered = await harvest(modal, context, spec, app, image)
-          return recovered.outputs
-        })
-        await hooks.log(`Recovered ${outputs.length} output file${outputs.length === 1 ? "" : "s"}`)
-        return { code, outputs }
+        const settled = await outcome(sandbox, hooks.output)
+        const recovered = await harvest(context, spec)
+        if (recovered.log.length > settled.streamed) await hooks.output(recovered.log.slice(settled.streamed))
+        if (recovered.code !== settled.code) {
+          throw new Error(`Modal sandbox exit ${settled.code} disagrees with durable result ${recovered.code}`)
+        }
+        await hooks.log(`Recovered command exit code ${recovered.code}`)
+        await hooks.log(
+          `Recovered ${recovered.outputs.length} output file${recovered.outputs.length === 1 ? "" : "s"} directly from Modal Volume`,
+        )
+        return recovered
       })
       .finally(() => modal.close())
   }
