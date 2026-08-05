@@ -22310,6 +22310,7 @@
                                 "evaluator_audit",
                                 "semantic_audit",
                                 "synthesis",
+                                "autonomy",
                                 "replication",
                                 "fidelities",
                                 "skill",
@@ -22527,6 +22528,7 @@
                                 "evaluator_audit",
                                 "semantic_audit",
                                 "synthesis",
+                                "autonomy",
                                 "replication",
                                 "fidelities",
                                 "skill",
@@ -22797,6 +22799,7 @@
                           "evaluator_audit",
                           "semantic_audit",
                           "synthesis",
+                          "autonomy",
                           "replication",
                           "fidelities",
                           "skill",
@@ -22964,6 +22967,7 @@
                                 "evaluator_audit",
                                 "semantic_audit",
                                 "synthesis",
+                                "autonomy",
                                 "replication",
                                 "fidelities",
                                 "skill",
@@ -23181,6 +23185,7 @@
                                 "evaluator_audit",
                                 "semantic_audit",
                                 "synthesis",
+                                "autonomy",
                                 "replication",
                                 "fidelities",
                                 "skill",
@@ -32565,6 +32570,983 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.synthesis.receipt({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/autonomy/receipts": {
+      "post": {
+        "operationId": "harness.autonomy.record",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Record an evaluator-authenticated human-AI autonomy trace",
+        "description": "Binds a complete interaction log to the exact run or candidate artifact and derives the Aletheia-inspired essentially-autonomous, collaborative, or primarily-human contribution level without trusting the caller's claim.",
+        "responses": {
+          "200": {
+            "description": "Immutable backend-derived human-AI autonomy receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "human-ai-autonomy-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "run",
+                            "candidate"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "artifactSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "traceSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "recorderArtifactSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "rawLogSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "startedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "endedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "events": {
+                      "minItems": 2,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "at": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "actor": {
+                            "type": "string",
+                            "enum": [
+                              "benchmark",
+                              "human",
+                              "agent"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "problem_statement",
+                              "clarification",
+                              "resource_provision",
+                              "strategy",
+                              "technical_correction",
+                              "artifact_edit",
+                              "candidate_selection",
+                              "evaluation_feedback",
+                              "exposition",
+                              "other"
+                            ]
+                          },
+                          "contribution": {
+                            "type": "string",
+                            "enum": [
+                              "problem",
+                              "auxiliary",
+                              "essential",
+                              "core",
+                              "unclear"
+                            ]
+                          },
+                          "contentSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "artifactBeforeSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "artifactAfterSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "priorEventID": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "eventID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "sequence",
+                          "at",
+                          "actor",
+                          "kind",
+                          "contribution",
+                          "contentSHA256",
+                          "evidence",
+                          "priorEventID",
+                          "eventID"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "claimedLevel": {
+                      "type": "string",
+                      "enum": [
+                        "essentially_autonomous",
+                        "human_ai_collaboration",
+                        "primarily_human"
+                      ]
+                    },
+                    "derivedLevel": {
+                      "type": "string",
+                      "enum": [
+                        "essentially_autonomous",
+                        "human_ai_collaboration",
+                        "primarily_human"
+                      ]
+                    },
+                    "metrics": {
+                      "type": "object",
+                      "properties": {
+                        "events": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "counts": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "enum": [
+                              "benchmark",
+                              "human",
+                              "agent"
+                            ]
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string",
+                              "enum": [
+                                "problem",
+                                "auxiliary",
+                                "essential",
+                                "core",
+                                "unclear"
+                              ]
+                            },
+                            "additionalProperties": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          }
+                        },
+                        "problemEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "humanSubstantiveEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "agentSubstantiveEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unclearEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "linkedArtifactEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "artifactTransitions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "finalArtifactLinked": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "events",
+                        "counts",
+                        "problemEvents",
+                        "humanSubstantiveEvents",
+                        "agentSubstantiveEvents",
+                        "unclearEvents",
+                        "linkedArtifactEvents",
+                        "artifactTransitions",
+                        "finalArtifactLinked"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "failures": {
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "protocolSHA256",
+                    "subject",
+                    "artifactSHA256",
+                    "traceSHA256",
+                    "recorderArtifactSHA256",
+                    "rawLogSHA256",
+                    "startedAt",
+                    "endedAt",
+                    "events",
+                    "claimedLevel",
+                    "metrics",
+                    "status",
+                    "failures",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "subject": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "run",
+                          "candidate"
+                        ]
+                      },
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "artifactSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "trace": {
+                    "type": "object",
+                    "properties": {
+                      "owner": {
+                        "type": "string",
+                        "const": "evaluator_runtime"
+                      },
+                      "complete": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "recorderArtifactSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "schemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "classificationPolicySHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "rawLogSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "startedAt": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "endedAt": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "events": {
+                        "minItems": 2,
+                        "maxItems": 10000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "sequence": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "at": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "actor": {
+                              "type": "string",
+                              "enum": [
+                                "benchmark",
+                                "human",
+                                "agent"
+                              ]
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "problem_statement",
+                                "clarification",
+                                "resource_provision",
+                                "strategy",
+                                "technical_correction",
+                                "artifact_edit",
+                                "candidate_selection",
+                                "evaluation_feedback",
+                                "exposition",
+                                "other"
+                              ]
+                            },
+                            "contribution": {
+                              "type": "string",
+                              "enum": [
+                                "problem",
+                                "auxiliary",
+                                "essential",
+                                "core",
+                                "unclear"
+                              ]
+                            },
+                            "contentSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "artifactBeforeSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "artifactAfterSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "evidence": {
+                              "minItems": 1,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              }
+                            }
+                          },
+                          "required": [
+                            "sequence",
+                            "at",
+                            "actor",
+                            "kind",
+                            "contribution",
+                            "contentSHA256",
+                            "evidence"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "owner",
+                      "complete",
+                      "recorderArtifactSHA256",
+                      "schemaSHA256",
+                      "classificationPolicySHA256",
+                      "rawLogSHA256",
+                      "startedAt",
+                      "endedAt",
+                      "events"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken",
+                  "subject",
+                  "artifactSHA256",
+                  "trace"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.autonomy.record({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/autonomy/receipts/{receiptID}": {
+      "post": {
+        "operationId": "harness.autonomy.receipt",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receiptID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a capability-protected human-AI autonomy receipt",
+        "responses": {
+          "200": {
+            "description": "Canonical human-AI autonomy receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "human-ai-autonomy-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "run",
+                            "candidate"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "artifactSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "traceSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "recorderArtifactSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "rawLogSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "startedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "endedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "events": {
+                      "minItems": 2,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sequence": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "at": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "actor": {
+                            "type": "string",
+                            "enum": [
+                              "benchmark",
+                              "human",
+                              "agent"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "problem_statement",
+                              "clarification",
+                              "resource_provision",
+                              "strategy",
+                              "technical_correction",
+                              "artifact_edit",
+                              "candidate_selection",
+                              "evaluation_feedback",
+                              "exposition",
+                              "other"
+                            ]
+                          },
+                          "contribution": {
+                            "type": "string",
+                            "enum": [
+                              "problem",
+                              "auxiliary",
+                              "essential",
+                              "core",
+                              "unclear"
+                            ]
+                          },
+                          "contentSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "artifactBeforeSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "artifactAfterSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "priorEventID": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "eventID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "sequence",
+                          "at",
+                          "actor",
+                          "kind",
+                          "contribution",
+                          "contentSHA256",
+                          "evidence",
+                          "priorEventID",
+                          "eventID"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "claimedLevel": {
+                      "type": "string",
+                      "enum": [
+                        "essentially_autonomous",
+                        "human_ai_collaboration",
+                        "primarily_human"
+                      ]
+                    },
+                    "derivedLevel": {
+                      "type": "string",
+                      "enum": [
+                        "essentially_autonomous",
+                        "human_ai_collaboration",
+                        "primarily_human"
+                      ]
+                    },
+                    "metrics": {
+                      "type": "object",
+                      "properties": {
+                        "events": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "counts": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "enum": [
+                              "benchmark",
+                              "human",
+                              "agent"
+                            ]
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string",
+                              "enum": [
+                                "problem",
+                                "auxiliary",
+                                "essential",
+                                "core",
+                                "unclear"
+                              ]
+                            },
+                            "additionalProperties": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          }
+                        },
+                        "problemEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "humanSubstantiveEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "agentSubstantiveEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "unclearEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "linkedArtifactEvents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "artifactTransitions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "finalArtifactLinked": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "events",
+                        "counts",
+                        "problemEvents",
+                        "humanSubstantiveEvents",
+                        "agentSubstantiveEvents",
+                        "unclearEvents",
+                        "linkedArtifactEvents",
+                        "artifactTransitions",
+                        "finalArtifactLinked"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "failures": {
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "protocolSHA256",
+                    "subject",
+                    "artifactSHA256",
+                    "traceSHA256",
+                    "recorderArtifactSHA256",
+                    "rawLogSHA256",
+                    "startedAt",
+                    "endedAt",
+                    "events",
+                    "claimedLevel",
+                    "metrics",
+                    "status",
+                    "failures",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.autonomy.receipt({\n  ...\n})"
           }
         ]
       }
@@ -43685,6 +44667,98 @@
                       ],
                       "additionalProperties": false
                     },
+                    "autonomy": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "human-ai-autonomy-v1"
+                        },
+                        "claimedLevel": {
+                          "type": "string",
+                          "enum": [
+                            "essentially_autonomous",
+                            "human_ai_collaboration",
+                            "primarily_human"
+                          ]
+                        },
+                        "recorder": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "artifactSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "source": {
+                              "type": "string",
+                              "const": "evaluator_runtime"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "artifactSHA256",
+                            "source"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "traceSchemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "classificationPolicySHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "maxEvents": {
+                          "type": "integer",
+                          "minimum": 2,
+                          "maximum": 10000
+                        },
+                        "rawRetention": {
+                          "type": "string",
+                          "const": "required"
+                        },
+                        "disclosure": {
+                          "type": "string",
+                          "enum": [
+                            "evaluator_retained",
+                            "public_essential_after_release"
+                          ]
+                        },
+                        "completeTraceRequired": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "uncertaintyPolicy": {
+                          "type": "string",
+                          "const": "inconclusive"
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "claimedLevel",
+                        "recorder",
+                        "traceSchemaSHA256",
+                        "classificationPolicySHA256",
+                        "maxEvents",
+                        "rawRetention",
+                        "disclosure",
+                        "completeTraceRequired",
+                        "uncertaintyPolicy"
+                      ],
+                      "additionalProperties": false
+                    },
                     "replication": {
                       "type": "object",
                       "properties": {
@@ -46154,6 +47228,98 @@
                     ],
                     "additionalProperties": false
                   },
+                  "autonomy": {
+                    "type": "object",
+                    "properties": {
+                      "protocolVersion": {
+                        "type": "string",
+                        "const": "human-ai-autonomy-v1"
+                      },
+                      "claimedLevel": {
+                        "type": "string",
+                        "enum": [
+                          "essentially_autonomous",
+                          "human_ai_collaboration",
+                          "primarily_human"
+                        ]
+                      },
+                      "recorder": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "artifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "source": {
+                            "type": "string",
+                            "const": "evaluator_runtime"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "version",
+                          "artifactSHA256",
+                          "source"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "traceSchemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "classificationPolicySHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "maxEvents": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 10000
+                      },
+                      "rawRetention": {
+                        "type": "string",
+                        "const": "required"
+                      },
+                      "disclosure": {
+                        "type": "string",
+                        "enum": [
+                          "evaluator_retained",
+                          "public_essential_after_release"
+                        ]
+                      },
+                      "completeTraceRequired": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "uncertaintyPolicy": {
+                        "type": "string",
+                        "const": "inconclusive"
+                      }
+                    },
+                    "required": [
+                      "protocolVersion",
+                      "claimedLevel",
+                      "recorder",
+                      "traceSchemaSHA256",
+                      "classificationPolicySHA256",
+                      "maxEvents",
+                      "rawRetention",
+                      "disclosure",
+                      "completeTraceRequired",
+                      "uncertaintyPolicy"
+                    ],
+                    "additionalProperties": false
+                  },
                   "replication": {
                     "type": "object",
                     "properties": {
@@ -46967,6 +48133,10 @@
                     "pattern": "^[a-f0-9]{64}$"
                   },
                   "synthesisReceiptID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "autonomyReceiptID": {
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
@@ -50866,6 +52036,98 @@
                           ],
                           "additionalProperties": false
                         },
+                        "autonomy": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "human-ai-autonomy-v1"
+                            },
+                            "claimedLevel": {
+                              "type": "string",
+                              "enum": [
+                                "essentially_autonomous",
+                                "human_ai_collaboration",
+                                "primarily_human"
+                              ]
+                            },
+                            "recorder": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "artifactSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "const": "evaluator_runtime"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "artifactSHA256",
+                                "source"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "traceSchemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "classificationPolicySHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "maxEvents": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 10000
+                            },
+                            "rawRetention": {
+                              "type": "string",
+                              "const": "required"
+                            },
+                            "disclosure": {
+                              "type": "string",
+                              "enum": [
+                                "evaluator_retained",
+                                "public_essential_after_release"
+                              ]
+                            },
+                            "completeTraceRequired": {
+                              "type": "boolean",
+                              "const": true
+                            },
+                            "uncertaintyPolicy": {
+                              "type": "string",
+                              "const": "inconclusive"
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "claimedLevel",
+                            "recorder",
+                            "traceSchemaSHA256",
+                            "classificationPolicySHA256",
+                            "maxEvents",
+                            "rawRetention",
+                            "disclosure",
+                            "completeTraceRequired",
+                            "uncertaintyPolicy"
+                          ],
+                          "additionalProperties": false
+                        },
                         "replication": {
                           "type": "object",
                           "properties": {
@@ -51570,6 +52832,10 @@
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
                       },
+                      "autonomyReceiptID": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
                       "evaluator": {
                         "type": "object",
                         "properties": {
@@ -51910,6 +53176,39 @@
                             "human_reprompted"
                           ]
                         },
+                        "autonomy": {
+                          "type": "object",
+                          "properties": {
+                            "claimedLevel": {
+                              "type": "string",
+                              "enum": [
+                                "essentially_autonomous",
+                                "human_ai_collaboration",
+                                "primarily_human"
+                              ]
+                            },
+                            "derivedLevel": {
+                              "type": "string",
+                              "enum": [
+                                "essentially_autonomous",
+                                "human_ai_collaboration",
+                                "primarily_human"
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "passed",
+                                "failed",
+                                "inconclusive"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "claimedLevel"
+                          ],
+                          "additionalProperties": false
+                        },
                         "seed": {
                           "type": "integer",
                           "minimum": -9007199254740991,
@@ -52015,6 +53314,10 @@
                           "pattern": "^[a-f0-9]{64}$"
                         },
                         "synthesisReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "autonomyReceiptID": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },

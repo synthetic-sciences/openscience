@@ -9184,6 +9184,7 @@ export type HarnessAblationInitializeData = {
         | "evaluator_audit"
         | "semantic_audit"
         | "synthesis"
+        | "autonomy"
         | "replication"
         | "fidelities"
         | "skill"
@@ -9239,6 +9240,7 @@ export type HarnessAblationInitializeResponses = {
           | "evaluator_audit"
           | "semantic_audit"
           | "synthesis"
+          | "autonomy"
           | "replication"
           | "fidelities"
           | "skill"
@@ -9290,6 +9292,7 @@ export type HarnessAblationInitializeResponses = {
           | "evaluator_audit"
           | "semantic_audit"
           | "synthesis"
+          | "autonomy"
           | "replication"
           | "fidelities"
           | "skill"
@@ -9387,6 +9390,7 @@ export type HarnessAblationAssessResponses = {
           | "evaluator_audit"
           | "semantic_audit"
           | "synthesis"
+          | "autonomy"
           | "replication"
           | "fidelities"
           | "skill"
@@ -9438,6 +9442,7 @@ export type HarnessAblationAssessResponses = {
           | "evaluator_audit"
           | "semantic_audit"
           | "synthesis"
+          | "autonomy"
           | "replication"
           | "fidelities"
           | "skill"
@@ -11436,6 +11441,230 @@ export type HarnessSynthesisReceiptResponses = {
 }
 
 export type HarnessSynthesisReceiptResponse = HarnessSynthesisReceiptResponses[keyof HarnessSynthesisReceiptResponses]
+
+export type HarnessAutonomyRecordData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    artifactSHA256: string
+    trace: {
+      owner: "evaluator_runtime"
+      complete: true
+      recorderArtifactSHA256: string
+      schemaSHA256: string
+      classificationPolicySHA256: string
+      rawLogSHA256: string
+      startedAt: number
+      endedAt: number
+      events: Array<{
+        sequence: number
+        at: number
+        actor: "benchmark" | "human" | "agent"
+        kind:
+          | "problem_statement"
+          | "clarification"
+          | "resource_provision"
+          | "strategy"
+          | "technical_correction"
+          | "artifact_edit"
+          | "candidate_selection"
+          | "evaluation_feedback"
+          | "exposition"
+          | "other"
+        contribution: "problem" | "auxiliary" | "essential" | "core" | "unclear"
+        contentSHA256: string
+        artifactBeforeSHA256?: string
+        artifactAfterSHA256?: string
+        evidence: Array<string>
+      }>
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/autonomy/receipts"
+}
+
+export type HarnessAutonomyRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessAutonomyRecordError = HarnessAutonomyRecordErrors[keyof HarnessAutonomyRecordErrors]
+
+export type HarnessAutonomyRecordResponses = {
+  /**
+   * Immutable backend-derived human-AI autonomy receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "human-ai-autonomy-receipt-v1"
+    receiptID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    protocolSHA256: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    artifactSHA256: string
+    traceSHA256: string
+    recorderArtifactSHA256: string
+    rawLogSHA256: string
+    startedAt: number
+    endedAt: number
+    events: Array<{
+      sequence: number
+      at: number
+      actor: "benchmark" | "human" | "agent"
+      kind:
+        | "problem_statement"
+        | "clarification"
+        | "resource_provision"
+        | "strategy"
+        | "technical_correction"
+        | "artifact_edit"
+        | "candidate_selection"
+        | "evaluation_feedback"
+        | "exposition"
+        | "other"
+      contribution: "problem" | "auxiliary" | "essential" | "core" | "unclear"
+      contentSHA256: string
+      artifactBeforeSHA256?: string
+      artifactAfterSHA256?: string
+      evidence: Array<string>
+      priorEventID: string | null
+      eventID: string
+    }>
+    claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
+    derivedLevel?: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
+    metrics: {
+      events: number
+      counts: {
+        [key: string]: {
+          [key: string]: number
+        }
+      }
+      problemEvents: number
+      humanSubstantiveEvents: number
+      agentSubstantiveEvents: number
+      unclearEvents: number
+      linkedArtifactEvents: number
+      artifactTransitions: number
+      finalArtifactLinked: boolean
+    }
+    status: "passed" | "failed" | "inconclusive"
+    failures: Array<string>
+    recordedAt: number
+  }
+}
+
+export type HarnessAutonomyRecordResponse = HarnessAutonomyRecordResponses[keyof HarnessAutonomyRecordResponses]
+
+export type HarnessAutonomyReceiptData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/autonomy/receipts/{receiptID}"
+}
+
+export type HarnessAutonomyReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessAutonomyReceiptError = HarnessAutonomyReceiptErrors[keyof HarnessAutonomyReceiptErrors]
+
+export type HarnessAutonomyReceiptResponses = {
+  /**
+   * Canonical human-AI autonomy receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "human-ai-autonomy-receipt-v1"
+    receiptID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    protocolSHA256: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    artifactSHA256: string
+    traceSHA256: string
+    recorderArtifactSHA256: string
+    rawLogSHA256: string
+    startedAt: number
+    endedAt: number
+    events: Array<{
+      sequence: number
+      at: number
+      actor: "benchmark" | "human" | "agent"
+      kind:
+        | "problem_statement"
+        | "clarification"
+        | "resource_provision"
+        | "strategy"
+        | "technical_correction"
+        | "artifact_edit"
+        | "candidate_selection"
+        | "evaluation_feedback"
+        | "exposition"
+        | "other"
+      contribution: "problem" | "auxiliary" | "essential" | "core" | "unclear"
+      contentSHA256: string
+      artifactBeforeSHA256?: string
+      artifactAfterSHA256?: string
+      evidence: Array<string>
+      priorEventID: string | null
+      eventID: string
+    }>
+    claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
+    derivedLevel?: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
+    metrics: {
+      events: number
+      counts: {
+        [key: string]: {
+          [key: string]: number
+        }
+      }
+      problemEvents: number
+      humanSubstantiveEvents: number
+      agentSubstantiveEvents: number
+      unclearEvents: number
+      linkedArtifactEvents: number
+      artifactTransitions: number
+      finalArtifactLinked: boolean
+    }
+    status: "passed" | "failed" | "inconclusive"
+    failures: Array<string>
+    recordedAt: number
+  }
+}
+
+export type HarnessAutonomyReceiptResponse = HarnessAutonomyReceiptResponses[keyof HarnessAutonomyReceiptResponses]
 
 export type HarnessLaunchRecordData = {
   body?: {
@@ -13990,6 +14219,23 @@ export type HarnessBindData = {
       cleanRoomRequired: true
       judgeFailurePolicy: "inconclusive"
     }
+    autonomy?: {
+      protocolVersion: "human-ai-autonomy-v1"
+      claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
+      recorder: {
+        name: string
+        version: string
+        artifactSHA256: string
+        source: "evaluator_runtime"
+      }
+      traceSchemaSHA256: string
+      classificationPolicySHA256: string
+      maxEvents: number
+      rawRetention: "required"
+      disclosure: "evaluator_retained" | "public_essential_after_release"
+      completeTraceRequired: true
+      uncertaintyPolicy: "inconclusive"
+    }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
       validatorSHA256: string
@@ -14701,6 +14947,23 @@ export type HarnessBindResponses = {
       cleanRoomRequired: true
       judgeFailurePolicy: "inconclusive"
     }
+    autonomy?: {
+      protocolVersion: "human-ai-autonomy-v1"
+      claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
+      recorder: {
+        name: string
+        version: string
+        artifactSHA256: string
+        source: "evaluator_runtime"
+      }
+      traceSchemaSHA256: string
+      classificationPolicySHA256: string
+      maxEvents: number
+      rawRetention: "required"
+      disclosure: "evaluator_retained" | "public_essential_after_release"
+      completeTraceRequired: true
+      uncertaintyPolicy: "inconclusive"
+    }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
       validatorSHA256: string
@@ -14827,6 +15090,7 @@ export type HarnessEvaluateData = {
     auditReceiptID?: string
     failureDiscoveryReceiptID?: string
     synthesisReceiptID?: string
+    autonomyReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
     metrics?: {
@@ -15739,6 +16003,23 @@ export type HarnessContractResponses = {
       cleanRoomRequired: true
       judgeFailurePolicy: "inconclusive"
     }
+    autonomy?: {
+      protocolVersion: "human-ai-autonomy-v1"
+      claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
+      recorder: {
+        name: string
+        version: string
+        artifactSHA256: string
+        source: "evaluator_runtime"
+      }
+      traceSchemaSHA256: string
+      classificationPolicySHA256: string
+      maxEvents: number
+      rawRetention: "required"
+      disclosure: "evaluator_retained" | "public_essential_after_release"
+      completeTraceRequired: true
+      uncertaintyPolicy: "inconclusive"
+    }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
       validatorSHA256: string
@@ -15893,6 +16174,7 @@ export type HarnessEvaluationsResponses = {
     auditReceiptID?: string
     failureDiscoveryReceiptID?: string
     synthesisReceiptID?: string
+    autonomyReceiptID?: string
     evaluator: {
       name: string
       version: string
@@ -15998,6 +16280,11 @@ export type HarnessReportResponses = {
       model: string
       effort?: string
       intervention: "autonomous" | "human_reprompted"
+      autonomy?: {
+        claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
+        derivedLevel?: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
+        status?: "passed" | "failed" | "inconclusive"
+      }
       seed: number
     }
     quality: {
@@ -16022,6 +16309,7 @@ export type HarnessReportResponses = {
       auditReceiptID?: string
       failureDiscoveryReceiptID?: string
       synthesisReceiptID?: string
+      autonomyReceiptID?: string
       confirmationReceiptID?: string
       evaluations: number
     }

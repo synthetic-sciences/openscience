@@ -30,6 +30,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 22. **A lucky run cannot authorize promotion.** An optional replicated-evaluation protocol freezes the validator, environment, stratum and independent-cluster commitments, estimator, 95% interval, seed, target, and precision limit. OpenScience requires the complete crossed grid, recomputes mean, median, IQM, or pass rate, and promotes only when the conservative confidence endpoint clears the target. Each subject can freeze only one canonical receipt, so failed units, unfavorable repeats, and alternate retries cannot be selected away.
 23. **Adaptive search cannot grade its own final claim.** An optional sealed-confirmation protocol commits distinct optimization and claim manifests, evaluator identities, validator, environment, metric, direction, and target. Search sees only optimization feedback. After search becomes terminal, the backend selects exactly one verified winner for one capability-isolated claim evaluation. Confirmation-enabled reports remain provisional until that immutable receipt exists and cannot enter comparison or the Pareto frontier before then.
 24. **Scientific synthesis must prove its clean room and its arithmetic.** An optional synthesis protocol freezes the hidden reference and atomic-fact commitments, publication cutoff, allowed retrieval tools, complete trace/filter schemas, independent decomposer and judges, thresholds, and judge-failure policy. The backend replays every source decision, treats judge errors as inconclusive, derives factual precision, recall, contradiction penalty, and F1, and accepts only one canonical receipt for the exact run or candidate.
+25. **Autonomy is a derived provenance claim, not a label.** An optional evaluator-owned protocol freezes the interaction recorder, schema, contribution policy, claimed A/C/H level, disclosure policy, and full-run event ceiling. OpenScience hash-chains the complete benchmark/human/agent trace, binds its last artifact transition to the evaluated bytes, derives the actual contribution level, treats unclear classifications as inconclusive, and rejects a passing final result without the one canonical matching receipt.
 
 ## System boundary
 
@@ -59,6 +60,8 @@ flowchart LR
     FC["Sealed confirmation receipt\nterminal aggregate only"]
     CS["Evaluator-owned synthesis runner\nhidden atomic facts + complete retrieval trace"]
     SR["Clean-room synthesis receipt\nbackend-derived precision + recall + F1"]
+    HA["Evaluator-owned human-AI recorder\ncomplete raw interaction log"]
+    AR["Autonomy receipt\nbackend-derived A / C / H level"]
     J["Immutable evaluation journal"]
     M["Verified hindsight memory"]
     K["Scientific claim ledger"]
@@ -106,6 +109,10 @@ flowchart LR
     O -->|hidden reference + evaluator capability| CS
     CS -->|authenticated atomic judgments| SR
     SR -->|required factual F1| E
+    C -->|frozen autonomy protocol| HA
+    O -->|benchmark + human + agent events| HA
+    HA -->|hash-chained trace + final artifact| AR
+    AR -->|required provenance gate| E
     E -->|authenticated result| J
     J --> G
     J --> M
@@ -265,6 +272,23 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
       { "family": "replay", "mode": "max_absolute_effect", "threshold": 0.01 },
       { "family": "retune", "mode": "min_effect", "threshold": 0.02 }
     ]
+  },
+  "autonomy": {
+    "protocolVersion": "human-ai-autonomy-v1",
+    "claimedLevel": "essentially_autonomous",
+    "recorder": {
+      "name": "evaluator-interaction-recorder",
+      "version": "1",
+      "artifactSHA256": "1616161616161616161616161616161616161616161616161616161616161616",
+      "source": "evaluator_runtime"
+    },
+    "traceSchemaSHA256": "1717171717171717171717171717171717171717171717171717171717171717",
+    "classificationPolicySHA256": "1818181818181818181818181818181818181818181818181818181818181818",
+    "maxEvents": 1000,
+    "rawRetention": "required",
+    "disclosure": "evaluator_retained",
+    "completeTraceRequired": true,
+    "uncertaintyPolicy": "inconclusive"
   },
   "simulation": {
     "kind": "pde",
@@ -597,12 +621,13 @@ The bundled skill catalog includes executable protocols for work that is otherwi
 | `run-replicated-evaluation`    | Preflights the exact frozen task-by-independent-cluster grid, commitment and environment binding, score/status rules, token isolation, and evidence required for a backend-derived conservative receipt.               |
 | `run-sealed-confirmation`      | Preflights the backend-selected terminal artifact, distinct claim commitments, one-shot score/status rules, token isolation, and token-free payload for a capability-protected claim receipt.                          |
 | `run-clean-room-synthesis`     | Salts hidden references and atomic facts, freezes retrieval/filter and judge commitments, and emits the token-free protocol for backend-replayed source decisions and factual F1.                                      |
+| `record-human-ai-autonomy`     | Hashes private prompts, outputs, raw logs, recorder bytes, and artifact transitions; validates the A/C/H taxonomy; and emits a token-free evaluator submission without exposing interaction content.                   |
 
 Their scripts return machine-readable JSON and nonzero failure codes, so an orchestrator can use them as blocking gates instead of relying on prompt compliance. They validate the protocol and reported measurements; they do not manufacture hidden data, run an unavailable simulator, or turn an internal result into official benchmark evidence.
 
 ### 15. Attribute gains with matched ablations
 
-`POST /harness/ablations` freezes a server-timestamped study before any paired evaluation exists. A study supports `profile`, `orchestration`, adaptive `search`, active `audit`, `simulation`, `evaluator_audit`, `semantic_audit`, scientific `synthesis`, `replication`, `fidelities`, and named `skill` or `tool` factors. It requires at least three distinct seeds on a held-out or release split. Within each seed, baseline and arm must have identical objectives, benchmark/evaluator protocol, packs, model, remaining tools/skills, budget, intervention, contamination policy, and seed after removing exactly the declared factor. Across pairs, every non-seed field and both factor values must remain identical.
+`POST /harness/ablations` freezes a server-timestamped study before any paired evaluation exists. A study supports `profile`, `orchestration`, adaptive `search`, active `audit`, `simulation`, `evaluator_audit`, `semantic_audit`, scientific `synthesis`, human-AI `autonomy`, `replication`, `fidelities`, and named `skill` or `tool` factors. It requires at least three distinct seeds on a held-out or release split. Within each seed, baseline and arm must have identical objectives, benchmark/evaluator protocol, packs, model, remaining tools/skills, budget, intervention, contamination policy, and seed after removing exactly the declared factor. Across pairs, every non-seed field and both factor values must remain identical.
 
 The plan stores contract fingerprints plus hashes of the baseline value, arm value, and matched context; evaluator capabilities are never persisted. Initialization fails if any paired session already has an evaluation. Every accepted evaluation receives a server-owned receipt time, and assessment rejects receipts older than the plan, closing concurrent initialization races without trusting evaluator-supplied clocks.
 
@@ -630,9 +655,19 @@ Each run or candidate can freeze only one canonical, content-addressed receipt. 
 
 The public policy is injected into both the main agent and any conditional coalition without exposing hidden commitments. Its exact protocol scopes verified hindsight, learned-skill comparisons, report comparison, and a dedicated matched-ablation factor, so conclusions or optimization traces from one hidden reference cannot silently transfer into another.
 
-### 18. Compare only compatible runs
+### 18. Derive human-AI autonomy from the complete interaction trace
 
-Legacy reports choose only a final evaluation. Confirmation-enabled reports choose only a canonical sealed claim receipt and exclude provisional optimization scores from comparison. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, adaptive-search, launch, runtime-integrity, evolution, controlled-intervention, simulation, evaluator-audit, semantic-audit, replicated-evaluation, sealed-confirmation, scientific-synthesis and objective-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface controller telemetry alongside the applicable evidence receipt.
+`human-ai-autonomy-v1` adapts the contribution axis in DeepMind's Aletheia Human-AI Interaction cards to benchmark execution. The contract predeclares one of `essentially_autonomous`, `human_ai_collaboration`, or `primarily_human`; pins the evaluator-runtime recorder, trace schema, classification policy, event ceiling, raw-retention requirement, and delayed-disclosure policy; and is immutable before the agent starts. Collaborative and primarily-human claims must also retain the legacy `human_reprompted` label, but that coarse label never determines the receipt.
+
+The evaluator captures the frozen problem plus every benchmark, human, and agent message or artifact action from the exact contract start. Events are contiguous, time-monotonic, hash-chained, evidence-linked, and classified as problem, auxiliary, essential, core, or unclear. Artifact transitions must form one chain, the trace must enclose candidate creation, and its last transition must equal the registered candidate artifact. The backend derives `essentially_autonomous` only when substantive agent content exists without essential human content; essential contributions from both sides derive collaboration; substantive human content with only auxiliary AI derives primarily human. Uncertainty is inconclusive, not silently resolved in favor of autonomy.
+
+A passing final evaluation must postdate and cite the one canonical passing receipt for its exact run or candidate. Reports show both claimed and derived levels, and comparison keys, verified hindsight, learned-skill comparisons, and matched ablations include the frozen protocol. The `record-human-ai-autonomy` skill hashes private files into a token-free submission, while the raw interaction log stays with the evaluator.
+
+This closes API forgery, trace reordering, artifact substitution, late-start capture, post-final edits, and unfavorable-receipt replacement inside the stated boundary. It cannot prove that an evaluator-controlled recorder omitted no off-platform conversation or that a semantic contribution label is correct; credible public claims still require a qualified recorder, retained raw evidence, and expert audit. Public disclosure of essential prompts after release is supported as a policy commitment, but hidden benchmark content must not be exposed early.
+
+### 19. Compare only compatible runs
+
+Legacy reports choose only a final evaluation. Confirmation-enabled reports choose only a canonical sealed claim receipt and exclude provisional optimization scores from comparison. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, adaptive-search, launch, runtime-integrity, evolution, controlled-intervention, simulation, evaluator-audit, semantic-audit, replicated-evaluation, sealed-confirmation, scientific-synthesis, human-AI-autonomy and objective-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface controller telemetry alongside the applicable evidence receipt.
 
 Cost and wall time include both the agent trace and evaluator-reported stage usage. Direction-aware score deltas and the Pareto frontier are available through `POST /harness/compare`.
 
@@ -694,6 +729,8 @@ Every adapter is version-agnostic. A development/validation run must still bind 
 | `POST` | `/harness/confirmations/receipts/:id`                | Read the canonical sealed confirmation receipt                |
 | `POST` | `/harness/syntheses/receipts`                        | Derive and freeze one clean-room scientific synthesis result  |
 | `POST` | `/harness/syntheses/receipts/:id`                    | Read a capability-protected synthesis receipt                 |
+| `POST` | `/harness/autonomy/receipts`                         | Derive and freeze one human-AI autonomy receipt               |
+| `POST` | `/harness/autonomy/receipts/:id`                     | Read a capability-protected autonomy receipt                  |
 | `POST` | `/harness/evaluations`                               | Record a staged evaluator-authenticated result                |
 | `GET`  | `/harness/runs/:sessionID/contract`                  | Inspect the bound protocol                                    |
 | `GET`  | `/harness/runs/:sessionID/evaluations`               | Inspect the immutable evaluation journal                      |
@@ -738,6 +775,7 @@ The implementation borrows principles, not source code, from the following prima
 | [PhysicsIntern](https://github.com/huggingface/physics-intern-skills)                                                                                                            | Use durable research state, fresh verification contexts, independent derivations/computations, and adversarial critique.                                                                              |
 | [ResearchClawBench](https://arxiv.org/abs/2606.07591)                                                                                                                            | Evaluate end-to-end research against hidden target work and make protocol mismatch, evidence mismatch, and missing scientific core visible.                                                           |
 | [SciConBench](https://arxiv.org/abs/2606.11337) and its [official implementation](https://github.com/hayoungjungg/SciConBench)                                                   | Evaluate time-bounded clean-room conclusion synthesis with atomic factual precision, recall, contradiction penalty, and F1 while explicitly preventing reference retrieval.                           |
+| [Towards Autonomous Mathematics Research (Aletheia)](https://arxiv.org/abs/2602.10177)                                                                                           | Separate primarily-human, collaborative, and essentially-autonomous work; document essential human-AI interactions instead of promoting an unaudited autonomy label.                                  |
 | [Towards Self-Evolving Benchmarks](https://arxiv.org/abs/2510.00415)                                                                                                             | Require validate-by-reproduce trajectories and multi-level validation before dynamically evolved tasks can enter benchmark evidence.                                                                  |
 | [The Ladder](https://proceedings.mlr.press/v37/blum15.html)                                                                                                                      | Repeated leaderboard feedback can overfit a holdout; restrict information and reserve independent final evaluation.                                                                                   |
 | [Preserving Statistical Validity in Adaptive Data Analysis](https://arxiv.org/abs/1411.2664)                                                                                     | Treat adaptively selected analyses as a distinct statistical regime rather than ordinary fixed-hypothesis evaluation.                                                                                 |
@@ -751,7 +789,7 @@ The expanded evaluation frontier is grounded in [PaperBench](https://openai.com/
 The harness is ready for benchmark integration, but architecture alone does not establish performance. For each target benchmark:
 
 1. Pin an official repository/evaluator commit, dataset revision and manifest, task manifest, environment, invocation, baseline artifact/score, split, hardware class, model, tools, budget, seed policy, and intervention policy; pass the complete launch-readiness suite.
-2. For strict hidden or post-training runs, capture an evaluator-owned execution trace and pass a contract-bound runtime-integrity receipt for the exact final artifact. For evolutionary optimization, additionally capture exact source manifests and parent deltas, run the predeclared controlled replay/retuning/transfer matrix when required, and reference both matching receipts on every passing final candidate.
+2. For strict hidden or post-training runs, capture an evaluator-owned execution trace and pass a contract-bound runtime-integrity receipt for the exact final artifact. Any autonomous or collaborative claim must also retain the complete human-AI interaction log and cite its backend-derived autonomy receipt. For evolutionary optimization, additionally capture exact source manifests and parent deltas, run the predeclared controlled replay/retuning/transfer matrix when required, and reference both matching receipts on every passing final candidate.
 3. Qualify any learned or hybrid evaluator against a separately controlled, committed meta-evaluation suite; retain official deterministic runners as the preferred ground truth where available.
 4. Reproduce the strongest public baseline under exactly that contract.
 5. Run ablations for profile routing, the complete adaptive-search controller, its local-intensity/global-routing/meta-guidance levels, multi-root search, fidelity screening, hindsight, fusion, replay diagnostics, domain packs, runtime integrity, evaluator qualification, and learned skills.

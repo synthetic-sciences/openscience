@@ -892,6 +892,32 @@ export namespace HarnessContract {
     })
   export type ScientificSynthesis = z.infer<typeof ScientificSynthesis>
 
+  export const AutonomyLevel = z.enum(["essentially_autonomous", "human_ai_collaboration", "primarily_human"])
+  export type AutonomyLevel = z.infer<typeof AutonomyLevel>
+
+  export const HumanAIAutonomy = z
+    .object({
+      protocolVersion: z.literal("human-ai-autonomy-v1"),
+      claimedLevel: AutonomyLevel,
+      recorder: z
+        .object({
+          name: z.string().min(1).max(200),
+          version: z.string().min(1).max(200),
+          artifactSHA256: Hash,
+          source: z.literal("evaluator_runtime"),
+        })
+        .strict(),
+      traceSchemaSHA256: Hash,
+      classificationPolicySHA256: Hash,
+      maxEvents: z.number().int().min(2).max(10_000),
+      rawRetention: z.literal("required"),
+      disclosure: z.enum(["evaluator_retained", "public_essential_after_release"]),
+      completeTraceRequired: z.literal(true),
+      uncertaintyPolicy: z.literal("inconclusive"),
+    })
+    .strict()
+  export type HumanAIAutonomy = z.infer<typeof HumanAIAutonomy>
+
   export const ReplicationEstimator = z.enum(["mean", "median", "iqm", "pass_rate"])
   export type ReplicationEstimator = z.infer<typeof ReplicationEstimator>
 
@@ -1139,6 +1165,7 @@ export namespace HarnessContract {
       evaluatorAudit: EvaluatorAudit.optional(),
       semanticAudit: SemanticAudit.optional(),
       synthesis: ScientificSynthesis.optional(),
+      autonomy: HumanAIAutonomy.optional(),
       replication: Replication.optional(),
       confirmation: Confirmation.optional(),
       packs: z
@@ -1250,6 +1277,7 @@ export namespace HarnessContract {
           value.evaluatorAudit ||
           value.semanticAudit ||
           value.synthesis ||
+          value.autonomy ||
           value.replication ||
           value.confirmation) &&
         !value.benchmark.evaluatorVersion
@@ -1295,6 +1323,7 @@ export namespace HarnessContract {
           value.evaluatorAudit ||
           value.semanticAudit ||
           value.synthesis ||
+          value.autonomy ||
           value.replication ||
           value.confirmation) &&
         !value.benchmark.evaluatorSource
@@ -1516,6 +1545,24 @@ export namespace HarnessContract {
           code: "custom",
           path: ["tools"],
           message: "Scientific synthesis retrieval tools must be present in the run tool allowlist",
+        })
+      }
+      if (value.autonomy && value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Human-AI autonomy tracing requires a capability-authenticated evaluator source",
+        })
+      }
+      if (
+        value.autonomy?.claimedLevel !== undefined &&
+        value.autonomy.claimedLevel !== "essentially_autonomous" &&
+        value.intervention !== "human_reprompted"
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["intervention"],
+          message: "Collaborative or primarily-human claims require the human_reprompted intervention label",
         })
       }
       if (

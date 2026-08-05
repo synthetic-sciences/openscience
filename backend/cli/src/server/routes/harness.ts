@@ -5,6 +5,7 @@ import { lazy } from "@/util/lazy"
 import { HarnessAblation } from "@/session/harness/ablation"
 import { HarnessAdapter } from "@/session/harness/adapter"
 import { HarnessAudit } from "@/session/harness/audit"
+import { HarnessAutonomy } from "@/session/harness/autonomy"
 import { HarnessBenchmark } from "@/session/harness/benchmark"
 import { HarnessConfirmation } from "@/session/harness/confirmation"
 import { HarnessContract } from "@/session/harness/contract"
@@ -639,6 +640,49 @@ export const HarnessRoutes = lazy(() =>
         const input = c.req.valid("json")
         const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
         return c.json(await HarnessSynthesis.read(c.req.valid("param").receiptID, contract))
+      },
+    )
+    .post(
+      "/autonomy/receipts",
+      describeRoute({
+        summary: "Record an evaluator-authenticated human-AI autonomy trace",
+        description:
+          "Binds a complete interaction log to the exact run or candidate artifact and derives the Aletheia-inspired essentially-autonomous, collaborative, or primarily-human contribution level without trusting the caller's claim.",
+        operationId: "harness.autonomy.record",
+        responses: {
+          200: {
+            description: "Immutable backend-derived human-AI autonomy receipt",
+            content: { "application/json": { schema: resolver(HarnessAutonomy.Receipt) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessAutonomy.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessAutonomy.record(input, contract))
+      },
+    )
+    .post(
+      "/autonomy/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected human-AI autonomy receipt",
+        operationId: "harness.autonomy.receipt",
+        responses: {
+          200: {
+            description: "Canonical human-AI autonomy receipt",
+            content: { "application/json": { schema: resolver(HarnessAutonomy.Receipt) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessAutonomy.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessAutonomy.read(c.req.valid("param").receiptID, contract))
       },
     )
     .post(

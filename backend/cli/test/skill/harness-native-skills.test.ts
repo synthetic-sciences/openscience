@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { HarnessContract } from "../../src/session/harness/contract"
+import { HarnessAutonomy } from "../../src/session/harness/autonomy"
 import { HarnessEvolution } from "../../src/session/harness/evolution"
 import { HarnessLaunch } from "../../src/session/harness/launch"
 
@@ -2232,6 +2233,102 @@ test("run-clean-room-synthesis hides answer facts and emits a bindable factualit
     const unsafe = await bun(script, [manifestFile])
     expect(unsafe.code).toBe(1)
     expect(unsafe.stderr).toContain("opaque safe identifier")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("record-human-ai-autonomy hashes private interactions and emits a token-free trace", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-human-ai-autonomy-"))
+  const script = "research/record-human-ai-autonomy/scripts/preflight.ts"
+  const manifestFile = path.join(dir, "manifest.json")
+  const protocolFile = path.join(dir, "preflight.json")
+  const traceFile = path.join(dir, "trace.json")
+  const startedAt = Date.now()
+  const problem = "Private held-out benchmark problem"
+  const result = "Private autonomous scientific solution"
+  const token = "private-evaluator-capability-must-never-be-emitted"
+  const manifest = {
+    claimedLevel: "essentially_autonomous",
+    recorder: { name: "interaction-recorder", version: "1", artifactPath: "recorder.bin" },
+    traceSchemaPath: "trace.schema.json",
+    classificationPolicyPath: "classification.policy.md",
+    maxEvents: 12,
+    disclosure: "evaluator_retained",
+  }
+  const trace = {
+    sessionID: "native-autonomy",
+    subject: { type: "run", id: "run-native-autonomy" },
+    artifactPath: "solution.txt",
+    rawLogPath: "raw-log.jsonl",
+    startedAt,
+    endedAt: startedAt + 1,
+    events: [
+      {
+        sequence: 1,
+        at: startedAt,
+        actor: "benchmark",
+        kind: "problem_statement",
+        contribution: "problem",
+        contentPath: "problem.txt",
+        evidence: ["private://raw-log#1"],
+      },
+      {
+        sequence: 2,
+        at: startedAt + 1,
+        actor: "agent",
+        kind: "artifact_edit",
+        contribution: "core",
+        contentPath: "solution.txt",
+        artifactAfterPath: "solution.txt",
+        evidence: ["private://raw-log#2"],
+      },
+    ],
+  }
+  try {
+    await Promise.all([
+      Bun.write(path.join(dir, "recorder.bin"), "frozen recorder executable"),
+      Bun.write(path.join(dir, "trace.schema.json"), JSON.stringify({ owner: "evaluator_runtime" })),
+      Bun.write(path.join(dir, "classification.policy.md"), "Aletheia contribution classes"),
+      Bun.write(path.join(dir, "problem.txt"), problem),
+      Bun.write(path.join(dir, "solution.txt"), result),
+      Bun.write(path.join(dir, "raw-log.jsonl"), `${problem}\n${result}\n${token}\n`),
+      Bun.write(manifestFile, JSON.stringify(manifest)),
+      Bun.write(traceFile, JSON.stringify(trace)),
+    ])
+    const frozen = await bun(script, ["protocol", manifestFile])
+    expect(frozen.code).toBe(0)
+    const protocol = JSON.parse(frozen.stdout)
+    expect(HarnessContract.HumanAIAutonomy.parse(protocol.protocol)).toEqual(protocol.protocol)
+    await Bun.write(protocolFile, frozen.stdout)
+
+    const prepared = await bun(script, ["submission", protocolFile, traceFile])
+    expect(prepared.code).toBe(0)
+    const payload = JSON.parse(prepared.stdout)
+    expect(HarnessAutonomy.Submit.parse({ ...payload.submission, evaluatorToken: "x".repeat(32) })).toMatchObject({
+      sessionID: "native-autonomy",
+      artifactSHA256: hash(result),
+      trace: { complete: true, events: [{ sequence: 1 }, { sequence: 2 }] },
+    })
+    expect(payload.preview).toMatchObject({
+      claimedLevel: "essentially_autonomous",
+      derivedLevel: "essentially_autonomous",
+      humanSubstantiveEvents: 0,
+      agentSubstantiveEvents: 1,
+    })
+    for (const secret of [problem, result, token]) expect(prepared.stdout).not.toContain(secret)
+
+    const gapped = structuredClone(trace)
+    gapped.events[1]!.sequence = 3
+    await Bun.write(traceFile, JSON.stringify(gapped))
+    const invalid = await bun(script, ["submission", protocolFile, traceFile])
+    expect(invalid.code).toBe(1)
+    expect(invalid.stderr).toContain("contiguous")
+
+    await Bun.write(manifestFile, JSON.stringify({ ...manifest, evaluatorToken: token }))
+    const secret = await bun(script, ["protocol", manifestFile])
+    expect(secret.code).toBe(1)
+    expect(secret.stderr).toContain("unknown fields: evaluatorToken")
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
   }

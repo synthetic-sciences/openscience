@@ -9,6 +9,7 @@ import { HarnessLaunch } from "./launch"
 import { HarnessSemantic } from "./semantic"
 import { HarnessReplication } from "./replication"
 import { HarnessSynthesis } from "./synthesis"
+import { HarnessAutonomy } from "./autonomy"
 
 export namespace HarnessOrchestrator {
   const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
@@ -1039,6 +1040,7 @@ export namespace HarnessOrchestrator {
         `Objective: ${contract.objective}`,
         ...(contract.semanticAudit ? [HarnessSemantic.prompt(contract)] : []),
         ...(contract.synthesis ? [HarnessSynthesis.prompt(contract)] : []),
+        ...(contract.autonomy ? [HarnessAutonomy.prompt(contract)] : []),
         ...(contract.replication ? [HarnessReplication.prompt(contract)] : []),
         ...(contract.confirmation ? [HarnessConfirmation.prompt(contract)] : []),
         instruction(role),

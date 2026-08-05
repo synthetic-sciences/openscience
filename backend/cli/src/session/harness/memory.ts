@@ -64,6 +64,10 @@ export namespace HarnessMemory {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          autonomySHA256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
           replicationSHA256: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
@@ -90,6 +94,8 @@ export namespace HarnessMemory {
     contract.replication ? digest(JSON.stringify(contract.replication)) : undefined
   const synthesis = (contract: HarnessContract.Info) =>
     contract.synthesis ? digest(JSON.stringify(contract.synthesis)) : undefined
+  const autonomy = (contract: HarnessContract.Info) =>
+    contract.autonomy ? digest(JSON.stringify(contract.autonomy)) : undefined
   const confirmation = (contract: HarnessContract.Info) =>
     contract.confirmation ? digest(JSON.stringify(contract.confirmation)) : undefined
   const key = (contract: HarnessContract.Info) => {
@@ -99,8 +105,10 @@ export namespace HarnessMemory {
     const prior = repeat ? `${base}\0${scope ?? "no-semantic-audit"}\0${repeat}` : scope ? `${base}\0${scope}` : base
     const factuality = synthesis(contract)
     const scientific = factuality ? `${prior}\0${factuality}` : prior
+    const provenance = autonomy(contract)
+    const accountable = provenance ? `${scientific}\0${provenance}` : scientific
     const sealed = confirmation(contract)
-    return digest(sealed ? `${scientific}\0${sealed}` : scientific)
+    return digest(sealed ? `${accountable}\0${sealed}` : accountable)
   }
   const file = (contract: HarnessContract.Info) => path.join(root, `${key(contract)}.json`)
   const clip = (value: string, max = 1_000) =>
@@ -122,6 +130,7 @@ export namespace HarnessMemory {
   function empty(contract: HarnessContract.Info): State {
     const scope = semantic(contract)
     const factuality = synthesis(contract)
+    const provenance = autonomy(contract)
     const repeat = replication(contract)
     const sealed = confirmation(contract)
     return {
@@ -133,6 +142,7 @@ export namespace HarnessMemory {
         evaluator: contract.benchmark.evaluator,
         ...(scope ? { semanticAuditSHA256: scope } : {}),
         ...(factuality ? { synthesisSHA256: factuality } : {}),
+        ...(provenance ? { autonomySHA256: provenance } : {}),
         ...(repeat ? { replicationSHA256: repeat } : {}),
         ...(sealed ? { confirmationSHA256: sealed } : {}),
       },

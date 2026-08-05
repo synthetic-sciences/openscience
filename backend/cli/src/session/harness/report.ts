@@ -2,6 +2,7 @@ import path from "path"
 import z from "zod"
 import { Global } from "@/global"
 import { HarnessAdaptation } from "./adaptation"
+import { HarnessAutonomy } from "./autonomy"
 import { HarnessBenchmark } from "./benchmark"
 import { HarnessConfirmation } from "./confirmation"
 import { HarnessContract } from "./contract"
@@ -46,6 +47,14 @@ export namespace HarnessReport {
           model: z.string().min(1),
           effort: z.string().optional(),
           intervention: z.enum(["autonomous", "human_reprompted"]),
+          autonomy: z
+            .object({
+              claimedLevel: HarnessContract.AutonomyLevel,
+              derivedLevel: HarnessContract.AutonomyLevel.optional(),
+              status: z.enum(["passed", "failed", "inconclusive"]).optional(),
+            })
+            .strict()
+            .optional(),
           seed: z.number().int(),
         })
         .strict(),
@@ -102,6 +111,10 @@ export namespace HarnessReport {
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
           synthesisReceiptID: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+          autonomyReceiptID: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
@@ -174,29 +187,37 @@ export namespace HarnessReport {
     return result.score <= contract.benchmark.target
   }
 
+  const selected = (evaluations: HarnessEvaluation.Info[], search?: HarnessSearch.State) => {
+    const best = search?.bestID
+      ? evaluations.findLast(
+          (item) =>
+            item.subject?.type === "candidate" && item.subject.id === search.bestID && HarnessEvaluation.final(item),
+        )
+      : undefined
+    return (
+      best ??
+      evaluations.findLast((item) => !item.subject && HarnessEvaluation.final(item)) ??
+      evaluations.findLast(HarnessEvaluation.final)
+    )
+  }
+
   export function compile(input: {
     contract: HarnessContract.Info
     evaluations: HarnessEvaluation.Info[]
     trace?: Trace
     search?: HarnessSearch.State
     confirmation?: HarnessConfirmation.Receipt
+    autonomy?: HarnessAutonomy.Receipt
     generatedAt?: number
   }) {
     const contract = HarnessContract.Info.parse(input.contract)
     const benchmark = HarnessBenchmark.resolve(contract.benchmark.name)
     const evaluations = input.evaluations.map((item) => HarnessEvaluation.Info.parse(item))
-    const best = input.search?.bestID
-      ? evaluations.findLast(
-          (item) =>
-            item.subject?.type === "candidate" &&
-            item.subject.id === input.search?.bestID &&
-            HarnessEvaluation.final(item),
-        )
-      : undefined
-    const evaluation =
-      best ??
-      evaluations.findLast((item) => !item.subject && HarnessEvaluation.final(item)) ??
-      evaluations.findLast(HarnessEvaluation.final)
+    const evaluation = selected(evaluations, input.search)
+    const autonomy = input.autonomy ? HarnessAutonomy.Receipt.parse(input.autonomy) : undefined
+    if (autonomy && autonomy.receiptID !== evaluation?.autonomyReceiptID) {
+      throw new Error(`Human-AI autonomy receipt does not match the selected evaluation`)
+    }
     const confirmation = input.confirmation ? HarnessConfirmation.binds(contract, input.confirmation) : undefined
     if (confirmation && !contract.confirmation) {
       throw new Error(`A legacy harness report cannot cite sealed confirmation evidence`)
@@ -231,6 +252,7 @@ export namespace HarnessReport {
       audit: contract.audit,
       failureDiscovery: contract.failureDiscovery,
       synthesis: contract.synthesis,
+      autonomy: contract.autonomy,
       confirmation: contract.confirmation,
       contamination: contract.contamination,
     })
@@ -289,6 +311,13 @@ export namespace HarnessReport {
         model: contract.model.name,
         effort: contract.model.effort,
         intervention: contract.intervention,
+        autonomy: contract.autonomy
+          ? {
+              claimedLevel: contract.autonomy.claimedLevel,
+              derivedLevel: autonomy?.derivedLevel,
+              status: autonomy?.status,
+            }
+          : undefined,
         seed: contract.seed,
       },
       quality: {
@@ -313,6 +342,7 @@ export namespace HarnessReport {
         auditReceiptID: contract.confirmation ? undefined : evaluation?.auditReceiptID,
         failureDiscoveryReceiptID: contract.confirmation ? undefined : evaluation?.failureDiscoveryReceiptID,
         synthesisReceiptID: contract.confirmation ? undefined : evaluation?.synthesisReceiptID,
+        autonomyReceiptID: evaluation?.autonomyReceiptID,
         confirmationReceiptID: confirmation?.receiptID,
         evaluations: evaluations.length,
       },
@@ -360,12 +390,17 @@ export namespace HarnessReport {
       HarnessSearch.read(sessionID).catch(() => undefined),
       HarnessConfirmation.current(contract),
     ])
+    const evaluation = selected(evaluations, search ?? undefined)
+    const autonomy = evaluation?.autonomyReceiptID
+      ? await HarnessAutonomy.read(evaluation.autonomyReceiptID, contract)
+      : undefined
     const report = compile({
       contract,
       evaluations,
       trace: trace.summary,
       search,
       confirmation: confirmation ?? undefined,
+      autonomy,
     })
     await Bun.write(file(sessionID), JSON.stringify(report, null, 2) + "\n")
     return report

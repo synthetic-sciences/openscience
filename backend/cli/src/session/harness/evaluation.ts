@@ -104,6 +104,10 @@ export namespace HarnessEvaluation {
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
+      autonomyReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       evaluator: z
         .object({
           name: z.string().min(1).max(200),
@@ -442,6 +446,23 @@ export namespace HarnessEvaluation {
         receiptID: evaluation.synthesisReceiptID,
         subject: evaluation.subject ?? { type: "run", id: evaluation.runID },
         score: evaluation.score,
+        evaluatedAt: evaluation.evaluatedAt,
+        recordedAt: evaluation.recordedAt!,
+        requirePassed: evaluation.status === "passed" && final(evaluation),
+      })
+    }
+    if (evaluation.autonomyReceiptID && !contract.autonomy) {
+      throw new Error(`Evaluation references an autonomy receipt without a bound human-AI autonomy protocol`)
+    }
+    if (contract.autonomy && evaluation.status === "passed" && final(evaluation) && !evaluation.autonomyReceiptID) {
+      throw new Error(`A passing final evaluation must reference a human-AI autonomy receipt`)
+    }
+    if (evaluation.autonomyReceiptID) {
+      const { HarnessAutonomy } = await import("./autonomy")
+      await HarnessAutonomy.assert({
+        contract,
+        receiptID: evaluation.autonomyReceiptID,
+        subject: evaluation.subject ?? { type: "run", id: evaluation.runID },
         evaluatedAt: evaluation.evaluatedAt,
         recordedAt: evaluation.recordedAt!,
         requirePassed: evaluation.status === "passed" && final(evaluation),

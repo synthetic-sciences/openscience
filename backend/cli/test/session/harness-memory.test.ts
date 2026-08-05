@@ -29,6 +29,7 @@ async function bind(
   semantic = false,
   replication = false,
   synthesis = false,
+  autonomy = false,
 ) {
   sessions.add(sessionID)
   return HarnessContract.bind({
@@ -117,6 +118,25 @@ async function bind(
           minF1: 0.4,
           cleanRoomRequired: true,
           judgeFailurePolicy: "inconclusive",
+        }
+      : undefined,
+    autonomy: autonomy
+      ? {
+          protocolVersion: "human-ai-autonomy-v1",
+          claimedLevel: "essentially_autonomous",
+          recorder: {
+            name: "memory-interaction-recorder",
+            version: "1",
+            artifactSHA256: hash("memory-autonomy-recorder"),
+            source: "evaluator_runtime",
+          },
+          traceSchemaSHA256: hash("memory-autonomy-trace"),
+          classificationPolicySHA256: hash("memory-autonomy-policy"),
+          maxEvents: 32,
+          rawRetention: "required",
+          disclosure: "evaluator_retained",
+          completeTraceRequired: true,
+          uncertaintyPolicy: "inconclusive",
         }
       : undefined,
     replication: replication
@@ -320,6 +340,22 @@ describe("verified retrospective memory", () => {
       await HarnessMemory.retrieve({
         sessionID: "memory-synthesis-query",
         query: "answer-shaped conclusion from an unrelated reference",
+      }),
+    ).toEqual([])
+  })
+
+  test("does not reuse untraced hindsight inside a frozen autonomy scope", async () => {
+    await candidate({
+      sessionID: "memory-autonomy-source",
+      scope: "autonomy",
+      proposal: "method selected after an undocumented human hint",
+      score: 0.99,
+    })
+    await bind("memory-autonomy-query", "autonomy", "Improve spectral PDE accuracy", false, false, false, true)
+    expect(
+      await HarnessMemory.retrieve({
+        sessionID: "memory-autonomy-query",
+        query: "method selected after an undocumented human hint",
       }),
     ).toEqual([])
   })

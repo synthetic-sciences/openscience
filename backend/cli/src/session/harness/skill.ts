@@ -262,6 +262,7 @@ export namespace HarnessSkill {
       evaluatorAudit: contract.evaluatorAudit,
       semanticAudit: contract.semanticAudit,
       synthesis: contract.synthesis,
+      autonomy: contract.autonomy,
       replication: contract.replication,
       confirmation: contract.confirmation,
       packs: contract.packs ?? [],

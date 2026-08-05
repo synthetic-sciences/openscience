@@ -41,7 +41,7 @@ async function run(input: {
   createdAt: number
   model?: string
   direction?: "maximize" | "minimize"
-  factor?: "orchestration" | "search" | "evaluator_audit" | "semantic_audit" | "synthesis" | "replication"
+  factor?: "orchestration" | "search" | "evaluator_audit" | "semantic_audit" | "synthesis" | "autonomy" | "replication"
 }) {
   const sessionID = `${input.prefix}-${input.seed}-${input.role}`
   sessions.add(sessionID)
@@ -121,6 +121,26 @@ async function run(input: {
             minF1: 0.4,
             cleanRoomRequired: true,
             judgeFailurePolicy: "inconclusive",
+          }
+        : undefined,
+    autonomy:
+      input.role === "arm" && input.factor === "autonomy"
+        ? {
+            protocolVersion: "human-ai-autonomy-v1",
+            claimedLevel: "essentially_autonomous",
+            recorder: {
+              name: "ablation-interaction-recorder",
+              version: "1",
+              artifactSHA256: hash("ablation-autonomy-recorder"),
+              source: "evaluator_runtime",
+            },
+            traceSchemaSHA256: hash("ablation-autonomy-trace"),
+            classificationPolicySHA256: hash("ablation-autonomy-policy"),
+            maxEvents: 32,
+            rawRetention: "required",
+            disclosure: "evaluator_retained",
+            completeTraceRequired: true,
+            uncertaintyPolicy: "inconclusive",
           }
         : undefined,
     semanticAudit:
@@ -210,6 +230,7 @@ async function study(
     | "evaluator_audit"
     | "semantic_audit"
     | "synthesis"
+    | "autonomy"
     | "replication" = "orchestration",
 ) {
   const createdAt = Date.now()
@@ -367,6 +388,15 @@ describe("matched scientific ablations", () => {
     if (!initialized) throw new Error("Expected an initialized ablation")
     plans.add(initialized.plan.planID)
     expect(initialized.plan.factor.kind).toBe("synthesis")
+    expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
+  })
+
+  test("isolates human-AI autonomy tracing as its own ablatable protocol factor", async () => {
+    const input = await study("ablation-autonomy", false, "maximize", "autonomy")
+    const initialized = await HarnessAblation.initialize(input.plan)
+    if (!initialized) throw new Error("Expected an initialized ablation")
+    plans.add(initialized.plan.planID)
+    expect(initialized.plan.factor.kind).toBe("autonomy")
     expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
   })
 

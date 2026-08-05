@@ -106,6 +106,10 @@ import type {
   HarnessAuditSelectResponses,
   HarnessAuditStatusErrors,
   HarnessAuditStatusResponses,
+  HarnessAutonomyReceiptErrors,
+  HarnessAutonomyReceiptResponses,
+  HarnessAutonomyRecordErrors,
+  HarnessAutonomyRecordResponses,
   HarnessBenchmarkRecipeErrors,
   HarnessBenchmarkRecipeResponses,
   HarnessBenchmarksResponses,
@@ -4257,6 +4261,7 @@ export class Ablation extends HeyApiClient {
           | "evaluator_audit"
           | "semantic_audit"
           | "synthesis"
+          | "autonomy"
           | "replication"
           | "fidelities"
           | "skill"
@@ -5256,6 +5261,129 @@ export class Synthesis extends HeyApiClient {
       ThrowOnError
     >({
       url: "/harness/syntheses/receipts/{receiptID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Autonomy extends HeyApiClient {
+  /**
+   * Record an evaluator-authenticated human-AI autonomy trace
+   *
+   * Binds a complete interaction log to the exact run or candidate artifact and derives the Aletheia-inspired essentially-autonomous, collaborative, or primarily-human contribution level without trusting the caller's claim.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+      subject?: {
+        type: "run" | "candidate"
+        id: string
+      }
+      artifactSHA256?: string
+      trace?: {
+        owner: "evaluator_runtime"
+        complete: true
+        recorderArtifactSHA256: string
+        schemaSHA256: string
+        classificationPolicySHA256: string
+        rawLogSHA256: string
+        startedAt: number
+        endedAt: number
+        events: Array<{
+          sequence: number
+          at: number
+          actor: "benchmark" | "human" | "agent"
+          kind:
+            | "problem_statement"
+            | "clarification"
+            | "resource_provision"
+            | "strategy"
+            | "technical_correction"
+            | "artifact_edit"
+            | "candidate_selection"
+            | "evaluation_feedback"
+            | "exposition"
+            | "other"
+          contribution: "problem" | "auxiliary" | "essential" | "core" | "unclear"
+          contentSHA256: string
+          artifactBeforeSHA256?: string
+          artifactAfterSHA256?: string
+          evidence: Array<string>
+        }>
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "artifactSHA256" },
+            { in: "body", key: "trace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessAutonomyRecordResponses,
+      HarnessAutonomyRecordErrors,
+      ThrowOnError
+    >({
+      url: "/harness/autonomy/receipts",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected human-AI autonomy receipt
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessAutonomyReceiptResponses,
+      HarnessAutonomyReceiptErrors,
+      ThrowOnError
+    >({
+      url: "/harness/autonomy/receipts/{receiptID}",
       ...options,
       ...params,
       headers: {
@@ -6691,6 +6819,23 @@ export class Harness extends HeyApiClient {
         cleanRoomRequired: true
         judgeFailurePolicy: "inconclusive"
       }
+      autonomy?: {
+        protocolVersion: "human-ai-autonomy-v1"
+        claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
+        recorder: {
+          name: string
+          version: string
+          artifactSHA256: string
+          source: "evaluator_runtime"
+        }
+        traceSchemaSHA256: string
+        classificationPolicySHA256: string
+        maxEvents: number
+        rawRetention: "required"
+        disclosure: "evaluator_retained" | "public_essential_after_release"
+        completeTraceRequired: true
+        uncertaintyPolicy: "inconclusive"
+      }
       replication?: {
         protocolVersion: "replicated-evaluation-v1"
         validatorSHA256: string
@@ -6850,6 +6995,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "evaluatorAudit" },
             { in: "body", key: "semanticAudit" },
             { in: "body", key: "synthesis" },
+            { in: "body", key: "autonomy" },
             { in: "body", key: "replication" },
             { in: "body", key: "confirmation" },
             { in: "body", key: "extraPacks" },
@@ -6906,6 +7052,7 @@ export class Harness extends HeyApiClient {
       auditReceiptID?: string
       failureDiscoveryReceiptID?: string
       synthesisReceiptID?: string
+      autonomyReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
       metrics?: {
@@ -6952,6 +7099,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "auditReceiptID" },
             { in: "body", key: "failureDiscoveryReceiptID" },
             { in: "body", key: "synthesisReceiptID" },
+            { in: "body", key: "autonomyReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
             { in: "body", key: "metrics" },
@@ -7162,6 +7310,11 @@ export class Harness extends HeyApiClient {
   private _synthesis?: Synthesis
   get synthesis(): Synthesis {
     return (this._synthesis ??= new Synthesis({ client: this.client }))
+  }
+
+  private _autonomy?: Autonomy
+  get autonomy(): Autonomy {
+    return (this._autonomy ??= new Autonomy({ client: this.client }))
   }
 
   private _launch?: Launch
