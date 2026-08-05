@@ -25,6 +25,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 17. **A clean score requires a clean execution trace.** A strict runtime-integrity protocol commits its validator, trace schema, assigned model, forbidden model artifacts, independent contamination/API/lookup auditors, and hidden canaries before execution. Final success requires a content-addressed receipt for the exact run or candidate; OpenScience derives the six gates and rejects missing, failed, substituted, post-hoc, or cross-subject receipts.
 18. **Native interfaces stay native.** A source-verified execution recipe records the official environment, entrypoint, ordered stages, typed bindings, produced artifacts, score selectors, and known limitations. CLI benchmarks remain argv contracts and Python libraries remain Python API contracts. Held-out or release runs for a verified recipe must bind its exact recipe and launch-driver digests; an unrelated generic command cannot pose as the official benchmark.
 19. **Evolution is replayable, not inferred from score.** An optional optimization protocol freezes source roots, extensions, bounds, manifest schema, and an evaluator-owned validator. Every passing final candidate must cite an immutable receipt for its exact artifact and all declared parents. OpenScience recomputes parent deltas and ancestral line reintroductions; these diagnostics never become fitness or proof of novelty.
+20. **Structural improvement must survive controlled intervention.** An optional evaluator-owned study is frozen after evolution tracing and before final evaluation. Exact same-condition replay, retuning or component interventions, and model/context/evaluator/split transfers alter only their declared factor. OpenScience derives paired effects and uncertainty from immutable observations; a required study gates promotion but never supplies fitness.
 
 ## System boundary
 
@@ -45,6 +46,8 @@ flowchart LR
     X["Runtime integrity receipt\nbackend-derived six-gate outcome"]
     T["Evaluator-owned source tracer\ncanonical snapshot + exact parent deltas"]
     Y["Evolution trace receipt\nreplay + cycle diagnostics"]
+    D["Evaluator-owned intervention runner\nfrozen one-difference pairs"]
+    Z["Controlled intervention receipt\nstability + causal/transfer diagnostics"]
     J["Immutable evaluation journal"]
     M["Verified hindsight memory"]
     K["Scientific claim ledger"]
@@ -74,6 +77,10 @@ flowchart LR
     O --> T
     T -->|authenticated manifests| Y
     Y -->|required candidate receipt| E
+    Y -->|bind exact evolved artifact| D
+    O --> D
+    D -->|authenticated paired outcomes| Z
+    Z -->|optional promotion gate| E
     E -->|authenticated result| J
     J --> G
     J --> M
@@ -204,6 +211,35 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
     "hiddenCanaryManifestSHA256": "1212121212121212121212121212121212121212121212121212121212121212",
     "minHiddenCanaries": 8
   },
+  "evolution": {
+    "protocolVersion": "evolution-trace-v1",
+    "validatorSHA256": "1313131313131313131313131313131313131313131313131313131313131313",
+    "manifestSchemaSHA256": "1414141414141414141414141414141414141414141414141414141414141414",
+    "lineAlgorithm": "sha256-exact-line-v1",
+    "roots": ["src"],
+    "extensions": [".ts", ".py"],
+    "exclude": ["vendor"],
+    "maxFiles": 10000,
+    "maxFileBytes": 10000000,
+    "maxTotalBytes": 100000000,
+    "maxSourceLines": 1000000,
+    "maxChangedLines": 200000
+  },
+  "interventions": {
+    "protocolVersion": "intervention-study-v1",
+    "validatorSHA256": "1515151515151515151515151515151515151515151515151515151515151515",
+    "requiredForPromotion": true,
+    "minPairs": 3,
+    "maxPairs": 5,
+    "maxTotalPairs": 15,
+    "confidence": 0.95,
+    "required": ["model_transfer", "replay", "retune"],
+    "rules": [
+      { "family": "model_transfer", "mode": "max_regression", "threshold": 0.05 },
+      { "family": "replay", "mode": "max_absolute_effect", "threshold": 0.01 },
+      { "family": "retune", "mode": "min_effect", "threshold": 0.02 }
+    ]
+  },
   "simulation": {
     "kind": "pde",
     "engine": {
@@ -313,6 +349,16 @@ OpenScience independently binds the subject artifact and complete parent set to 
 
 The journal is append-only, topological, content-addressed, and revalidated on every read. Parent, artifact, protocol, validator, timestamp, delta, or derived-diagnostic substitution fails closed. A trace receipt alone leaves the candidate unverified. When the protocol is bound, only a later passing final candidate evaluation that references the matching receipt may promote it; benchmark score remains the sole fitness authority. Legacy contracts remain valid because the protocol is opt-in.
 
+#### Distinguish structural gains from retuning and evaluator coupling
+
+Evolution provenance explains which bytes changed; it does not establish that the change is stable, causally important, or portable. An optimize run can therefore bind `intervention-study-v1` together with `evolution-trace-v1`. The contract freezes the evaluator-owned validator, required families, three-to-thirty-two pairs per family, total execution ceiling, 95% confidence policy, and one direction-aware threshold per family.
+
+Run the bundled `design-replay-interventions` skill after the exact candidate has an evolution receipt and before its final evaluation. It validates a matrix whose cells commit the artifact, seed, model, context, evaluator, split manifest, environment, and budget. `replay` changes nothing; `retune`, `ablation`, and `repair` change only the artifact and keep the evolved candidate as the arm; `model_transfer`, `context_transfer`, `evaluator_transfer`, and `split_transfer` change only the named condition while evaluating the same candidate. The resulting plan is server-timestamped and immutable, so results cannot choose their own controls post hoc.
+
+The external evaluator executes each control and arm independently, then records the exact target hash, score, status, evidence, and evaluation time. OpenScience keeps this append-only observation journal separate from candidate fitness and revalidates plan hashes, one-difference semantics, contiguous pair indexes, unique pair/role slots, submission and outcome derivations, timestamps, complete execution, and receipt identity on every read. The assessment derives direction-aware paired effects, sample standard deviation, standard error, and 95% Student interval. Replay requires every absolute effect to stay within tolerance; retuning, ablation, and repair require a lower confidence bound above the frozen minimum with no regression; transfers forbid any excessive regression and require the lower bound to clear the negative tolerance.
+
+`failed` or missing cells cannot disappear into a smaller sample. An overlapping interval remains `inconclusive`. When `requiredForPromotion` is true, a later passing final candidate evaluation must cite the passing receipt and must postdate every intervention observation and the server assessment. The receipt qualifies a scoped stability, attribution, or transfer claim; it is never a benchmark score, search reward, novelty score, or SOTA result.
+
 ### 2. Execute through a profile
 
 The contract overrides heuristic routing. Unbound interactive sessions use a conservative `react` default and select a specialized profile only from strong task signals.
@@ -355,6 +401,7 @@ The optimizer is an open candidate graph rather than a single mutable working fi
 - Parallelizable search can atomically `dispatch` up to eight budget-backed sibling reservations against one recommendation. Open reservations count against the candidate budget, carry distinct content-derived identities, spread independent roots across islands, and may be consumed out of order exactly once. Serial proposals cannot steal reserved capacity. Failed work is explicitly released; rediscovered bytes release their reservation automatically; search termination releases every unused ticket.
 - Every new parallel ticket carries a content-addressed `agentic-variation-v1` mandate. A batch rotates without repetition across the nine EvoTrace edit mechanisms—bug repair, external integration, architectural change, composition, local refinement, pruning, refactoring, efficiency, and hyperparameter tuning—in a strategy-sensitive order. The mandate is a primary search direction, not a fixed single-turn mutation: the producer may plan, inspect lineage, consult permitted knowledge, run tools, test, debug, and revise before returning one artifact.
 - When `evolution-trace-v1` is bound, the external evaluator must record the exact source snapshot and every declared parent delta before final promotion. Verified search results surface backend-derived cycle and reintroduction diagnostics, but ranking, Pareto membership, target attainment, and stopping still use only evaluator metrics.
+- When `intervention-study-v1` is bound, the external evaluator freezes and executes the required controlled matrix before final promotion. Intervention effects remain outside recommendation, ranking, Pareto, target, and stopping logic.
 - When verified alternatives exist, centralized dispatch assigns distinct Pareto/branch lineages before reusing a route. Fusion portfolios vary the complementary verified branch; migration portfolios vary verified target islands; one-parent exploration, exploitation, and divergence rotate across verified branches. This diversification is opt-in with `dispatch`; the serial recommendation path is unchanged for sequential work.
 - Reservations are centralized admission capabilities, not fitness. Creating, consuming, or releasing them cannot change `bestID`, the Pareto archive, evaluator results, or benchmark claims.
 - The requested generation mode is adaptive: `single-pass` establishes the initial seed, `stepwise` reserves explicit planning/review for independent roots and structural fusion, migration, or divergence, and `diff` focuses local exploration and exploitation on a verified trajectory. A mode is an instruction, not a self-reported proof that the producer followed it.
@@ -481,6 +528,7 @@ The bundled skill catalog includes executable protocols for work that is otherwi
 | `audit-benchmark-sources`      | Fetches every official pin, verifies required paths and datasets, checks subset cardinality, and reports upstream drift without silently changing trusted revisions.                                                   |
 | `verify-benchmark-integrity`   | Validates evaluator-owned trace structure, derives observable model/lookup/canary counts, verifies committed auditor identities, and builds the token-free input for a backend-derived runtime-integrity receipt.      |
 | `trace-evolutionary-candidate` | Captures a canonical evaluator-owned source manifest, verifies exact parent snapshots, writes deterministic parent deltas, and builds the token-free input for backend-derived replay and ancestral-cycle diagnostics. |
+| `design-replay-interventions`  | Validates evaluator-owned exact one-difference replay, retuning, ablation/repair, and transfer matrices, then emits a token-free frozen plan and execution ledger.                                                     |
 
 Their scripts return machine-readable JSON and nonzero failure codes, so an orchestrator can use them as blocking gates instead of relying on prompt compliance. They validate the protocol and reported measurements; they do not manufacture hidden data, run an unavailable simulator, or turn an internal result into official benchmark evidence.
 
@@ -506,7 +554,7 @@ This mechanism does not claim that a finite meta-evaluation suite makes a judge 
 
 ### 15. Compare only compatible runs
 
-Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, launch, runtime-integrity, simulation, evaluator-audit and objective-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface the launch, integrity, simulation, and evaluator-audit receipts used by the selected final evaluation.
+Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, launch, runtime-integrity, evolution, controlled-intervention, simulation, evaluator-audit and objective-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface the launch, integrity, evolution, controlled-intervention, simulation, and evaluator-audit receipts used by the selected final evaluation.
 
 Cost and wall time include both the agent trace and evaluator-reported stage usage. Direction-aware score deltas and the Pareto frontier are available through `POST /harness/compare`.
 
@@ -549,6 +597,10 @@ Every adapter is version-agnostic. A development/validation run must still bind 
 | `POST` | `/harness/integrity/receipts/:id`                    | Read a capability-protected runtime-integrity receipt         |
 | `POST` | `/harness/evolution/receipts`                        | Derive and record replayable evolutionary provenance          |
 | `POST` | `/harness/evolution/receipts/:id`                    | Read a capability-protected evolution trace receipt           |
+| `POST` | `/harness/interventions`                             | Freeze an evaluator-owned controlled intervention matrix      |
+| `POST` | `/harness/interventions/:candidateID/observations`   | Record one immutable control or arm outcome                   |
+| `POST` | `/harness/interventions/:candidateID/assessment`     | Derive the controlled paired-effect receipt                   |
+| `POST` | `/harness/interventions/:candidateID/status`         | Read capability-protected intervention state                  |
 | `POST` | `/harness/simulations/receipts`                      | Recompute and record a simulator validation receipt           |
 | `POST` | `/harness/simulations/receipts/:id`                  | Read a capability-protected simulator validation receipt      |
 | `POST` | `/harness/evaluations`                               | Record a staged evaluator-authenticated result                |
@@ -600,7 +652,7 @@ The expanded evaluation frontier is grounded in [PaperBench](https://openai.com/
 The harness is ready for benchmark integration, but architecture alone does not establish performance. For each target benchmark:
 
 1. Pin an official repository/evaluator commit, dataset revision and manifest, task manifest, environment, invocation, baseline artifact/score, split, hardware class, model, tools, budget, seed policy, and intervention policy; pass the complete launch-readiness suite.
-2. For strict hidden or post-training runs, capture an evaluator-owned execution trace and pass a contract-bound runtime-integrity receipt for the exact final artifact. For evolutionary optimization, additionally capture exact source manifests and parent deltas and reference the matching evolution receipt on every passing final candidate.
+2. For strict hidden or post-training runs, capture an evaluator-owned execution trace and pass a contract-bound runtime-integrity receipt for the exact final artifact. For evolutionary optimization, additionally capture exact source manifests and parent deltas, run the predeclared controlled replay/retuning/transfer matrix when required, and reference both matching receipts on every passing final candidate.
 3. Qualify any learned or hybrid evaluator against a separately controlled, committed meta-evaluation suite; retain official deterministic runners as the preferred ground truth where available.
 4. Reproduce the strongest public baseline under exactly that contract.
 5. Run ablations for profile routing, multi-root search, UCB exploration, fidelity screening, hindsight, fusion, strategy divergence, replay diagnostics, domain packs, runtime integrity, evaluator qualification, and learned skills.

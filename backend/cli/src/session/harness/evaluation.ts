@@ -8,6 +8,7 @@ import { HarnessJudge } from "./judge"
 import { HarnessLaunch } from "./launch"
 import { HarnessIntegrity } from "./integrity"
 import { HarnessEvolution } from "./evolution"
+import { HarnessIntervention } from "./intervention"
 import { HarnessSimulation } from "./simulation"
 
 export namespace HarnessEvaluation {
@@ -70,6 +71,10 @@ export namespace HarnessEvaluation {
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
       evolutionReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      interventionReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -251,6 +256,35 @@ export namespace HarnessEvaluation {
         contract,
         receiptID: evaluation.evolutionReceiptID,
         candidateID: evaluation.subject.id,
+        evaluatedAt: evaluation.evaluatedAt,
+        recordedAt: evaluation.recordedAt!,
+      })
+    }
+    if (evaluation.interventionReceiptID && !contract.interventions) {
+      throw new Error(`Evaluation references an intervention receipt without a bound intervention protocol`)
+    }
+    if (evaluation.interventionReceiptID && evaluation.subject?.type !== "candidate") {
+      throw new Error(`Only a candidate evaluation may reference an intervention receipt`)
+    }
+    if (evaluation.interventionReceiptID && !evaluation.evolutionReceiptID) {
+      throw new Error(`An intervention-bearing evaluation must reference its exact evolution receipt`)
+    }
+    if (
+      contract.interventions?.requiredForPromotion &&
+      evaluation.subject?.type === "candidate" &&
+      evaluation.status === "passed" &&
+      final(evaluation) &&
+      !evaluation.interventionReceiptID
+    ) {
+      throw new Error(`A passing final candidate evaluation must reference a controlled intervention receipt`)
+    }
+    if (evaluation.interventionReceiptID && evaluation.subject?.type === "candidate") {
+      await HarnessIntervention.assert({
+        contract,
+        receiptID: evaluation.interventionReceiptID,
+        candidateID: evaluation.subject.id,
+        evolutionReceiptID: evaluation.evolutionReceiptID!,
+        requirePassed: evaluation.status === "passed" && final(evaluation),
         evaluatedAt: evaluation.evaluatedAt,
         recordedAt: evaluation.recordedAt!,
       })

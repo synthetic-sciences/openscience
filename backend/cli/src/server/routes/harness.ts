@@ -12,6 +12,7 @@ import { HarnessEvolution } from "@/session/harness/evolution"
 import { HarnessJudge } from "@/session/harness/judge"
 import { HarnessLaunch } from "@/session/harness/launch"
 import { HarnessIntegrity } from "@/session/harness/integrity"
+import { HarnessIntervention } from "@/session/harness/intervention"
 import { HarnessOrchestrator } from "@/session/harness/orchestrator"
 import { HarnessReport } from "@/session/harness/report"
 import { HarnessRecipe } from "@/session/harness/recipe"
@@ -167,6 +168,95 @@ export const HarnessRoutes = lazy(() =>
       validator("param", z.object({ planID: z.string().regex(/^[a-f0-9]{64}$/) })),
       validator("json", HarnessAblation.Assess),
       async (c) => c.json(await HarnessAblation.assess(c.req.valid("param").planID, c.req.valid("json"))),
+    )
+    .post(
+      "/interventions",
+      describeRoute({
+        summary: "Freeze an evaluator-owned controlled replay study",
+        description:
+          "Binds a candidate and exact evolution receipt to predeclared replay, retuning, ablation, repair, or transfer pairs before the candidate's final evaluation.",
+        operationId: "harness.intervention.initialize",
+        responses: {
+          200: {
+            description: "Immutable controlled intervention plan",
+            content: { "application/json": { schema: resolver(HarnessIntervention.State) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessIntervention.Initialize),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessIntervention.initialize(input, contract))
+      },
+    )
+    .post(
+      "/interventions/:candidateID/observations",
+      describeRoute({
+        summary: "Record an evaluator-authenticated intervention outcome",
+        description:
+          "Binds one numeric outcome to an exact frozen pair target without adding it to candidate fitness or the benchmark evaluation journal.",
+        operationId: "harness.intervention.observe",
+        responses: {
+          200: {
+            description: "Immutable intervention outcome",
+            content: { "application/json": { schema: resolver(HarnessIntervention.Outcome) } },
+          },
+          ...errors(400, 403, 404, 409),
+        },
+      }),
+      validator("param", z.object({ candidateID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessIntervention.Observe),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessIntervention.observe(c.req.valid("param").candidateID, input, contract))
+      },
+    )
+    .post(
+      "/interventions/:candidateID/assessment",
+      describeRoute({
+        summary: "Assess a complete controlled replay study",
+        description:
+          "Recomputes direction-aware paired effects, confidence intervals, stability, tuning gap, component dependence, and transfer robustness from every frozen outcome.",
+        operationId: "harness.intervention.assess",
+        responses: {
+          200: {
+            description: "Immutable controlled intervention receipt",
+            content: { "application/json": { schema: resolver(HarnessIntervention.Receipt) } },
+          },
+          ...errors(400, 403, 404, 409),
+        },
+      }),
+      validator("param", z.object({ candidateID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessIntervention.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessIntervention.assess(input.sessionID, c.req.valid("param").candidateID, contract))
+      },
+    )
+    .post(
+      "/interventions/:candidateID/status",
+      describeRoute({
+        summary: "Read a capability-protected controlled replay study",
+        operationId: "harness.intervention.status",
+        responses: {
+          200: {
+            description: "Controlled intervention state",
+            content: { "application/json": { schema: resolver(HarnessIntervention.State.nullable()) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ candidateID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessIntervention.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessIntervention.status(input.sessionID, c.req.valid("param").candidateID, contract))
+      },
     )
     .post(
       "/evaluators/qualifications",

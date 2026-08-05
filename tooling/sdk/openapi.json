@@ -18594,6 +18594,3295 @@
         ]
       }
     },
+    "/harness/interventions": {
+      "post": {
+        "operationId": "harness.intervention.initialize",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Freeze an evaluator-owned controlled replay study",
+        "description": "Binds a candidate and exact evolution receipt to predeclared replay, retuning, ablation, repair, or transfer pairs before the candidate's final evaluation.",
+        "responses": {
+          "200": {
+            "description": "Immutable controlled intervention plan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "plan": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "planID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "contractFingerprint": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "protocol": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "intervention-study-v1"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "requiredForPromotion": {
+                              "type": "boolean"
+                            },
+                            "minPairs": {
+                              "type": "integer",
+                              "minimum": 3,
+                              "maximum": 32
+                            },
+                            "maxPairs": {
+                              "type": "integer",
+                              "minimum": 3,
+                              "maximum": 32
+                            },
+                            "maxTotalPairs": {
+                              "type": "integer",
+                              "minimum": 3,
+                              "maximum": 256
+                            },
+                            "confidence": {
+                              "type": "number",
+                              "const": 0.95
+                            },
+                            "required": {
+                              "minItems": 1,
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "replay",
+                                  "retune",
+                                  "ablation",
+                                  "repair",
+                                  "model_transfer",
+                                  "context_transfer",
+                                  "evaluator_transfer",
+                                  "split_transfer"
+                                ]
+                              }
+                            },
+                            "rules": {
+                              "minItems": 1,
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "family": {
+                                        "type": "string",
+                                        "const": "replay"
+                                      },
+                                      "mode": {
+                                        "type": "string",
+                                        "const": "max_absolute_effect"
+                                      },
+                                      "threshold": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      }
+                                    },
+                                    "required": [
+                                      "family",
+                                      "mode",
+                                      "threshold"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "family": {
+                                        "type": "string",
+                                        "enum": [
+                                          "retune",
+                                          "ablation",
+                                          "repair"
+                                        ]
+                                      },
+                                      "mode": {
+                                        "type": "string",
+                                        "const": "min_effect"
+                                      },
+                                      "threshold": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      }
+                                    },
+                                    "required": [
+                                      "family",
+                                      "mode",
+                                      "threshold"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "family": {
+                                        "type": "string",
+                                        "enum": [
+                                          "model_transfer",
+                                          "context_transfer",
+                                          "evaluator_transfer",
+                                          "split_transfer"
+                                        ]
+                                      },
+                                      "mode": {
+                                        "type": "string",
+                                        "const": "max_regression"
+                                      },
+                                      "threshold": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      }
+                                    },
+                                    "required": [
+                                      "family",
+                                      "mode",
+                                      "threshold"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "validatorSHA256",
+                            "requiredForPromotion",
+                            "minPairs",
+                            "maxPairs",
+                            "maxTotalPairs",
+                            "confidence",
+                            "required",
+                            "rules"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "benchmark": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "taskID": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "metric": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": [
+                                "maximize",
+                                "minimize"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "taskID",
+                            "metric",
+                            "direction"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "subject": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "candidate"
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "artifact": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "artifact"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "evolutionReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "validator": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "const": "design-replay-interventions"
+                            },
+                            "version": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "scriptSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "scriptSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "pairs": {
+                          "minItems": 3,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "family": {
+                                "type": "string",
+                                "enum": [
+                                  "replay",
+                                  "retune",
+                                  "ablation",
+                                  "repair",
+                                  "model_transfer",
+                                  "context_transfer",
+                                  "evaluator_transfer",
+                                  "split_transfer"
+                                ]
+                              },
+                              "index": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 31
+                              },
+                              "control": {
+                                "type": "object",
+                                "properties": {
+                                  "artifact": {
+                                    "type": "object",
+                                    "properties": {
+                                      "uri": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 2048
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "uri",
+                                      "sha256"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "condition": {
+                                    "type": "object",
+                                    "properties": {
+                                      "seed": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "model": {
+                                        "type": "object",
+                                        "properties": {
+                                          "provider": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 500
+                                          },
+                                          "version": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          }
+                                        },
+                                        "required": [
+                                          "provider",
+                                          "name",
+                                          "version"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "context": {
+                                        "type": "object",
+                                        "properties": {
+                                          "uri": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "sha256": {
+                                            "type": "string",
+                                            "pattern": "^[a-f0-9]{64}$"
+                                          }
+                                        },
+                                        "required": [
+                                          "uri",
+                                          "sha256"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "evaluator": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          },
+                                          "version": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          },
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "benchmark",
+                                              "gate",
+                                              "external"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "version",
+                                          "source"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "split": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          },
+                                          "manifest": {
+                                            "type": "object",
+                                            "properties": {
+                                              "uri": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 2048
+                                              },
+                                              "sha256": {
+                                                "type": "string",
+                                                "pattern": "^[a-f0-9]{64}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "uri",
+                                              "sha256"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "manifest"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "environment": {
+                                        "type": "object",
+                                        "properties": {
+                                          "uri": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "sha256": {
+                                            "type": "string",
+                                            "pattern": "^[a-f0-9]{64}$"
+                                          }
+                                        },
+                                        "required": [
+                                          "uri",
+                                          "sha256"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "budget": {
+                                        "type": "object",
+                                        "properties": {
+                                          "uri": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "sha256": {
+                                            "type": "string",
+                                            "pattern": "^[a-f0-9]{64}$"
+                                          }
+                                        },
+                                        "required": [
+                                          "uri",
+                                          "sha256"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "seed",
+                                      "model",
+                                      "context",
+                                      "evaluator",
+                                      "split",
+                                      "environment",
+                                      "budget"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "artifact",
+                                  "condition"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "arm": {
+                                "type": "object",
+                                "properties": {
+                                  "artifact": {
+                                    "type": "object",
+                                    "properties": {
+                                      "uri": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 2048
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "uri",
+                                      "sha256"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "condition": {
+                                    "type": "object",
+                                    "properties": {
+                                      "seed": {
+                                        "type": "integer",
+                                        "minimum": -9007199254740991,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "model": {
+                                        "type": "object",
+                                        "properties": {
+                                          "provider": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 500
+                                          },
+                                          "version": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          }
+                                        },
+                                        "required": [
+                                          "provider",
+                                          "name",
+                                          "version"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "context": {
+                                        "type": "object",
+                                        "properties": {
+                                          "uri": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "sha256": {
+                                            "type": "string",
+                                            "pattern": "^[a-f0-9]{64}$"
+                                          }
+                                        },
+                                        "required": [
+                                          "uri",
+                                          "sha256"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "evaluator": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          },
+                                          "version": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          },
+                                          "source": {
+                                            "type": "string",
+                                            "enum": [
+                                              "benchmark",
+                                              "gate",
+                                              "external"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "version",
+                                          "source"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "split": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          },
+                                          "manifest": {
+                                            "type": "object",
+                                            "properties": {
+                                              "uri": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 2048
+                                              },
+                                              "sha256": {
+                                                "type": "string",
+                                                "pattern": "^[a-f0-9]{64}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "uri",
+                                              "sha256"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "manifest"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "environment": {
+                                        "type": "object",
+                                        "properties": {
+                                          "uri": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "sha256": {
+                                            "type": "string",
+                                            "pattern": "^[a-f0-9]{64}$"
+                                          }
+                                        },
+                                        "required": [
+                                          "uri",
+                                          "sha256"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "budget": {
+                                        "type": "object",
+                                        "properties": {
+                                          "uri": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "sha256": {
+                                            "type": "string",
+                                            "pattern": "^[a-f0-9]{64}$"
+                                          }
+                                        },
+                                        "required": [
+                                          "uri",
+                                          "sha256"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "seed",
+                                      "model",
+                                      "context",
+                                      "evaluator",
+                                      "split",
+                                      "environment",
+                                      "budget"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "artifact",
+                                  "condition"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "change": {
+                                "type": "object",
+                                "properties": {
+                                  "uri": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "uri",
+                                  "sha256"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "pairID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "family",
+                              "index",
+                              "control",
+                              "arm",
+                              "change",
+                              "pairID"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "createdAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "planID",
+                        "runID",
+                        "sessionID",
+                        "contractFingerprint",
+                        "protocol",
+                        "benchmark",
+                        "subject",
+                        "evolutionReceiptID",
+                        "validator",
+                        "pairs",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "outcomes": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "schemaVersion": {
+                            "type": "number",
+                            "const": 1
+                          },
+                          "outcomeID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "submissionID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "pairID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "control",
+                              "arm"
+                            ]
+                          },
+                          "targetSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "passed",
+                              "failed",
+                              "inconclusive"
+                            ]
+                          },
+                          "score": {
+                            "type": "number"
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 128,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "evaluatedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "recordedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "schemaVersion",
+                          "outcomeID",
+                          "submissionID",
+                          "pairID",
+                          "role",
+                          "targetSHA256",
+                          "status",
+                          "evidence",
+                          "evaluatedAt",
+                          "recordedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "receipt": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "receiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "planID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "contractFingerprint": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "subject": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "candidate"
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "artifact": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "artifact"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "evolutionReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "families": {
+                          "minItems": 1,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "family": {
+                                "type": "string",
+                                "enum": [
+                                  "replay",
+                                  "retune",
+                                  "ablation",
+                                  "repair",
+                                  "model_transfer",
+                                  "context_transfer",
+                                  "evaluator_transfer",
+                                  "split_transfer"
+                                ]
+                              },
+                              "mode": {
+                                "type": "string",
+                                "enum": [
+                                  "max_absolute_effect",
+                                  "min_effect",
+                                  "max_regression"
+                                ]
+                              },
+                              "threshold": {
+                                "type": "number"
+                              },
+                              "pairs": {
+                                "type": "integer",
+                                "minimum": 3,
+                                "maximum": 32
+                              },
+                              "validPairs": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 32
+                              },
+                              "meanEffect": {
+                                "type": "number"
+                              },
+                              "standardDeviation": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "standardError": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "confidence95": {
+                                "type": "array",
+                                "prefixItems": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ]
+                              },
+                              "maxAbsoluteEffect": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "regressions": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "verdict": {
+                                "type": "string",
+                                "enum": [
+                                  "passed",
+                                  "failed",
+                                  "inconclusive"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "family",
+                              "mode",
+                              "threshold",
+                              "pairs",
+                              "validPairs",
+                              "regressions",
+                              "verdict"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed",
+                            "inconclusive"
+                          ]
+                        },
+                        "observedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "assessedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "receiptID",
+                        "planID",
+                        "runID",
+                        "sessionID",
+                        "contractFingerprint",
+                        "subject",
+                        "evolutionReceiptID",
+                        "families",
+                        "status",
+                        "observedAt",
+                        "assessedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "plan",
+                    "outcomes",
+                    "order"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "runID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "subject": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "candidate"
+                      },
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "artifact": {
+                        "type": "object",
+                        "properties": {
+                          "uri": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "uri",
+                          "sha256"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id",
+                      "artifact"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "evolutionReceiptID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "validator": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "const": "design-replay-interventions"
+                      },
+                      "version": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "scriptSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "version",
+                      "scriptSHA256"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "pairs": {
+                    "minItems": 3,
+                    "maxItems": 256,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "family": {
+                          "type": "string",
+                          "enum": [
+                            "replay",
+                            "retune",
+                            "ablation",
+                            "repair",
+                            "model_transfer",
+                            "context_transfer",
+                            "evaluator_transfer",
+                            "split_transfer"
+                          ]
+                        },
+                        "index": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 31
+                        },
+                        "control": {
+                          "type": "object",
+                          "properties": {
+                            "artifact": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "condition": {
+                              "type": "object",
+                              "properties": {
+                                "seed": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "model": {
+                                  "type": "object",
+                                  "properties": {
+                                    "provider": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 500
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    }
+                                  },
+                                  "required": [
+                                    "provider",
+                                    "name",
+                                    "version"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "context": {
+                                  "type": "object",
+                                  "properties": {
+                                    "uri": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2048
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "uri",
+                                    "sha256"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "evaluator": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "source": {
+                                      "type": "string",
+                                      "enum": [
+                                        "benchmark",
+                                        "gate",
+                                        "external"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "version",
+                                    "source"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "split": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "manifest": {
+                                      "type": "object",
+                                      "properties": {
+                                        "uri": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 2048
+                                        },
+                                        "sha256": {
+                                          "type": "string",
+                                          "pattern": "^[a-f0-9]{64}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "uri",
+                                        "sha256"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "manifest"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "environment": {
+                                  "type": "object",
+                                  "properties": {
+                                    "uri": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2048
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "uri",
+                                    "sha256"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "budget": {
+                                  "type": "object",
+                                  "properties": {
+                                    "uri": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2048
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "uri",
+                                    "sha256"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "seed",
+                                "model",
+                                "context",
+                                "evaluator",
+                                "split",
+                                "environment",
+                                "budget"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "artifact",
+                            "condition"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "arm": {
+                          "type": "object",
+                          "properties": {
+                            "artifact": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "condition": {
+                              "type": "object",
+                              "properties": {
+                                "seed": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "model": {
+                                  "type": "object",
+                                  "properties": {
+                                    "provider": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 500
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    }
+                                  },
+                                  "required": [
+                                    "provider",
+                                    "name",
+                                    "version"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "context": {
+                                  "type": "object",
+                                  "properties": {
+                                    "uri": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2048
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "uri",
+                                    "sha256"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "evaluator": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "source": {
+                                      "type": "string",
+                                      "enum": [
+                                        "benchmark",
+                                        "gate",
+                                        "external"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "version",
+                                    "source"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "split": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "manifest": {
+                                      "type": "object",
+                                      "properties": {
+                                        "uri": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 2048
+                                        },
+                                        "sha256": {
+                                          "type": "string",
+                                          "pattern": "^[a-f0-9]{64}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "uri",
+                                        "sha256"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "manifest"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "environment": {
+                                  "type": "object",
+                                  "properties": {
+                                    "uri": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2048
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "uri",
+                                    "sha256"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "budget": {
+                                  "type": "object",
+                                  "properties": {
+                                    "uri": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2048
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "uri",
+                                    "sha256"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "seed",
+                                "model",
+                                "context",
+                                "evaluator",
+                                "split",
+                                "environment",
+                                "budget"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "artifact",
+                            "condition"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "change": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "family",
+                        "index",
+                        "control",
+                        "arm",
+                        "change"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "runID",
+                  "sessionID",
+                  "evaluatorToken",
+                  "subject",
+                  "evolutionReceiptID",
+                  "validator",
+                  "pairs"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.intervention.initialize({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/interventions/{candidateID}/observations": {
+      "post": {
+        "operationId": "harness.intervention.observe",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "candidateID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Record an evaluator-authenticated intervention outcome",
+        "description": "Binds one numeric outcome to an exact frozen pair target without adding it to candidate fitness or the benchmark evaluation journal.",
+        "responses": {
+          "200": {
+            "description": "Immutable intervention outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "outcomeID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "submissionID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "pairID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "control",
+                        "arm"
+                      ]
+                    },
+                    "targetSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "score": {
+                      "type": "number"
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "outcomeID",
+                    "submissionID",
+                    "pairID",
+                    "role",
+                    "targetSHA256",
+                    "status",
+                    "evidence",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "pairID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "control",
+                      "arm"
+                    ]
+                  },
+                  "targetSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "passed",
+                      "failed",
+                      "inconclusive"
+                    ]
+                  },
+                  "score": {
+                    "type": "number"
+                  },
+                  "evidence": {
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "evaluatedAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "sessionID",
+                  "evaluatorToken",
+                  "pairID",
+                  "role",
+                  "targetSHA256",
+                  "status",
+                  "evidence",
+                  "evaluatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.intervention.observe({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/interventions/{candidateID}/assessment": {
+      "post": {
+        "operationId": "harness.intervention.assess",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "candidateID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Assess a complete controlled replay study",
+        "description": "Recomputes direction-aware paired effects, confidence intervals, stability, tuning gap, component dependence, and transfer robustness from every frozen outcome.",
+        "responses": {
+          "200": {
+            "description": "Immutable controlled intervention receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "planID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "candidate"
+                        },
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "artifact"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "evolutionReceiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "families": {
+                      "minItems": 1,
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "family": {
+                            "type": "string",
+                            "enum": [
+                              "replay",
+                              "retune",
+                              "ablation",
+                              "repair",
+                              "model_transfer",
+                              "context_transfer",
+                              "evaluator_transfer",
+                              "split_transfer"
+                            ]
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "max_absolute_effect",
+                              "min_effect",
+                              "max_regression"
+                            ]
+                          },
+                          "threshold": {
+                            "type": "number"
+                          },
+                          "pairs": {
+                            "type": "integer",
+                            "minimum": 3,
+                            "maximum": 32
+                          },
+                          "validPairs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 32
+                          },
+                          "meanEffect": {
+                            "type": "number"
+                          },
+                          "standardDeviation": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "standardError": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "confidence95": {
+                            "type": "array",
+                            "prefixItems": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ]
+                          },
+                          "maxAbsoluteEffect": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "regressions": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "verdict": {
+                            "type": "string",
+                            "enum": [
+                              "passed",
+                              "failed",
+                              "inconclusive"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "family",
+                          "mode",
+                          "threshold",
+                          "pairs",
+                          "validPairs",
+                          "regressions",
+                          "verdict"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "observedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "assessedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "receiptID",
+                    "planID",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "subject",
+                    "evolutionReceiptID",
+                    "families",
+                    "status",
+                    "observedAt",
+                    "assessedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.intervention.assess({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/interventions/{candidateID}/status": {
+      "post": {
+        "operationId": "harness.intervention.status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "candidateID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a capability-protected controlled replay study",
+        "responses": {
+          "200": {
+            "description": "Controlled intervention state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "plan": {
+                          "type": "object",
+                          "properties": {
+                            "schemaVersion": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "planID": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "runID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "sessionID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "contractFingerprint": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "protocol": {
+                              "type": "object",
+                              "properties": {
+                                "protocolVersion": {
+                                  "type": "string",
+                                  "const": "intervention-study-v1"
+                                },
+                                "validatorSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "requiredForPromotion": {
+                                  "type": "boolean"
+                                },
+                                "minPairs": {
+                                  "type": "integer",
+                                  "minimum": 3,
+                                  "maximum": 32
+                                },
+                                "maxPairs": {
+                                  "type": "integer",
+                                  "minimum": 3,
+                                  "maximum": 32
+                                },
+                                "maxTotalPairs": {
+                                  "type": "integer",
+                                  "minimum": 3,
+                                  "maximum": 256
+                                },
+                                "confidence": {
+                                  "type": "number",
+                                  "const": 0.95
+                                },
+                                "required": {
+                                  "minItems": 1,
+                                  "maxItems": 8,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "replay",
+                                      "retune",
+                                      "ablation",
+                                      "repair",
+                                      "model_transfer",
+                                      "context_transfer",
+                                      "evaluator_transfer",
+                                      "split_transfer"
+                                    ]
+                                  }
+                                },
+                                "rules": {
+                                  "minItems": 1,
+                                  "maxItems": 8,
+                                  "type": "array",
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "family": {
+                                            "type": "string",
+                                            "const": "replay"
+                                          },
+                                          "mode": {
+                                            "type": "string",
+                                            "const": "max_absolute_effect"
+                                          },
+                                          "threshold": {
+                                            "type": "number",
+                                            "minimum": 0
+                                          }
+                                        },
+                                        "required": [
+                                          "family",
+                                          "mode",
+                                          "threshold"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "family": {
+                                            "type": "string",
+                                            "enum": [
+                                              "retune",
+                                              "ablation",
+                                              "repair"
+                                            ]
+                                          },
+                                          "mode": {
+                                            "type": "string",
+                                            "const": "min_effect"
+                                          },
+                                          "threshold": {
+                                            "type": "number",
+                                            "minimum": 0
+                                          }
+                                        },
+                                        "required": [
+                                          "family",
+                                          "mode",
+                                          "threshold"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "family": {
+                                            "type": "string",
+                                            "enum": [
+                                              "model_transfer",
+                                              "context_transfer",
+                                              "evaluator_transfer",
+                                              "split_transfer"
+                                            ]
+                                          },
+                                          "mode": {
+                                            "type": "string",
+                                            "const": "max_regression"
+                                          },
+                                          "threshold": {
+                                            "type": "number",
+                                            "minimum": 0
+                                          }
+                                        },
+                                        "required": [
+                                          "family",
+                                          "mode",
+                                          "threshold"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "protocolVersion",
+                                "validatorSHA256",
+                                "requiredForPromotion",
+                                "minPairs",
+                                "maxPairs",
+                                "maxTotalPairs",
+                                "confidence",
+                                "required",
+                                "rules"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "benchmark": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "taskID": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "metric": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": [
+                                    "maximize",
+                                    "minimize"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "taskID",
+                                "metric",
+                                "direction"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "subject": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "candidate"
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "artifact": {
+                                  "type": "object",
+                                  "properties": {
+                                    "uri": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2048
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "uri",
+                                    "sha256"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id",
+                                "artifact"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "evolutionReceiptID": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "validator": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "const": "design-replay-interventions"
+                                },
+                                "version": {
+                                  "type": "number",
+                                  "const": 1
+                                },
+                                "scriptSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "scriptSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "pairs": {
+                              "minItems": 3,
+                              "maxItems": 256,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "family": {
+                                    "type": "string",
+                                    "enum": [
+                                      "replay",
+                                      "retune",
+                                      "ablation",
+                                      "repair",
+                                      "model_transfer",
+                                      "context_transfer",
+                                      "evaluator_transfer",
+                                      "split_transfer"
+                                    ]
+                                  },
+                                  "index": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 31
+                                  },
+                                  "control": {
+                                    "type": "object",
+                                    "properties": {
+                                      "artifact": {
+                                        "type": "object",
+                                        "properties": {
+                                          "uri": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "sha256": {
+                                            "type": "string",
+                                            "pattern": "^[a-f0-9]{64}$"
+                                          }
+                                        },
+                                        "required": [
+                                          "uri",
+                                          "sha256"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "condition": {
+                                        "type": "object",
+                                        "properties": {
+                                          "seed": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "model": {
+                                            "type": "object",
+                                            "properties": {
+                                              "provider": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200
+                                              },
+                                              "name": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 500
+                                              },
+                                              "version": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200
+                                              }
+                                            },
+                                            "required": [
+                                              "provider",
+                                              "name",
+                                              "version"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "context": {
+                                            "type": "object",
+                                            "properties": {
+                                              "uri": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 2048
+                                              },
+                                              "sha256": {
+                                                "type": "string",
+                                                "pattern": "^[a-f0-9]{64}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "uri",
+                                              "sha256"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "evaluator": {
+                                            "type": "object",
+                                            "properties": {
+                                              "name": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200
+                                              },
+                                              "version": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200
+                                              },
+                                              "source": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "benchmark",
+                                                  "gate",
+                                                  "external"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "name",
+                                              "version",
+                                              "source"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "split": {
+                                            "type": "object",
+                                            "properties": {
+                                              "name": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200
+                                              },
+                                              "manifest": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "uri": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 2048
+                                                  },
+                                                  "sha256": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-f0-9]{64}$"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "uri",
+                                                  "sha256"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "required": [
+                                              "name",
+                                              "manifest"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "environment": {
+                                            "type": "object",
+                                            "properties": {
+                                              "uri": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 2048
+                                              },
+                                              "sha256": {
+                                                "type": "string",
+                                                "pattern": "^[a-f0-9]{64}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "uri",
+                                              "sha256"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "budget": {
+                                            "type": "object",
+                                            "properties": {
+                                              "uri": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 2048
+                                              },
+                                              "sha256": {
+                                                "type": "string",
+                                                "pattern": "^[a-f0-9]{64}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "uri",
+                                              "sha256"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "seed",
+                                          "model",
+                                          "context",
+                                          "evaluator",
+                                          "split",
+                                          "environment",
+                                          "budget"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "artifact",
+                                      "condition"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "arm": {
+                                    "type": "object",
+                                    "properties": {
+                                      "artifact": {
+                                        "type": "object",
+                                        "properties": {
+                                          "uri": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 2048
+                                          },
+                                          "sha256": {
+                                            "type": "string",
+                                            "pattern": "^[a-f0-9]{64}$"
+                                          }
+                                        },
+                                        "required": [
+                                          "uri",
+                                          "sha256"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "condition": {
+                                        "type": "object",
+                                        "properties": {
+                                          "seed": {
+                                            "type": "integer",
+                                            "minimum": -9007199254740991,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "model": {
+                                            "type": "object",
+                                            "properties": {
+                                              "provider": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200
+                                              },
+                                              "name": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 500
+                                              },
+                                              "version": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200
+                                              }
+                                            },
+                                            "required": [
+                                              "provider",
+                                              "name",
+                                              "version"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "context": {
+                                            "type": "object",
+                                            "properties": {
+                                              "uri": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 2048
+                                              },
+                                              "sha256": {
+                                                "type": "string",
+                                                "pattern": "^[a-f0-9]{64}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "uri",
+                                              "sha256"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "evaluator": {
+                                            "type": "object",
+                                            "properties": {
+                                              "name": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200
+                                              },
+                                              "version": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200
+                                              },
+                                              "source": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "benchmark",
+                                                  "gate",
+                                                  "external"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "name",
+                                              "version",
+                                              "source"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "split": {
+                                            "type": "object",
+                                            "properties": {
+                                              "name": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 200
+                                              },
+                                              "manifest": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "uri": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 2048
+                                                  },
+                                                  "sha256": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-f0-9]{64}$"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "uri",
+                                                  "sha256"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            },
+                                            "required": [
+                                              "name",
+                                              "manifest"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "environment": {
+                                            "type": "object",
+                                            "properties": {
+                                              "uri": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 2048
+                                              },
+                                              "sha256": {
+                                                "type": "string",
+                                                "pattern": "^[a-f0-9]{64}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "uri",
+                                              "sha256"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "budget": {
+                                            "type": "object",
+                                            "properties": {
+                                              "uri": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 2048
+                                              },
+                                              "sha256": {
+                                                "type": "string",
+                                                "pattern": "^[a-f0-9]{64}$"
+                                              }
+                                            },
+                                            "required": [
+                                              "uri",
+                                              "sha256"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "seed",
+                                          "model",
+                                          "context",
+                                          "evaluator",
+                                          "split",
+                                          "environment",
+                                          "budget"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "artifact",
+                                      "condition"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "change": {
+                                    "type": "object",
+                                    "properties": {
+                                      "uri": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 2048
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "uri",
+                                      "sha256"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "pairID": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "family",
+                                  "index",
+                                  "control",
+                                  "arm",
+                                  "change",
+                                  "pairID"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "createdAt": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "schemaVersion",
+                            "planID",
+                            "runID",
+                            "sessionID",
+                            "contractFingerprint",
+                            "protocol",
+                            "benchmark",
+                            "subject",
+                            "evolutionReceiptID",
+                            "validator",
+                            "pairs",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "outcomes": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "schemaVersion": {
+                                "type": "number",
+                                "const": 1
+                              },
+                              "outcomeID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "submissionID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "pairID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "control",
+                                  "arm"
+                                ]
+                              },
+                              "targetSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "passed",
+                                  "failed",
+                                  "inconclusive"
+                                ]
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "evidence": {
+                                "minItems": 1,
+                                "maxItems": 128,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "evaluatedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "recordedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "schemaVersion",
+                              "outcomeID",
+                              "submissionID",
+                              "pairID",
+                              "role",
+                              "targetSHA256",
+                              "status",
+                              "evidence",
+                              "evaluatedAt",
+                              "recordedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "order": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "receipt": {
+                          "type": "object",
+                          "properties": {
+                            "schemaVersion": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "receiptID": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "planID": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "runID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "sessionID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "contractFingerprint": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "subject": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "candidate"
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "artifact": {
+                                  "type": "object",
+                                  "properties": {
+                                    "uri": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2048
+                                    },
+                                    "sha256": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "uri",
+                                    "sha256"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id",
+                                "artifact"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "evolutionReceiptID": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "families": {
+                              "minItems": 1,
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "family": {
+                                    "type": "string",
+                                    "enum": [
+                                      "replay",
+                                      "retune",
+                                      "ablation",
+                                      "repair",
+                                      "model_transfer",
+                                      "context_transfer",
+                                      "evaluator_transfer",
+                                      "split_transfer"
+                                    ]
+                                  },
+                                  "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "max_absolute_effect",
+                                      "min_effect",
+                                      "max_regression"
+                                    ]
+                                  },
+                                  "threshold": {
+                                    "type": "number"
+                                  },
+                                  "pairs": {
+                                    "type": "integer",
+                                    "minimum": 3,
+                                    "maximum": 32
+                                  },
+                                  "validPairs": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 32
+                                  },
+                                  "meanEffect": {
+                                    "type": "number"
+                                  },
+                                  "standardDeviation": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "standardError": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "confidence95": {
+                                    "type": "array",
+                                    "prefixItems": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "number"
+                                      }
+                                    ]
+                                  },
+                                  "maxAbsoluteEffect": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "regressions": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "verdict": {
+                                    "type": "string",
+                                    "enum": [
+                                      "passed",
+                                      "failed",
+                                      "inconclusive"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "family",
+                                  "mode",
+                                  "threshold",
+                                  "pairs",
+                                  "validPairs",
+                                  "regressions",
+                                  "verdict"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "passed",
+                                "failed",
+                                "inconclusive"
+                              ]
+                            },
+                            "observedAt": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "assessedAt": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "schemaVersion",
+                            "receiptID",
+                            "planID",
+                            "runID",
+                            "sessionID",
+                            "contractFingerprint",
+                            "subject",
+                            "evolutionReceiptID",
+                            "families",
+                            "status",
+                            "observedAt",
+                            "assessedAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "plan",
+                        "outcomes",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.intervention.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/evaluators/qualifications": {
       "post": {
         "operationId": "harness.judge.record",
@@ -28933,6 +32222,158 @@
                       ],
                       "additionalProperties": false
                     },
+                    "interventions": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "intervention-study-v1"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "requiredForPromotion": {
+                          "type": "boolean"
+                        },
+                        "minPairs": {
+                          "type": "integer",
+                          "minimum": 3,
+                          "maximum": 32
+                        },
+                        "maxPairs": {
+                          "type": "integer",
+                          "minimum": 3,
+                          "maximum": 32
+                        },
+                        "maxTotalPairs": {
+                          "type": "integer",
+                          "minimum": 3,
+                          "maximum": 256
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "const": 0.95
+                        },
+                        "required": {
+                          "minItems": 1,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "replay",
+                              "retune",
+                              "ablation",
+                              "repair",
+                              "model_transfer",
+                              "context_transfer",
+                              "evaluator_transfer",
+                              "split_transfer"
+                            ]
+                          }
+                        },
+                        "rules": {
+                          "minItems": 1,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "family": {
+                                    "type": "string",
+                                    "const": "replay"
+                                  },
+                                  "mode": {
+                                    "type": "string",
+                                    "const": "max_absolute_effect"
+                                  },
+                                  "threshold": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "family",
+                                  "mode",
+                                  "threshold"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "family": {
+                                    "type": "string",
+                                    "enum": [
+                                      "retune",
+                                      "ablation",
+                                      "repair"
+                                    ]
+                                  },
+                                  "mode": {
+                                    "type": "string",
+                                    "const": "min_effect"
+                                  },
+                                  "threshold": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "family",
+                                  "mode",
+                                  "threshold"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "family": {
+                                    "type": "string",
+                                    "enum": [
+                                      "model_transfer",
+                                      "context_transfer",
+                                      "evaluator_transfer",
+                                      "split_transfer"
+                                    ]
+                                  },
+                                  "mode": {
+                                    "type": "string",
+                                    "const": "max_regression"
+                                  },
+                                  "threshold": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "family",
+                                  "mode",
+                                  "threshold"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "validatorSHA256",
+                        "requiredForPromotion",
+                        "minPairs",
+                        "maxPairs",
+                        "maxTotalPairs",
+                        "confidence",
+                        "required",
+                        "rules"
+                      ],
+                      "additionalProperties": false
+                    },
                     "simulation": {
                       "type": "object",
                       "properties": {
@@ -30130,6 +33571,158 @@
                     ],
                     "additionalProperties": false
                   },
+                  "interventions": {
+                    "type": "object",
+                    "properties": {
+                      "protocolVersion": {
+                        "type": "string",
+                        "const": "intervention-study-v1"
+                      },
+                      "validatorSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "requiredForPromotion": {
+                        "type": "boolean"
+                      },
+                      "minPairs": {
+                        "type": "integer",
+                        "minimum": 3,
+                        "maximum": 32
+                      },
+                      "maxPairs": {
+                        "type": "integer",
+                        "minimum": 3,
+                        "maximum": 32
+                      },
+                      "maxTotalPairs": {
+                        "type": "integer",
+                        "minimum": 3,
+                        "maximum": 256
+                      },
+                      "confidence": {
+                        "type": "number",
+                        "const": 0.95
+                      },
+                      "required": {
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "replay",
+                            "retune",
+                            "ablation",
+                            "repair",
+                            "model_transfer",
+                            "context_transfer",
+                            "evaluator_transfer",
+                            "split_transfer"
+                          ]
+                        }
+                      },
+                      "rules": {
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "family": {
+                                  "type": "string",
+                                  "const": "replay"
+                                },
+                                "mode": {
+                                  "type": "string",
+                                  "const": "max_absolute_effect"
+                                },
+                                "threshold": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "family",
+                                "mode",
+                                "threshold"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "family": {
+                                  "type": "string",
+                                  "enum": [
+                                    "retune",
+                                    "ablation",
+                                    "repair"
+                                  ]
+                                },
+                                "mode": {
+                                  "type": "string",
+                                  "const": "min_effect"
+                                },
+                                "threshold": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "family",
+                                "mode",
+                                "threshold"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "family": {
+                                  "type": "string",
+                                  "enum": [
+                                    "model_transfer",
+                                    "context_transfer",
+                                    "evaluator_transfer",
+                                    "split_transfer"
+                                  ]
+                                },
+                                "mode": {
+                                  "type": "string",
+                                  "const": "max_regression"
+                                },
+                                "threshold": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "family",
+                                "mode",
+                                "threshold"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "protocolVersion",
+                      "validatorSHA256",
+                      "requiredForPromotion",
+                      "minPairs",
+                      "maxPairs",
+                      "maxTotalPairs",
+                      "confidence",
+                      "required",
+                      "rules"
+                    ],
+                    "additionalProperties": false
+                  },
                   "simulation": {
                     "type": "object",
                     "properties": {
@@ -30825,6 +34418,10 @@
                     "pattern": "^[a-f0-9]{64}$"
                   },
                   "evolutionReceiptID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "interventionReceiptID": {
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
@@ -33488,6 +37085,158 @@
                           ],
                           "additionalProperties": false
                         },
+                        "interventions": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "intervention-study-v1"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "requiredForPromotion": {
+                              "type": "boolean"
+                            },
+                            "minPairs": {
+                              "type": "integer",
+                              "minimum": 3,
+                              "maximum": 32
+                            },
+                            "maxPairs": {
+                              "type": "integer",
+                              "minimum": 3,
+                              "maximum": 32
+                            },
+                            "maxTotalPairs": {
+                              "type": "integer",
+                              "minimum": 3,
+                              "maximum": 256
+                            },
+                            "confidence": {
+                              "type": "number",
+                              "const": 0.95
+                            },
+                            "required": {
+                              "minItems": 1,
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "replay",
+                                  "retune",
+                                  "ablation",
+                                  "repair",
+                                  "model_transfer",
+                                  "context_transfer",
+                                  "evaluator_transfer",
+                                  "split_transfer"
+                                ]
+                              }
+                            },
+                            "rules": {
+                              "minItems": 1,
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "family": {
+                                        "type": "string",
+                                        "const": "replay"
+                                      },
+                                      "mode": {
+                                        "type": "string",
+                                        "const": "max_absolute_effect"
+                                      },
+                                      "threshold": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      }
+                                    },
+                                    "required": [
+                                      "family",
+                                      "mode",
+                                      "threshold"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "family": {
+                                        "type": "string",
+                                        "enum": [
+                                          "retune",
+                                          "ablation",
+                                          "repair"
+                                        ]
+                                      },
+                                      "mode": {
+                                        "type": "string",
+                                        "const": "min_effect"
+                                      },
+                                      "threshold": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      }
+                                    },
+                                    "required": [
+                                      "family",
+                                      "mode",
+                                      "threshold"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "family": {
+                                        "type": "string",
+                                        "enum": [
+                                          "model_transfer",
+                                          "context_transfer",
+                                          "evaluator_transfer",
+                                          "split_transfer"
+                                        ]
+                                      },
+                                      "mode": {
+                                        "type": "string",
+                                        "const": "max_regression"
+                                      },
+                                      "threshold": {
+                                        "type": "number",
+                                        "minimum": 0
+                                      }
+                                    },
+                                    "required": [
+                                      "family",
+                                      "mode",
+                                      "threshold"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "validatorSHA256",
+                            "requiredForPromotion",
+                            "minPairs",
+                            "maxPairs",
+                            "maxTotalPairs",
+                            "confidence",
+                            "required",
+                            "rules"
+                          ],
+                          "additionalProperties": false
+                        },
                         "simulation": {
                           "type": "object",
                           "properties": {
@@ -34074,6 +37823,10 @@
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
                       },
+                      "interventionReceiptID": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
                       "evaluatorAuditReceiptID": {
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
@@ -34484,6 +38237,10 @@
                           "pattern": "^[a-f0-9]{64}$"
                         },
                         "evolutionReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "interventionReceiptID": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },

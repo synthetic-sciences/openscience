@@ -330,6 +330,100 @@ export namespace HarnessContract {
     })
   export type Evolution = z.infer<typeof Evolution>
 
+  export const InterventionFamily = z.enum([
+    "replay",
+    "retune",
+    "ablation",
+    "repair",
+    "model_transfer",
+    "context_transfer",
+    "evaluator_transfer",
+    "split_transfer",
+  ])
+  export type InterventionFamily = z.infer<typeof InterventionFamily>
+
+  const InterventionRule = z.discriminatedUnion("mode", [
+    z
+      .object({
+        family: z.literal("replay"),
+        mode: z.literal("max_absolute_effect"),
+        threshold: z.number().finite().nonnegative(),
+      })
+      .strict(),
+    z
+      .object({
+        family: z.enum(["retune", "ablation", "repair"]),
+        mode: z.literal("min_effect"),
+        threshold: z.number().finite().nonnegative(),
+      })
+      .strict(),
+    z
+      .object({
+        family: z.enum(["model_transfer", "context_transfer", "evaluator_transfer", "split_transfer"]),
+        mode: z.literal("max_regression"),
+        threshold: z.number().finite().nonnegative(),
+      })
+      .strict(),
+  ])
+
+  export const Interventions = z
+    .object({
+      protocolVersion: z.literal("intervention-study-v1"),
+      validatorSHA256: Hash,
+      requiredForPromotion: z.boolean(),
+      minPairs: z.number().int().min(3).max(32),
+      maxPairs: z.number().int().min(3).max(32),
+      maxTotalPairs: z.number().int().min(3).max(256),
+      confidence: z.literal(0.95),
+      required: z
+        .array(InterventionFamily)
+        .min(1)
+        .max(InterventionFamily.options.length)
+        .refine((items) => new Set(items).size === items.length, "Intervention families must be unique")
+        .refine(
+          (items) => JSON.stringify(items) === JSON.stringify(items.toSorted()),
+          "Intervention families must be sorted",
+        ),
+      rules: z
+        .array(InterventionRule)
+        .min(1)
+        .max(InterventionFamily.options.length)
+        .refine(
+          (items) => new Set(items.map((item) => item.family)).size === items.length,
+          "Intervention rules must be unique",
+        )
+        .refine(
+          (items) =>
+            JSON.stringify(items.map((item) => item.family)) ===
+            JSON.stringify(items.map((item) => item.family).toSorted()),
+          "Intervention rules must be family-sorted",
+        ),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (value.minPairs > value.maxPairs) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["maxPairs"],
+          message: "Intervention maximum pairs cannot be smaller than its minimum pairs",
+        })
+      }
+      if (value.maxPairs * value.required.length > value.maxTotalPairs) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["maxTotalPairs"],
+          message: "Intervention total pair limit cannot fit every required family",
+        })
+      }
+      if (JSON.stringify(value.required) === JSON.stringify(value.rules.map((item) => item.family))) return
+      ctx.addIssue({
+        code: "custom",
+        path: ["rules"],
+        message: "Intervention rules must cover exactly the required families",
+      })
+    })
+  export type Interventions = z.infer<typeof Interventions>
+
   export const SimulationStress = z.enum([
     "timestep_sensitivity",
     "solver_tolerance_sensitivity",
@@ -493,6 +587,7 @@ export namespace HarnessContract {
       recipe: HarnessRecipe.Materialized.optional(),
       integrity: Integrity.optional(),
       evolution: Evolution.optional(),
+      interventions: Interventions.optional(),
       simulation: Simulation.optional(),
       evaluatorAudit: EvaluatorAudit.optional(),
       packs: z
@@ -578,7 +673,12 @@ export namespace HarnessContract {
         })
       }
       if (
-        (value.launch || value.integrity || value.evolution || value.simulation || value.evaluatorAudit) &&
+        (value.launch ||
+          value.integrity ||
+          value.evolution ||
+          value.interventions ||
+          value.simulation ||
+          value.evaluatorAudit) &&
         !value.benchmark.evaluatorVersion
       ) {
         ctx.addIssue({
@@ -588,7 +688,12 @@ export namespace HarnessContract {
         })
       }
       if (
-        (value.launch || value.integrity || value.evolution || value.simulation || value.evaluatorAudit) &&
+        (value.launch ||
+          value.integrity ||
+          value.evolution ||
+          value.interventions ||
+          value.simulation ||
+          value.evaluatorAudit) &&
         !value.benchmark.evaluatorSource
       ) {
         ctx.addIssue({
@@ -630,6 +735,44 @@ export namespace HarnessContract {
           code: "custom",
           path: ["benchmark", "evaluatorSource"],
           message: "Evolution trace validation requires a capability-authenticated evaluator source",
+        })
+      }
+      if (value.interventions && value.profile !== "optimize") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["interventions"],
+          message: "Controlled replay interventions require the optimize profile",
+        })
+      }
+      if (value.interventions && !value.evolution) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["interventions"],
+          message: "Controlled replay interventions require exact evolutionary provenance",
+        })
+      }
+      if (
+        value.interventions &&
+        (!value.benchmark.metric || !["maximize", "minimize"].includes(value.benchmark.direction ?? ""))
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["interventions"],
+          message: "Controlled replay interventions require a numeric benchmark metric and direction",
+        })
+      }
+      if (value.interventions && !["held_out", "release"].includes(value.benchmark.split)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "split"],
+          message: "Controlled replay interventions require a held-out or release benchmark split",
+        })
+      }
+      if (value.interventions && value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Controlled replay interventions require a capability-authenticated evaluator source",
         })
       }
       if (

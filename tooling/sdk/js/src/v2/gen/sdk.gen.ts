@@ -125,6 +125,14 @@ import type {
   HarnessIntegrityReceiptResponses,
   HarnessIntegrityRecordErrors,
   HarnessIntegrityRecordResponses,
+  HarnessInterventionAssessErrors,
+  HarnessInterventionAssessResponses,
+  HarnessInterventionInitializeErrors,
+  HarnessInterventionInitializeResponses,
+  HarnessInterventionObserveErrors,
+  HarnessInterventionObserveResponses,
+  HarnessInterventionStatusErrors,
+  HarnessInterventionStatusResponses,
   HarnessJudgeReceiptErrors,
   HarnessJudgeReceiptResponses,
   HarnessJudgeRecordErrors,
@@ -4006,6 +4014,306 @@ export class Ablation extends HeyApiClient {
   }
 }
 
+export class Intervention extends HeyApiClient {
+  /**
+   * Freeze an evaluator-owned controlled replay study
+   *
+   * Binds a candidate and exact evolution receipt to predeclared replay, retuning, ablation, repair, or transfer pairs before the candidate's final evaluation.
+   */
+  public initialize<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      schemaVersion?: 1
+      runID?: string
+      sessionID?: string
+      evaluatorToken?: string
+      subject?: {
+        type: "candidate"
+        id: string
+        artifact: {
+          uri: string
+          sha256: string
+        }
+      }
+      evolutionReceiptID?: string
+      validator?: {
+        name: "design-replay-interventions"
+        version: 1
+        scriptSHA256: string
+      }
+      pairs?: Array<{
+        family:
+          | "replay"
+          | "retune"
+          | "ablation"
+          | "repair"
+          | "model_transfer"
+          | "context_transfer"
+          | "evaluator_transfer"
+          | "split_transfer"
+        index: number
+        control: {
+          artifact: {
+            uri: string
+            sha256: string
+          }
+          condition: {
+            seed: number
+            model: {
+              provider: string
+              name: string
+              version: string
+            }
+            context: {
+              uri: string
+              sha256: string
+            }
+            evaluator: {
+              name: string
+              version: string
+              source: "benchmark" | "gate" | "external"
+            }
+            split: {
+              name: string
+              manifest: {
+                uri: string
+                sha256: string
+              }
+            }
+            environment: {
+              uri: string
+              sha256: string
+            }
+            budget: {
+              uri: string
+              sha256: string
+            }
+          }
+        }
+        arm: {
+          artifact: {
+            uri: string
+            sha256: string
+          }
+          condition: {
+            seed: number
+            model: {
+              provider: string
+              name: string
+              version: string
+            }
+            context: {
+              uri: string
+              sha256: string
+            }
+            evaluator: {
+              name: string
+              version: string
+              source: "benchmark" | "gate" | "external"
+            }
+            split: {
+              name: string
+              manifest: {
+                uri: string
+                sha256: string
+              }
+            }
+            environment: {
+              uri: string
+              sha256: string
+            }
+            budget: {
+              uri: string
+              sha256: string
+            }
+          }
+        }
+        change: {
+          uri: string
+          sha256: string
+        }
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "schemaVersion" },
+            { in: "body", key: "runID" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "evolutionReceiptID" },
+            { in: "body", key: "validator" },
+            { in: "body", key: "pairs" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessInterventionInitializeResponses,
+      HarnessInterventionInitializeErrors,
+      ThrowOnError
+    >({
+      url: "/harness/interventions",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Record an evaluator-authenticated intervention outcome
+   *
+   * Binds one numeric outcome to an exact frozen pair target without adding it to candidate fitness or the benchmark evaluation journal.
+   */
+  public observe<ThrowOnError extends boolean = false>(
+    parameters: {
+      candidateID: string
+      directory?: string
+      schemaVersion?: 1
+      sessionID?: string
+      evaluatorToken?: string
+      pairID?: string
+      role?: "control" | "arm"
+      targetSHA256?: string
+      status?: "passed" | "failed" | "inconclusive"
+      score?: number
+      evidence?: Array<string>
+      evaluatedAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "candidateID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "schemaVersion" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "pairID" },
+            { in: "body", key: "role" },
+            { in: "body", key: "targetSHA256" },
+            { in: "body", key: "status" },
+            { in: "body", key: "score" },
+            { in: "body", key: "evidence" },
+            { in: "body", key: "evaluatedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessInterventionObserveResponses,
+      HarnessInterventionObserveErrors,
+      ThrowOnError
+    >({
+      url: "/harness/interventions/{candidateID}/observations",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Assess a complete controlled replay study
+   *
+   * Recomputes direction-aware paired effects, confidence intervals, stability, tuning gap, component dependence, and transfer robustness from every frozen outcome.
+   */
+  public assess<ThrowOnError extends boolean = false>(
+    parameters: {
+      candidateID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "candidateID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessInterventionAssessResponses,
+      HarnessInterventionAssessErrors,
+      ThrowOnError
+    >({
+      url: "/harness/interventions/{candidateID}/assessment",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected controlled replay study
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      candidateID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "candidateID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessInterventionStatusResponses,
+      HarnessInterventionStatusErrors,
+      ThrowOnError
+    >({
+      url: "/harness/interventions/{candidateID}/status",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Judge extends HeyApiClient {
   /**
    * Qualify a bound benchmark evaluator
@@ -5271,6 +5579,42 @@ export class Harness extends HeyApiClient {
         maxSourceLines: number
         maxChangedLines: number
       }
+      interventions?: {
+        protocolVersion: "intervention-study-v1"
+        validatorSHA256: string
+        requiredForPromotion: boolean
+        minPairs: number
+        maxPairs: number
+        maxTotalPairs: number
+        confidence: 0.95
+        required: Array<
+          | "replay"
+          | "retune"
+          | "ablation"
+          | "repair"
+          | "model_transfer"
+          | "context_transfer"
+          | "evaluator_transfer"
+          | "split_transfer"
+        >
+        rules: Array<
+          | {
+              family: "replay"
+              mode: "max_absolute_effect"
+              threshold: number
+            }
+          | {
+              family: "retune" | "ablation" | "repair"
+              mode: "min_effect"
+              threshold: number
+            }
+          | {
+              family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
+              mode: "max_regression"
+              threshold: number
+            }
+        >
+      }
       simulation?: {
         kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
         engine: {
@@ -5417,6 +5761,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "recipe" },
             { in: "body", key: "integrity" },
             { in: "body", key: "evolution" },
+            { in: "body", key: "interventions" },
             { in: "body", key: "simulation" },
             { in: "body", key: "evaluatorAudit" },
             { in: "body", key: "extraPacks" },
@@ -5466,6 +5811,7 @@ export class Harness extends HeyApiClient {
       launchReceiptID?: string
       integrityReceiptID?: string
       evolutionReceiptID?: string
+      interventionReceiptID?: string
       evaluatorAuditReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
@@ -5506,6 +5852,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "launchReceiptID" },
             { in: "body", key: "integrityReceiptID" },
             { in: "body", key: "evolutionReceiptID" },
+            { in: "body", key: "interventionReceiptID" },
             { in: "body", key: "evaluatorAuditReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
@@ -5682,6 +6029,11 @@ export class Harness extends HeyApiClient {
   private _ablation?: Ablation
   get ablation(): Ablation {
     return (this._ablation ??= new Ablation({ client: this.client }))
+  }
+
+  private _intervention?: Intervention
+  get intervention(): Intervention {
+    return (this._intervention ??= new Intervention({ client: this.client }))
   }
 
   private _judge?: Judge

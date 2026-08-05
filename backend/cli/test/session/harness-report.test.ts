@@ -237,6 +237,47 @@ describe("harness quality-cost reports", () => {
     expect(() => HarnessReport.compare([a, b], "judge-one")).toThrow("only comparable")
   })
 
+  test("refuses comparisons across different controlled intervention protocols", () => {
+    const evolution = HarnessContract.Evolution.parse({
+      protocolVersion: "evolution-trace-v1",
+      validatorSHA256: "a".repeat(64),
+      manifestSchemaSHA256: "b".repeat(64),
+      lineAlgorithm: "sha256-exact-line-v1",
+      roots: ["src"],
+      extensions: [".ts"],
+      exclude: [],
+      maxFiles: 100,
+      maxFileBytes: 100_000,
+      maxTotalBytes: 1_000_000,
+      maxSourceLines: 10_000,
+      maxChangedLines: 1_000,
+    })
+    const interventions = HarnessContract.Interventions.parse({
+      protocolVersion: "intervention-study-v1",
+      validatorSHA256: "c".repeat(64),
+      requiredForPromotion: true,
+      minPairs: 3,
+      maxPairs: 3,
+      maxTotalPairs: 3,
+      confidence: 0.95,
+      required: ["replay"],
+      rules: [{ family: "replay", mode: "max_absolute_effect", threshold: 0.01 }],
+    })
+    const first = HarnessContract.Info.parse({ ...contract("intervention-one"), evolution, interventions })
+    const second = HarnessContract.Info.parse({
+      ...contract("intervention-two"),
+      evolution,
+      interventions: {
+        ...interventions,
+        rules: [{ family: "replay", mode: "max_absolute_effect", threshold: 0.02 }],
+      },
+    })
+    const a = HarnessReport.compile({ contract: first, evaluations: [evaluation(first, 0.8)], generatedAt: 3 })
+    const b = HarnessReport.compile({ contract: second, evaluations: [evaluation(second, 0.9)], generatedAt: 3 })
+    expect(a.comparisonKey).not.toBe(b.comparisonKey)
+    expect(() => HarnessReport.compare([a, b], "intervention-one")).toThrow("only comparable")
+  })
+
   test("reports only final fidelity scores even when a later screening record is present", () => {
     const staged = HarnessContract.Info.parse({
       ...contract("staged"),

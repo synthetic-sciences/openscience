@@ -890,6 +890,132 @@ test("trace-evolutionary-candidate captures exact snapshots and deterministic pa
   }
 })
 
+test("design-replay-interventions freezes exact one-difference evaluator pairs", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-interventions-"))
+  const script = "research/design-replay-interventions/scripts/design_interventions.py"
+  const contract = path.join(dir, "contract.json")
+  const spec = path.join(dir, "spec.json")
+  const output = path.join(dir, "initialize.json")
+  const report = path.join(dir, "targets.json")
+  const commitments = await run(script, ["commitments"])
+  expect(commitments.code).toBe(0)
+  const validatorSHA256 = JSON.parse(commitments.stdout).validatorSHA256
+  const artifact = (name: string) => ({ uri: `artifact:${name}`, sha256: hash(name) })
+  const subject = { type: "candidate", id: hash("winner"), artifact: artifact("winner") }
+  const condition = (seed: number) => ({
+    seed,
+    model: { provider: "test", name: "primary", version: "1" },
+    context: artifact("context"),
+    evaluator: { name: "official", version: "1", source: "benchmark" },
+    split: { name: "held_out", manifest: artifact("split") },
+    environment: artifact("environment"),
+    budget: artifact("budget"),
+  })
+  const pairs = [0, 1, 2].flatMap((index) => {
+    const base = condition(index)
+    const winner = { artifact: subject.artifact, condition: base }
+    return [
+      {
+        family: "model_transfer",
+        index,
+        control: winner,
+        arm: {
+          artifact: subject.artifact,
+          condition: { ...base, model: { provider: "test", name: "transfer", version: "2" } },
+        },
+        change: artifact(`model-${index}`),
+      },
+      { family: "replay", index, control: winner, arm: winner, change: artifact(`replay-${index}`) },
+      {
+        family: "retune",
+        index,
+        control: { artifact: artifact(`retuned-${index}`), condition: base },
+        arm: winner,
+        change: artifact(`retune-${index}`),
+      },
+    ]
+  })
+  await Promise.all([
+    Bun.write(
+      contract,
+      JSON.stringify({
+        protocolVersion: "intervention-study-v1",
+        validatorSHA256,
+        requiredForPromotion: true,
+        minPairs: 3,
+        maxPairs: 4,
+        maxTotalPairs: 12,
+        confidence: 0.95,
+        required: ["model_transfer", "replay", "retune"],
+        rules: [
+          { family: "model_transfer", mode: "max_regression", threshold: 0.05 },
+          { family: "replay", mode: "max_absolute_effect", threshold: 0.01 },
+          { family: "retune", mode: "min_effect", threshold: 0.1 },
+        ],
+      }),
+    ),
+    Bun.write(
+      spec,
+      JSON.stringify({
+        schemaVersion: 1,
+        runID: "run-1",
+        sessionID: "session-1",
+        subject,
+        evolutionReceiptID: hash("evolution-receipt"),
+        pairs,
+      }),
+    ),
+  ])
+
+  try {
+    const result = await run(script, [
+      "build",
+      "--contract",
+      contract,
+      "--spec",
+      spec,
+      "--output",
+      output,
+      "--report",
+      report,
+    ])
+    expect(result.code).toBe(0)
+    const request = JSON.parse(await Bun.file(output).text())
+    const targets = JSON.parse(await Bun.file(report).text())
+    expect(request).toMatchObject({
+      schemaVersion: 1,
+      subject,
+      validator: { name: "design-replay-interventions", version: 1, scriptSHA256: validatorSHA256 },
+    })
+    expect(request.evaluatorToken).toBeUndefined()
+    expect(request.pairs).toHaveLength(9)
+    expect(targets).toMatchObject({
+      candidateID: subject.id,
+      families: { model_transfer: 3, replay: 3, retune: 3 },
+    })
+    expect(targets.targets[0].controlSHA256).toBe(digest(request.pairs[0].control))
+
+    const invalid = structuredClone(JSON.parse(await Bun.file(spec).text()))
+    invalid.pairs[0].arm.condition.context = artifact("substituted-context")
+    await Bun.write(spec, JSON.stringify(invalid))
+    const rejected = await run(script, [
+      "build",
+      "--contract",
+      contract,
+      "--spec",
+      spec,
+      "--output",
+      output,
+      "--report",
+      report,
+    ])
+    expect(rejected.code).toBe(2)
+    expect(rejected.stderr).toContain("may change only model")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("simulator-validation accepts a convergent invariant-preserving study", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-simulator-"))
   const source = path.join(dir, "study.json")

@@ -8368,6 +8368,754 @@ export type HarnessAblationAssessResponses = {
 
 export type HarnessAblationAssessResponse = HarnessAblationAssessResponses[keyof HarnessAblationAssessResponses]
 
+export type HarnessInterventionInitializeData = {
+  body?: {
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    evaluatorToken: string
+    subject: {
+      type: "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    evolutionReceiptID: string
+    validator: {
+      name: "design-replay-interventions"
+      version: 1
+      scriptSHA256: string
+    }
+    pairs: Array<{
+      family:
+        | "replay"
+        | "retune"
+        | "ablation"
+        | "repair"
+        | "model_transfer"
+        | "context_transfer"
+        | "evaluator_transfer"
+        | "split_transfer"
+      index: number
+      control: {
+        artifact: {
+          uri: string
+          sha256: string
+        }
+        condition: {
+          seed: number
+          model: {
+            provider: string
+            name: string
+            version: string
+          }
+          context: {
+            uri: string
+            sha256: string
+          }
+          evaluator: {
+            name: string
+            version: string
+            source: "benchmark" | "gate" | "external"
+          }
+          split: {
+            name: string
+            manifest: {
+              uri: string
+              sha256: string
+            }
+          }
+          environment: {
+            uri: string
+            sha256: string
+          }
+          budget: {
+            uri: string
+            sha256: string
+          }
+        }
+      }
+      arm: {
+        artifact: {
+          uri: string
+          sha256: string
+        }
+        condition: {
+          seed: number
+          model: {
+            provider: string
+            name: string
+            version: string
+          }
+          context: {
+            uri: string
+            sha256: string
+          }
+          evaluator: {
+            name: string
+            version: string
+            source: "benchmark" | "gate" | "external"
+          }
+          split: {
+            name: string
+            manifest: {
+              uri: string
+              sha256: string
+            }
+          }
+          environment: {
+            uri: string
+            sha256: string
+          }
+          budget: {
+            uri: string
+            sha256: string
+          }
+        }
+      }
+      change: {
+        uri: string
+        sha256: string
+      }
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/interventions"
+}
+
+export type HarnessInterventionInitializeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessInterventionInitializeError =
+  HarnessInterventionInitializeErrors[keyof HarnessInterventionInitializeErrors]
+
+export type HarnessInterventionInitializeResponses = {
+  /**
+   * Immutable controlled intervention plan
+   */
+  200: {
+    schemaVersion: 1
+    plan: {
+      schemaVersion: 1
+      planID: string
+      runID: string
+      sessionID: string
+      contractFingerprint: string
+      protocol: {
+        protocolVersion: "intervention-study-v1"
+        validatorSHA256: string
+        requiredForPromotion: boolean
+        minPairs: number
+        maxPairs: number
+        maxTotalPairs: number
+        confidence: 0.95
+        required: Array<
+          | "replay"
+          | "retune"
+          | "ablation"
+          | "repair"
+          | "model_transfer"
+          | "context_transfer"
+          | "evaluator_transfer"
+          | "split_transfer"
+        >
+        rules: Array<
+          | {
+              family: "replay"
+              mode: "max_absolute_effect"
+              threshold: number
+            }
+          | {
+              family: "retune" | "ablation" | "repair"
+              mode: "min_effect"
+              threshold: number
+            }
+          | {
+              family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
+              mode: "max_regression"
+              threshold: number
+            }
+        >
+      }
+      benchmark: {
+        name: string
+        version: string
+        taskID: string
+        metric: string
+        direction: "maximize" | "minimize"
+      }
+      subject: {
+        type: "candidate"
+        id: string
+        artifact: {
+          uri: string
+          sha256: string
+        }
+      }
+      evolutionReceiptID: string
+      validator: {
+        name: "design-replay-interventions"
+        version: 1
+        scriptSHA256: string
+      }
+      pairs: Array<{
+        family:
+          | "replay"
+          | "retune"
+          | "ablation"
+          | "repair"
+          | "model_transfer"
+          | "context_transfer"
+          | "evaluator_transfer"
+          | "split_transfer"
+        index: number
+        control: {
+          artifact: {
+            uri: string
+            sha256: string
+          }
+          condition: {
+            seed: number
+            model: {
+              provider: string
+              name: string
+              version: string
+            }
+            context: {
+              uri: string
+              sha256: string
+            }
+            evaluator: {
+              name: string
+              version: string
+              source: "benchmark" | "gate" | "external"
+            }
+            split: {
+              name: string
+              manifest: {
+                uri: string
+                sha256: string
+              }
+            }
+            environment: {
+              uri: string
+              sha256: string
+            }
+            budget: {
+              uri: string
+              sha256: string
+            }
+          }
+        }
+        arm: {
+          artifact: {
+            uri: string
+            sha256: string
+          }
+          condition: {
+            seed: number
+            model: {
+              provider: string
+              name: string
+              version: string
+            }
+            context: {
+              uri: string
+              sha256: string
+            }
+            evaluator: {
+              name: string
+              version: string
+              source: "benchmark" | "gate" | "external"
+            }
+            split: {
+              name: string
+              manifest: {
+                uri: string
+                sha256: string
+              }
+            }
+            environment: {
+              uri: string
+              sha256: string
+            }
+            budget: {
+              uri: string
+              sha256: string
+            }
+          }
+        }
+        change: {
+          uri: string
+          sha256: string
+        }
+        pairID: string
+      }>
+      createdAt: number
+    }
+    outcomes: {
+      [key: string]: {
+        schemaVersion: 1
+        outcomeID: string
+        submissionID: string
+        pairID: string
+        role: "control" | "arm"
+        targetSHA256: string
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        evidence: Array<string>
+        evaluatedAt: number
+        recordedAt: number
+      }
+    }
+    order: Array<string>
+    receipt?: {
+      schemaVersion: 1
+      receiptID: string
+      planID: string
+      runID: string
+      sessionID: string
+      contractFingerprint: string
+      subject: {
+        type: "candidate"
+        id: string
+        artifact: {
+          uri: string
+          sha256: string
+        }
+      }
+      evolutionReceiptID: string
+      families: Array<{
+        family:
+          | "replay"
+          | "retune"
+          | "ablation"
+          | "repair"
+          | "model_transfer"
+          | "context_transfer"
+          | "evaluator_transfer"
+          | "split_transfer"
+        mode: "max_absolute_effect" | "min_effect" | "max_regression"
+        threshold: number
+        pairs: number
+        validPairs: number
+        meanEffect?: number
+        standardDeviation?: number
+        standardError?: number
+        confidence95?: [number, number]
+        maxAbsoluteEffect?: number
+        regressions: number
+        verdict: "passed" | "failed" | "inconclusive"
+      }>
+      status: "passed" | "failed" | "inconclusive"
+      observedAt: number
+      assessedAt: number
+    }
+  }
+}
+
+export type HarnessInterventionInitializeResponse =
+  HarnessInterventionInitializeResponses[keyof HarnessInterventionInitializeResponses]
+
+export type HarnessInterventionObserveData = {
+  body?: {
+    schemaVersion: 1
+    sessionID: string
+    evaluatorToken: string
+    pairID: string
+    role: "control" | "arm"
+    targetSHA256: string
+    status: "passed" | "failed" | "inconclusive"
+    score?: number
+    evidence: Array<string>
+    evaluatedAt: number
+  }
+  path: {
+    candidateID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/interventions/{candidateID}/observations"
+}
+
+export type HarnessInterventionObserveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessInterventionObserveError = HarnessInterventionObserveErrors[keyof HarnessInterventionObserveErrors]
+
+export type HarnessInterventionObserveResponses = {
+  /**
+   * Immutable intervention outcome
+   */
+  200: {
+    schemaVersion: 1
+    outcomeID: string
+    submissionID: string
+    pairID: string
+    role: "control" | "arm"
+    targetSHA256: string
+    status: "passed" | "failed" | "inconclusive"
+    score?: number
+    evidence: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessInterventionObserveResponse =
+  HarnessInterventionObserveResponses[keyof HarnessInterventionObserveResponses]
+
+export type HarnessInterventionAssessData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    candidateID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/interventions/{candidateID}/assessment"
+}
+
+export type HarnessInterventionAssessErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessInterventionAssessError = HarnessInterventionAssessErrors[keyof HarnessInterventionAssessErrors]
+
+export type HarnessInterventionAssessResponses = {
+  /**
+   * Immutable controlled intervention receipt
+   */
+  200: {
+    schemaVersion: 1
+    receiptID: string
+    planID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    evolutionReceiptID: string
+    families: Array<{
+      family:
+        | "replay"
+        | "retune"
+        | "ablation"
+        | "repair"
+        | "model_transfer"
+        | "context_transfer"
+        | "evaluator_transfer"
+        | "split_transfer"
+      mode: "max_absolute_effect" | "min_effect" | "max_regression"
+      threshold: number
+      pairs: number
+      validPairs: number
+      meanEffect?: number
+      standardDeviation?: number
+      standardError?: number
+      confidence95?: [number, number]
+      maxAbsoluteEffect?: number
+      regressions: number
+      verdict: "passed" | "failed" | "inconclusive"
+    }>
+    status: "passed" | "failed" | "inconclusive"
+    observedAt: number
+    assessedAt: number
+  }
+}
+
+export type HarnessInterventionAssessResponse =
+  HarnessInterventionAssessResponses[keyof HarnessInterventionAssessResponses]
+
+export type HarnessInterventionStatusData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    candidateID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/interventions/{candidateID}/status"
+}
+
+export type HarnessInterventionStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessInterventionStatusError = HarnessInterventionStatusErrors[keyof HarnessInterventionStatusErrors]
+
+export type HarnessInterventionStatusResponses = {
+  /**
+   * Controlled intervention state
+   */
+  200: {
+    schemaVersion: 1
+    plan: {
+      schemaVersion: 1
+      planID: string
+      runID: string
+      sessionID: string
+      contractFingerprint: string
+      protocol: {
+        protocolVersion: "intervention-study-v1"
+        validatorSHA256: string
+        requiredForPromotion: boolean
+        minPairs: number
+        maxPairs: number
+        maxTotalPairs: number
+        confidence: 0.95
+        required: Array<
+          | "replay"
+          | "retune"
+          | "ablation"
+          | "repair"
+          | "model_transfer"
+          | "context_transfer"
+          | "evaluator_transfer"
+          | "split_transfer"
+        >
+        rules: Array<
+          | {
+              family: "replay"
+              mode: "max_absolute_effect"
+              threshold: number
+            }
+          | {
+              family: "retune" | "ablation" | "repair"
+              mode: "min_effect"
+              threshold: number
+            }
+          | {
+              family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
+              mode: "max_regression"
+              threshold: number
+            }
+        >
+      }
+      benchmark: {
+        name: string
+        version: string
+        taskID: string
+        metric: string
+        direction: "maximize" | "minimize"
+      }
+      subject: {
+        type: "candidate"
+        id: string
+        artifact: {
+          uri: string
+          sha256: string
+        }
+      }
+      evolutionReceiptID: string
+      validator: {
+        name: "design-replay-interventions"
+        version: 1
+        scriptSHA256: string
+      }
+      pairs: Array<{
+        family:
+          | "replay"
+          | "retune"
+          | "ablation"
+          | "repair"
+          | "model_transfer"
+          | "context_transfer"
+          | "evaluator_transfer"
+          | "split_transfer"
+        index: number
+        control: {
+          artifact: {
+            uri: string
+            sha256: string
+          }
+          condition: {
+            seed: number
+            model: {
+              provider: string
+              name: string
+              version: string
+            }
+            context: {
+              uri: string
+              sha256: string
+            }
+            evaluator: {
+              name: string
+              version: string
+              source: "benchmark" | "gate" | "external"
+            }
+            split: {
+              name: string
+              manifest: {
+                uri: string
+                sha256: string
+              }
+            }
+            environment: {
+              uri: string
+              sha256: string
+            }
+            budget: {
+              uri: string
+              sha256: string
+            }
+          }
+        }
+        arm: {
+          artifact: {
+            uri: string
+            sha256: string
+          }
+          condition: {
+            seed: number
+            model: {
+              provider: string
+              name: string
+              version: string
+            }
+            context: {
+              uri: string
+              sha256: string
+            }
+            evaluator: {
+              name: string
+              version: string
+              source: "benchmark" | "gate" | "external"
+            }
+            split: {
+              name: string
+              manifest: {
+                uri: string
+                sha256: string
+              }
+            }
+            environment: {
+              uri: string
+              sha256: string
+            }
+            budget: {
+              uri: string
+              sha256: string
+            }
+          }
+        }
+        change: {
+          uri: string
+          sha256: string
+        }
+        pairID: string
+      }>
+      createdAt: number
+    }
+    outcomes: {
+      [key: string]: {
+        schemaVersion: 1
+        outcomeID: string
+        submissionID: string
+        pairID: string
+        role: "control" | "arm"
+        targetSHA256: string
+        status: "passed" | "failed" | "inconclusive"
+        score?: number
+        evidence: Array<string>
+        evaluatedAt: number
+        recordedAt: number
+      }
+    }
+    order: Array<string>
+    receipt?: {
+      schemaVersion: 1
+      receiptID: string
+      planID: string
+      runID: string
+      sessionID: string
+      contractFingerprint: string
+      subject: {
+        type: "candidate"
+        id: string
+        artifact: {
+          uri: string
+          sha256: string
+        }
+      }
+      evolutionReceiptID: string
+      families: Array<{
+        family:
+          | "replay"
+          | "retune"
+          | "ablation"
+          | "repair"
+          | "model_transfer"
+          | "context_transfer"
+          | "evaluator_transfer"
+          | "split_transfer"
+        mode: "max_absolute_effect" | "min_effect" | "max_regression"
+        threshold: number
+        pairs: number
+        validPairs: number
+        meanEffect?: number
+        standardDeviation?: number
+        standardError?: number
+        confidence95?: [number, number]
+        maxAbsoluteEffect?: number
+        regressions: number
+        verdict: "passed" | "failed" | "inconclusive"
+      }>
+      status: "passed" | "failed" | "inconclusive"
+      observedAt: number
+      assessedAt: number
+    }
+  } | null
+}
+
+export type HarnessInterventionStatusResponse =
+  HarnessInterventionStatusResponses[keyof HarnessInterventionStatusResponses]
+
 export type HarnessJudgeRecordData = {
   body?: {
     sessionID: string
@@ -10809,6 +11557,42 @@ export type HarnessBindData = {
       maxSourceLines: number
       maxChangedLines: number
     }
+    interventions?: {
+      protocolVersion: "intervention-study-v1"
+      validatorSHA256: string
+      requiredForPromotion: boolean
+      minPairs: number
+      maxPairs: number
+      maxTotalPairs: number
+      confidence: 0.95
+      required: Array<
+        | "replay"
+        | "retune"
+        | "ablation"
+        | "repair"
+        | "model_transfer"
+        | "context_transfer"
+        | "evaluator_transfer"
+        | "split_transfer"
+      >
+      rules: Array<
+        | {
+            family: "replay"
+            mode: "max_absolute_effect"
+            threshold: number
+          }
+        | {
+            family: "retune" | "ablation" | "repair"
+            mode: "min_effect"
+            threshold: number
+          }
+        | {
+            family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
+            mode: "max_regression"
+            threshold: number
+          }
+      >
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -11243,6 +12027,42 @@ export type HarnessBindResponses = {
       maxSourceLines: number
       maxChangedLines: number
     }
+    interventions?: {
+      protocolVersion: "intervention-study-v1"
+      validatorSHA256: string
+      requiredForPromotion: boolean
+      minPairs: number
+      maxPairs: number
+      maxTotalPairs: number
+      confidence: 0.95
+      required: Array<
+        | "replay"
+        | "retune"
+        | "ablation"
+        | "repair"
+        | "model_transfer"
+        | "context_transfer"
+        | "evaluator_transfer"
+        | "split_transfer"
+      >
+      rules: Array<
+        | {
+            family: "replay"
+            mode: "max_absolute_effect"
+            threshold: number
+          }
+        | {
+            family: "retune" | "ablation" | "repair"
+            mode: "min_effect"
+            threshold: number
+          }
+        | {
+            family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
+            mode: "max_regression"
+            threshold: number
+          }
+      >
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -11356,6 +12176,7 @@ export type HarnessEvaluateData = {
     launchReceiptID?: string
     integrityReceiptID?: string
     evolutionReceiptID?: string
+    interventionReceiptID?: string
     evaluatorAuditReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
@@ -11998,6 +12819,42 @@ export type HarnessContractResponses = {
       maxSourceLines: number
       maxChangedLines: number
     }
+    interventions?: {
+      protocolVersion: "intervention-study-v1"
+      validatorSHA256: string
+      requiredForPromotion: boolean
+      minPairs: number
+      maxPairs: number
+      maxTotalPairs: number
+      confidence: 0.95
+      required: Array<
+        | "replay"
+        | "retune"
+        | "ablation"
+        | "repair"
+        | "model_transfer"
+        | "context_transfer"
+        | "evaluator_transfer"
+        | "split_transfer"
+      >
+      rules: Array<
+        | {
+            family: "replay"
+            mode: "max_absolute_effect"
+            threshold: number
+          }
+        | {
+            family: "retune" | "ablation" | "repair"
+            mode: "min_effect"
+            threshold: number
+          }
+        | {
+            family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
+            mode: "max_regression"
+            threshold: number
+          }
+      >
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -12139,6 +12996,7 @@ export type HarnessEvaluationsResponses = {
     launchReceiptID?: string
     integrityReceiptID?: string
     evolutionReceiptID?: string
+    interventionReceiptID?: string
     evaluatorAuditReceiptID?: string
     evaluator: {
       name: string
@@ -12259,6 +13117,7 @@ export type HarnessReportResponses = {
       launchReceiptID?: string
       integrityReceiptID?: string
       evolutionReceiptID?: string
+      interventionReceiptID?: string
       evaluatorAuditReceiptID?: string
       evaluations: number
     }

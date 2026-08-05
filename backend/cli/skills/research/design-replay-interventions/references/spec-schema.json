@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syntheticsciences.ai/schemas/intervention-study-spec-v1.json",
+  "title": "OpenScience controlled intervention specification",
+  "type": "object",
+  "required": ["schemaVersion", "runID", "sessionID", "subject", "evolutionReceiptID", "pairs"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "runID": { "type": "string", "minLength": 1 },
+    "sessionID": { "type": "string", "minLength": 1 },
+    "subject": {
+      "type": "object",
+      "required": ["type", "id", "artifact"],
+      "properties": {
+        "type": { "const": "candidate" },
+        "id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "artifact": { "$ref": "#/$defs/artifact" }
+      },
+      "additionalProperties": false
+    },
+    "evolutionReceiptID": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "pairs": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "required": ["family", "index", "control", "arm", "change"],
+        "properties": {
+          "family": {
+            "enum": ["replay", "retune", "ablation", "repair", "model_transfer", "context_transfer", "evaluator_transfer", "split_transfer"]
+          },
+          "index": { "type": "integer", "minimum": 0, "maximum": 31 },
+          "control": { "$ref": "#/$defs/target" },
+          "arm": { "$ref": "#/$defs/target" },
+          "change": { "$ref": "#/$defs/artifact" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["uri", "sha256"],
+      "properties": {
+        "uri": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      },
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "required": ["artifact", "condition"],
+      "properties": {
+        "artifact": { "$ref": "#/$defs/artifact" },
+        "condition": {
+          "type": "object",
+          "required": ["seed", "model", "context", "evaluator", "split", "environment", "budget"],
+          "properties": {
+            "seed": { "type": "integer" },
+            "model": { "$ref": "#/$defs/model" },
+            "context": { "$ref": "#/$defs/artifact" },
+            "evaluator": { "$ref": "#/$defs/evaluator" },
+            "split": { "$ref": "#/$defs/split" },
+            "environment": { "$ref": "#/$defs/artifact" },
+            "budget": { "$ref": "#/$defs/artifact" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "model": {
+      "type": "object",
+      "required": ["provider", "name", "version"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "evaluator": {
+      "type": "object",
+      "required": ["name", "version", "source"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "source": { "enum": ["benchmark", "gate", "external"] }
+      },
+      "additionalProperties": false
+    },
+    "split": {
+      "type": "object",
+      "required": ["name", "manifest"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "manifest": { "$ref": "#/$defs/artifact" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
