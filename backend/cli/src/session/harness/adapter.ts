@@ -33,6 +33,7 @@ export namespace HarnessAdapter {
         .strict(),
       objective: z.string().min(1).max(4_000),
       profile: HarnessContract.Profile.optional(),
+      search: z.enum(["adaptive", "static"]).optional(),
       orchestration: HarnessContract.Orchestration.optional(),
       audit: HarnessContract.Audit.optional(),
       launch: HarnessContract.Launch.optional(),
@@ -281,6 +282,9 @@ export namespace HarnessAdapter {
     if (profile === "optimize" && task.budget.candidates === undefined) {
       throw new Error(`An optimize benchmark must declare a candidate budget`)
     }
+    if (task.search && profile !== "optimize") {
+      throw new Error(`A search policy selection requires the optimize profile`)
+    }
     if (benchmark.source.status === "official_subset" && (task.split === "held_out" || task.split === "release")) {
       throw new Error(
         `${benchmark.title} exposes only ${benchmark.source.publicTasks} public tasks and cannot represent the ${benchmark.source.totalTasks}-task hidden benchmark`,
@@ -344,6 +348,10 @@ export namespace HarnessAdapter {
       },
       profile,
       orchestration: task.orchestration,
+      search:
+        profile === "optimize" && task.metric.name && task.metric.direction !== "pass" && task.search !== "static"
+          ? HarnessContract.adaptiveSearch
+          : undefined,
       audit: task.audit,
       launch: task.launch,
       recipe,

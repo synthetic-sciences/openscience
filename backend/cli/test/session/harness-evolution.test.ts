@@ -55,6 +55,7 @@ function task(sessionID: string): HarnessAdapter.Task {
     split: "validation",
     evaluator: { name: "official-evolution-evaluator", version: "7", source: "benchmark", token },
     objective: "Improve the official score while retaining evaluator-owned replayable source lineage",
+    search: "static",
     evolution: protocol(),
     metric: { name: "score", direction: "maximize" },
     model: { provider: "test", name: "research-agent" },

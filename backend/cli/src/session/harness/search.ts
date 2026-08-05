@@ -2,6 +2,7 @@ import path from "path"
 import z from "zod"
 import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
+import { HarnessAdaptation } from "./adaptation"
 import { HarnessContract } from "./contract"
 import { HarnessEvaluation } from "./evaluation"
 import { HarnessEvolution } from "./evolution"
@@ -73,6 +74,7 @@ export namespace HarnessSearch {
       evaluator: z.string().max(200).optional(),
       evolution: Evolution.optional(),
       evaluatedAt: z.number().int().positive(),
+      recordedRevision: z.number().int().positive().optional(),
     })
     .strict()
   export type Result = z.infer<typeof Result>
@@ -88,6 +90,7 @@ export namespace HarnessSearch {
         .array(z.string().regex(/^[a-f0-9]{64}$/))
         .max(6)
         .refine((ids) => new Set(ids).size === ids.length, "Recommendation context must be unique"),
+      control: HarnessAdaptation.Control.optional(),
     })
     .strict()
   export type Lease = z.infer<typeof Lease>
@@ -108,6 +111,7 @@ export namespace HarnessSearch {
       generation: z.number().int().nonnegative(),
       island: z.number().int().nonnegative().default(0),
       ordinal: z.number().int().nonnegative().optional(),
+      createdRevision: z.number().int().positive().optional(),
       proposal: z.string().min(1).max(4_000),
       artifact: Artifact,
       lease: Lease.optional(),
@@ -150,6 +154,7 @@ export namespace HarnessSearch {
     .object({
       mode: z.enum(["legacy", "islands"]),
       count: z.number().int().min(1).max(4),
+      initial: z.number().int().min(1).max(2).optional(),
       topology: z.literal("ring"),
       migrationInterval: z.number().int().positive(),
     })
@@ -158,8 +163,8 @@ export namespace HarnessSearch {
 
   export const State = z
     .object({
-      schemaVersion: z.literal(3),
-      proposalPolicy: z.enum(["advisory-v2", "leased-v3"]),
+      schemaVersion: z.literal(4),
+      proposalPolicy: z.enum(["advisory-v2", "leased-v3", "adaptive-v4"]),
       runID: z.string().min(1),
       sessionID: z.string().min(1),
       objective: z.string().min(1),
@@ -168,6 +173,7 @@ export namespace HarnessSearch {
       direction: z.enum(["maximize", "minimize", "pass"]),
       target: z.number().finite().optional(),
       objectives: HarnessContract.Objectives.default([]),
+      controller: HarnessContract.Search.optional(),
       population: Population,
       budget: z
         .object({
@@ -241,6 +247,7 @@ export namespace HarnessSearch {
       inspirationIDs: input.inspirationIDs.toSorted(),
       targetIsland: input.targetIsland,
       contextIDs: input.contextIDs,
+      ...(input.control ? { control: input.control } : {}),
     })
 
   const mandateID = (input: Omit<Mandate, "id">) => digest(input)
@@ -323,6 +330,7 @@ export namespace HarnessSearch {
     return {
       mode: "islands",
       count,
+      initial: Math.min(2, count),
       topology: "ring",
       migrationInterval: Math.max(2, Math.ceil(budget / (count * 2))),
     }
@@ -333,6 +341,72 @@ export namespace HarnessSearch {
     for (const candidate of candidates(state)) counts[candidate.island] = (counts[candidate.island] ?? 0) + 1
     const least = Math.min(...counts)
     return counts.findIndex((count) => count === least)
+  }
+
+  const events = (state: State, revision = state.revision): HarnessAdaptation.Event[] =>
+    candidates(state).flatMap((candidate) => {
+      if (
+        candidate.createdRevision === undefined ||
+        candidate.createdRevision > revision ||
+        candidate.result?.source !== "verified" ||
+        candidate.result.recordedRevision === undefined ||
+        candidate.result.recordedRevision > revision
+      ) {
+        return []
+      }
+      return [
+        HarnessAdaptation.Event.parse({
+          candidateID: candidate.id,
+          island: candidate.island,
+          revision: candidate.result.recordedRevision,
+          status: candidate.result.status,
+          score: candidate.result.status === "passed" ? candidate.result.score : undefined,
+        }),
+      ]
+    })
+
+  function summary(state: State, revision = state.revision) {
+    if (!state.controller || state.direction === "pass") {
+      throw new Error(`Adaptive search requires a numeric controller contract`)
+    }
+    return HarnessAdaptation.derive({
+      policy: state.controller,
+      direction: state.direction,
+      islands: state.population.count,
+      events: events(state, revision),
+    })
+  }
+
+  function controller(state: State, targetIsland: number, revision = state.revision) {
+    if (!state.controller || state.direction === "pass") {
+      throw new Error(`Adaptive search requires a numeric controller contract`)
+    }
+    return HarnessAdaptation.control({
+      policy: state.controller,
+      direction: state.direction,
+      islands: state.population.count,
+      events: events(state, revision),
+      targetIsland,
+      key: `${state.runID}:${state.sessionID}:${revision}`,
+    })
+  }
+
+  const roots = (state: State) =>
+    candidates(state).filter(
+      (candidate) =>
+        !candidate.parentIDs.length &&
+        (candidate.result === undefined ||
+          candidate.result.source !== "verified" ||
+          candidate.result.status === "passed"),
+    )
+
+  const rootLimit = (state: State) => {
+    if (state.proposalPolicy !== "adaptive-v4") {
+      return Math.min(4, Math.max(2, Math.ceil(Math.sqrt(state.budget.candidates))))
+    }
+    const active = new Set(roots(state).map((candidate) => candidate.island)).size
+    const spawn = events(state).length && summary(state).globalStagnation ? 1 : 0
+    return Math.min(state.population.count, Math.max(state.population.initial ?? 1, active) + spawn)
   }
 
   const stop = (state: State, reason: Stop, now = Date.now()): State => ({
@@ -350,8 +424,11 @@ export namespace HarnessSearch {
   })
 
   function topology(state: State) {
-    if (state.proposalPolicy === "leased-v3" && state.population.mode !== "islands") {
+    if (state.proposalPolicy !== "advisory-v2" && state.population.mode !== "islands") {
       throw new Error(`Leased search state must use the server-derived island policy`)
+    }
+    if ((state.proposalPolicy === "adaptive-v4") !== Boolean(state.controller)) {
+      throw new Error(`Adaptive proposal policy and controller must be declared together`)
     }
     if (state.population.mode === "legacy") {
       if (candidates(state).some((candidate) => candidate.ordinal !== undefined || candidate.island !== 0)) {
@@ -392,7 +469,7 @@ export namespace HarnessSearch {
         if (claimed.has(candidate.reservationID)) throw new Error(`A reservation may authorize only one candidate`)
         claimed.add(candidate.reservationID)
       }
-      if (state.proposalPolicy === "leased-v3") {
+      if (state.proposalPolicy !== "advisory-v2") {
         if (!candidate.lease) throw new Error(`Leased search candidate is missing recommendation provenance`)
         if (candidate.lease.targetIsland !== candidate.island) {
           throw new Error(`Persisted recommendation target does not match candidate island`)
@@ -409,17 +486,44 @@ export namespace HarnessSearch {
           inspirationIDs: candidate.inspirationIDs,
           targetIsland: candidate.lease.targetIsland,
           contextIDs: candidate.lease.contextIDs,
+          control: candidate.lease.control,
         })
         if (candidate.lease.id !== expected) {
           throw new Error(`Persisted recommendation identity does not match its content`)
         }
+        if (state.proposalPolicy === "adaptive-v4") {
+          if (
+            !candidate.createdRevision ||
+            (candidate.result?.source === "verified" && !candidate.result.recordedRevision)
+          ) {
+            throw new Error(`Adaptive candidates require revision-bound provenance`)
+          }
+          if (!candidate.lease.control) throw new Error(`Adaptive recommendation is missing controller provenance`)
+          if (candidate.createdRevision <= candidate.lease.revision || candidate.createdRevision > state.revision) {
+            throw new Error(`Adaptive candidate revision provenance is invalid`)
+          }
+          if (
+            candidate.result?.recordedRevision !== undefined &&
+            (candidate.result.recordedRevision <= candidate.createdRevision ||
+              candidate.result.recordedRevision > state.revision)
+          ) {
+            throw new Error(`Adaptive evaluation revision provenance is invalid`)
+          }
+          const expectedControl = controller(state, candidate.lease.targetIsland, candidate.lease.revision)
+          if (JSON.stringify(candidate.lease.control) !== JSON.stringify(expectedControl)) {
+            throw new Error(`Adaptive recommendation controller does not match verified candidate history`)
+          }
+        }
       }
       const least = Math.min(...counts)
-      const expected = candidate.reservationID
-        ? candidate.lease?.targetIsland
-        : parents.length
-          ? parents.toSorted((a, b) => order(state, a!, b!))[0]!.island
-          : counts.findIndex((count) => count === least)
+      const expected =
+        state.proposalPolicy === "adaptive-v4"
+          ? candidate.lease?.targetIsland
+          : candidate.reservationID
+            ? candidate.lease?.targetIsland
+            : parents.length
+              ? parents.toSorted((a, b) => order(state, a!, b!))[0]!.island
+              : counts.findIndex((count) => count === least)
       if (candidate.island !== expected || candidate.island >= state.population.count) {
         throw new Error(`Persisted candidate island does not match server assignment`)
       }
@@ -473,8 +577,16 @@ export namespace HarnessSearch {
         inspirationIDs: item.inspirationIDs,
         targetIsland: item.lease.targetIsland,
         contextIDs: item.lease.contextIDs,
+        control: item.lease.control,
       })
       if (item.lease.id !== expected) throw new Error(`Persisted reservation lease does not match its content`)
+      if (state.proposalPolicy === "adaptive-v4") {
+        if (!item.lease.control) throw new Error(`Adaptive reservation is missing controller provenance`)
+        const expectedControl = controller(state, item.lease.targetIsland, item.lease.revision)
+        if (JSON.stringify(item.lease.control) !== JSON.stringify(expectedControl)) {
+          throw new Error(`Adaptive reservation controller does not match verified candidate history`)
+        }
+      }
       if (item.status === "open" && item.candidateID) {
         throw new Error(`An open reservation cannot name a candidate`)
       }
@@ -490,18 +602,41 @@ export namespace HarnessSearch {
     }
   }
 
+  export function adaptation(state: State) {
+    const parsed = State.parse(state)
+    topology(parsed)
+    return summary(parsed)
+  }
+
   function parse(data: Record<string, unknown>) {
     const migrated =
       data.schemaVersion === 1
         ? {
             ...data,
-            schemaVersion: 3,
+            schemaVersion: 4,
             proposalPolicy: "advisory-v2",
-            population: { mode: "legacy", count: 1, topology: "ring", migrationInterval: 1 },
+            population: { mode: "legacy", count: 1, initial: 1, topology: "ring", migrationInterval: 1 },
           }
         : data.schemaVersion === 2
-          ? { ...data, schemaVersion: 3, proposalPolicy: "advisory-v2" }
-          : data
+          ? {
+              ...data,
+              schemaVersion: 4,
+              proposalPolicy: "advisory-v2",
+              population: {
+                ...(data.population as object),
+                initial: Math.min(2, Number((data.population as { count?: number } | undefined)?.count ?? 1)),
+              },
+            }
+          : data.schemaVersion === 3
+            ? {
+                ...data,
+                schemaVersion: 4,
+                population: {
+                  ...(data.population as object),
+                  initial: Math.min(2, Number((data.population as { count?: number } | undefined)?.count ?? 1)),
+                },
+              }
+            : data
     const parsed = State.parse(migrated)
     const expected = archive(parsed).map((item) => item.id)
     const state = "archiveIDs" in data ? parsed : State.parse({ ...parsed, archiveIDs: expected })
@@ -543,10 +678,13 @@ export namespace HarnessSearch {
     ) {
       throw new Error(`Harness search cannot exceed the contract wall-time budget`)
     }
+    if (contract.search && input.stall !== undefined && input.stall !== contract.search.stagnation.patience) {
+      throw new Error(`Adaptive search patience is fixed by the benchmark contract`)
+    }
     const now = Date.now()
     const initial: State = {
-      schemaVersion: 3,
-      proposalPolicy: "leased-v3",
+      schemaVersion: 4,
+      proposalPolicy: contract.search ? "adaptive-v4" : "leased-v3",
       runID: contract.runID,
       sessionID: input.sessionID,
       objective: contract.objective,
@@ -554,6 +692,7 @@ export namespace HarnessSearch {
       metric: contract.benchmark.metric ?? "status",
       direction: contract.benchmark.direction ?? "pass",
       objectives: contract.benchmark.objectives ?? [],
+      controller: contract.search,
       population: population(candidates),
       ...(contract.benchmark.target === undefined && input.target === undefined
         ? {}
@@ -561,7 +700,7 @@ export namespace HarnessSearch {
       budget: {
         candidates,
         ...(wallTimeMs === undefined ? {} : { wallTimeMs }),
-        stall: input.stall ?? 5,
+        stall: input.stall ?? contract.search?.stagnation.patience ?? 5,
       },
       status: "active",
       candidates: {},
@@ -585,6 +724,7 @@ export namespace HarnessSearch {
         "direction",
         "target",
         "objectives",
+        "controller",
         "budget",
       ] as const
       if (stable.every((key) => JSON.stringify(state[key]) === JSON.stringify(expected[key]))) return state
@@ -603,24 +743,19 @@ export namespace HarnessSearch {
     await JsonStore.update(file(input.sessionID), (data) => {
       const state = parse(data)
       const now = Date.now()
-      if (state.proposalPolicy !== "leased-v3") {
-        throw new Error(`Parallel reservations require the leased-v3 proposal policy`)
+      if (state.proposalPolicy === "advisory-v2") {
+        throw new Error(`Parallel reservations require a leased proposal policy`)
       }
       if (state.status !== "active") return state
       if (expired(state, now)) return stop(state, "budget_exhausted", now)
       const remaining = Math.max(0, state.budget.candidates - candidates(state).length - open(state).length)
       const choice = recommend(state)
-      const roots = candidates(state).filter(
-        (candidate) =>
-          !candidate.parentIDs.length &&
-          (candidate.result === undefined ||
-            (candidate.result.source === "verified" && candidate.result.status === "passed")),
-      )
-      const rootLimit = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(state.budget.candidates))))
+      const current = roots(state)
+      const limit = rootLimit(state)
       const openRoots = open(state).filter((item) => !item.parentIDs.length).length
       const capacity = choice.parentIDs.length
         ? remaining
-        : Math.max(0, Math.min(remaining, rootLimit - roots.length - openRoots))
+        : Math.max(0, Math.min(remaining, limit - current.length - openRoots))
       const size = Math.min(count, capacity)
       if (!size) return state
       const start = reservations(state).length
@@ -633,6 +768,7 @@ export namespace HarnessSearch {
           mode: plan.recommendation.mode,
           targetIsland: plan.recommendation.targetIsland,
           contextIDs: plan.recommendation.contextIDs,
+          control: plan.recommendation.control,
         })
         const draft = {
           ordinal: start + index,
@@ -761,7 +897,7 @@ export namespace HarnessSearch {
             inspirationIDs: reservation.inspirationIDs,
             reasons: ["budget-backed-parallel-reservation"],
           }
-        : state.proposalPolicy === "leased-v3"
+        : state.proposalPolicy !== "advisory-v2"
           ? recommend(state)
           : undefined
       if (recommendation && !input.recommendationID && !reservation) {
@@ -778,22 +914,17 @@ export namespace HarnessSearch {
         throw new Error(`Proposal lineage does not match the leased recommendation`)
       }
       if (!parents.length) {
-        const roots = candidates(state).filter(
-          (candidate) =>
-            !candidate.parentIDs.length &&
-            (candidate.result === undefined ||
-              (candidate.result.source === "verified" && candidate.result.status === "passed")),
-        )
-        const limit = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(state.budget.candidates))))
+        const current = roots(state)
+        const limit = rootLimit(state)
         const held = reservation ? 0 : open(state).filter((item) => !item.parentIDs.length).length
-        if (roots.length + held >= limit) throw new Error(`Independent candidate root budget is exhausted`)
-        if (roots.some((candidate) => candidate.branch === input.branch)) {
+        if (current.length + held >= limit) throw new Error(`Independent candidate root budget is exhausted`)
+        if (current.some((candidate) => candidate.branch === input.branch)) {
           throw new Error(`An active independent root already exists for branch ${input.branch}`)
         }
       }
       const generation = ancestors.length ? Math.max(...ancestors.map((parent) => parent!.generation)) + 1 : 0
       const derived = ancestors.length ? ancestors.toSorted((a, b) => order(state, a!, b!))[0]!.island : vacancy(state)
-      const island = reservation?.lease.targetIsland ?? derived
+      const island = recommendation?.targetIsland ?? derived
       if (recommendation && ancestors.length && derived !== recommendation.targetIsland) {
         throw new Error(`Server island assignment does not match the leased recommendation`)
       }
@@ -807,6 +938,7 @@ export namespace HarnessSearch {
               mode: recommendation.mode,
               targetIsland: recommendation.targetIsland,
               contextIDs: recommendation.contextIDs,
+              control: recommendation.control,
             })
           : undefined)
       const id = identity({
@@ -826,6 +958,7 @@ export namespace HarnessSearch {
         generation,
         island,
         ...(state.population.mode === "legacy" ? {} : { ordinal: candidates(state).length }),
+        ...(state.proposalPolicy === "adaptive-v4" ? { createdRevision: state.revision + 1 } : {}),
         proposal: input.proposal,
         artifact,
         lease,
@@ -930,6 +1063,9 @@ export namespace HarnessSearch {
         evolution: evolution ? { receiptID: evolution.receiptID, ...evolution.diagnostics } : undefined,
         feedback: evaluation.notes,
         evaluatedAt: evaluation.evaluatedAt,
+        ...(state.proposalPolicy === "adaptive-v4"
+          ? { recordedRevision: candidate.result?.recordedRevision ?? state.revision + 1 }
+          : {}),
       })
       if (candidate.result?.source === "verified") {
         if (JSON.stringify(candidate.result) === JSON.stringify(result)) return state
@@ -1024,7 +1160,7 @@ export namespace HarnessSearch {
     return read(sessionID)
   }
 
-  function route(state: State): Route {
+  function legacyRoute(state: State): Route {
     const pool = ranked(state)
     if (!pool.length) {
       return {
@@ -1143,6 +1279,148 @@ export namespace HarnessSearch {
         ...(state.objectives.length ? [`pareto-frontier:${pareto.length}`] : []),
       ],
     }
+  }
+
+  function adaptiveRoute(state: State): Route {
+    const pool = ranked(state)
+    const roots = candidates(state).filter(
+      (candidate) =>
+        !candidate.parentIDs.length &&
+        (candidate.result === undefined ||
+          candidate.result.source !== "verified" ||
+          candidate.result.status === "passed"),
+    )
+    const occupied = new Set(roots.map((candidate) => candidate.island))
+    const initial = state.population.initial ?? 1
+    const missing = Array.from({ length: initial }, (_, island) => island).find((island) => !occupied.has(island))
+    if (!pool.length) {
+      return {
+        strategy: "seed",
+        parentIDs: [],
+        inspirationIDs: [],
+        targetIsland: missing ?? 0,
+        reasons: ["no-verified-candidate", "adaptive-cold-start"],
+      }
+    }
+    if (missing !== undefined) {
+      return {
+        strategy: "explore",
+        parentIDs: [],
+        inspirationIDs: [],
+        targetIsland: missing,
+        reasons: [`adaptive-initial-island:${missing}`, `initial-islands:${occupied.size}/${initial}`],
+      }
+    }
+    const adaptive = summary(state)
+    const spawn = Array.from({ length: state.population.count }, (_, island) => island).find(
+      (island) => !occupied.has(island),
+    )
+    if (adaptive.globalStagnation && spawn !== undefined) {
+      return {
+        strategy: "explore",
+        parentIDs: [],
+        inspirationIDs: [],
+        targetIsland: spawn,
+        reasons: [
+          `adaptive-stalled:${adaptive.stalled}`,
+          `adaptive-max-signal:${Math.max(...adaptive.islands.map((item) => item.accumulatedImprovement)).toFixed(6)}`,
+          `adaptive-island-spawn:${spawn}`,
+        ],
+      }
+    }
+    if (adaptive.globalStagnation) {
+      const best = pool[0]!
+      return {
+        strategy: "diverge",
+        parentIDs: [best.id],
+        inspirationIDs: [],
+        targetIsland: best.island,
+        reasons: [
+          `adaptive-stalled:${adaptive.stalled}`,
+          `adaptive-signal:${adaptive.islands[best.island]!.accumulatedImprovement.toFixed(6)}`,
+          "meta-guidance",
+          "strategy-level-mutation",
+        ],
+      }
+    }
+    if (
+      state.population.count > 1 &&
+      candidates(state).length >= state.population.migrationInterval &&
+      candidates(state).length % state.population.migrationInterval === 0
+    ) {
+      const source = pool[0]!
+      const target = Array.from(
+        { length: state.population.count - 1 },
+        (_, index) => (source.island + index + 1) % state.population.count,
+      ).find((island) => pool.some((candidate) => candidate.island === island))
+      const anchor = target === undefined ? undefined : pool.find((candidate) => candidate.island === target)
+      if (anchor) {
+        return {
+          strategy: "migrate",
+          parentIDs: [anchor.id],
+          inspirationIDs: [source.id],
+          targetIsland: anchor.island,
+          reasons: [
+            `adaptive-events:${adaptive.events}`,
+            `ring:${source.island}->${anchor.island}`,
+            "verified-inspiration",
+            "migration-reward-not-precredited",
+          ],
+        }
+      }
+    }
+    const pareto = archive(state)
+    const prioritized = [...pareto, ...pool.filter((candidate) => !pareto.some((item) => item.id === candidate.id))]
+    const distinct = prioritized.filter(
+      (candidate, index) => prioritized.findIndex((item) => item.branch === candidate.branch) === index,
+    )
+    if (adaptive.stalled >= state.controller!.stagnation.patience && distinct.length >= 2) {
+      const best = pool[0]!
+      const complement = prioritized.find((candidate) => candidate.branch !== best.branch)!
+      return {
+        strategy: "fuse",
+        parentIDs: [best.id, complement.id],
+        inspirationIDs: [],
+        targetIsland: best.island,
+        reasons: [`adaptive-stalled:${adaptive.stalled}`, "cross-branch-fusion", "global-signal-not-yet-meta-stagnant"],
+      }
+    }
+    const selected = adaptive.selectedIsland
+    const target =
+      selected !== undefined && pool.some((candidate) => candidate.island === selected) ? selected : pool[0]!.island
+    const control = controller(state, target)
+    const local = pool.filter((candidate) => candidate.island === target)
+    const children = new Map(local.map((candidate) => [candidate.id, 0]))
+    for (const candidate of candidates(state)) {
+      for (const parent of candidate.parentIDs) {
+        if (children.has(parent)) children.set(parent, children.get(parent)! + 1)
+      }
+    }
+    const least = Math.min(...local.map((candidate) => children.get(candidate.id) ?? 0))
+    const diverse = local.filter((candidate) => (children.get(candidate.id) ?? 0) === least)
+    const parent = control.explore
+      ? diverse[Math.min(diverse.length - 1, Math.floor(control.draw * diverse.length))]!
+      : local[0]!
+    return {
+      strategy: control.explore ? "explore" : "exploit",
+      parentIDs: [parent.id],
+      inspirationIDs: [],
+      targetIsland: target,
+      reasons: [
+        `adaptive-island:${target}`,
+        `adaptive-visits:${control.visits}`,
+        `adaptive-reward:${control.rewardMean.toFixed(6)}`,
+        `adaptive-signal:${control.accumulatedImprovement.toFixed(6)}`,
+        `adaptive-intensity:${control.intensity.toFixed(6)}`,
+        `adaptive-draw:${control.draw.toFixed(6)}`,
+        control.explore ? "adaptive-exploration" : "adaptive-exploitation",
+      ],
+    }
+  }
+
+  function route(state: State): Route {
+    if (state.proposalPolicy === "adaptive-v4") return adaptiveRoute(state)
+    return legacyRoute(state)
   }
 
   const trail = (state: State, id: string) => {
@@ -1326,10 +1604,12 @@ export namespace HarnessSearch {
   }
 
   function materialize(state: State, choice: Route): Recommendation {
+    const control = state.proposalPolicy === "adaptive-v4" ? controller(state, choice.targetIsland) : undefined
     const mode: Mode =
       choice.strategy === "seed"
         ? "single-pass"
-        : choice.strategy === "exploit" || (choice.strategy === "explore" && choice.parentIDs.length)
+        : choice.strategy === "exploit" ||
+            (choice.strategy === "explore" && choice.parentIDs.length && !control?.explore)
           ? "diff"
           : "stepwise"
     const roots = [...choice.parentIDs, ...choice.inspirationIDs]
@@ -1348,6 +1628,7 @@ export namespace HarnessSearch {
       inspirationIDs: choice.inspirationIDs,
       targetIsland: choice.targetIsland,
       contextIDs,
+      control,
     }
     return { id: leaseID(state, body), ...body, reasons: choice.reasons }
   }
@@ -1372,6 +1653,7 @@ export namespace HarnessSearch {
 
   export function recommend(state: State): Recommendation {
     const parsed = State.parse(state)
+    topology(parsed)
     return materialize(parsed, route(parsed))
   }
 }

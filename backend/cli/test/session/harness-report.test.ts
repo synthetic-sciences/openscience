@@ -103,6 +103,54 @@ describe("harness quality-cost reports", () => {
     expect(HarnessReport.dominates(second, first)).toBe(true)
   })
 
+  test("reports adaptive controller telemetry and keeps static search out of the comparison set", () => {
+    const adaptive = HarnessContract.Info.parse({
+      ...contract("adaptive-report"),
+      search: HarnessContract.adaptiveSearch,
+    })
+    const search = HarnessSearch.State.parse({
+      schemaVersion: 4,
+      proposalPolicy: "adaptive-v4",
+      runID: adaptive.runID,
+      sessionID: adaptive.sessionID,
+      objective: adaptive.objective,
+      evaluator: adaptive.benchmark.evaluator,
+      metric: "score",
+      direction: "maximize",
+      objectives: [],
+      controller: HarnessContract.adaptiveSearch,
+      population: { mode: "islands", count: 2, initial: 2, topology: "ring", migrationInterval: 3 },
+      budget: { candidates: 10, stall: 5 },
+      status: "active",
+      candidates: {},
+      reservations: {},
+      archiveIDs: [],
+      stalled: 0,
+      revision: 0,
+      startedAt: 1,
+      updatedAt: 1,
+    })
+    const report = HarnessReport.compile({
+      contract: adaptive,
+      evaluations: [evaluation(adaptive, 0.8)],
+      search,
+      generatedAt: 3,
+    })
+    expect(report.search).toMatchObject({
+      proposalPolicy: "adaptive-v4",
+      controller: HarnessContract.adaptiveSearch,
+      adaptation: { events: 0, stalled: 0, globalStagnation: false },
+    })
+    const staticContract = contract("static-report")
+    const staticReport = HarnessReport.compile({
+      contract: staticContract,
+      evaluations: [evaluation(staticContract, 0.8)],
+      generatedAt: 3,
+    })
+    expect(report.comparisonKey).not.toBe(staticReport.comparisonKey)
+    expect(() => HarnessReport.compare([report, staticReport], report.runID)).toThrow("only comparable")
+  })
+
   test("refuses cross-task comparisons instead of normalizing unlike metrics", () => {
     const first = contract("one")
     const other = HarnessContract.Info.parse({
@@ -137,7 +185,7 @@ describe("harness quality-cost reports", () => {
       metrics: { score: 0.8, robustness: 0.7 },
     })
     const search = HarnessSearch.State.parse({
-      schemaVersion: 3,
+      schemaVersion: 4,
       proposalPolicy: "leased-v3",
       runID: multi.runID,
       sessionID: multi.sessionID,
@@ -146,7 +194,7 @@ describe("harness quality-cost reports", () => {
       metric: "score",
       direction: "maximize",
       objectives: multi.benchmark.objectives,
-      population: { mode: "islands", count: 2, topology: "ring", migrationInterval: 3 },
+      population: { mode: "islands", count: 2, initial: 2, topology: "ring", migrationInterval: 3 },
       budget: { candidates: 10, stall: 5 },
       status: "active",
       candidates: {},

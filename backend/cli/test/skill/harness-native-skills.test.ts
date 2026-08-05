@@ -890,6 +890,56 @@ test("trace-evolutionary-candidate captures exact snapshots and deterministic pa
   }
 })
 
+test("operate-adaptive-search rejects inconsistent controller decisions", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-adaptive-lease-"))
+  const script = "research/operate-adaptive-search/scripts/validate_lease.py"
+  const source = path.join(dir, "lease.json")
+  const lease = {
+    id: hash("lease"),
+    revision: 7,
+    strategy: "exploit",
+    mode: "diff",
+    parentIDs: [hash("parent")],
+    inspirationIDs: [],
+    targetIsland: 1,
+    contextIDs: [hash("parent")],
+    reasons: ["adaptive-exploitation"],
+    control: {
+      protocolVersion: "adaptive-search-v1",
+      policySHA256: hash(JSON.stringify(HarnessContract.adaptiveSearch)),
+      eventCount: 6,
+      stalled: 0,
+      selectedIsland: 1,
+      targetIsland: 1,
+      visits: 3,
+      accumulatedImprovement: 0.04,
+      rewardMean: 0.02,
+      intensity: 0.3,
+      draw: 0.8,
+      explore: false,
+      globalStagnation: false,
+    },
+  }
+  try {
+    await Bun.write(source, JSON.stringify(lease))
+    const valid = await run(script, [source])
+    expect(valid.code).toBe(0)
+    expect(JSON.parse(valid.stdout)).toMatchObject({
+      valid: true,
+      strategy: "exploit",
+      targetIsland: 1,
+      eventCount: 6,
+      explore: false,
+    })
+    await Bun.write(source, JSON.stringify({ ...lease, control: { ...lease.control, explore: true } }))
+    const rejected = await run(script, [source])
+    expect(rejected.code).toBe(1)
+    expect(rejected.stderr).toContain("deterministic intensity draw")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("design-replay-interventions freezes exact one-difference evaluator pairs", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-interventions-"))
   const script = "research/design-replay-interventions/scripts/design_interventions.py"

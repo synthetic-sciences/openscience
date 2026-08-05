@@ -18,6 +18,7 @@ export namespace HarnessAblation {
       kind: z.enum([
         "profile",
         "orchestration",
+        "search",
         "audit",
         "simulation",
         "evaluator_audit",
@@ -210,6 +211,7 @@ export namespace HarnessAblation {
   function value(contract: HarnessContract.Info, factor: Factor) {
     if (factor.kind === "profile") return contract.profile
     if (factor.kind === "orchestration") return contract.orchestration ?? null
+    if (factor.kind === "search") return contract.search ?? null
     if (factor.kind === "audit") return contract.audit ?? null
     if (factor.kind === "simulation") return contract.simulation ?? null
     if (factor.kind === "evaluator_audit") return contract.evaluatorAudit ?? null
@@ -237,6 +239,7 @@ export namespace HarnessAblation {
       benchmark,
       ...(factor.kind === "profile" ? {} : { profile: contract.profile }),
       ...(factor.kind === "orchestration" ? {} : { orchestration: contract.orchestration }),
+      ...(factor.kind === "search" ? {} : { search: contract.search }),
       ...(factor.kind === "audit" ? {} : { audit: contract.audit }),
       launch: contract.launch,
       recipe: contract.recipe,

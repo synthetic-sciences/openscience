@@ -1,6 +1,7 @@
 import path from "path"
 import z from "zod"
 import { Global } from "@/global"
+import { HarnessAdaptation } from "./adaptation"
 import { HarnessBenchmark } from "./benchmark"
 import { HarnessContract } from "./contract"
 import { HarnessEvaluation } from "./evaluation"
@@ -108,6 +109,9 @@ export namespace HarnessReport {
           verified: z.number().int().nonnegative(),
           generations: z.number().int().nonnegative(),
           stalled: z.number().int().nonnegative(),
+          proposalPolicy: z.enum(["advisory-v2", "leased-v3", "adaptive-v4"]),
+          controller: HarnessContract.Search.optional(),
+          adaptation: HarnessAdaptation.Summary.optional(),
           objectives: HarnessContract.Objectives,
           objectiveAudit: HarnessContract.ObjectiveAudit.optional(),
           archive: z.number().int().nonnegative(),
@@ -186,6 +190,7 @@ export namespace HarnessReport {
       integrity: contract.integrity,
       evolution: contract.evolution,
       interventions: contract.interventions,
+      search: contract.search,
       evaluatorAudit: contract.evaluatorAudit,
       contamination: contract.contamination,
     })
@@ -279,6 +284,10 @@ export namespace HarnessReport {
             verified: candidates.filter((item) => item.result?.source === "verified").length,
             generations: Math.max(0, ...candidates.map((item) => item.generation)),
             stalled: input.search.stalled,
+            proposalPolicy: input.search.proposalPolicy,
+            controller: input.search.controller,
+            adaptation:
+              input.search.proposalPolicy === "adaptive-v4" ? HarnessSearch.adaptation(input.search) : undefined,
             objectives: input.search.objectives,
             objectiveAudit: contract.benchmark.objectiveAudit,
             archive: HarnessSearch.frontier(input.search).length,

@@ -3919,7 +3919,16 @@ export class Ablation extends HeyApiClient {
       schemaVersion?: 1
       studyID?: string
       factor?: {
-        kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
+        kind:
+          | "profile"
+          | "orchestration"
+          | "search"
+          | "audit"
+          | "simulation"
+          | "evaluator_audit"
+          | "fidelities"
+          | "skill"
+          | "tool"
         name?: string
       }
       minEffect?: number
@@ -5443,6 +5452,7 @@ export class Harness extends HeyApiClient {
       }
       objective?: string
       profile?: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+      search?: "adaptive" | "static"
       orchestration?: {
         topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
         traits?: {
@@ -5755,6 +5765,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "evaluator" },
             { in: "body", key: "objective" },
             { in: "body", key: "profile" },
+            { in: "body", key: "search" },
             { in: "body", key: "orchestration" },
             { in: "body", key: "audit" },
             { in: "body", key: "launch" },

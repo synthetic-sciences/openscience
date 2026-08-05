@@ -124,6 +124,7 @@ describe("benchmark adapters", () => {
       expect(contract.packs).toEqual(manifest.packs)
       expect(contract.benchmark.evaluatorVersion).toBe("2")
       expect(contract.benchmark.evaluatorSource).toBe("benchmark")
+      expect(contract.search).toEqual(manifest.profile === "optimize" ? HarnessContract.adaptiveSearch : undefined)
       expect(manifest.execution).toBe("external_runner_required")
       expect(JSON.stringify(contract)).not.toContain(token)
     }
@@ -136,6 +137,11 @@ describe("benchmark adapters", () => {
     const input = task("mle", "adapter-budget")
     delete input.budget.candidates
     await expect(HarnessAdapter.bind(input)).rejects.toThrow("candidate budget")
+    await expect(
+      HarnessAdapter.bind({ ...task("statistics", "adapter-search-profile"), search: "adaptive" }),
+    ).rejects.toThrow("optimize profile")
+    const staticSearch = await HarnessAdapter.bind({ ...task("mle", "adapter-static-search"), search: "static" })
+    expect(staticSearch.search).toBeUndefined()
   })
 
   test("binds evaluator-declared secondary objectives without changing the primary metric", async () => {

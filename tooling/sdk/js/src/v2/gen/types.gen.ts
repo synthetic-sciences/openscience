@@ -8118,7 +8118,16 @@ export type HarnessAblationInitializeData = {
     schemaVersion: 1
     studyID: string
     factor: {
-      kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
+      kind:
+        | "profile"
+        | "orchestration"
+        | "search"
+        | "audit"
+        | "simulation"
+        | "evaluator_audit"
+        | "fidelities"
+        | "skill"
+        | "tool"
       name?: string
     }
     minEffect: number
@@ -8161,7 +8170,16 @@ export type HarnessAblationInitializeResponses = {
       planID: string
       studyID: string
       factor: {
-        kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
+        kind:
+          | "profile"
+          | "orchestration"
+          | "search"
+          | "audit"
+          | "simulation"
+          | "evaluator_audit"
+          | "fidelities"
+          | "skill"
+          | "tool"
         name?: string
       }
       baselineValueSHA256: string
@@ -8200,7 +8218,16 @@ export type HarnessAblationInitializeResponses = {
       planID: string
       studyID: string
       factor: {
-        kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
+        kind:
+          | "profile"
+          | "orchestration"
+          | "search"
+          | "audit"
+          | "simulation"
+          | "evaluator_audit"
+          | "fidelities"
+          | "skill"
+          | "tool"
         name?: string
       }
       pairs: Array<{
@@ -8285,7 +8312,16 @@ export type HarnessAblationAssessResponses = {
       planID: string
       studyID: string
       factor: {
-        kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
+        kind:
+          | "profile"
+          | "orchestration"
+          | "search"
+          | "audit"
+          | "simulation"
+          | "evaluator_audit"
+          | "fidelities"
+          | "skill"
+          | "tool"
         name?: string
       }
       baselineValueSHA256: string
@@ -8324,7 +8360,16 @@ export type HarnessAblationAssessResponses = {
       planID: string
       studyID: string
       factor: {
-        kind: "profile" | "orchestration" | "audit" | "simulation" | "evaluator_audit" | "fidelities" | "skill" | "tool"
+        kind:
+          | "profile"
+          | "orchestration"
+          | "search"
+          | "audit"
+          | "simulation"
+          | "evaluator_audit"
+          | "fidelities"
+          | "skill"
+          | "tool"
         name?: string
       }
       pairs: Array<{
@@ -11421,6 +11466,7 @@ export type HarnessBindData = {
     }
     objective: string
     profile?: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
+    search?: "adaptive" | "static"
     orchestration?: {
       topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
       traits?: {
@@ -11802,6 +11848,26 @@ export type HarnessBindResponses = {
         minUtilityGain: number
         maxUncertainty: number
         targetUtility?: number
+      }
+    }
+    search?: {
+      protocolVersion: "adaptive-search-v1"
+      signal: {
+        source: "verified-final-evaluations"
+        decay: 0.9
+        epsilon: 1e-8
+      }
+      local: {
+        minIntensity: 0.15
+        maxIntensity: 0.5
+      }
+      global: {
+        exploration: 1.4142135623730951
+        minVisits: 2
+      }
+      stagnation: {
+        patience: 5
+        maxSignal: 0.02
       }
     }
     audit?: {
@@ -12596,6 +12662,26 @@ export type HarnessContractResponses = {
         targetUtility?: number
       }
     }
+    search?: {
+      protocolVersion: "adaptive-search-v1"
+      signal: {
+        source: "verified-final-evaluations"
+        decay: 0.9
+        epsilon: 1e-8
+      }
+      local: {
+        minIntensity: 0.15
+        maxIntensity: 0.5
+      }
+      global: {
+        exploration: 1.4142135623730951
+        minVisits: 2
+      }
+      stagnation: {
+        patience: 5
+        maxSignal: 0.02
+      }
+    }
     audit?: {
       mode: "performance" | "failure" | "hybrid"
       budget: number
@@ -13149,6 +13235,48 @@ export type HarnessReportResponses = {
       verified: number
       generations: number
       stalled: number
+      proposalPolicy: "advisory-v2" | "leased-v3" | "adaptive-v4"
+      controller?: {
+        protocolVersion: "adaptive-search-v1"
+        signal: {
+          source: "verified-final-evaluations"
+          decay: 0.9
+          epsilon: 1e-8
+        }
+        local: {
+          minIntensity: 0.15
+          maxIntensity: 0.5
+        }
+        global: {
+          exploration: 1.4142135623730951
+          minVisits: 2
+        }
+        stagnation: {
+          patience: 5
+          maxSignal: 0.02
+        }
+      }
+      adaptation?: {
+        protocolVersion: "adaptive-search-v1"
+        policySHA256: string
+        events: number
+        stalled: number
+        selectedIsland?: number
+        globalStagnation: boolean
+        islands: Array<{
+          island: number
+          visits: number
+          decayedVisits: number
+          improvements: number
+          accumulatedImprovement: number
+          decayedReward: number
+          rewardMean: number
+          intensity: number
+          ucb: number
+          bestID?: string
+          bestFitness?: number
+        }>
+      }
       objectives: Array<{
         metric: string
         direction: "maximize" | "minimize"

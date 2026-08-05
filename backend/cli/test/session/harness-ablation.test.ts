@@ -40,7 +40,7 @@ async function run(input: {
   createdAt: number
   model?: string
   direction?: "maximize" | "minimize"
-  factor?: "orchestration" | "evaluator_audit"
+  factor?: "orchestration" | "search" | "evaluator_audit"
 }) {
   const sessionID = `${input.prefix}-${input.seed}-${input.role}`
   sessions.add(sessionID)
@@ -54,9 +54,11 @@ async function run(input: {
     split: "held_out",
     evaluator: { name: "official-ablation-evaluator", version: "3", source: "benchmark", token },
     objective: "Measure the isolated effect of conditional orchestration",
+    profile: input.factor === "search" ? "optimize" : undefined,
+    search: input.factor === "search" ? (input.role === "arm" ? "adaptive" : "static") : undefined,
     launch: launchProtocol("ablation"),
     orchestration:
-      input.role === "arm" && input.factor !== "evaluator_audit"
+      input.role === "arm" && input.factor === "orchestration"
         ? { topology: "solo", maxWorkers: 1, maxRounds: 1, minIndependentVerifiers: 1 }
         : undefined,
     evaluatorAudit:
@@ -82,7 +84,12 @@ async function run(input: {
     model: { provider: "test", name: input.model ?? "model" },
     tools: ["read", "bash"],
     skills: [],
-    budget: { steps: 30, tokens: 20_000, costUSD: 2 },
+    budget: {
+      steps: 30,
+      tokens: 20_000,
+      costUSD: 2,
+      ...(input.factor === "search" ? { candidates: 8 } : {}),
+    },
     seed: input.seed,
     intervention: "autonomous",
     contamination: { policy: "hidden outcomes remain evaluator-private", hiddenTestsAccessible: false },
@@ -96,7 +103,7 @@ async function study(
   prefix: string,
   drift = false,
   direction: "maximize" | "minimize" = "maximize",
-  factor: "orchestration" | "evaluator_audit" = "orchestration",
+  factor: "orchestration" | "search" | "evaluator_audit" = "orchestration",
 ) {
   const createdAt = Date.now()
   const pairs = await Promise.all(
@@ -226,6 +233,18 @@ describe("matched scientific ablations", () => {
     if (!initialized) throw new Error("Expected an initialized ablation")
     plans.add(initialized.plan.planID)
     expect(initialized.plan.factor.kind).toBe("evaluator_audit")
+    expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
+  })
+
+  test("isolates the adaptive search controller from the static leased baseline", async () => {
+    const input = await study("ablation-search", false, "maximize", "search")
+    const initialized = await HarnessAblation.initialize(input.plan)
+    if (!initialized) throw new Error("Expected an initialized ablation")
+    plans.add(initialized.plan.planID)
+    expect(initialized.plan.factor.kind).toBe("search")
+    expect(
+      input.pairs.every((pair) => !pair.baseline.search && pair.arm.search?.protocolVersion === "adaptive-search-v1"),
+    ).toBe(true)
     expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
   })
 

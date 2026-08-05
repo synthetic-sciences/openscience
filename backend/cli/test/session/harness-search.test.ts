@@ -28,6 +28,7 @@ function contract(
     candidates?: number
     wallTimeMs?: number
     objectives?: HarnessContract.Objectives
+    adaptive?: boolean
   },
 ) {
   sessions.add(sessionID)
@@ -47,6 +48,7 @@ function contract(
       objectives: input?.objectives,
     },
     profile: input?.profile ?? "optimize",
+    search: input?.adaptive ? HarnessContract.adaptiveSearch : undefined,
     model: { provider: "test", name: "model" },
     tools: [],
     skills: [],
@@ -73,16 +75,21 @@ async function setup(
     direction?: "maximize" | "minimize"
     objectives?: HarnessContract.Objectives
     leased?: boolean
+    adaptive?: boolean
   },
 ) {
-  await contract(sessionID, { direction: input?.direction, objectives: input?.objectives })
+  await contract(sessionID, {
+    direction: input?.direction,
+    objectives: input?.objectives,
+    adaptive: input?.adaptive,
+  })
   const state = await HarnessSearch.initialize({
     sessionID,
     candidates: input?.candidates ?? 8,
     stall: input?.stall,
     target: input?.target,
   })
-  if (input?.leased) return state
+  if (input?.leased || input?.adaptive) return state
   const target = path.join(Global.Path.data, "harness", "search", `${encodeURIComponent(sessionID)}.json`)
   const advisory = JSON.parse(await fs.readFile(target, "utf8"))
   advisory.schemaVersion = 2
@@ -106,6 +113,20 @@ async function add(
     proposal: `proposal ${name}`,
     artifact: artifact(name),
   })
+}
+
+async function leased(sessionID: string, name: string, branch = name) {
+  const recommendation = HarnessSearch.recommend(await HarnessSearch.read(sessionID))
+  const candidate = await HarnessSearch.add({
+    sessionID,
+    recommendationID: recommendation.id,
+    parentIDs: recommendation.parentIDs,
+    inspirationIDs: recommendation.inspirationIDs,
+    branch,
+    proposal: `proposal ${name}`,
+    artifact: artifact(name),
+  })
+  return { recommendation, candidate }
 }
 
 async function evaluate(
@@ -256,6 +277,159 @@ describe("harness candidate graph", () => {
     const next = HarnessSearch.recommend(moved.state)
     expect(next.contextIDs).not.toContain(moved.id)
     expect(next.contextIDs.every((id) => moved.state.candidates[id]?.result?.source === "verified")).toBe(true)
+  })
+
+  test("routes adaptive compute from verified improvements and ignores agent observations", async () => {
+    const initial = await setup("search-adaptive", { candidates: 12, adaptive: true })
+    expect(initial).toMatchObject({
+      schemaVersion: 4,
+      proposalPolicy: "adaptive-v4",
+      controller: HarnessContract.adaptiveSearch,
+      population: { count: 2, initial: 2 },
+    })
+    const first = await leased("search-adaptive", "adaptive-first", "baseline")
+    expect(first.recommendation).toMatchObject({
+      strategy: "seed",
+      targetIsland: 0,
+      control: { eventCount: 0, targetIsland: 0, visits: 0 },
+    })
+    expect(first.candidate.state.candidates[first.candidate.id]?.createdRevision).toBe(1)
+    expect(first.candidate.state.candidates[first.candidate.id]?.lease?.control).toMatchObject({
+      policySHA256: first.recommendation.control?.policySHA256,
+      eventCount: 0,
+      targetIsland: 0,
+    })
+    await evaluate("search-adaptive", first.candidate.id, 10)
+
+    const second = await leased("search-adaptive", "adaptive-second", "alternate")
+    expect(second.recommendation).toMatchObject({
+      strategy: "explore",
+      parentIDs: [],
+      targetIsland: 1,
+      control: { eventCount: 1, targetIsland: 1, visits: 0 },
+    })
+    await evaluate("search-adaptive", second.candidate.id, 9)
+
+    const third = await leased("search-adaptive", "adaptive-third", "baseline")
+    expect(third.recommendation).toMatchObject({
+      targetIsland: 0,
+      control: { eventCount: 2, selectedIsland: 0, targetIsland: 0, visits: 1 },
+    })
+    const before = HarnessSearch.adaptation(third.candidate.state)
+    const observed = await HarnessSearch.observe({
+      sessionID: "search-adaptive",
+      candidateID: third.candidate.id,
+      status: "passed",
+      score: 999,
+      metrics: { score: 999 },
+      feedback: "untrusted self-evaluation",
+    })
+    expect(HarnessSearch.adaptation(observed)).toEqual(before)
+    await evaluate("search-adaptive", third.candidate.id, 12)
+    const next = HarnessSearch.recommend(await HarnessSearch.read("search-adaptive"))
+    expect(next.control).toMatchObject({ eventCount: 3, selectedIsland: 1, targetIsland: 1, visits: 1 })
+    expect(HarnessSearch.adaptation(await HarnessSearch.read("search-adaptive")).islands[0]).toMatchObject({
+      visits: 2,
+      improvements: 1,
+      accumulatedImprovement: 0.004,
+    })
+  })
+
+  test("reuses the authenticated adaptive island after a failed root releases capacity", async () => {
+    await setup("search-adaptive-root-retry", { candidates: 12, adaptive: true })
+    const failed = await leased("search-adaptive-root-retry", "adaptive-failed-root", "failed-root")
+    expect(failed.recommendation.targetIsland).toBe(0)
+    await evaluate("search-adaptive-root-retry", failed.candidate.id, undefined, "failed")
+
+    const retry = await leased("search-adaptive-root-retry", "adaptive-retry-root", "retry-root")
+    expect(retry.recommendation).toMatchObject({ strategy: "seed", targetIsland: 0 })
+    expect(retry.candidate.state.candidates[retry.candidate.id]).toMatchObject({ island: 0 })
+  })
+
+  test("rejects a fully rehashed adaptive lease whose controller semantics were substituted", async () => {
+    await setup("search-adaptive-tamper", { candidates: 6, adaptive: true })
+    const added = await leased("search-adaptive-tamper", "adaptive-tamper", "baseline")
+    const file = path.join(Global.Path.data, "harness", "search", "search-adaptive-tamper.json")
+    const state = JSON.parse(await fs.readFile(file, "utf8"))
+    const candidate = state.candidates[added.candidate.id]
+    candidate.lease.control.intensity += 0.1
+    candidate.lease.id = hash(
+      JSON.stringify({
+        runID: state.runID,
+        sessionID: state.sessionID,
+        revision: candidate.lease.revision,
+        strategy: candidate.lease.strategy,
+        mode: candidate.lease.mode,
+        parentIDs: candidate.parentIDs.toSorted(),
+        inspirationIDs: candidate.inspirationIDs.toSorted(),
+        targetIsland: candidate.lease.targetIsland,
+        contextIDs: candidate.lease.contextIDs,
+        control: candidate.lease.control,
+      }),
+    )
+    candidate.id = hash(
+      JSON.stringify({
+        parentIDs: candidate.parentIDs.toSorted(),
+        inspirationIDs: candidate.inspirationIDs.toSorted(),
+        branch: candidate.branch,
+        proposal: candidate.proposal,
+        artifact: candidate.artifact,
+        lease: candidate.lease,
+      }),
+    )
+    delete state.candidates[added.candidate.id]
+    state.candidates[candidate.id] = candidate
+    await fs.writeFile(file, JSON.stringify(state))
+    await expect(HarnessSearch.read("search-adaptive-tamper")).rejects.toThrow(
+      "controller does not match verified candidate history",
+    )
+  })
+
+  test("spawns new islands and escalates to meta-guidance only after verified global stagnation", async () => {
+    await setup("search-adaptive-stagnation", { candidates: 32, adaptive: true })
+    const first = await leased("search-adaptive-stagnation", "stagnation-root-0", "root-0")
+    await evaluate("search-adaptive-stagnation", first.candidate.id, 1)
+    const second = await leased("search-adaptive-stagnation", "stagnation-root-1", "root-1")
+    await evaluate("search-adaptive-stagnation", second.candidate.id, 1)
+
+    const failed: string[] = []
+    for (const index of Array.from({ length: 8 }, (_, index) => index)) {
+      const recommendation = HarnessSearch.recommend(await HarnessSearch.read("search-adaptive-stagnation"))
+      if (!recommendation.parentIDs.length && recommendation.targetIsland === 2) break
+      const candidate = await HarnessSearch.add({
+        sessionID: "search-adaptive-stagnation",
+        recommendationID: recommendation.id,
+        parentIDs: recommendation.parentIDs,
+        inspirationIDs: recommendation.inspirationIDs,
+        branch: `failed-${index}`,
+        proposal: `verified failed attempt ${index}`,
+        artifact: artifact(`stagnation-failed-${index}`),
+      })
+      await evaluate("search-adaptive-stagnation", candidate.id, undefined, "failed")
+      failed.push(candidate.id)
+    }
+    expect(failed.length).toBeGreaterThanOrEqual(HarnessContract.adaptiveSearch.stagnation.patience - 1)
+    const spawn = HarnessSearch.recommend(await HarnessSearch.read("search-adaptive-stagnation"))
+    expect(spawn).toMatchObject({
+      strategy: "explore",
+      parentIDs: [],
+      targetIsland: 2,
+      control: { globalStagnation: true },
+    })
+    expect(spawn.reasons).toContain("adaptive-island-spawn:2")
+    const third = await leased("search-adaptive-stagnation", "stagnation-root-2", "root-2")
+    await evaluate("search-adaptive-stagnation", third.candidate.id, 0.5)
+    const fourth = await leased("search-adaptive-stagnation", "stagnation-root-3", "root-3")
+    expect(fourth.recommendation).toMatchObject({ parentIDs: [], targetIsland: 3 })
+    await evaluate("search-adaptive-stagnation", fourth.candidate.id, 0.4)
+    const meta = HarnessSearch.recommend(await HarnessSearch.read("search-adaptive-stagnation"))
+    expect(meta).toMatchObject({
+      strategy: "diverge",
+      mode: "stepwise",
+      parentIDs: [first.candidate.id],
+      control: { globalStagnation: true },
+    })
+    expect(meta.reasons).toContain("meta-guidance")
   })
 
   test("requests focused diffs for exploitation and serializes recommendation races", async () => {
@@ -727,7 +901,13 @@ describe("harness candidate graph", () => {
 
   test("assigns deterministic islands server-side and preserves them across restart", async () => {
     const initial = await setup("search-islands", { candidates: 8 })
-    expect(initial.population).toEqual({ mode: "islands", count: 2, topology: "ring", migrationInterval: 2 })
+    expect(initial.population).toEqual({
+      mode: "islands",
+      count: 2,
+      initial: 2,
+      topology: "ring",
+      migrationInterval: 2,
+    })
 
     const first = await add("search-islands", "first", [], "line-a")
     expect(first.state.candidates[first.id]).toMatchObject({ island: 0, ordinal: 0 })
@@ -965,13 +1145,15 @@ describe("harness candidate graph", () => {
     delete legacy.candidates[seed.id].ordinal
     await fs.writeFile(file, JSON.stringify(legacy))
     const state = await HarnessSearch.read("search-pareto-legacy")
-    expect(state.schemaVersion).toBe(3)
+    expect(state.schemaVersion).toBe(4)
     expect(state.proposalPolicy).toBe("advisory-v2")
-    expect(state.population).toEqual({ mode: "legacy", count: 1, topology: "ring", migrationInterval: 1 })
+    expect(state.population).toEqual({ mode: "legacy", count: 1, initial: 1, topology: "ring", migrationInterval: 1 })
     expect(state.objectives).toEqual([])
     expect(state.archiveIDs).toEqual([seed.id])
     expect(state.bestID).toBe(seed.id)
-    await expect(HarnessSearch.reserve({ sessionID: "search-pareto-legacy", count: 1 })).rejects.toThrow("leased-v3")
+    await expect(HarnessSearch.reserve({ sessionID: "search-pareto-legacy", count: 1 })).rejects.toThrow(
+      "leased proposal policy",
+    )
   })
 
   test("preserves branch diversity during early exploration", async () => {

@@ -26,6 +26,46 @@ export namespace HarnessContract {
     )
   export type Objectives = z.infer<typeof Objectives>
 
+  export const Search = z
+    .object({
+      protocolVersion: z.literal("adaptive-search-v1"),
+      signal: z
+        .object({
+          source: z.literal("verified-final-evaluations"),
+          decay: z.literal(0.9),
+          epsilon: z.literal(1e-8),
+        })
+        .strict(),
+      local: z
+        .object({
+          minIntensity: z.literal(0.15),
+          maxIntensity: z.literal(0.5),
+        })
+        .strict(),
+      global: z
+        .object({
+          exploration: z.literal(Math.SQRT2),
+          minVisits: z.literal(2),
+        })
+        .strict(),
+      stagnation: z
+        .object({
+          patience: z.literal(5),
+          maxSignal: z.literal(0.02),
+        })
+        .strict(),
+    })
+    .strict()
+  export type Search = z.infer<typeof Search>
+
+  export const adaptiveSearch: Search = {
+    protocolVersion: "adaptive-search-v1",
+    signal: { source: "verified-final-evaluations", decay: 0.9, epsilon: 1e-8 },
+    local: { minIntensity: 0.15, maxIntensity: 0.5 },
+    global: { exploration: Math.SQRT2, minVisits: 2 },
+    stagnation: { patience: 5, maxSignal: 0.02 },
+  }
+
   export const Topology = z.enum(["auto", "solo", "centralized", "fork_join", "tournament", "evolution"])
   export type Topology = z.infer<typeof Topology>
 
@@ -582,6 +622,7 @@ export namespace HarnessContract {
         .strict(),
       profile: Profile,
       orchestration: Orchestration.optional(),
+      search: Search.optional(),
       audit: Audit.optional(),
       launch: Launch.optional(),
       recipe: HarnessRecipe.Materialized.optional(),
@@ -663,6 +704,23 @@ export namespace HarnessContract {
           code: "custom",
           path: ["benchmark", "objectives"],
           message: "Secondary objectives require the optimize profile",
+        })
+      }
+      if (value.search && value.profile !== "optimize") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["search"],
+          message: "Adaptive candidate search requires the optimize profile",
+        })
+      }
+      if (
+        value.search &&
+        (!value.benchmark.metric || !["maximize", "minimize"].includes(value.benchmark.direction ?? ""))
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["search"],
+          message: "Adaptive candidate search requires a numeric benchmark metric and direction",
         })
       }
       if (value.benchmark.objectiveAudit && !value.benchmark.objectives?.length) {
