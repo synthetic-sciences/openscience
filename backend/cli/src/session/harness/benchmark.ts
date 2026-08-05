@@ -17,6 +17,7 @@ export namespace HarnessBenchmark {
     "ale",
     "weather",
     "researchclaw",
+    "astabench",
     "paperbench",
     "corebench",
     "scienceagentbench",
@@ -193,6 +194,11 @@ export namespace HarnessBenchmark {
       reason:
         "The public grader requires an API key, but the official CLI accepts it only through --api-key; a sealed launch cannot put credentials in argv or a committed recipe.",
       anchor: "evaluate_all_results.py",
+    },
+    astabench: {
+      reason:
+        "The official two-phase runner invokes the default root solve project with uv --frozen, but the pinned repository omits the root uv.lock and explicitly ignores it, so the unchanged published entrypoint cannot resolve a reproducible solve environment.",
+      anchor: "scripts/eval_then_score.sh",
     },
   } as const
   const item = (input: Omit<Manifest, "execution" | "recipe">) => {
@@ -489,6 +495,33 @@ export namespace HarnessBenchmark {
         "https://huggingface.co/datasets/InternScience/ResearchClawBench",
       ),
       task: "General research execution with benchmark-specific packs added without silently changing the evaluator.",
+    }),
+    astabench: item({
+      id: "astabench",
+      title: "AstaBench",
+      family: "generalist",
+      aliases: ["astabench", "asta-bench", "asta bench"],
+      profile: "reproduce",
+      profiles: ["react", "reproduce", "optimize"],
+      packs: [],
+      source: source(
+        "https://github.com/allenai/asta-bench",
+        "8fbdbbb68a73fe4a47af4ebcf1819b90b608bd36",
+        "https://allenai.org/papers/astabench",
+        [
+          ".gitignore",
+          "README.md",
+          "pyproject.toml",
+          "astabench/cli.py",
+          "astabench/config/v1.0.0.yml",
+          "scripts/eval_then_score.sh",
+          "scripts/smoke_solve_score.sh",
+          "solvers/scorer/pyproject.toml",
+          "solvers/scorer/uv.lock",
+        ],
+        "https://huggingface.co/datasets/allenai/asta-bench",
+      ),
+      task: "Evaluate literature search, code execution, data analysis, and end-to-end scientific discovery under standardized tools, separately frozen scoring, and cost accounting.",
     }),
     paperbench: item({
       id: "paperbench",

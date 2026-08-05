@@ -85,17 +85,17 @@ describe("benchmark adapters", () => {
       expect(HarnessBenchmark.resolve(manifest.title).id).toBe(manifest.id)
     }
     const sources = Object.values(HarnessBenchmark.catalog).map((manifest) => manifest.source.status)
-    expect(sources.filter((status) => status === "official_open")).toHaveLength(19)
+    expect(sources.filter((status) => status === "official_open")).toHaveLength(20)
     expect(sources.filter((status) => status === "official_subset")).toHaveLength(1)
     expect(sources.filter((status) => status === "methodology_only")).toHaveLength(3)
     const paths = Object.values(HarnessBenchmark.catalog).flatMap((manifest) =>
       manifest.source.status === "methodology_only" ? [] : manifest.source.requiredPaths,
     )
-    expect(paths).toHaveLength(118)
+    expect(paths).toHaveLength(127)
     const recipes = Object.values(HarnessBenchmark.catalog).map((manifest) => manifest.recipe.status)
     expect(recipes.filter((status) => status === "source_verified")).toHaveLength(16)
     expect(recipes.filter((status) => status === "pending_source_verification")).toHaveLength(0)
-    expect(recipes.filter((status) => status === "blocked_upstream")).toHaveLength(4)
+    expect(recipes.filter((status) => status === "blocked_upstream")).toHaveLength(5)
     expect(recipes.filter((status) => status === "not_applicable")).toHaveLength(3)
   })
 
@@ -104,6 +104,7 @@ describe("benchmark adapters", () => {
     expect(HarnessBenchmark.resolve("p^2").id).toBe("statistics")
     expect(HarnessBenchmark.resolve("BioMni Bench").id).toBe("biomni")
     expect(HarnessBenchmark.resolve("ResearchClawBench").id).toBe("researchclaw")
+    expect(HarnessBenchmark.resolve("AstaBench").id).toBe("astabench")
     expect(() => HarnessBenchmark.resolve("imaginary-bench")).toThrow("Unsupported benchmark adapter")
   })
 
@@ -176,6 +177,13 @@ describe("benchmark adapters", () => {
         launch: launchProtocol("posttrain"),
       }),
     ).rejects.toThrow("blocked at README.md")
+    await expect(
+      HarnessAdapter.bind({
+        ...task("astabench", "astabench-blocked"),
+        split: "held_out",
+        launch: launchProtocol("astabench"),
+      }),
+    ).rejects.toThrow("blocked at scripts/eval_then_score.sh")
   })
 
   test("binds the exact native recipe driver and rejects recipe or entrypoint substitution", async () => {
