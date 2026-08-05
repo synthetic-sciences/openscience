@@ -57,6 +57,14 @@ export namespace KernelHost {
   // meaningfully, takes a single 200ms sample instead.
   let baseline: ReturnType<typeof mark> | undefined
 
+  // Drops the rolling baseline so the next snapshot takes the cold 200ms
+  // sample. Without it a caller inherits whatever window an earlier caller in
+  // the same process left behind, and a window that has not advanced yields no
+  // busy figure at all — an outcome that depends on call order, not on code.
+  export function reset() {
+    baseline = undefined
+  }
+
   const load = async (cores: number) => {
     const previous = baseline
     const fresh = mark()

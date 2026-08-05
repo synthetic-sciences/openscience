@@ -1,6 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import os from "node:os"
 import { KernelHost } from "../../../src/science/kernel/host"
+
+// The baseline is module state shared with every other caller in the process,
+// so each test starts cold rather than depending on being the first to sample.
+beforeEach(() => KernelHost.reset())
 
 const meminfo = `MemTotal:       16318000 kB
 MemFree:         1402184 kB
