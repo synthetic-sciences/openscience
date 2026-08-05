@@ -940,6 +940,45 @@ test("operate-adaptive-search rejects inconsistent controller decisions", async 
   }
 })
 
+test("run-verifier-routed-research enforces clean restart context isolation", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-verifier-unit-"))
+  const script = "research/run-verifier-routed-research/scripts/validate_unit.py"
+  const source = path.join(dir, "work.json")
+  const review = (id: string) => ({ id: hash(id), role: "verification", status: "completed" })
+  const work = {
+    id: hash("clean-restart"),
+    status: "pending",
+    role: "generation",
+    label: "clean-restart-2",
+    prompt: 'role="generation" topology="verifier_loop" return one complete candidate artifact',
+    context: [review("review-a"), review("review-b")],
+    allocation: { steps: 1, tokens: 1000, costUSD: 0.01, wallTimeMs: 1000 },
+  }
+  try {
+    await Bun.write(source, JSON.stringify(work))
+    const valid = await run(script, [source])
+    expect(valid.code).toBe(0)
+    expect(JSON.parse(valid.stdout)).toMatchObject({
+      valid: true,
+      role: "generation",
+      label: "clean-restart-2",
+    })
+
+    await Bun.write(
+      source,
+      JSON.stringify({
+        ...work,
+        context: [{ id: hash("rejected-candidate"), role: "generation", status: "completed" }, ...work.context],
+      }),
+    )
+    const rejected = await run(script, [source])
+    expect(rejected.code).toBe(1)
+    expect(rejected.stderr).toContain("clean restart may receive verifier summaries only")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("design-replay-interventions freezes exact one-difference evaluator pairs", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-interventions-"))
   const script = "research/design-replay-interventions/scripts/design_interventions.py"

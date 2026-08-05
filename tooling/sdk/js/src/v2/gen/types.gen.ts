@@ -10961,7 +10961,7 @@ export type HarnessOrchestrationStatusResponses = {
    */
   200: {
     schemaVersion: 3
-    protocolVersion: "coalition-v1" | "coalition-v2"
+    protocolVersion: "coalition-v1" | "coalition-v2" | "coalition-v3"
     sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
     workerPolicy: "claimed-v1" | "task-attested-v1"
     runID: string
@@ -10969,7 +10969,7 @@ export type HarnessOrchestrationStatusResponses = {
     contractFingerprint: string
     objective: string
     selection: {
-      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
       source: "contract" | "policy"
       reasons: Array<string>
       traits: {
@@ -11008,6 +11008,26 @@ export type HarnessOrchestrationStatusResponses = {
       phase: "searching" | "finalizing"
       stopReason?: "target_reached" | "marginal_utility_exhausted" | "max_rounds"
     }
+    repair?: {
+      protocolVersion: "verifier-routed-v1"
+      minConfidence: number
+      phase: "producing" | "verifying" | "investigating" | "completed"
+      candidateID: string
+      verifierIDs: Array<string>
+      evidenceID?: string
+      routes: Array<{
+        id: string
+        attempt: number
+        candidateID: string
+        actionID?: string
+        verifierIDs: Array<string>
+        decision: "accept" | "revise" | "restart" | "investigate"
+        confidence: number
+        evidenceRefs: Array<string>
+        recordedAt: number
+      }>
+      stopReason?: "accepted" | "attempt_limit" | "work_failed"
+    }
     consensus?: {
       status: "supported" | "rejected" | "disputed" | "insufficient"
       verifierCount: number
@@ -11028,6 +11048,7 @@ export type HarnessOrchestrationStatusResponses = {
           | "reflection"
           | "ranking"
           | "evolution"
+          | "revision"
           | "verification"
           | "investigation"
           | "simulation"
@@ -11079,6 +11100,7 @@ export type HarnessOrchestrationStatusResponses = {
           }
           verdict?: {
             decision: "support" | "reject" | "abstain"
+            severity?: "none" | "minor" | "critical" | "unknown"
             confidence: number
             checks: Array<{
               id: string
@@ -11131,7 +11153,7 @@ export type HarnessOrchestrationStartResponses = {
    */
   200: {
     schemaVersion: 3
-    protocolVersion: "coalition-v1" | "coalition-v2"
+    protocolVersion: "coalition-v1" | "coalition-v2" | "coalition-v3"
     sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
     workerPolicy: "claimed-v1" | "task-attested-v1"
     runID: string
@@ -11139,7 +11161,7 @@ export type HarnessOrchestrationStartResponses = {
     contractFingerprint: string
     objective: string
     selection: {
-      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
       source: "contract" | "policy"
       reasons: Array<string>
       traits: {
@@ -11178,6 +11200,26 @@ export type HarnessOrchestrationStartResponses = {
       phase: "searching" | "finalizing"
       stopReason?: "target_reached" | "marginal_utility_exhausted" | "max_rounds"
     }
+    repair?: {
+      protocolVersion: "verifier-routed-v1"
+      minConfidence: number
+      phase: "producing" | "verifying" | "investigating" | "completed"
+      candidateID: string
+      verifierIDs: Array<string>
+      evidenceID?: string
+      routes: Array<{
+        id: string
+        attempt: number
+        candidateID: string
+        actionID?: string
+        verifierIDs: Array<string>
+        decision: "accept" | "revise" | "restart" | "investigate"
+        confidence: number
+        evidenceRefs: Array<string>
+        recordedAt: number
+      }>
+      stopReason?: "accepted" | "attempt_limit" | "work_failed"
+    }
     consensus?: {
       status: "supported" | "rejected" | "disputed" | "insufficient"
       verifierCount: number
@@ -11198,6 +11240,7 @@ export type HarnessOrchestrationStartResponses = {
           | "reflection"
           | "ranking"
           | "evolution"
+          | "revision"
           | "verification"
           | "investigation"
           | "simulation"
@@ -11249,6 +11292,7 @@ export type HarnessOrchestrationStartResponses = {
           }
           verdict?: {
             decision: "support" | "reject" | "abstain"
+            severity?: "none" | "minor" | "critical" | "unknown"
             confidence: number
             checks: Array<{
               id: string
@@ -11309,7 +11353,7 @@ export type HarnessOrchestrationCheckpointResponses = {
    */
   200: {
     schemaVersion: 3
-    protocolVersion: "coalition-v1" | "coalition-v2"
+    protocolVersion: "coalition-v1" | "coalition-v2" | "coalition-v3"
     sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
     workerPolicy: "claimed-v1" | "task-attested-v1"
     runID: string
@@ -11317,7 +11361,7 @@ export type HarnessOrchestrationCheckpointResponses = {
     contractFingerprint: string
     objective: string
     selection: {
-      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
       source: "contract" | "policy"
       reasons: Array<string>
       traits: {
@@ -11356,6 +11400,26 @@ export type HarnessOrchestrationCheckpointResponses = {
       phase: "searching" | "finalizing"
       stopReason?: "target_reached" | "marginal_utility_exhausted" | "max_rounds"
     }
+    repair?: {
+      protocolVersion: "verifier-routed-v1"
+      minConfidence: number
+      phase: "producing" | "verifying" | "investigating" | "completed"
+      candidateID: string
+      verifierIDs: Array<string>
+      evidenceID?: string
+      routes: Array<{
+        id: string
+        attempt: number
+        candidateID: string
+        actionID?: string
+        verifierIDs: Array<string>
+        decision: "accept" | "revise" | "restart" | "investigate"
+        confidence: number
+        evidenceRefs: Array<string>
+        recordedAt: number
+      }>
+      stopReason?: "accepted" | "attempt_limit" | "work_failed"
+    }
     consensus?: {
       status: "supported" | "rejected" | "disputed" | "insufficient"
       verifierCount: number
@@ -11376,6 +11440,7 @@ export type HarnessOrchestrationCheckpointResponses = {
           | "reflection"
           | "ranking"
           | "evolution"
+          | "revision"
           | "verification"
           | "investigation"
           | "simulation"
@@ -11427,6 +11492,7 @@ export type HarnessOrchestrationCheckpointResponses = {
           }
           verdict?: {
             decision: "support" | "reject" | "abstain"
+            severity?: "none" | "minor" | "critical" | "unknown"
             confidence: number
             checks: Array<{
               id: string
@@ -11468,7 +11534,7 @@ export type HarnessBindData = {
     profile?: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
     search?: "adaptive" | "static"
     orchestration?: {
-      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
       traits?: {
         decomposability: number
         sequentiality: number
@@ -11486,6 +11552,7 @@ export type HarnessBindData = {
         | "reflection"
         | "ranking"
         | "evolution"
+        | "revision"
         | "verification"
         | "investigation"
         | "simulation"
@@ -11499,6 +11566,10 @@ export type HarnessBindData = {
         minUtilityGain: number
         maxUncertainty: number
         targetUtility?: number
+      }
+      repair?: {
+        protocolVersion: "verifier-routed-v1"
+        minConfidence: number
       }
     }
     audit?: {
@@ -11817,7 +11888,7 @@ export type HarnessBindResponses = {
     }
     profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
     orchestration?: {
-      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
       traits?: {
         decomposability: number
         sequentiality: number
@@ -11835,6 +11906,7 @@ export type HarnessBindResponses = {
         | "reflection"
         | "ranking"
         | "evolution"
+        | "revision"
         | "verification"
         | "investigation"
         | "simulation"
@@ -11848,6 +11920,10 @@ export type HarnessBindResponses = {
         minUtilityGain: number
         maxUncertainty: number
         targetUtility?: number
+      }
+      repair?: {
+        protocolVersion: "verifier-routed-v1"
+        minConfidence: number
       }
     }
     search?: {
@@ -12629,7 +12705,7 @@ export type HarnessContractResponses = {
     }
     profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
     orchestration?: {
-      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
       traits?: {
         decomposability: number
         sequentiality: number
@@ -12647,6 +12723,7 @@ export type HarnessContractResponses = {
         | "reflection"
         | "ranking"
         | "evolution"
+        | "revision"
         | "verification"
         | "investigation"
         | "simulation"
@@ -12660,6 +12737,10 @@ export type HarnessContractResponses = {
         minUtilityGain: number
         maxUncertainty: number
         targetUtility?: number
+      }
+      repair?: {
+        protocolVersion: "verifier-routed-v1"
+        minConfidence: number
       }
     }
     search?: {

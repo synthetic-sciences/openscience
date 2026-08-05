@@ -108,6 +108,12 @@ const verdict = (decision: HarnessOrchestrator.Verdict["decision"]): HarnessOrch
   ],
 })
 
+const routed = (
+  decision: HarnessOrchestrator.Verdict["decision"],
+  severity: NonNullable<HarnessOrchestrator.Verdict["severity"]>,
+  confidence = decision === "abstain" ? 0.4 : 0.8,
+): HarnessOrchestrator.Verdict => ({ ...verdict(decision), severity, confidence })
+
 const turns: string[] = []
 
 const attest = async (
@@ -232,6 +238,235 @@ describe("scientific coalition orchestration", () => {
         },
       }),
     ).toThrow("explicit evolution")
+    expect(() => HarnessContract.Orchestration.parse(config("verifier_loop"))).toThrow("repair contract")
+    expect(() =>
+      HarnessContract.Orchestration.parse({
+        ...config("centralized"),
+        repair: { protocolVersion: "verifier-routed-v1", minConfidence: 0.7 },
+      }),
+    ).toThrow("explicit verifier_loop")
+  })
+
+  test("accepts only after a complete high-confidence verifier panel", async () => {
+    const sessionID = "repair-accept"
+    const orchestration: HarnessContract.Orchestration = {
+      ...config("verifier_loop"),
+      maxRounds: 3,
+      repair: { protocolVersion: "verifier-routed-v1", minConfidence: 0.7 },
+    }
+    await bind(sessionID, orchestration)
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    expect(initial).toMatchObject({
+      protocolVersion: "coalition-v3",
+      repair: { phase: "producing", routes: [] },
+    })
+    expect(initial.work[initial.order[0]!]!.allocation.steps).toBe(7)
+    const candidate = HarnessOrchestrator.ready(initial)[0]!
+    const proposed = await finish(sessionID, candidate, "repair-author", done("candidate"))
+    const verifiers = HarnessOrchestrator.ready(proposed)
+    expect(verifiers).toHaveLength(2)
+    const first = await finish(sessionID, verifiers[0]!, "repair-verifier-a", {
+      ...done("verified-a"),
+      verdict: routed("support", "none"),
+    })
+    expect(first.status).toBe("active")
+    expect(first.consensus).toBeUndefined()
+    const settled = await finish(sessionID, HarnessOrchestrator.ready(first)[0]!, "repair-verifier-b", {
+      ...done("verified-b"),
+      verdict: routed("support", "none"),
+    })
+    expect(settled).toMatchObject({
+      status: "completed",
+      repair: { phase: "completed", stopReason: "accepted" },
+      consensus: { status: "supported", verifierCount: 2, support: 2, reject: 0, abstain: 0 },
+    })
+    expect(settled.repair!.routes.map((item) => item.decision)).toEqual(["accept"])
+    expect(HarnessOrchestrator.State.safeParse(settled).success).toBe(true)
+    const file = path.join(Global.Path.data, "harness", "orchestration", `${encodeURIComponent(sessionID)}.json`)
+    const stored = JSON.parse(await fs.readFile(file, "utf8")) as HarnessOrchestrator.State
+    stored.repair!.minConfidence = 0.75
+    await fs.writeFile(file, JSON.stringify(stored))
+    await expect(HarnessOrchestrator.read(sessionID)).rejects.toThrow("bound contract")
+  })
+
+  test("requires repair-panel severity after Task execution", async () => {
+    const sessionID = "repair-severity"
+    await bind(sessionID, {
+      ...config("verifier_loop"),
+      maxRounds: 1,
+      repair: { protocolVersion: "verifier-routed-v1", minConfidence: 0.7 },
+    })
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    const proposed = await finish(
+      sessionID,
+      HarnessOrchestrator.ready(initial)[0]!,
+      "severity-author",
+      done("candidate"),
+    )
+    const verifier = HarnessOrchestrator.ready(proposed)[0]!
+    await attest(sessionID, verifier, "severity-verifier")
+    await expect(
+      HarnessOrchestrator.complete({
+        sessionID,
+        workID: verifier.id,
+        workerSessionID: "severity-verifier",
+        result: { ...done("missing-severity"), verdict: verdict("support") },
+      }),
+    ).rejects.toThrow("severity classification")
+  })
+
+  test("routes localized defects to revision and excludes stale panels from final consensus", async () => {
+    const sessionID = "repair-revise"
+    await bind(sessionID, {
+      ...config("verifier_loop"),
+      maxRounds: 3,
+      repair: { protocolVersion: "verifier-routed-v1", minConfidence: 0.7 },
+    })
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    const candidate = HarnessOrchestrator.ready(initial)[0]!
+    const proposed = await finish(sessionID, candidate, "revise-author", done("candidate-with-local-defect"))
+    const panel = HarnessOrchestrator.ready(proposed)
+    const rejected = await finish(sessionID, panel[0]!, "revise-verifier-a", {
+      ...done("localized-counterexample"),
+      verdict: routed("reject", "minor"),
+    })
+    const routedState = await finish(sessionID, HarnessOrchestrator.ready(rejected)[0]!, "revise-verifier-b", {
+      ...done("otherwise-sound"),
+      verdict: routed("support", "none"),
+    })
+    const revision = HarnessOrchestrator.ready(routedState)[0]!
+    expect(revision).toMatchObject({ role: "revision", label: "targeted-revision-1" })
+    expect(routedState.repair!.routes[0]!.actionID).toBe(revision.id)
+    expect(revision.context.map((item) => item.role)).toEqual(["generation", "verification", "verification"])
+    const repaired = await finish(sessionID, revision, "reviser", done("complete-repaired-candidate"))
+    const final = HarnessOrchestrator.ready(repaired)
+    const checked = await finish(sessionID, final[0]!, "fresh-final-a", {
+      ...done("repair-check-a"),
+      verdict: routed("support", "none"),
+    })
+    const settled = await finish(sessionID, HarnessOrchestrator.ready(checked)[0]!, "fresh-final-b", {
+      ...done("repair-check-b"),
+      verdict: routed("support", "none"),
+    })
+    expect(settled.repair!.routes.map((item) => item.decision)).toEqual(["revise", "accept"])
+    expect(settled.repair!.routes[0]!.candidateID).toBe(candidate.id)
+    expect(settled.repair!.routes[1]!.candidateID).toBe(revision.id)
+    expect(settled.consensus).toMatchObject({ status: "supported", verifierCount: 2, support: 2, reject: 0 })
+  })
+
+  test("routes critical defects to a clean restart without rejected candidate context", async () => {
+    const sessionID = "repair-restart"
+    await bind(sessionID, {
+      ...config("verifier_loop"),
+      maxRounds: 2,
+      repair: { protocolVersion: "verifier-routed-v1", minConfidence: 0.7 },
+    })
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    const candidate = HarnessOrchestrator.ready(initial)[0]!
+    const proposed = await finish(sessionID, candidate, "restart-author", done("invalid-premise-candidate"))
+    const panel = HarnessOrchestrator.ready(proposed)
+    const rejected = await finish(sessionID, panel[0]!, "restart-verifier-a", {
+      ...done("fatal-counterexample"),
+      verdict: routed("reject", "critical"),
+    })
+    const routedState = await finish(sessionID, HarnessOrchestrator.ready(rejected)[0]!, "restart-verifier-b", {
+      ...done("secondary-review"),
+      verdict: routed("reject", "minor"),
+    })
+    const restart = HarnessOrchestrator.ready(routedState)[0]!
+    expect(restart).toMatchObject({ role: "generation", label: "clean-restart-1" })
+    expect(routedState.repair!.routes[0]!.actionID).toBe(restart.id)
+    expect(restart.dependencies).toEqual(routedState.repair!.routes[0]!.verifierIDs)
+    expect(restart.context.map((item) => item.role)).toEqual(["verification", "verification"])
+    expect(restart.context.some((item) => item.summary === "invalid-premise-candidate")).toBe(false)
+    expect(restart.prompt).toContain("Start from a blank solution")
+  })
+
+  test("routes abstention to evidence acquisition and stops at the immutable attempt ceiling", async () => {
+    const sessionID = "repair-investigate"
+    await bind(sessionID, {
+      ...config("verifier_loop"),
+      maxRounds: 2,
+      repair: { protocolVersion: "verifier-routed-v1", minConfidence: 0.7 },
+    })
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    const candidate = HarnessOrchestrator.ready(initial)[0]!
+    const proposed = await finish(sessionID, candidate, "investigate-author", done("evidence-limited-candidate"))
+    const panel = HarnessOrchestrator.ready(proposed)
+    const uncertain = await finish(sessionID, panel[0]!, "investigate-verifier-a", {
+      ...done("missing-observation"),
+      verdict: routed("abstain", "unknown"),
+    })
+    const routedState = await finish(sessionID, HarnessOrchestrator.ready(uncertain)[0]!, "investigate-verifier-b", {
+      ...done("provisional-support"),
+      verdict: routed("support", "none"),
+    })
+    const investigation = HarnessOrchestrator.ready(routedState)[0]!
+    expect(investigation).toMatchObject({ role: "investigation", label: "evidence-investigation-1" })
+    expect(routedState.repair!.routes[0]!.actionID).toBe(investigation.id)
+    const evidenced = await finish(sessionID, investigation, "evidence-worker", done("new-observable-evidence"))
+    const final = HarnessOrchestrator.ready(evidenced)
+    expect(final[0]!.context.map((item) => item.role)).toEqual(["generation", "investigation"])
+    expect(final[0]!.context.some((item) => item.role === "verification")).toBe(false)
+    const first = await finish(sessionID, final[0]!, "attempt-two-a", {
+      ...done("remaining-failure-a"),
+      verdict: routed("reject", "minor"),
+    })
+    const settled = await finish(sessionID, HarnessOrchestrator.ready(first)[0]!, "attempt-two-b", {
+      ...done("remaining-failure-b"),
+      verdict: routed("reject", "minor"),
+    })
+    expect(settled).toMatchObject({
+      status: "completed",
+      repair: { phase: "completed", stopReason: "attempt_limit" },
+      consensus: { status: "rejected", verifierCount: 2, reject: 2 },
+    })
+    expect(settled.repair!.routes.map((item) => item.decision)).toEqual(["investigate", "revise"])
+    expect(settled.repair!.routes[1]!.actionID).toBeUndefined()
+
+    const file = path.join(Global.Path.data, "harness", "orchestration", `${encodeURIComponent(sessionID)}.json`)
+    const stored = JSON.parse(await fs.readFile(file, "utf8")) as HarnessOrchestrator.State
+    stored.repair!.routes[0]!.decision = "accept"
+    await fs.writeFile(file, JSON.stringify(stored))
+    await expect(HarnessOrchestrator.read(sessionID)).rejects.toThrow("Repair route derivation drifted")
+  })
+
+  test("reserves the whole conditional repair budget before starting", async () => {
+    const sessionID = "repair-budget"
+    await HarnessContract.bind(
+      contract(
+        sessionID,
+        {
+          ...config("verifier_loop"),
+          maxRounds: 3,
+          repair: { protocolVersion: "verifier-routed-v1", minConfidence: 0.7 },
+        },
+        { steps: 8 },
+      ),
+    )
+    await expect(HarnessOrchestrator.initialize(sessionID)).rejects.toThrow("every orchestration unit")
+  })
+
+  test("fails closed when a routed producer cannot return an artifact", async () => {
+    const sessionID = "repair-work-failed"
+    await bind(sessionID, {
+      ...config("verifier_loop"),
+      maxRounds: 2,
+      repair: { protocolVersion: "verifier-routed-v1", minConfidence: 0.7 },
+    })
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    const settled = await fail(
+      sessionID,
+      HarnessOrchestrator.ready(initial)[0]!,
+      "failed-repair-author",
+      "no valid artifact produced",
+    )
+    expect(settled).toMatchObject({
+      status: "completed",
+      repair: { phase: "completed", stopReason: "work_failed", routes: [] },
+      consensus: { status: "insufficient", verifierCount: 0 },
+    })
+    expect(HarnessOrchestrator.ready(settled)).toEqual([])
   })
 
   test("persists a restart-safe DAG and unlocks work only after dependencies", async () => {

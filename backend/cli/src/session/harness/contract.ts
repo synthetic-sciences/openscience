@@ -66,7 +66,15 @@ export namespace HarnessContract {
     stagnation: { patience: 5, maxSignal: 0.02 },
   }
 
-  export const Topology = z.enum(["auto", "solo", "centralized", "fork_join", "tournament", "evolution"])
+  export const Topology = z.enum([
+    "auto",
+    "solo",
+    "centralized",
+    "fork_join",
+    "tournament",
+    "evolution",
+    "verifier_loop",
+  ])
   export type Topology = z.infer<typeof Topology>
 
   export const Role = z.enum([
@@ -75,6 +83,7 @@ export namespace HarnessContract {
     "reflection",
     "ranking",
     "evolution",
+    "revision",
     "verification",
     "investigation",
     "simulation",
@@ -107,6 +116,14 @@ export namespace HarnessContract {
     .strict()
   export type Adaptive = z.infer<typeof Adaptive>
 
+  export const Repair = z
+    .object({
+      protocolVersion: z.literal("verifier-routed-v1"),
+      minConfidence: z.number().finite().min(0.5).max(1),
+    })
+    .strict()
+  export type Repair = z.infer<typeof Repair>
+
   export const Orchestration = z
     .object({
       topology: Topology,
@@ -121,29 +138,57 @@ export namespace HarnessContract {
         .optional(),
       minIndependentVerifiers: z.number().int().min(1).max(2),
       adaptive: Adaptive.optional(),
+      repair: Repair.optional(),
     })
     .strict()
     .superRefine((value, ctx) => {
-      if (!value.adaptive) return
-      if (value.topology !== "evolution") {
+      if (value.adaptive && value.topology !== "evolution") {
         ctx.addIssue({
           code: "custom",
           path: ["topology"],
           message: "Adaptive marginal-utility control requires an explicit evolution topology",
         })
       }
-      if (value.adaptive.minRounds > value.maxRounds) {
+      if (value.adaptive && value.adaptive.minRounds > value.maxRounds) {
         ctx.addIssue({
           code: "custom",
           path: ["adaptive", "minRounds"],
           message: "Adaptive minimum rounds exceed the orchestration round budget",
         })
       }
-      if (Math.max(value.adaptive.minRounds, value.adaptive.patience + 1) > value.maxRounds) {
+      if (value.adaptive && Math.max(value.adaptive.minRounds, value.adaptive.patience + 1) > value.maxRounds) {
         ctx.addIssue({
           code: "custom",
           path: ["adaptive", "patience"],
           message: "Adaptive patience cannot be observed within the orchestration round budget",
+        })
+      }
+      if (value.repair && value.topology !== "verifier_loop") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["topology"],
+          message: "Verifier-routed repair requires an explicit verifier_loop topology",
+        })
+      }
+      if (value.topology === "verifier_loop" && !value.repair) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["repair"],
+          message: "Verifier loop topology requires a verifier-routed repair contract",
+        })
+      }
+      if (value.topology === "verifier_loop" && value.minIndependentVerifiers !== 2) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["minIndependentVerifiers"],
+          message: "Verifier loop topology requires two independent verifiers",
+        })
+      }
+      if (value.adaptive && value.repair) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["repair"],
+          message: "Adaptive evolution and verifier-routed repair are separate bounded controllers",
         })
       }
     })

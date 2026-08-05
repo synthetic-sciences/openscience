@@ -56,6 +56,7 @@ export namespace HarnessOrchestrator {
   export const Verdict = z
     .object({
       decision: z.enum(["support", "reject", "abstain"]),
+      severity: z.enum(["none", "minor", "critical", "unknown"]).optional(),
       confidence: z.number().min(0).max(1),
       checks: z
         .array(
@@ -83,6 +84,24 @@ export namespace HarnessOrchestrator {
           code: "custom",
           path: ["checks"],
           message: "An abstaining verdict requires an inconclusive check",
+        })
+      }
+      if (value.severity === undefined) return
+      if (value.decision === "support" && value.severity !== "none") {
+        ctx.addIssue({ code: "custom", path: ["severity"], message: "Supporting verdict severity must be none" })
+      }
+      if (value.decision === "reject" && !["minor", "critical"].includes(value.severity)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["severity"],
+          message: "Rejecting verdict severity must be minor or critical",
+        })
+      }
+      if (value.decision === "abstain" && value.severity !== "unknown") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["severity"],
+          message: "Abstaining verdict severity must be unknown",
         })
       }
     })
@@ -276,6 +295,96 @@ export namespace HarnessOrchestrator {
     })
   export type Work = z.infer<typeof Work>
 
+  export const RepairRoute = z
+    .object({
+      id: z.string().regex(/^[a-f0-9]{64}$/),
+      attempt: z.number().int().min(1).max(8),
+      candidateID: z.string().regex(/^[a-f0-9]{64}$/),
+      actionID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      verifierIDs: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .min(1)
+        .max(2)
+        .refine((items) => new Set(items).size === items.length, "Repair route verifiers must be unique"),
+      decision: z.enum(["accept", "revise", "restart", "investigate"]),
+      confidence: z.number().finite().min(0).max(1),
+      evidenceRefs: z
+        .array(z.string().min(1).max(2_048))
+        .min(1)
+        .max(128)
+        .refine((items) => new Set(items).size === items.length, "Repair route evidence must be unique"),
+      recordedAt: z.number().int().positive(),
+    })
+    .strict()
+  export type RepairRoute = z.infer<typeof RepairRoute>
+
+  const Repair = HarnessContract.Repair.extend({
+    phase: z.enum(["producing", "verifying", "investigating", "completed"]),
+    candidateID: z.string().regex(/^[a-f0-9]{64}$/),
+    verifierIDs: z
+      .array(z.string().regex(/^[a-f0-9]{64}$/))
+      .max(2)
+      .refine((items) => new Set(items).size === items.length, "Repair panel verifiers must be unique"),
+    evidenceID: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    routes: z.array(RepairRoute).max(8),
+    stopReason: z.enum(["accepted", "attempt_limit", "work_failed"]).optional(),
+  })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (value.phase === "verifying" && !value.verifierIDs.length) {
+        ctx.addIssue({ code: "custom", path: ["verifierIDs"], message: "Verifying repair needs a verifier panel" })
+      }
+      if (value.phase !== "verifying" && value.verifierIDs.length) {
+        ctx.addIssue({ code: "custom", path: ["verifierIDs"], message: "Only verification may retain a live panel" })
+      }
+      if (value.phase === "investigating" && !value.evidenceID) {
+        ctx.addIssue({ code: "custom", path: ["evidenceID"], message: "Investigation needs an evidence work item" })
+      }
+      if (value.phase !== "investigating" && value.evidenceID) {
+        ctx.addIssue({ code: "custom", path: ["evidenceID"], message: "Only investigation may retain evidence work" })
+      }
+      if (value.phase === "completed" && !value.stopReason) {
+        ctx.addIssue({ code: "custom", path: ["stopReason"], message: "Completed repair needs a stop reason" })
+      }
+      if (value.phase !== "completed" && value.stopReason) {
+        ctx.addIssue({ code: "custom", path: ["stopReason"], message: "Active repair cannot have a stop reason" })
+      }
+      if (value.routes.some((item, index) => item.attempt !== index + 1)) {
+        ctx.addIssue({ code: "custom", path: ["routes"], message: "Repair routes must be sequential" })
+      }
+    })
+  export type Repair = z.infer<typeof Repair>
+
+  function routeID(fingerprint: string, sessionID: string, route: Omit<RepairRoute, "id"> | RepairRoute) {
+    return digest({
+      fingerprint,
+      sessionID,
+      attempt: route.attempt,
+      candidateID: route.candidateID,
+      actionID: route.actionID,
+      verifierIDs: route.verifierIDs,
+      decision: route.decision,
+      confidence: route.confidence,
+      evidenceRefs: route.evidenceRefs,
+      recordedAt: route.recordedAt,
+    })
+  }
+
+  function decision(verifiers: Work[], minConfidence: number): RepairRoute["decision"] {
+    const verdicts = verifiers.map((item) => item.result?.verdict)
+    if (verdicts.some((item) => item?.decision === "reject" && item.severity === "critical")) return "restart"
+    if (verdicts.some((item) => item?.decision === "abstain" || item?.severity === "unknown")) return "investigate"
+    if (verdicts.some((item) => item?.decision === "reject" && item.severity === "minor")) return "revise"
+    if (verdicts.every((item) => item?.decision === "support" && item.confidence >= minConfidence)) return "accept"
+    return "investigate"
+  }
+
   function lane(work: Pick<Work, "role" | "label">) {
     if (work.role === "generation" && work.label === "seed-a") return "producer-a" as const
     if (work.role === "generation" && work.label === "seed-b") return "producer-b" as const
@@ -346,10 +455,46 @@ export namespace HarnessOrchestrator {
     .strict()
   export type Consensus = z.infer<typeof Consensus>
 
+  function summarize(verifiers: Work[], derivedAt: number) {
+    const verdicts = verifiers.flatMap((item) => (item.result?.verdict ? [item.result.verdict] : []))
+    const support = verdicts.filter((verdict) => verdict.decision === "support").length
+    const reject = verdicts.filter((verdict) => verdict.decision === "reject").length
+    const abstain = verdicts.filter((verdict) => verdict.decision === "abstain").length
+    const status =
+      verdicts.length < 2
+        ? "insufficient"
+        : support === verdicts.length
+          ? "supported"
+          : reject === verdicts.length
+            ? "rejected"
+            : "disputed"
+    const evidenceRefs = [
+      ...new Set(
+        verifiers.flatMap((item) => [
+          ...(item.result?.evidenceRefs ?? []),
+          ...(item.result?.verdict?.checks.flatMap((check) => check.evidenceRefs) ?? []),
+        ]),
+      ),
+    ]
+    return Consensus.parse({
+      status,
+      verifierCount: verdicts.length,
+      support,
+      reject,
+      abstain,
+      confidence: verdicts.length
+        ? verdicts.reduce((sum, verdict) => sum + verdict.confidence, 0) / verdicts.length
+        : 0,
+      evidenceRefs,
+      provisional: true,
+      derivedAt,
+    })
+  }
+
   export const State = z
     .object({
       schemaVersion: z.literal(3),
-      protocolVersion: z.enum(["coalition-v1", "coalition-v2"]),
+      protocolVersion: z.enum(["coalition-v1", "coalition-v2", "coalition-v3"]),
       sessionPolicy: z.enum(["legacy-v1", "fresh-v1", "producer-lanes-v1"]),
       workerPolicy: WorkerPolicy,
       runID: z.string().min(1),
@@ -362,6 +507,7 @@ export namespace HarnessOrchestrator {
       minIndependentVerifiers: z.number().int().min(1).max(2),
       status: z.enum(["active", "awaiting_checkpoint", "completed"]),
       adaptive: Adaptive.optional(),
+      repair: Repair.optional(),
       consensus: Consensus.optional(),
       work: z.record(z.string(), Work),
       order: z.array(z.string().regex(/^[a-f0-9]{64}$/)),
@@ -474,6 +620,16 @@ export namespace HarnessOrchestrator {
           message: "Adaptive orchestration requires coalition-v2",
         })
       }
+      if (value.repair && value.protocolVersion !== "coalition-v3") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["protocolVersion"],
+          message: "Verifier-routed repair requires coalition-v3",
+        })
+      }
+      if (value.repair && value.selection.topology !== "verifier_loop") {
+        ctx.addIssue({ code: "custom", path: ["repair"], message: "Repair state requires verifier_loop topology" })
+      }
       if (value.status === "awaiting_checkpoint" && !value.adaptive) {
         ctx.addIssue({ code: "custom", path: ["status"], message: "Only adaptive orchestration awaits checkpoints" })
       }
@@ -514,11 +670,111 @@ export namespace HarnessOrchestrator {
           ctx.addIssue({ code: "custom", path: ["adaptive"], message: "Adaptive control state drifted" })
         }
       }
+      if (value.repair) {
+        const items = Object.values(value.work)
+        if (value.repair.routes.length > value.maxRounds) {
+          ctx.addIssue({ code: "custom", path: ["repair", "routes"], message: "Repair exceeded attempt limit" })
+        }
+        if (!value.work[value.repair.candidateID]) {
+          ctx.addIssue({ code: "custom", path: ["repair", "candidateID"], message: "Repair candidate is missing" })
+        }
+        if (value.repair.verifierIDs.some((id) => value.work[id]?.role !== "verification")) {
+          ctx.addIssue({ code: "custom", path: ["repair", "verifierIDs"], message: "Repair panel drifted" })
+        }
+        if (value.repair.evidenceID && value.work[value.repair.evidenceID]?.role !== "investigation") {
+          ctx.addIssue({ code: "custom", path: ["repair", "evidenceID"], message: "Repair evidence work drifted" })
+        }
+        for (const route of value.repair.routes) {
+          const verifiers = route.verifierIDs.map((id) => value.work[id]).filter((item): item is Work => !!item)
+          const action = route.actionID ? value.work[route.actionID] : undefined
+          const terminal = route.decision === "accept" || route.attempt === value.maxRounds
+          const expectedRole =
+            route.decision === "revise"
+              ? "revision"
+              : route.decision === "restart"
+                ? "generation"
+                : route.decision === "investigate"
+                  ? "investigation"
+                  : undefined
+          const expectedDependencies =
+            route.decision === "restart" ? route.verifierIDs : [route.candidateID, ...route.verifierIDs]
+          const expectedLabel =
+            route.decision === "revise"
+              ? `targeted-revision-${route.attempt}`
+              : route.decision === "restart"
+                ? `clean-restart-${route.attempt}`
+                : `evidence-investigation-${route.attempt}`
+          if (
+            route.id !== routeID(value.contractFingerprint, value.sessionID, route) ||
+            verifiers.length !== value.minIndependentVerifiers ||
+            verifiers.some((item) => item.status !== "completed" || item.role !== "verification") ||
+            route.candidateID !== verifiers[0]?.dependencies[0] ||
+            route.verifierIDs.some((id) => value.work[id]?.dependencies[0] !== route.candidateID) ||
+            route.decision !== decision(verifiers, value.repair.minConfidence) ||
+            terminal === !!action ||
+            (!!action &&
+              (action.role !== expectedRole ||
+                action.label !== expectedLabel ||
+                action.round !== route.attempt ||
+                JSON.stringify(action.dependencies) !== JSON.stringify(expectedDependencies)))
+          ) {
+            ctx.addIssue({ code: "custom", path: ["repair", "routes"], message: "Repair route derivation drifted" })
+            break
+          }
+          const evidenceRefs = [
+            ...new Set(
+              verifiers.flatMap((item) => [
+                ...(item.result?.evidenceRefs ?? []),
+                ...(item.result?.verdict?.checks.flatMap((check) => check.evidenceRefs) ?? []),
+              ]),
+            ),
+          ]
+          const confidence =
+            verifiers.reduce((sum, item) => sum + (item.result?.verdict?.confidence ?? 0), 0) / verifiers.length
+          if (JSON.stringify(route.evidenceRefs) !== JSON.stringify(evidenceRefs) || route.confidence !== confidence) {
+            ctx.addIssue({ code: "custom", path: ["repair", "routes"], message: "Repair route evidence drifted" })
+            break
+          }
+        }
+        const final = value.repair.routes.at(-1)
+        if (
+          value.repair.stopReason === "accepted" &&
+          (final?.decision !== "accept" || value.repair.routes.length > value.maxRounds)
+        ) {
+          ctx.addIssue({ code: "custom", path: ["repair", "stopReason"], message: "Repair acceptance drifted" })
+        }
+        if (value.repair.stopReason === "attempt_limit" && value.repair.routes.length !== value.maxRounds) {
+          ctx.addIssue({ code: "custom", path: ["repair", "stopReason"], message: "Repair attempt stop drifted" })
+        }
+        if (value.repair.stopReason === "attempt_limit" && final?.decision === "accept") {
+          ctx.addIssue({ code: "custom", path: ["repair", "stopReason"], message: "Accepted repair cannot exhaust" })
+        }
+        if (value.repair.stopReason === "work_failed" && !items.some((item) => item.status === "failed")) {
+          ctx.addIssue({ code: "custom", path: ["repair", "stopReason"], message: "Repair failure stop drifted" })
+        }
+        if (value.repair.phase === "completed" && value.status !== "completed") {
+          ctx.addIssue({ code: "custom", path: ["status"], message: "Completed repair must settle orchestration" })
+        }
+        if (value.repair.phase !== "completed" && value.status === "completed") {
+          ctx.addIssue({ code: "custom", path: ["status"], message: "Active repair cannot settle orchestration" })
+        }
+      }
       if (
         value.consensus &&
         value.consensus.support + value.consensus.reject + value.consensus.abstain !== value.consensus.verifierCount
       ) {
         ctx.addIssue({ code: "custom", path: ["consensus"], message: "Consensus verdict counts do not reconcile" })
+      }
+      if (value.consensus) {
+        const final = value.repair?.stopReason === "work_failed" ? undefined : value.repair?.routes.at(-1)
+        const verifiers = final
+          ? final.verifierIDs.map((id) => value.work[id]!).filter(Boolean)
+          : value.repair
+            ? []
+            : value.order.map((id) => value.work[id]!).filter((item) => item.role === "verification")
+        if (JSON.stringify(value.consensus) !== JSON.stringify(summarize(verifiers, value.consensus.derivedAt))) {
+          ctx.addIssue({ code: "custom", path: ["consensus"], message: "Consensus derivation drifted" })
+        }
       }
       const seen = new Set<string>()
       for (const id of value.order) {
@@ -575,6 +831,7 @@ export namespace HarnessOrchestrator {
     fork_join: ["generation", "simulation", "synthesis", "verification"],
     tournament: ["generation", "proximity", "reflection", "ranking", "verification"],
     evolution: ["generation", "proximity", "reflection", "ranking", "evolution", "investigation", "verification"],
+    verifier_loop: ["generation", "revision", "verification", "investigation"],
   }
 
   function supports(topology: Exclude<HarnessContract.Topology, "auto">, roles?: HarnessContract.Role[]) {
@@ -639,12 +896,15 @@ export namespace HarnessOrchestrator {
     const candidates = contract.budget.candidates ?? Number.POSITIVE_INFINITY
     const small = workers === 1 || steps < 24 || tokens < 12_000 || candidates < 2
     const choose = (topology: Exclude<HarnessContract.Topology, "auto">, reasons: string[]): Selection | undefined =>
-      supports(topology, roles) ? Selection.parse({ topology, source: "policy", reasons, traits }) : undefined
+      supports(topology, roles) && (topology !== "verifier_loop" || !!config?.repair)
+        ? Selection.parse({ topology, source: "policy", reasons, traits })
+        : undefined
     if (small) return choose("solo", ["bounded-coordination-budget"]) ?? selectSolo(traits, roles)
     if (traits.sequentiality >= 0.72 && traits.decomposability < 0.58) {
       return (
         (traits.verificationRisk >= 0.62
-          ? choose("centralized", ["sequential-task", "verification-gate"])
+          ? (choose("verifier_loop", ["sequential-task", "verifier-routed-repair"]) ??
+            choose("centralized", ["sequential-task", "verification-gate"]))
           : choose("solo", ["sequential-task"])) ?? selectSolo(traits, roles)
       )
     }
@@ -661,9 +921,48 @@ export namespace HarnessOrchestrator {
       return choose("fork_join", ["decomposable-work", "bounded-parallelism"]) ?? selectSolo(traits, roles)
     }
     if (traits.verificationRisk >= 0.62) {
-      return choose("centralized", ["verification-gate"]) ?? selectSolo(traits, roles)
+      return (
+        choose("verifier_loop", ["verifier-routed-repair"]) ??
+        choose("centralized", ["verification-gate"]) ??
+        selectSolo(traits, roles)
+      )
     }
     return selectSolo(traits, roles)
+  }
+
+  function verify(state: State, contract: HarnessContract.Info) {
+    if (state.contractFingerprint !== HarnessContract.fingerprint(contract)) {
+      throw new Error(`Orchestration state belongs to a different contract`)
+    }
+    const selection = select(contract)
+    const config = contract.orchestration
+    const adaptive = state.adaptive
+      ? {
+          protocolVersion: state.adaptive.protocolVersion,
+          minRounds: state.adaptive.minRounds,
+          patience: state.adaptive.patience,
+          minUtilityGain: state.adaptive.minUtilityGain,
+          maxUncertainty: state.adaptive.maxUncertainty,
+          targetUtility: state.adaptive.targetUtility,
+        }
+      : undefined
+    const repair = state.repair
+      ? { protocolVersion: state.repair.protocolVersion, minConfidence: state.repair.minConfidence }
+      : undefined
+    const protocol = config?.repair ? "coalition-v3" : config?.adaptive ? "coalition-v2" : "coalition-v1"
+    if (
+      state.objective !== contract.objective ||
+      JSON.stringify(state.selection) !== JSON.stringify(selection) ||
+      state.maxWorkers !== (config?.maxWorkers ?? 2) ||
+      state.maxRounds !== (config?.maxRounds ?? 2) ||
+      state.minIndependentVerifiers !== (config?.minIndependentVerifiers ?? 1) ||
+      JSON.stringify(adaptive) !== JSON.stringify(config?.adaptive) ||
+      JSON.stringify(repair) !== JSON.stringify(config?.repair) ||
+      (state.workerPolicy === "task-attested-v1" && state.protocolVersion !== protocol)
+    ) {
+      throw new Error(`Orchestration control state drifted from its bound contract`)
+    }
+    return state
   }
 
   function selectSolo(traits: HarnessContract.Traits, roles?: HarnessContract.Role[]): Selection {
@@ -698,10 +997,12 @@ export namespace HarnessOrchestrator {
         "Run pairwise comparisons using the declared objective and evidence. Emit a provisional ranking with uncertainty.",
       evolution:
         "Create a new candidate by combining verified strengths while explicitly avoiding documented failure modes.",
+      revision:
+        "Repair only the evidence-backed failed checks in the upstream candidate. Preserve supported components, expose every change, and return a complete replacement artifact rather than a patch to hidden reasoning.",
       verification:
-        "Verify from a fresh session using artifacts and observable evidence only. Do not trust producer conclusions or hidden reasoning. Return support, reject, or abstain with confidence and evidence-backed checks; do not inspect another verifier's verdict.",
+        "Verify from a fresh session using artifacts and observable evidence only. Do not trust producer conclusions or hidden reasoning. Return support, reject, or abstain with confidence and evidence-backed checks; classify severity as none, minor, critical, or unknown; do not inspect another verifier's verdict.",
       investigation:
-        "Search for counterexamples, edge cases, sabotage, reward hacking, and distribution-shift failures.",
+        "Acquire observable evidence for inconclusive checks and search for counterexamples, edge cases, sabotage, reward hacking, and distribution-shift failures. Do not revise the candidate.",
       simulation:
         "Execute the appropriate simulator or numerical check and report configuration, invariants, convergence, and artifacts.",
       synthesis:
@@ -737,6 +1038,17 @@ export namespace HarnessOrchestrator {
           ? [
               "This is a persistent producer lane. On resumed rounds, inspect the new dependency artifacts and feedback, retain only useful tested context, and use tools to propose, test, repair, and critique the edit before returning one candidate.",
               "Lane memory is search context only. It cannot certify a benchmark result, replace observable evidence, or influence verifier authority.",
+            ]
+          : []),
+        ...(selection.topology === "verifier_loop" && role === "generation" && label.startsWith("clean-restart-")
+          ? [
+              "Start from a blank solution. Use upstream verifier summaries only as failure constraints; do not reconstruct, quote, or minimally edit the rejected candidate.",
+            ]
+          : []),
+        ...(selection.topology === "verifier_loop" && role === "verification"
+          ? [
+              "Severity is controller input: none means all checks pass; minor means a localized correction can preserve the candidate premise; critical means the premise or global reasoning is invalid; unknown means evidence is insufficient.",
+              "The backend, not this worker, chooses accept, revise, restart, or investigate after every independent verifier settles.",
             ]
           : []),
         "Return a concise result, artifact references, evidence references, and actual resource usage.",
@@ -803,6 +1115,7 @@ export namespace HarnessOrchestrator {
       const investigation = add("investigation", "failure-discovery", evolved, contract.orchestration?.maxRounds ?? 2)
       verify([...evolved, investigation], (contract.orchestration?.maxRounds ?? 2) + 1)
     }
+    if (selection.topology === "verifier_loop") add("generation", "initial-candidate")
     return items
   }
 
@@ -823,15 +1136,22 @@ export namespace HarnessOrchestrator {
     const selection = select(contract)
     const planned = plan(contract, selection)
     if (!planned.length) throw new Error(`Orchestration policy produced no work`)
-    if (contract.budget.steps !== undefined && contract.budget.steps < planned.length) {
+    const capacity = contract.orchestration?.repair
+      ? contract.orchestration.maxRounds * (contract.orchestration.minIndependentVerifiers + 1)
+      : planned.length
+    if (contract.budget.steps !== undefined && contract.budget.steps < capacity) {
       throw new Error(`Contract step budget cannot allocate one step to every orchestration unit`)
     }
-    const budget = allocation(contract, planned.length)
+    const budget = allocation(contract, capacity)
     const work = Object.fromEntries(planned.map((item) => [item.id, Work.parse({ ...item, allocation: budget })]))
     const now = Date.now()
     const state = State.parse({
       schemaVersion: 3,
-      protocolVersion: contract.orchestration?.adaptive ? "coalition-v2" : "coalition-v1",
+      protocolVersion: contract.orchestration?.repair
+        ? "coalition-v3"
+        : contract.orchestration?.adaptive
+          ? "coalition-v2"
+          : "coalition-v1",
       sessionPolicy: selection.topology === "evolution" ? "producer-lanes-v1" : "fresh-v1",
       workerPolicy: "task-attested-v1",
       runID: contract.runID,
@@ -851,6 +1171,15 @@ export namespace HarnessOrchestrator {
             phase: "searching",
           }
         : undefined,
+      repair: contract.orchestration?.repair
+        ? {
+            ...contract.orchestration.repair,
+            phase: "producing",
+            candidateID: planned[0]!.id,
+            verifierIDs: [],
+            routes: [],
+          }
+        : undefined,
       work,
       order: planned.map((item) => item.id),
       revision: 0,
@@ -867,7 +1196,9 @@ export namespace HarnessOrchestrator {
   }
 
   export async function read(sessionID: string) {
-    return parse(await JsonStore.read(file(sessionID)))
+    const contract = await HarnessContract.read(sessionID)
+    if (!contract) throw new Error(`No harness contract is bound to session ${sessionID}`)
+    return verify(parse(await JsonStore.read(file(sessionID))), contract)
   }
 
   function resume(state: State, work: Work) {
@@ -911,8 +1242,10 @@ export namespace HarnessOrchestrator {
 
   export async function attest(input: z.input<typeof WorkerAttestation>) {
     const value = WorkerAttestation.parse(input)
+    const contract = await HarnessContract.read(value.sessionID)
+    if (!contract) throw new Error(`No harness contract is bound to session ${value.sessionID}`)
     await JsonStore.update(file(value.sessionID), (data) => {
-      const state = parse(data)
+      const state = verify(parse(data), contract)
       if (state.workerPolicy !== "task-attested-v1") {
         throw new Error(`Legacy orchestration does not accept Task execution receipts`)
       }
@@ -1029,6 +1362,164 @@ export namespace HarnessOrchestrator {
     return round
   }
 
+  function append(state: State, items: Array<Omit<Work, "allocation">>) {
+    const budget = state.work[state.order[0]!]!.allocation
+    const added = items.map((item) => Work.parse({ ...item, allocation: budget }))
+    return {
+      ...state,
+      work: Object.fromEntries([...Object.entries(state.work), ...added.map((item) => [item.id, item] as const)]),
+      order: [...state.order, ...added.map((item) => item.id)],
+    }
+  }
+
+  function panel(state: State, contract: HarnessContract.Info, dependencies: string[], attempt: number) {
+    const verifiers = Array.from({ length: state.minIndependentVerifiers }, (_, index) =>
+      unit(
+        contract,
+        state.selection,
+        "verification",
+        `repair-verification-${attempt}-${index + 1}`,
+        dependencies,
+        attempt,
+      ),
+    )
+    const next = append(state, verifiers)
+    return State.parse({
+      ...next,
+      repair: {
+        ...state.repair!,
+        phase: "verifying",
+        verifierIDs: verifiers.map((item) => item.id),
+        evidenceID: undefined,
+      },
+    })
+  }
+
+  function advance(state: State, contract: HarnessContract.Info, now: number): State {
+    if (!state.repair) return state
+    if (state.repair.phase === "completed") return state
+    if (state.repair.phase === "producing") {
+      const candidate = state.work[state.repair.candidateID]!
+      if (["failed", "cancelled"].includes(candidate.status)) {
+        return State.parse({
+          ...state,
+          status: "completed",
+          repair: { ...state.repair, phase: "completed", verifierIDs: [], stopReason: "work_failed" },
+        })
+      }
+      if (candidate.status !== "completed") return state
+      return panel(state, contract, [candidate.id], state.repair.routes.length + 1)
+    }
+    if (state.repair.phase === "investigating") {
+      const evidence = state.work[state.repair.evidenceID!]!
+      if (["failed", "cancelled"].includes(evidence.status)) {
+        return State.parse({
+          ...state,
+          status: "completed",
+          repair: {
+            ...state.repair,
+            phase: "completed",
+            verifierIDs: [],
+            evidenceID: undefined,
+            stopReason: "work_failed",
+          },
+        })
+      }
+      if (evidence.status !== "completed") return state
+      return panel(
+        { ...state, repair: { ...state.repair, verifierIDs: [], evidenceID: undefined } },
+        contract,
+        [state.repair.candidateID, evidence.id],
+        state.repair.routes.length + 1,
+      )
+    }
+    const verifiers = state.repair.verifierIDs.map((id) => state.work[id]!)
+    if (verifiers.some((item) => !["completed", "failed", "cancelled"].includes(item.status))) return state
+    if (verifiers.some((item) => item.status !== "completed")) {
+      return State.parse({
+        ...state,
+        status: "completed",
+        repair: { ...state.repair, phase: "completed", verifierIDs: [], stopReason: "work_failed" },
+      })
+    }
+    const route = decision(verifiers, state.repair.minConfidence)
+    const attempt = state.repair.routes.length + 1
+    const stopping = route === "accept" || attempt === state.maxRounds
+    const dependencies =
+      route === "restart" ? state.repair.verifierIDs : [state.repair.candidateID, ...state.repair.verifierIDs]
+    const role =
+      route === "revise"
+        ? ("revision" as const)
+        : route === "restart"
+          ? ("generation" as const)
+          : ("investigation" as const)
+    const label =
+      route === "revise"
+        ? `targeted-revision-${attempt}`
+        : route === "restart"
+          ? `clean-restart-${attempt}`
+          : `evidence-investigation-${attempt}`
+    const action = stopping ? undefined : unit(contract, state.selection, role, label, dependencies, attempt)
+    const evidenceRefs = [
+      ...new Set(
+        verifiers.flatMap((item) => [
+          ...item.result!.evidenceRefs,
+          ...item.result!.verdict!.checks.flatMap((check) => check.evidenceRefs),
+        ]),
+      ),
+    ]
+    const record = {
+      attempt,
+      candidateID: state.repair.candidateID,
+      actionID: action?.id,
+      verifierIDs: state.repair.verifierIDs,
+      decision: route,
+      confidence:
+        verifiers.reduce((sum, item) => sum + item.result!.verdict!.confidence, 0) / state.minIndependentVerifiers,
+      evidenceRefs,
+      recordedAt: now,
+    }
+    const recorded = RepairRoute.parse({ id: routeID(state.contractFingerprint, state.sessionID, record), ...record })
+    const routes = [...state.repair.routes, recorded]
+    if (stopping) {
+      return State.parse({
+        ...state,
+        status: "completed",
+        repair: {
+          ...state.repair,
+          phase: "completed",
+          verifierIDs: [],
+          routes,
+          stopReason: route === "accept" ? "accepted" : "attempt_limit",
+        },
+      })
+    }
+    if (!action) throw new Error(`Repair route did not produce its required action`)
+    const next = append(state, [action])
+    if (route === "investigate") {
+      return State.parse({
+        ...next,
+        repair: {
+          ...state.repair,
+          phase: "investigating",
+          verifierIDs: [],
+          evidenceID: action.id,
+          routes,
+        },
+      })
+    }
+    return State.parse({
+      ...next,
+      repair: {
+        ...state.repair,
+        phase: "producing",
+        candidateID: action.id,
+        verifierIDs: [],
+        routes,
+      },
+    })
+  }
+
   function settle(state: State, now: number): State {
     const work = Object.fromEntries(
       state.order.map((id) => {
@@ -1041,44 +1532,22 @@ export namespace HarnessOrchestrator {
     )
     const done = Object.values(work).every((item) => ["completed", "failed", "cancelled"].includes(item.status))
     const checkpoint = due({ ...state, work })
-    const verifiers = state.order.map((id) => work[id]!).filter((item) => item.role === "verification")
-    const verdicts = verifiers.flatMap((item) => (item.result?.verdict ? [item.result.verdict] : []))
-    const consensus = (() => {
-      if (!done) return
-      const support = verdicts.filter((verdict) => verdict.decision === "support").length
-      const reject = verdicts.filter((verdict) => verdict.decision === "reject").length
-      const abstain = verdicts.filter((verdict) => verdict.decision === "abstain").length
-      const status =
-        verdicts.length < 2
-          ? "insufficient"
-          : support === verdicts.length
-            ? "supported"
-            : reject === verdicts.length
-              ? "rejected"
-              : "disputed"
-      const evidenceRefs = [
-        ...new Set(
-          verifiers.flatMap((item) => [
-            ...(item.result?.evidenceRefs ?? []),
-            ...(item.result?.verdict?.checks.flatMap((check) => check.evidenceRefs) ?? []),
-          ]),
-        ),
-      ]
-      return Consensus.parse({
-        status,
-        verifierCount: verdicts.length,
-        support,
-        reject,
-        abstain,
-        confidence: verdicts.length
-          ? verdicts.reduce((sum, verdict) => sum + verdict.confidence, 0) / verdicts.length
-          : 0,
-        evidenceRefs,
-        provisional: true,
-        derivedAt: now,
-      })
-    })()
-    const status = done ? "completed" : checkpoint ? "awaiting_checkpoint" : "active"
+    const final = state.repair?.stopReason === "work_failed" ? undefined : state.repair?.routes.at(-1)
+    const verifiers = final
+      ? final.verifierIDs.map((id) => work[id]!)
+      : state.repair
+        ? []
+        : state.order.map((id) => work[id]!).filter((item) => item.role === "verification")
+    const consensus = done ? summarize(verifiers, now) : undefined
+    const status = state.repair
+      ? state.repair.phase === "completed" && done
+        ? "completed"
+        : "active"
+      : done
+        ? "completed"
+        : checkpoint
+          ? "awaiting_checkpoint"
+          : "active"
     return State.parse({ ...state, work, status, consensus, updatedAt: now })
   }
 
@@ -1138,10 +1607,7 @@ export namespace HarnessOrchestrator {
     const bound = HarnessContract.Info.parse(contract)
     if (bound.sessionID !== value.sessionID) throw new Error(`Utility checkpoint does not match the harness contract`)
     await JsonStore.update(file(value.sessionID), (data) => {
-      const state = parse(data)
-      if (state.contractFingerprint !== HarnessContract.fingerprint(bound)) {
-        throw new Error(`Utility checkpoint does not match the orchestration contract`)
-      }
+      const state = verify(parse(data), bound)
       if (!state.adaptive) throw new Error(`Orchestration does not declare adaptive marginal-utility control`)
       const existing = state.adaptive.checkpoints.find((item) => item.round === value.round)
       if (existing) {
@@ -1239,8 +1705,10 @@ export namespace HarnessOrchestrator {
     result: z.input<typeof Submission>
   }) {
     const submission = Submission.parse(input.result)
+    const contract = await HarnessContract.read(input.sessionID)
+    if (!contract) throw new Error(`No harness contract is bound to session ${input.sessionID}`)
     await JsonStore.update(file(input.sessionID), (data) => {
-      const state = parse(data)
+      const state = verify(parse(data), contract)
       const work = state.work[input.workID]
       if (!work) throw new Error(`Unknown orchestration work ${input.workID}`)
       const usage = work.workerReceipt?.usage ?? submission.usage
@@ -1287,6 +1755,9 @@ export namespace HarnessOrchestrator {
       if (work.role === "verification" && !submission.evidenceRefs.length) {
         throw new Error(`Verification work requires observable evidence references`)
       }
+      if (state.repair && work.role === "verification" && !submission.verdict?.severity) {
+        throw new Error(`Verifier-routed repair requires a severity classification`)
+      }
       if (work.role !== "verification" && submission.verdict) {
         throw new Error(`Only verification work may submit a verdict`)
       }
@@ -1302,14 +1773,16 @@ export namespace HarnessOrchestrator {
         revision: state.revision + 1,
         updatedAt: now,
       }
-      return settle(next, now)
+      return settle(advance(next, contract, now), now)
     })
     return read(input.sessionID)
   }
 
   export async function fail(input: { sessionID: string; workID: string; workerSessionID: string; failure: string }) {
+    const contract = await HarnessContract.read(input.sessionID)
+    if (!contract) throw new Error(`No harness contract is bound to session ${input.sessionID}`)
     await JsonStore.update(file(input.sessionID), (data) => {
-      const state = parse(data)
+      const state = verify(parse(data), contract)
       const work = state.work[input.workID]
       if (!work) throw new Error(`Unknown orchestration work ${input.workID}`)
       if (work.status === "failed") {
@@ -1344,7 +1817,7 @@ export namespace HarnessOrchestrator {
         revision: state.revision + 1,
         updatedAt: now,
       }
-      return settle(next, now)
+      return settle(advance(next, contract, now), now)
     })
     return read(input.sessionID)
   }

@@ -5454,7 +5454,7 @@ export class Harness extends HeyApiClient {
       profile?: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
       search?: "adaptive" | "static"
       orchestration?: {
-        topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution"
+        topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
         traits?: {
           decomposability: number
           sequentiality: number
@@ -5472,6 +5472,7 @@ export class Harness extends HeyApiClient {
           | "reflection"
           | "ranking"
           | "evolution"
+          | "revision"
           | "verification"
           | "investigation"
           | "simulation"
@@ -5485,6 +5486,10 @@ export class Harness extends HeyApiClient {
           minUtilityGain: number
           maxUncertainty: number
           targetUtility?: number
+        }
+        repair?: {
+          protocolVersion: "verifier-routed-v1"
+          minConfidence: number
         }
       }
       audit?: {

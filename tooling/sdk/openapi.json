@@ -28262,7 +28262,8 @@
                       "type": "string",
                       "enum": [
                         "coalition-v1",
-                        "coalition-v2"
+                        "coalition-v2",
+                        "coalition-v3"
                       ]
                     },
                     "sessionPolicy": {
@@ -28306,7 +28307,8 @@
                             "centralized",
                             "fork_join",
                             "tournament",
-                            "evolution"
+                            "evolution",
+                            "verifier_loop"
                           ]
                         },
                         "source": {
@@ -28544,6 +28546,137 @@
                       ],
                       "additionalProperties": false
                     },
+                    "repair": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "verifier-routed-v1"
+                        },
+                        "minConfidence": {
+                          "type": "number",
+                          "minimum": 0.5,
+                          "maximum": 1
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "producing",
+                            "verifying",
+                            "investigating",
+                            "completed"
+                          ]
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "verifierIDs": {
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "evidenceID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "routes": {
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "attempt": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 8
+                              },
+                              "candidateID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "actionID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "verifierIDs": {
+                                "minItems": 1,
+                                "maxItems": 2,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "decision": {
+                                "type": "string",
+                                "enum": [
+                                  "accept",
+                                  "revise",
+                                  "restart",
+                                  "investigate"
+                                ]
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "evidenceRefs": {
+                                "minItems": 1,
+                                "maxItems": 128,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "recordedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "attempt",
+                              "candidateID",
+                              "verifierIDs",
+                              "decision",
+                              "confidence",
+                              "evidenceRefs",
+                              "recordedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "accepted",
+                            "attempt_limit",
+                            "work_failed"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "minConfidence",
+                        "phase",
+                        "candidateID",
+                        "verifierIDs",
+                        "routes"
+                      ],
+                      "additionalProperties": false
+                    },
                     "consensus": {
                       "type": "object",
                       "properties": {
@@ -28633,6 +28766,7 @@
                               "reflection",
                               "ranking",
                               "evolution",
+                              "revision",
                               "verification",
                               "investigation",
                               "simulation",
@@ -28898,6 +29032,15 @@
                                       "abstain"
                                     ]
                                   },
+                                  "severity": {
+                                    "type": "string",
+                                    "enum": [
+                                      "none",
+                                      "minor",
+                                      "critical",
+                                      "unknown"
+                                    ]
+                                  },
                                   "confidence": {
                                     "type": "number",
                                     "minimum": 0,
@@ -29095,7 +29238,8 @@
                       "type": "string",
                       "enum": [
                         "coalition-v1",
-                        "coalition-v2"
+                        "coalition-v2",
+                        "coalition-v3"
                       ]
                     },
                     "sessionPolicy": {
@@ -29139,7 +29283,8 @@
                             "centralized",
                             "fork_join",
                             "tournament",
-                            "evolution"
+                            "evolution",
+                            "verifier_loop"
                           ]
                         },
                         "source": {
@@ -29377,6 +29522,137 @@
                       ],
                       "additionalProperties": false
                     },
+                    "repair": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "verifier-routed-v1"
+                        },
+                        "minConfidence": {
+                          "type": "number",
+                          "minimum": 0.5,
+                          "maximum": 1
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "producing",
+                            "verifying",
+                            "investigating",
+                            "completed"
+                          ]
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "verifierIDs": {
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "evidenceID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "routes": {
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "attempt": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 8
+                              },
+                              "candidateID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "actionID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "verifierIDs": {
+                                "minItems": 1,
+                                "maxItems": 2,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "decision": {
+                                "type": "string",
+                                "enum": [
+                                  "accept",
+                                  "revise",
+                                  "restart",
+                                  "investigate"
+                                ]
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "evidenceRefs": {
+                                "minItems": 1,
+                                "maxItems": 128,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "recordedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "attempt",
+                              "candidateID",
+                              "verifierIDs",
+                              "decision",
+                              "confidence",
+                              "evidenceRefs",
+                              "recordedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "accepted",
+                            "attempt_limit",
+                            "work_failed"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "minConfidence",
+                        "phase",
+                        "candidateID",
+                        "verifierIDs",
+                        "routes"
+                      ],
+                      "additionalProperties": false
+                    },
                     "consensus": {
                       "type": "object",
                       "properties": {
@@ -29466,6 +29742,7 @@
                               "reflection",
                               "ranking",
                               "evolution",
+                              "revision",
                               "verification",
                               "investigation",
                               "simulation",
@@ -29729,6 +30006,15 @@
                                       "support",
                                       "reject",
                                       "abstain"
+                                    ]
+                                  },
+                                  "severity": {
+                                    "type": "string",
+                                    "enum": [
+                                      "none",
+                                      "minor",
+                                      "critical",
+                                      "unknown"
                                     ]
                                   },
                                   "confidence": {
@@ -29931,7 +30217,8 @@
                       "type": "string",
                       "enum": [
                         "coalition-v1",
-                        "coalition-v2"
+                        "coalition-v2",
+                        "coalition-v3"
                       ]
                     },
                     "sessionPolicy": {
@@ -29975,7 +30262,8 @@
                             "centralized",
                             "fork_join",
                             "tournament",
-                            "evolution"
+                            "evolution",
+                            "verifier_loop"
                           ]
                         },
                         "source": {
@@ -30213,6 +30501,137 @@
                       ],
                       "additionalProperties": false
                     },
+                    "repair": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "verifier-routed-v1"
+                        },
+                        "minConfidence": {
+                          "type": "number",
+                          "minimum": 0.5,
+                          "maximum": 1
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "producing",
+                            "verifying",
+                            "investigating",
+                            "completed"
+                          ]
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "verifierIDs": {
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "evidenceID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "routes": {
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "attempt": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 8
+                              },
+                              "candidateID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "actionID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "verifierIDs": {
+                                "minItems": 1,
+                                "maxItems": 2,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "decision": {
+                                "type": "string",
+                                "enum": [
+                                  "accept",
+                                  "revise",
+                                  "restart",
+                                  "investigate"
+                                ]
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "evidenceRefs": {
+                                "minItems": 1,
+                                "maxItems": 128,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                }
+                              },
+                              "recordedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "attempt",
+                              "candidateID",
+                              "verifierIDs",
+                              "decision",
+                              "confidence",
+                              "evidenceRefs",
+                              "recordedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "accepted",
+                            "attempt_limit",
+                            "work_failed"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "minConfidence",
+                        "phase",
+                        "candidateID",
+                        "verifierIDs",
+                        "routes"
+                      ],
+                      "additionalProperties": false
+                    },
                     "consensus": {
                       "type": "object",
                       "properties": {
@@ -30302,6 +30721,7 @@
                               "reflection",
                               "ranking",
                               "evolution",
+                              "revision",
                               "verification",
                               "investigation",
                               "simulation",
@@ -30565,6 +30985,15 @@
                                       "support",
                                       "reject",
                                       "abstain"
+                                    ]
+                                  },
+                                  "severity": {
+                                    "type": "string",
+                                    "enum": [
+                                      "none",
+                                      "minor",
+                                      "critical",
+                                      "unknown"
                                     ]
                                   },
                                   "confidence": {
@@ -31007,7 +31436,8 @@
                             "centralized",
                             "fork_join",
                             "tournament",
-                            "evolution"
+                            "evolution",
+                            "verifier_loop"
                           ]
                         },
                         "traits": {
@@ -31072,7 +31502,7 @@
                         },
                         "roles": {
                           "minItems": 1,
-                          "maxItems": 9,
+                          "maxItems": 10,
                           "type": "array",
                           "items": {
                             "type": "string",
@@ -31082,6 +31512,7 @@
                               "reflection",
                               "ranking",
                               "evolution",
+                              "revision",
                               "verification",
                               "investigation",
                               "simulation",
@@ -31133,6 +31564,25 @@
                             "patience",
                             "minUtilityGain",
                             "maxUncertainty"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "repair": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "verifier-routed-v1"
+                            },
+                            "minConfidence": {
+                              "type": "number",
+                              "minimum": 0.5,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "minConfidence"
                           ],
                           "additionalProperties": false
                         }
@@ -33061,7 +33511,8 @@
                           "centralized",
                           "fork_join",
                           "tournament",
-                          "evolution"
+                          "evolution",
+                          "verifier_loop"
                         ]
                       },
                       "traits": {
@@ -33126,7 +33577,7 @@
                       },
                       "roles": {
                         "minItems": 1,
-                        "maxItems": 9,
+                        "maxItems": 10,
                         "type": "array",
                         "items": {
                           "type": "string",
@@ -33136,6 +33587,7 @@
                             "reflection",
                             "ranking",
                             "evolution",
+                            "revision",
                             "verification",
                             "investigation",
                             "simulation",
@@ -33187,6 +33639,25 @@
                           "patience",
                           "minUtilityGain",
                           "maxUncertainty"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "repair": {
+                        "type": "object",
+                        "properties": {
+                          "protocolVersion": {
+                            "type": "string",
+                            "const": "verifier-routed-v1"
+                          },
+                          "minConfidence": {
+                            "type": "number",
+                            "minimum": 0.5,
+                            "maximum": 1
+                          }
+                        },
+                        "required": [
+                          "protocolVersion",
+                          "minConfidence"
                         ],
                         "additionalProperties": false
                       }
@@ -35971,7 +36442,8 @@
                                 "centralized",
                                 "fork_join",
                                 "tournament",
-                                "evolution"
+                                "evolution",
+                                "verifier_loop"
                               ]
                             },
                             "traits": {
@@ -36036,7 +36508,7 @@
                             },
                             "roles": {
                               "minItems": 1,
-                              "maxItems": 9,
+                              "maxItems": 10,
                               "type": "array",
                               "items": {
                                 "type": "string",
@@ -36046,6 +36518,7 @@
                                   "reflection",
                                   "ranking",
                                   "evolution",
+                                  "revision",
                                   "verification",
                                   "investigation",
                                   "simulation",
@@ -36097,6 +36570,25 @@
                                 "patience",
                                 "minUtilityGain",
                                 "maxUncertainty"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "repair": {
+                              "type": "object",
+                              "properties": {
+                                "protocolVersion": {
+                                  "type": "string",
+                                  "const": "verifier-routed-v1"
+                                },
+                                "minConfidence": {
+                                  "type": "number",
+                                  "minimum": 0.5,
+                                  "maximum": 1
+                                }
+                              },
+                              "required": [
+                                "protocolVersion",
+                                "minConfidence"
                               ],
                               "additionalProperties": false
                             }

@@ -110,6 +110,10 @@ const Parameters = z.object({
     .enum(["support", "reject", "abstain"])
     .optional()
     .describe("For verification coalition_complete: blinded structured verdict"),
+  verdict_severity: z
+    .enum(["none", "minor", "critical", "unknown"])
+    .optional()
+    .describe("For verifier_loop coalition_complete: none, minor, critical, or unknown diagnosis"),
   verdict_confidence: z
     .number()
     .min(0)
@@ -219,6 +223,7 @@ const coalition = (state: HarnessOrchestrator.State) => ({
   maxRounds: state.maxRounds,
   minIndependentVerifiers: state.minIndependentVerifiers,
   adaptive: state.adaptive,
+  repair: state.repair,
   consensus: state.consensus,
   revision: state.revision,
   progress: Object.fromEntries(
@@ -290,6 +295,9 @@ export const HarnessTool = Tool.define("harness", {
           "verification completion requires verdict, verdict_confidence, and verdict_checks together",
         )
       }
+      if (params.verdict_severity && !params.verdict) {
+        return result("Invalid coalition completion", "verdict_severity requires a structured verdict")
+      }
       const state = await HarnessOrchestrator.complete({
         sessionID: ctx.sessionID,
         workID: params.work_id,
@@ -303,6 +311,7 @@ export const HarnessTool = Tool.define("harness", {
             params.verdict && params.verdict_confidence !== undefined && params.verdict_checks
               ? {
                   decision: params.verdict,
+                  severity: params.verdict_severity,
                   confidence: params.verdict_confidence,
                   checks: params.verdict_checks.map((check) => ({
                     id: check.id,

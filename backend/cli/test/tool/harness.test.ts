@@ -134,6 +134,72 @@ describe("harness tool", () => {
     ).toBe(false)
   })
 
+  test("carries verifier severity through the tool and exposes backend-owned repair routing", async () => {
+    await bind({
+      topology: "verifier_loop",
+      maxWorkers: 2,
+      maxRounds: 1,
+      minIndependentVerifiers: 2,
+      repair: { protocolVersion: "verifier-routed-v1", minConfidence: 0.7 },
+    })
+    const tool = await HarnessTool.init()
+    const started = JSON.parse((await tool.execute({ action: "coalition_start" }, context)).output)
+    expect(started).toMatchObject({
+      protocolVersion: "coalition-v3",
+      topology: "verifier_loop",
+      repair: { protocolVersion: "verifier-routed-v1", phase: "producing", routes: [] },
+    })
+    const author = started.ready[0]
+    await attest(author, "repair-tool-author")
+    const proposed = JSON.parse(
+      (
+        await tool.execute(
+          {
+            action: "coalition_complete",
+            work_id: author.id,
+            worker_session_id: "repair-tool-author",
+            result_summary: "candidate",
+            artifact_refs: ["artifact://candidate"],
+          },
+          context,
+        )
+      ).output,
+    )
+    expect(proposed.repair).toMatchObject({ phase: "verifying" })
+    expect(proposed.ready).toHaveLength(2)
+
+    const verify = async (work: (typeof proposed.ready)[number], worker: string) => {
+      await attest(work, worker)
+      return JSON.parse(
+        (
+          await tool.execute(
+            {
+              action: "coalition_complete",
+              work_id: work.id,
+              worker_session_id: worker,
+              result_summary: "independent support",
+              evidence_refs: [`evidence://${worker}`],
+              verdict: "support",
+              verdict_severity: "none",
+              verdict_confidence: 0.9,
+              verdict_checks: [
+                { id: "observable-check", status: "passed", evidence_refs: [`evidence://${worker}/check`] },
+              ],
+            },
+            context,
+          )
+        ).output,
+      )
+    }
+    const first = await verify(proposed.ready[0], "repair-tool-verifier-a")
+    const settled = await verify(first.ready[0], "repair-tool-verifier-b")
+    expect(settled).toMatchObject({
+      status: "completed",
+      repair: { phase: "completed", stopReason: "accepted", routes: [{ decision: "accept" }] },
+      consensus: { status: "supported", verifierCount: 2, support: 2 },
+    })
+  })
+
   test("publishes the exact Task session contract for persistent producer lanes", async () => {
     await bind({ topology: "evolution", maxWorkers: 2, maxRounds: 1, minIndependentVerifiers: 1 })
     const tool = await HarnessTool.init()
