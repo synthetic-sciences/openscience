@@ -10,6 +10,7 @@ export namespace HarnessOrchestrator {
   const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
   const Agent = z.enum(["task", "biology", "physics", "ml", "critique", "physics-critique", "reviewer"])
   const Status = z.enum(["pending", "completed", "failed", "cancelled"])
+  const Lane = z.enum(["producer-a", "producer-b"])
 
   const Usage = z
     .object({
@@ -197,6 +198,7 @@ export namespace HarnessOrchestrator {
         .refine((items) => new Set(items).size === items.length, "Work dependencies must be unique"),
       prompt: z.string().min(1).max(8_000),
       allocation: Allocation,
+      lane: Lane.optional(),
       status: Status,
       workerSessionID: z.string().min(1).optional(),
       result: Result.optional(),
@@ -231,6 +233,29 @@ export namespace HarnessOrchestrator {
     })
   export type Work = z.infer<typeof Work>
 
+  function lane(work: Pick<Work, "role" | "label">) {
+    if (work.role === "generation" && work.label === "seed-a") return "producer-a" as const
+    if (work.role === "generation" && work.label === "seed-b") return "producer-b" as const
+    if (work.role === "evolution" && /^evolved-candidate-\d+$/.test(work.label)) return "producer-a" as const
+    if (work.role === "evolution" && /^divergent-candidate-\d+$/.test(work.label)) return "producer-b" as const
+  }
+
+  function workID(
+    runID: string,
+    work: Pick<Work, "role" | "label" | "dependencies" | "round" | "lane">,
+    policy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1",
+  ) {
+    return digest({
+      runID,
+      role: work.role,
+      label: work.label,
+      dependencies: work.dependencies,
+      round: work.round,
+      ...(policy === "legacy-v1" ? {} : { sessionPolicy: policy }),
+      ...(work.lane ? { lane: work.lane } : {}),
+    })
+  }
+
   export const Selection = z
     .object({
       topology: HarnessContract.Topology.exclude(["auto"]),
@@ -258,8 +283,9 @@ export namespace HarnessOrchestrator {
 
   export const State = z
     .object({
-      schemaVersion: z.literal(1),
+      schemaVersion: z.literal(2),
       protocolVersion: z.enum(["coalition-v1", "coalition-v2"]),
+      sessionPolicy: z.enum(["legacy-v1", "fresh-v1", "producer-lanes-v1"]),
       runID: z.string().min(1),
       sessionID: z.string().min(1),
       contractFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
@@ -285,9 +311,51 @@ export namespace HarnessOrchestrator {
       if (Object.keys(value.work).length !== value.order.length) {
         ctx.addIssue({ code: "custom", path: ["work"], message: "Orchestration work must exactly match its order" })
       }
-      const sessions = Object.values(value.work).flatMap((work) => (work.workerSessionID ? [work.workerSessionID] : []))
-      if (new Set(sessions).size !== sessions.length) {
-        ctx.addIssue({ code: "custom", path: ["work"], message: "Coalition worker sessions must be unique" })
+      const items = Object.values(value.work)
+      if (value.sessionPolicy === "producer-lanes-v1" && value.selection.topology !== "evolution") {
+        ctx.addIssue({ code: "custom", path: ["sessionPolicy"], message: "Producer lanes require evolution topology" })
+      }
+      for (const work of items) {
+        const expected = value.sessionPolicy === "producer-lanes-v1" ? lane(work) : undefined
+        if (work.lane !== expected) {
+          ctx.addIssue({ code: "custom", path: ["work", work.id, "lane"], message: "Producer lane assignment drifted" })
+        }
+        if (value.sessionPolicy !== "legacy-v1" && work.id !== workID(value.runID, work, value.sessionPolicy)) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["work", work.id, "id"],
+            message: "Orchestration work identity drifted",
+          })
+        }
+      }
+      const sessions = new Map<string, Work[]>()
+      for (const work of items) {
+        if (!work.workerSessionID) continue
+        sessions.set(work.workerSessionID, [...(sessions.get(work.workerSessionID) ?? []), work])
+      }
+      for (const works of sessions.values()) {
+        if (works.length === 1) continue
+        const lanes = new Set(works.map((work) => work.lane))
+        if (
+          value.sessionPolicy === "producer-lanes-v1" &&
+          lanes.size === 1 &&
+          !lanes.has(undefined) &&
+          works.every((work) => ["generation", "evolution"].includes(work.role))
+        ) {
+          continue
+        }
+        ctx.addIssue({
+          code: "custom",
+          path: ["work"],
+          message: "Coalition worker session crossed isolation boundaries",
+        })
+      }
+      if (value.sessionPolicy === "producer-lanes-v1") {
+        for (const name of Lane.options) {
+          const works = items.filter((work) => work.lane === name && work.workerSessionID)
+          if (new Set(works.map((work) => work.workerSessionID)).size <= 1) continue
+          ctx.addIssue({ code: "custom", path: ["work"], message: `Producer lane ${name} changed worker session` })
+        }
       }
       if (value.consensus && value.status !== "completed") {
         ctx.addIssue({ code: "custom", path: ["consensus"], message: "Consensus requires settled orchestration" })
@@ -369,6 +437,7 @@ export namespace HarnessOrchestrator {
   export type State = z.infer<typeof State>
 
   export type Ready = Work & {
+    resumeSessionID?: string
     context: Array<{
       id: string
       role: HarnessContract.Role
@@ -382,6 +451,12 @@ export namespace HarnessOrchestrator {
   const file = (sessionID: string) => path.join(root, `${encodeURIComponent(sessionID)}.json`)
   const clamp = (value: number) => Math.max(0, Math.min(1, value))
   const evolving = (role: HarnessContract.Role) => ["proximity", "reflection", "ranking", "evolution"].includes(role)
+
+  function parse(data: Record<string, unknown>) {
+    const migrated =
+      data.schemaVersion === 1 ? { ...data, schemaVersion: 2, sessionPolicy: "legacy-v1" as const } : data
+    return State.parse(migrated)
+  }
 
   const required: Record<Exclude<HarnessContract.Topology, "auto">, HarnessContract.Role[]> = {
     solo: ["generation"],
@@ -531,8 +606,10 @@ export namespace HarnessOrchestrator {
     label: string,
     dependencies: string[] = [],
     round = 0,
+    lane?: z.infer<typeof Lane>,
   ): Omit<Work, "allocation"> {
-    const id = digest({ runID: contract.runID, role, label, dependencies, round })
+    const policy = selection.topology === "evolution" ? "producer-lanes-v1" : "fresh-v1"
+    const id = workID(contract.runID, { role, label, dependencies, round, lane }, policy)
     return {
       id,
       role,
@@ -540,10 +617,17 @@ export namespace HarnessOrchestrator {
       round,
       agent: agent(role, contract),
       dependencies,
+      ...(lane ? { lane } : {}),
       prompt: [
-        `<scientific-coalition role="${role}" topology="${selection.topology}" round="${round}">`,
+        `<scientific-coalition role="${role}" topology="${selection.topology}" round="${round}"${lane ? ` lane="${lane}"` : ""}>`,
         `Objective: ${contract.objective}`,
         instruction(role),
+        ...(lane
+          ? [
+              "This is a persistent producer lane. On resumed rounds, inspect the new dependency artifacts and feedback, retain only useful tested context, and use tools to propose, test, repair, and critique the edit before returning one candidate.",
+              "Lane memory is search context only. It cannot certify a benchmark result, replace observable evidence, or influence verifier authority.",
+            ]
+          : []),
         "Return a concise result, artifact references, evidence references, and actual resource usage.",
         "Your output is provisional orchestration state, never benchmark evidence or a final scientific claim.",
         "</scientific-coalition>",
@@ -554,8 +638,14 @@ export namespace HarnessOrchestrator {
 
   function plan(contract: HarnessContract.Info, selection: Selection) {
     const items: Array<Omit<Work, "allocation">> = []
-    const add = (role: HarnessContract.Role, label: string, dependencies: string[] = [], round = 0) => {
-      const item = unit(contract, selection, role, label, dependencies, round)
+    const add = (
+      role: HarnessContract.Role,
+      label: string,
+      dependencies: string[] = [],
+      round = 0,
+      lane?: z.infer<typeof Lane>,
+    ) => {
+      const item = unit(contract, selection, role, label, dependencies, round, lane)
       items.push(item)
       return item.id
     }
@@ -584,8 +674,8 @@ export namespace HarnessOrchestrator {
       verify([first, second, ranking], 1)
     }
     if (selection.topology === "evolution") {
-      const first = add("generation", "seed-a")
-      const second = add("generation", "seed-b")
+      const first = add("generation", "seed-a", [], 0, "producer-a")
+      const second = add("generation", "seed-b", [], 0, "producer-b")
       const evolved = Array.from({ length: contract.orchestration?.maxRounds ?? 2 }).reduce(
         (parents: string[], _, index) => {
           const round = index + 1
@@ -593,8 +683,8 @@ export namespace HarnessOrchestrator {
           const reflection = add("reflection", `adversarial-reflection-${round}`, [...parents, proximity], round)
           const ranking = add("ranking", `pairwise-tournament-${round}`, [proximity, reflection], round)
           return [
-            add("evolution", `evolved-candidate-${round}`, [ranking, reflection], round),
-            add("evolution", `divergent-candidate-${round}`, [ranking, reflection], round),
+            add("evolution", `evolved-candidate-${round}`, [ranking, reflection], round, "producer-a"),
+            add("evolution", `divergent-candidate-${round}`, [ranking, reflection], round, "producer-b"),
           ]
         },
         [first, second],
@@ -629,8 +719,9 @@ export namespace HarnessOrchestrator {
     const work = Object.fromEntries(planned.map((item) => [item.id, Work.parse({ ...item, allocation: budget })]))
     const now = Date.now()
     const state = State.parse({
-      schemaVersion: 1,
+      schemaVersion: 2,
       protocolVersion: contract.orchestration?.adaptive ? "coalition-v2" : "coalition-v1",
+      sessionPolicy: selection.topology === "evolution" ? "producer-lanes-v1" : "fresh-v1",
       runID: contract.runID,
       sessionID,
       contractFingerprint: HarnessContract.fingerprint(contract),
@@ -656,7 +747,7 @@ export namespace HarnessOrchestrator {
     })
     await JsonStore.update(file(sessionID), (data) => {
       if (!Object.keys(data).length) return state
-      const current = State.parse(data)
+      const current = parse(data)
       if (current.contractFingerprint === state.contractFingerprint) return current
       throw new Error(`Orchestration state belongs to a different contract`)
     })
@@ -664,7 +755,29 @@ export namespace HarnessOrchestrator {
   }
 
   export async function read(sessionID: string) {
-    return State.parse(await JsonStore.read(file(sessionID)))
+    return parse(await JsonStore.read(file(sessionID)))
+  }
+
+  function resume(state: State, work: Work) {
+    if (state.sessionPolicy !== "producer-lanes-v1" || !work.lane) return
+    const index = state.order.indexOf(work.id)
+    return state.order
+      .slice(0, index)
+      .map((id) => state.work[id]!)
+      .findLast((item) => item.lane === work.lane && item.status === "completed")?.workerSessionID
+  }
+
+  function worker(state: State, work: Work, sessionID: string) {
+    const expected = resume(state, work)
+    if (expected) {
+      if (sessionID !== expected) {
+        throw new Error(`Producer lane ${work.lane} must resume its prior worker session`)
+      }
+      return
+    }
+    if (Object.values(state.work).some((item) => item.workerSessionID === sessionID)) {
+      throw new Error(`Each fresh coalition role requires a distinct worker session`)
+    }
   }
 
   export function ready(state: State): Ready[] {
@@ -698,7 +811,8 @@ export namespace HarnessOrchestrator {
           evidenceRefs: parent.result!.evidenceRefs,
         }
       })
-      return [{ ...work, context }]
+      const sessionID = resume(current, work)
+      return [{ ...work, ...(sessionID ? { resumeSessionID: sessionID } : {}), context }]
     })
   }
 
@@ -831,7 +945,7 @@ export namespace HarnessOrchestrator {
     const bound = HarnessContract.Info.parse(contract)
     if (bound.sessionID !== value.sessionID) throw new Error(`Utility checkpoint does not match the harness contract`)
     await JsonStore.update(file(value.sessionID), (data) => {
-      const state = State.parse(data)
+      const state = parse(data)
       if (state.contractFingerprint !== HarnessContract.fingerprint(bound)) {
         throw new Error(`Utility checkpoint does not match the orchestration contract`)
       }
@@ -933,7 +1047,7 @@ export namespace HarnessOrchestrator {
   }) {
     const submission = Submission.parse(input.result)
     await JsonStore.update(file(input.sessionID), (data) => {
-      const state = State.parse(data)
+      const state = parse(data)
       const work = state.work[input.workID]
       if (!work) throw new Error(`Unknown orchestration work ${input.workID}`)
       if (work.status === "completed") {
@@ -953,9 +1067,7 @@ export namespace HarnessOrchestrator {
       if (!work.dependencies.every((dependency) => state.work[dependency]?.status === "completed")) {
         throw new Error(`Orchestration work cannot complete before its dependencies`)
       }
-      if (Object.values(state.work).some((item) => item.workerSessionID === input.workerSessionID)) {
-        throw new Error(`Each coalition role requires a distinct worker session`)
-      }
+      worker(state, work, input.workerSessionID)
       if (work.role === "verification" && !submission.verdict) {
         throw new Error(`Verification work requires a structured verdict`)
       }
@@ -984,7 +1096,7 @@ export namespace HarnessOrchestrator {
 
   export async function fail(input: { sessionID: string; workID: string; workerSessionID: string; failure: string }) {
     await JsonStore.update(file(input.sessionID), (data) => {
-      const state = State.parse(data)
+      const state = parse(data)
       const work = state.work[input.workID]
       if (!work) throw new Error(`Unknown orchestration work ${input.workID}`)
       if (work.status === "failed") {
@@ -995,9 +1107,7 @@ export namespace HarnessOrchestrator {
       if (!work.dependencies.every((dependency) => state.work[dependency]?.status === "completed")) {
         throw new Error(`Orchestration work cannot fail before its dependencies`)
       }
-      if (Object.values(state.work).some((item) => item.workerSessionID === input.workerSessionID)) {
-        throw new Error(`Each coalition role requires a distinct worker session`)
-      }
+      worker(state, work, input.workerSessionID)
       const now = Date.now()
       const next: State = {
         ...state,

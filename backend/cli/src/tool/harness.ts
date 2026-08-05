@@ -68,7 +68,9 @@ const Parameters = z.object({
     .string()
     .min(1)
     .optional()
-    .describe("For coalition_complete/coalition_fail: fresh Task child session identity"),
+    .describe(
+      "For coalition_complete/coalition_fail: exact ready.resumeSessionID for a resumed producer lane, otherwise a fresh Task child session identity",
+    ),
   result_summary: z.string().min(1).max(8_000).optional().describe("For coalition_complete: concise result"),
   artifact_refs: z
     .array(z.string().min(1).max(2_048))
@@ -163,6 +165,7 @@ const coalition = (state: HarnessOrchestrator.State) => ({
   runID: state.runID,
   status: state.status,
   protocolVersion: state.protocolVersion,
+  sessionPolicy: state.sessionPolicy,
   topology: state.selection.topology,
   selectionSource: state.selection.source,
   selectionReasons: state.selection.reasons,
@@ -187,6 +190,8 @@ const coalition = (state: HarnessOrchestrator.State) => ({
       label: work.label,
       round: work.round,
       agent: work.agent,
+      lane: work.lane,
+      resumeSessionID: work.resumeSessionID,
       prompt: work.prompt,
       allocation: work.allocation,
       context: work.context,

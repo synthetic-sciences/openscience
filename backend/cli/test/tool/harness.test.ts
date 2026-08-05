@@ -30,7 +30,7 @@ afterEach(async () => {
   await fs.rm(path.join(Global.Path.data, "harness", "retrospectives"), { recursive: true, force: true })
 })
 
-async function bind() {
+async function bind(orchestration?: HarnessContract.Orchestration) {
   return HarnessContract.bind({
     schemaVersion: 1,
     runID: "run-harness-tool",
@@ -47,6 +47,7 @@ async function bind() {
       target: 0.9,
     },
     profile: "optimize",
+    ...(orchestration ? { orchestration } : {}),
     model: { provider: "test", name: "model" },
     tools: ["harness"],
     skills: [],
@@ -83,6 +84,47 @@ describe("harness tool", () => {
     expect(completed.metadata).toMatchObject({ workID: work.id, provisional: true, revision: 1 })
     expect(JSON.parse(completed.output).revision).toBe(1)
     expect(tool.parameters.safeParse({ action: "coalition_verify", work_id: work.id }).success).toBe(false)
+  })
+
+  test("publishes the exact Task session contract for persistent producer lanes", async () => {
+    await bind({ topology: "evolution", maxWorkers: 2, maxRounds: 1, minIndependentVerifiers: 1 })
+    const tool = await HarnessTool.init()
+    const started = JSON.parse((await tool.execute({ action: "coalition_start" }, context)).output)
+    expect(started).toMatchObject({ sessionPolicy: "producer-lanes-v1", topology: "evolution" })
+    expect(
+      started.ready.map((work: { lane?: string; resumeSessionID?: string }) => [work.lane, work.resumeSessionID]),
+    ).toEqual([
+      ["producer-a", undefined],
+      ["producer-b", undefined],
+    ])
+
+    const complete = async (state: { ready: Array<{ id: string; label: string }> }, worker: string) =>
+      JSON.parse(
+        (
+          await tool.execute(
+            {
+              action: "coalition_complete",
+              work_id: state.ready[0]!.id,
+              worker_session_id: worker,
+              result_summary: state.ready[0]!.label,
+              artifact_refs: [`artifact://${state.ready[0]!.label}`],
+              evidence_refs: [`evidence://${state.ready[0]!.label}`],
+            },
+            context,
+          )
+        ).output,
+      )
+    const seededA = await complete(started, "lane-a-session")
+    const seededB = await complete(seededA, "lane-b-session")
+    const mapped = await complete(seededB, "fresh-map")
+    const reflected = await complete(mapped, "fresh-reflection")
+    const ranked = await complete(reflected, "fresh-ranking")
+    expect(
+      ranked.ready.map((work: { lane: string; resumeSessionID: string }) => [work.lane, work.resumeSessionID]),
+    ).toEqual([
+      ["producer-a", "lane-a-session"],
+      ["producer-b", "lane-b-session"],
+    ])
   })
 
   test("exposes resumable candidate control without an agent verification action", async () => {

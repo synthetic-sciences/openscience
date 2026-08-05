@@ -279,7 +279,7 @@ describe("/harness routes", () => {
       const next = await HarnessOrchestrator.complete({
         sessionID,
         workID: work.id,
-        workerSessionID: `route-worker-${state.revision}`,
+        workerSessionID: work.resumeSessionID ?? `route-worker-${state.revision}`,
         result: {
           summary: work.label,
           artifactRefs: [`artifact://${work.label}`],

@@ -9862,8 +9862,9 @@ export type HarnessOrchestrationStatusResponses = {
    * Scientific orchestration state
    */
   200: {
-    schemaVersion: 1
+    schemaVersion: 2
     protocolVersion: "coalition-v1" | "coalition-v2"
+    sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
     runID: string
     sessionID: string
     contractFingerprint: string
@@ -9943,6 +9944,7 @@ export type HarnessOrchestrationStatusResponses = {
           costUSD?: number
           wallTimeMs?: number
         }
+        lane?: "producer-a" | "producer-b"
         status: "pending" | "completed" | "failed" | "cancelled"
         workerSessionID?: string
         result?: {
@@ -10008,8 +10010,9 @@ export type HarnessOrchestrationStartResponses = {
    * Scientific orchestration state
    */
   200: {
-    schemaVersion: 1
+    schemaVersion: 2
     protocolVersion: "coalition-v1" | "coalition-v2"
+    sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
     runID: string
     sessionID: string
     contractFingerprint: string
@@ -10089,6 +10092,7 @@ export type HarnessOrchestrationStartResponses = {
           costUSD?: number
           wallTimeMs?: number
         }
+        lane?: "producer-a" | "producer-b"
         status: "pending" | "completed" | "failed" | "cancelled"
         workerSessionID?: string
         result?: {
@@ -10162,8 +10166,9 @@ export type HarnessOrchestrationCheckpointResponses = {
    * Scientific orchestration state
    */
   200: {
-    schemaVersion: 1
+    schemaVersion: 2
     protocolVersion: "coalition-v1" | "coalition-v2"
+    sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
     runID: string
     sessionID: string
     contractFingerprint: string
@@ -10243,6 +10248,7 @@ export type HarnessOrchestrationCheckpointResponses = {
           costUSD?: number
           wallTimeMs?: number
         }
+        lane?: "producer-a" | "producer-b"
         status: "pending" | "completed" | "failed" | "cancelled"
         workerSessionID?: string
         result?: {

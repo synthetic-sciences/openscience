@@ -23444,13 +23444,21 @@
                   "properties": {
                     "schemaVersion": {
                       "type": "number",
-                      "const": 1
+                      "const": 2
                     },
                     "protocolVersion": {
                       "type": "string",
                       "enum": [
                         "coalition-v1",
                         "coalition-v2"
+                      ]
+                    },
+                    "sessionPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "legacy-v1",
+                        "fresh-v1",
+                        "producer-lanes-v1"
                       ]
                     },
                     "runID": {
@@ -23872,6 +23880,13 @@
                             },
                             "additionalProperties": false
                           },
+                          "lane": {
+                            "type": "string",
+                            "enum": [
+                              "producer-a",
+                              "producer-b"
+                            ]
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -24059,6 +24074,7 @@
                   "required": [
                     "schemaVersion",
                     "protocolVersion",
+                    "sessionPolicy",
                     "runID",
                     "sessionID",
                     "contractFingerprint",
@@ -24138,13 +24154,21 @@
                   "properties": {
                     "schemaVersion": {
                       "type": "number",
-                      "const": 1
+                      "const": 2
                     },
                     "protocolVersion": {
                       "type": "string",
                       "enum": [
                         "coalition-v1",
                         "coalition-v2"
+                      ]
+                    },
+                    "sessionPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "legacy-v1",
+                        "fresh-v1",
+                        "producer-lanes-v1"
                       ]
                     },
                     "runID": {
@@ -24566,6 +24590,13 @@
                             },
                             "additionalProperties": false
                           },
+                          "lane": {
+                            "type": "string",
+                            "enum": [
+                              "producer-a",
+                              "producer-b"
+                            ]
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -24753,6 +24784,7 @@
                   "required": [
                     "schemaVersion",
                     "protocolVersion",
+                    "sessionPolicy",
                     "runID",
                     "sessionID",
                     "contractFingerprint",
@@ -24835,13 +24867,21 @@
                   "properties": {
                     "schemaVersion": {
                       "type": "number",
-                      "const": 1
+                      "const": 2
                     },
                     "protocolVersion": {
                       "type": "string",
                       "enum": [
                         "coalition-v1",
                         "coalition-v2"
+                      ]
+                    },
+                    "sessionPolicy": {
+                      "type": "string",
+                      "enum": [
+                        "legacy-v1",
+                        "fresh-v1",
+                        "producer-lanes-v1"
                       ]
                     },
                     "runID": {
@@ -25263,6 +25303,13 @@
                             },
                             "additionalProperties": false
                           },
+                          "lane": {
+                            "type": "string",
+                            "enum": [
+                              "producer-a",
+                              "producer-b"
+                            ]
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -25450,6 +25497,7 @@
                   "required": [
                     "schemaVersion",
                     "protocolVersion",
+                    "sessionPolicy",
                     "runID",
                     "sessionID",
                     "contractFingerprint",

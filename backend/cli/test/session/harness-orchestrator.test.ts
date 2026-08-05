@@ -119,7 +119,7 @@ const advance = async (sessionID: string, state: HarnessOrchestrator.State): Pro
   const next = await HarnessOrchestrator.complete({
     sessionID,
     workID: work.id,
-    workerSessionID: `worker-${sessionID}-${state.revision}`,
+    workerSessionID: work.resumeSessionID ?? `worker-${sessionID}-${state.revision}`,
     result,
   })
   return advance(sessionID, next)
@@ -217,6 +217,148 @@ describe("scientific coalition orchestration", () => {
 
     const restarted = await HarnessOrchestrator.initialize("dag")
     expect(restarted).toEqual(second)
+  })
+
+  test("resumes only the exact same producer lane while keeping verification fresh", async () => {
+    const sessionID = "producer-lanes"
+    await bind(sessionID, { ...config("evolution"), maxRounds: 1 })
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    const roots = HarnessOrchestrator.ready(initial)
+    expect(initial).toMatchObject({ schemaVersion: 2, sessionPolicy: "producer-lanes-v1" })
+    expect(roots.map((work) => [work.label, work.lane, work.resumeSessionID])).toEqual([
+      ["seed-a", "producer-a", undefined],
+      ["seed-b", "producer-b", undefined],
+    ])
+    expect(roots[0]!.prompt).toContain("propose, test, repair, and critique")
+    expect(roots[0]!.prompt).toContain("cannot certify a benchmark result")
+    expect(
+      HarnessOrchestrator.State.safeParse({
+        ...initial,
+        work: { ...initial.work, [roots[0]!.id]: { ...initial.work[roots[0]!.id]!, lane: "producer-b" } },
+      }).success,
+    ).toBe(false)
+
+    const first = await HarnessOrchestrator.complete({
+      sessionID,
+      workID: roots[0]!.id,
+      workerSessionID: "lane-a-session",
+      result: done("seed-a"),
+    })
+    const second = await HarnessOrchestrator.complete({
+      sessionID,
+      workID: roots[1]!.id,
+      workerSessionID: "lane-b-session",
+      result: done("seed-b"),
+    })
+    expect(first.work[roots[0]!.id]!.workerSessionID).toBe("lane-a-session")
+
+    const evolve = async (state: HarnessOrchestrator.State): Promise<HarnessOrchestrator.State> => {
+      if (HarnessOrchestrator.ready(state).some((work) => work.role === "evolution")) return state
+      const work = HarnessOrchestrator.ready(state)[0]!
+      return evolve(
+        await HarnessOrchestrator.complete({
+          sessionID,
+          workID: work.id,
+          workerSessionID: `fresh-${state.revision}`,
+          result: done(work.label),
+        }),
+      )
+    }
+    const staged = await evolve(second)
+    const ready = HarnessOrchestrator.ready(staged)
+    expect(ready.map((work) => [work.lane, work.resumeSessionID])).toEqual([
+      ["producer-a", "lane-a-session"],
+      ["producer-b", "lane-b-session"],
+    ])
+
+    await expect(
+      HarnessOrchestrator.complete({
+        sessionID,
+        workID: ready[0]!.id,
+        workerSessionID: "substituted-session",
+        result: done("substituted"),
+      }),
+    ).rejects.toThrow("must resume")
+    await expect(
+      HarnessOrchestrator.complete({
+        sessionID,
+        workID: ready[1]!.id,
+        workerSessionID: "lane-a-session",
+        result: done("crossed"),
+      }),
+    ).rejects.toThrow("must resume")
+
+    const restarted = await HarnessOrchestrator.initialize(sessionID)
+    expect(HarnessOrchestrator.ready(restarted).map((work) => work.resumeSessionID)).toEqual([
+      "lane-a-session",
+      "lane-b-session",
+    ])
+    const a = await HarnessOrchestrator.complete({
+      sessionID,
+      workID: ready[0]!.id,
+      workerSessionID: "lane-a-session",
+      result: done("evolved-a"),
+    })
+    const b = await HarnessOrchestrator.complete({
+      sessionID,
+      workID: ready[1]!.id,
+      workerSessionID: "lane-b-session",
+      result: done("evolved-b"),
+    })
+    const tampered = {
+      ...b,
+      work: {
+        ...b.work,
+        [ready[1]!.id]: { ...b.work[ready[1]!.id]!, workerSessionID: "lane-a-session" },
+      },
+    }
+    expect(HarnessOrchestrator.State.safeParse(tampered).success).toBe(false)
+    expect(a.work[ready[0]!.id]!.workerSessionID).toBe("lane-a-session")
+
+    const probe = HarnessOrchestrator.ready(b)[0]!
+    expect(probe).toMatchObject({ role: "investigation" })
+    expect(probe.lane).toBeUndefined()
+    expect(probe.resumeSessionID).toBeUndefined()
+    const investigated = await HarnessOrchestrator.complete({
+      sessionID,
+      workID: probe.id,
+      workerSessionID: "fresh-investigator",
+      result: done("investigation"),
+    })
+    const verifier = HarnessOrchestrator.ready(investigated)[0]!
+    expect(verifier).toMatchObject({ role: "verification" })
+    expect(verifier.resumeSessionID).toBeUndefined()
+    await expect(
+      HarnessOrchestrator.complete({
+        sessionID,
+        workID: verifier.id,
+        workerSessionID: "lane-a-session",
+        result: { ...done("tainted-verification"), verdict: verdict("support") },
+      }),
+    ).rejects.toThrow("distinct worker session")
+  })
+
+  test("migrates version-one orchestration into fresh-session compatibility mode", async () => {
+    const sessionID = "legacy-orchestration"
+    await bind(sessionID)
+    const initial = await HarnessOrchestrator.initialize(sessionID)
+    const file = path.join(Global.Path.data, "harness", "orchestration", `${encodeURIComponent(sessionID)}.json`)
+    const legacy = { ...initial } as Record<string, unknown>
+    legacy.schemaVersion = 1
+    delete legacy.sessionPolicy
+    await Bun.write(file, JSON.stringify(legacy))
+
+    const migrated = await HarnessOrchestrator.read(sessionID)
+    expect(migrated).toMatchObject({ schemaVersion: 2, sessionPolicy: "legacy-v1" })
+    expect(Object.values(migrated.work).every((work) => work.lane === undefined)).toBe(true)
+    const work = HarnessOrchestrator.ready(migrated)[0]!
+    const completed = await HarnessOrchestrator.complete({
+      sessionID,
+      workID: work.id,
+      workerSessionID: "legacy-fresh-session",
+      result: done("legacy-work"),
+    })
+    expect(completed.sessionPolicy).toBe("legacy-v1")
   })
 
   test("enforces per-role allocation and immutable idempotent completion", async () => {
