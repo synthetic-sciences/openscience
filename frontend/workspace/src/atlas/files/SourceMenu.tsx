@@ -119,7 +119,15 @@ export function SourceMenu(props: {
             </For>
             <Show when={props.onAdd}>
               <div class="files-menu__sep" />
-              <button type="button" class="files-menu__item" onClick={() => { setOpen(false); props.onAdd?.() }}>
+              <button
+                type="button"
+                class="files-menu__item"
+                data-source-add
+                onClick={() => {
+                  setOpen(false)
+                  props.onAdd?.()
+                }}
+              >
                 <span class="files-menu__glyph" aria-hidden="true">+</span>
                 <span><span class="files-menu__label">Add folder…</span></span>
                 <span class="files-menu__tail" />

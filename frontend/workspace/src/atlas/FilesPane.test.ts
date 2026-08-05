@@ -209,4 +209,59 @@ describe("files pane", () => {
     expect(host.querySelector('[data-source-item="fsg_1"]')).toBeNull()
     expect(host.querySelector('[data-source-item="project"]')).not.toBeNull()
   })
+
+  test("connects a folder from the source menu with an explicit write choice", async () => {
+    const posted: Array<Record<string, unknown>> = []
+    const store = { granted: false }
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path, init) => {
+          if (path === `/session/${SESSION}/filesystem` && init?.method === "POST") {
+            posted.push(JSON.parse(String(init.body)))
+            store.granted = true
+            return listing([])
+          }
+          if (path === `/session/${SESSION}/filesystem`)
+            return new Response(
+              JSON.stringify(snapshot(store.granted ? [grant("fsg_9", "/home/keertan/data/pdebench", "write")] : [])),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            )
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>("[data-source-add]")?.click()
+
+    const form = host.querySelector<HTMLFormElement>(".files-connect")
+    const input = host.querySelector<HTMLInputElement>('[aria-label="Folder path"]')!
+    const access = host.querySelector<HTMLSelectElement>("[data-connect-access]")!
+    expect(form).not.toBeNull()
+    // Read is the default, and each choice states what it authorises.
+    expect(access.value).toBe("read")
+    expect(host.querySelector("[data-connect-note]")?.textContent).toContain("inspected but not changed")
+
+    input.value = "/home/keertan/data/pdebench"
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+    access.value = "write"
+    access.dispatchEvent(new Event("change", { bubbles: true }))
+
+    expect(host.querySelector("[data-connect-note]")?.textContent).toContain(
+      "code runtimes do not gain a writable mount",
+    )
+
+    form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    await settle()
+
+    expect(posted).toEqual([{ path: "/home/keertan/data/pdebench", access: "write", scope: "session" }])
+    expect(host.querySelector(".files-connect")).toBeNull()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    expect(host.querySelector('[data-source-item="fsg_9"]')?.textContent).toContain("pdebench")
+  })
 })

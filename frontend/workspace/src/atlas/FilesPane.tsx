@@ -1,5 +1,7 @@
-import { Show, createMemo, createResource, createSignal, type JSX } from "solid-js"
+import { For, Show, createMemo, createResource, createSignal, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
+import { useDialog } from "@synsci/ui/context/dialog"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { SourceMenu } from "@/atlas/files/SourceMenu"
@@ -9,11 +11,14 @@ import { TrashList } from "@/atlas/files/TrashList"
 import { buildSources, type PaneSource } from "@/atlas/files/sources"
 import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/resource"
 import type { StoredArtifact } from "@/artifacts/store"
+import { FolderPicker } from "@/atlas/FolderPicker"
 import {
   connectedFilesystemGrants,
   parseFilesystemSnapshot,
   sessionFilesystemRoot,
+  type FilesystemAccess,
   type FilesystemIdentity,
+  type FilesystemScope,
   type FilesystemSnapshot,
 } from "@/atlas/file-sources"
 import "@/atlas/files/FilesPane.css"
@@ -42,6 +47,39 @@ async function readAccess(transport: Transport, identity: FilesystemIdentity): P
   throw new Error("Filesystem access belongs to another session or project.")
 }
 
+interface ConnectInput {
+  path: string
+  access: FilesystemAccess
+  scope: FilesystemScope
+}
+
+const ACCESS: Array<{ value: FilesystemAccess; label: string }> = [
+  { value: "read", label: "Read only" },
+  { value: "write", label: "Read & write" },
+]
+
+const SCOPE: Array<{ value: FilesystemScope; label: string }> = [
+  { value: "once", label: "One request" },
+  { value: "session", label: "This session" },
+  { value: "project", label: "This project" },
+  { value: "installation", label: "Every project" },
+]
+
+// Read versus write is a security boundary, not a preference, so the pane
+// says what each one actually authorises at the moment of choosing.
+const accessNote = (access: FilesystemAccess) => {
+  if (access === "read") return "Files can be inspected but not changed."
+  return "OpenScience can publish or change files through brokered tools; code runtimes do not gain a writable mount."
+}
+
+async function grantAccess(transport: Transport, identity: FilesystemIdentity, input: ConnectInput) {
+  return transport(`/session/${encodeURIComponent(identity.sessionID)}/filesystem`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then(json)
+}
+
 async function revokeAccess(transport: Transport, identity: FilesystemIdentity, grantID: string) {
   const url = `/session/${encodeURIComponent(identity.sessionID)}/filesystem/${encodeURIComponent(grantID)}`
   return transport(url, { method: "DELETE" }).then(json)
@@ -62,6 +100,7 @@ export function FilesPane(
   const sdk = standalone ? undefined : useSDK()
   const sync = standalone ? undefined : useSync()
   const params = standalone ? ({} as ReturnType<typeof useParams>) : useParams()
+  const dialog = standalone ? undefined : useDialog()
   const transport: Transport = props.request ?? sdk!.request
 
   const projectRoot = () =>
@@ -99,6 +138,12 @@ export function FilesPane(
   const [tabs, setTabs] = createSignal<string[]>([])
   const [active, setActive] = createSignal("files")
   const [busy, setBusy] = createSignal(false)
+  const [connect, setConnect] = createStore({
+    open: false,
+    path: "",
+    access: "read" as FilesystemAccess,
+    scope: "session" as FilesystemScope,
+  })
 
   const where = () => [current().root, ...path()].filter(Boolean).join("/")
 
@@ -152,6 +197,44 @@ export function FilesPane(
   const open = (name: string) => {
     if (!tabs().includes(name)) setTabs([...tabs(), name])
     setActive(name)
+  }
+
+  // The picker walks the real filesystem and hands back an absolute path. It
+  // needs the dialog host, so outside a provider the typed path stays the
+  // only route in — which is also what keeps this form testable.
+  const browse = () => {
+    dialog?.show(
+      () => (
+        <FolderPicker
+          kind="folder"
+          title="Connect a folder"
+          onSelect={(result) => {
+            const picked = Array.isArray(result) ? result[0] : result
+            if (picked) setConnect("path", picked)
+          }}
+        />
+      ),
+      { lite: true },
+    )
+  }
+
+  const submit = (event: SubmitEvent) => {
+    event.preventDefault()
+    const current = identity()
+    const path = connect.path.trim()
+    if (!current || !path || busy()) return
+    setBusy(true)
+    grantAccess(transport, current, { path, access: connect.access, scope: connect.scope })
+      .then(() => refetchSnapshot())
+      .then(() => {
+        setBusy(false)
+        setError("")
+        setConnect({ open: false, path: "", access: "read", scope: "session" })
+      })
+      .catch((cause) => {
+        setBusy(false)
+        setError(errorMessage(cause))
+      })
   }
 
   // A grant is a durable, possibly installation-wide, possibly writable hole
@@ -216,8 +299,67 @@ export function FilesPane(
             setFilter("")
           }}
           onRevoke={revoke}
+          onAdd={() => setConnect({ open: true, path: "", access: "read", scope: "session" })}
         />
       </div>
+
+      <Show when={connect.open}>
+        <form class="files-connect" aria-label="Connect a folder" onSubmit={submit}>
+          <div class="files-connect__row">
+            <input
+              class="files-search"
+              value={connect.path}
+              aria-label="Folder path"
+              placeholder="/home/you/data"
+              spellcheck={false}
+              onInput={(event) => setConnect("path", event.currentTarget.value)}
+            />
+            <Show when={dialog}>
+              <button type="button" class="files-connect__browse" data-connect-browse onClick={browse}>
+                Browse…
+              </button>
+            </Show>
+          </div>
+
+          <div class="files-connect__row">
+            <label class="files-connect__field">
+              <span>Access</span>
+              <select
+                aria-label="Folder access"
+                data-connect-access
+                value={connect.access}
+                onChange={(event) => setConnect("access", event.currentTarget.value as FilesystemAccess)}
+              >
+                <For each={ACCESS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+              </select>
+            </label>
+            <label class="files-connect__field">
+              <span>Available for</span>
+              <select
+                aria-label="Folder access duration"
+                data-connect-scope
+                value={connect.scope}
+                onChange={(event) => setConnect("scope", event.currentTarget.value as FilesystemScope)}
+              >
+                <For each={SCOPE}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+              </select>
+            </label>
+          </div>
+
+          <p class="files-connect__note" data-connect-note>
+            {accessNote(connect.access)}
+          </p>
+
+          <div class="files-connect__row files-connect__row--end">
+            <button type="button" class="files-connect__cancel" onClick={() => setConnect("open", false)}>
+              Cancel
+            </button>
+            <button type="submit" class="files-connect__submit" disabled={!connect.path.trim() || busy()}>
+              {busy() ? "Connecting…" : "Connect"}
+            </button>
+          </div>
+        </form>
+      </Show>
 
       <div class="files-search-row">
         <input
