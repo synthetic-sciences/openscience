@@ -30,6 +30,14 @@ export type Transport = (path: string, init?: RequestInit, query?: Record<string
 export interface PaneFile {
   name: string
   path: string
+  /**
+   * The source the file was opened from. A tab outlives the picker's current
+   * selection, so it carries its own provenance rather than reading whichever
+   * source happens to be selected when it is next shown — otherwise a file
+   * opened from a read-only grant becomes editable the moment the picker moves.
+   */
+  source: string
+  readonly?: boolean
 }
 
 async function json(response: Response): Promise<unknown> {
@@ -155,13 +163,27 @@ export function FilesPane(
     }),
   )
 
-  const [source, setSource] = createSignal<PaneSource | undefined>()
-  const current = createMemo(() => source() ?? sources().find((item) => item.kind === "project") ?? sources()[0]!)
+  // The pick is remembered by id, not by the object that was clicked.
+  // `sources()` rebuilds on every snapshot refetch and every project change, so
+  // a captured object goes stale twice over: it keeps the root it was built
+  // with (a project switch would keep listing the old project), and it stops
+  // matching the rows the menu renders, which compare the active source by
+  // identity for their ✓ and aria-checked.
+  const [picked, setPicked] = createSignal<string>()
+  const current = createMemo(
+    () =>
+      sources().find((item) => item.id === picked()) ??
+      sources().find((item) => item.kind === "project") ??
+      sources()[0]!,
+  )
   const [path, setPath] = createSignal<string[]>([])
   const [filter, setFilter] = createSignal("")
   const [error, setError] = createSignal("")
   const [tabs, setTabs] = createSignal<PaneFile[]>([])
-  const [active, setActive] = createSignal("files")
+  // Undefined is the browser itself. A sentinel string would be a filename a
+  // real file can carry, and "files" is one — the browser would then be
+  // unreachable behind a tab it cannot tell apart from itself.
+  const [active, setActive] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
   const [connect, setConnect] = createStore({
     open: false,
@@ -176,42 +198,46 @@ export function FilesPane(
   // never reject: RightPane wraps this pane in <Suspense>, and reading an
   // errored resource during render reaches app.tsx's ErrorBoundary, which
   // would replace the entire workspace over one failed poll.
-  const [entries] = createResource(
-    () => [where(), sessionID(), current().kind] as const,
-    ([target, session, kind]) => {
-      // The artifacts and trash pseudo-sources always have root "" — they are
-      // backed by the artifact store, not the filesystem, and the server
-      // falls back an empty path to the project root (File.list(dir || root)),
-      // which would silently list the project's files mislabeled as
-      // artifacts. Every other kind always carries a real root once a live
-      // project context exists, so gate on the source kind rather than on
-      // target emptiness.
-      if (kind === "artifacts" || kind === "trash") {
-        // No listing is attempted, so the previous listing's failure no longer
-        // describes anything on screen — leaving it up puts "this folder could
-        // not be read" over a perfectly good trash list.
+  // A tuple literal is a fresh array on every read and createResource compares
+  // its source with ===, so the listing refetched on every unrelated rebuild of
+  // `sources()` — a grant snapshot arriving re-listed a folder that had not
+  // moved. Compare the parts instead.
+  const key = createMemo(() => [where(), sessionID(), current().kind] as const, undefined, {
+    equals: (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2],
+  })
+  const [entries] = createResource(key, ([target, session, kind]) => {
+    // The artifacts and trash pseudo-sources always have root "" — they are
+    // backed by the artifact store, not the filesystem, and the server
+    // falls back an empty path to the project root (File.list(dir || root)),
+    // which would silently list the project's files mislabeled as
+    // artifacts. Every other kind always carries a real root once a live
+    // project context exists, so gate on the source kind rather than on
+    // target emptiness.
+    if (kind === "artifacts" || kind === "trash") {
+      // No listing is attempted, so the previous listing's failure no longer
+      // describes anything on screen — leaving it up puts "this folder could
+      // not be read" over a perfectly good trash list.
+      setError("")
+      return Promise.resolve([] as FileRow[])
+    }
+    const query: Record<string, string> = { path: target }
+    if (session) query.sessionID = session
+    return transport("/file", undefined, query)
+      .then(json)
+      .then((value) => {
         setError("")
-        return Promise.resolve([] as FileRow[])
-      }
-      const query: Record<string, string> = { path: target }
-      if (session) query.sessionID = session
-      return transport("/file", undefined, query)
-        .then(json)
-        .then((value) => {
-          setError("")
-          // GET /file returns a bare FileNode[] (backend/cli/src/server/routes/file.ts:158-182,
-          // FileListResponses in tooling/sdk/js/src/v2/gen/types.gen.ts:7889). The {data}
-          // wrapper only exists on the generated client's RequestResult, never on the body.
-          if (Array.isArray(value)) return value as FileRow[]
-          const data = (value as { data?: unknown }).data
-          return Array.isArray(data) ? (data as FileRow[]) : []
-        })
-        .catch(() => {
-          setError("This folder could not be read. The last listing may be out of date.")
-          return [] as FileRow[]
-        })
-    },
-  )
+        // GET /file returns a bare FileNode[] (backend/cli/src/server/routes/file.ts:158-182,
+        // FileListResponses in tooling/sdk/js/src/v2/gen/types.gen.ts:7889). The {data}
+        // wrapper only exists on the generated client's RequestResult, never on the body.
+        if (Array.isArray(value)) return value as FileRow[]
+        const data = (value as { data?: unknown }).data
+        return Array.isArray(data) ? (data as FileRow[]) : []
+      })
+      .catch(() => {
+        setError("This folder could not be read. The last listing may be out of date.")
+        return [] as FileRow[]
+      })
+  })
 
   const rows = createMemo(() => {
     const query = filter().trim().toLowerCase()
@@ -248,7 +274,13 @@ export function FilesPane(
   // name from a different folder re-points the existing tab rather than
   // stacking a second, indistinguishable one.
   const open = (row: FileRow) => {
-    const file = { name: row.name, path: row.path ?? [where(), row.name].filter(Boolean).join("/") }
+    const from = current()
+    const file: PaneFile = {
+      name: row.name,
+      path: row.path ?? [where(), row.name].filter(Boolean).join("/"),
+      source: from.name,
+      readonly: from.readonly,
+    }
     const known = tabs().some((tab) => tab.name === file.name)
     setTabs(known ? tabs().map((tab) => (tab.name === file.name ? file : tab)) : [...tabs(), file])
     setActive(file.name)
@@ -256,7 +288,7 @@ export function FilesPane(
 
   const closeTab = (name: string) => {
     setTabs(tabs().filter((tab) => tab.name !== name))
-    if (active() === name) setActive("files")
+    if (active() === name) setActive(undefined)
   }
 
   const selected = createMemo(() => tabs().find((tab) => tab.name === active()))
@@ -318,9 +350,13 @@ export function FilesPane(
       .then(() => {
         // The revoked source is gone from the next snapshot; if it was the
         // one being browsed, fall back to the default rather than listing a
-        // folder the session no longer has access to.
-        if (source()?.id === target.id) setSource(undefined)
-        setPath([])
+        // folder the session no longer has access to. Revoking any *other*
+        // grant leaves the browsed folder alone — resetting the path there
+        // would throw the user back to the root of a folder nothing happened to.
+        if (picked() === target.id) {
+          setPicked(undefined)
+          setPath([])
+        }
         setBusy(false)
         setError("")
       })
@@ -352,7 +388,7 @@ export function FilesPane(
           sources={sources()}
           active={current()}
           onPick={(next) => {
-            setSource(next)
+            setPicked(next.id)
             setPath([])
             setFilter("")
             // The notice describes the source being left, not the one arriving.
@@ -482,7 +518,12 @@ export function FilesPane(
 
   return (
     <section class="files-pane" aria-label="Files">
-      <FileTabs open={tabs().map((tab) => tab.name)} active={active()} onSelect={setActive} onClose={closeTab} />
+      <FileTabs
+        open={tabs().map((tab) => tab.name)}
+        active={active()}
+        onSelect={(id) => setActive(id)}
+        onClose={closeTab}
+      />
 
       <Show when={selected()} keyed fallback={browser()}>
         {(file) =>
@@ -494,9 +535,9 @@ export function FilesPane(
             <FileView
               directory={projectRoot()}
               path={file.path}
-              subtitle={current().name}
+              subtitle={file.source}
               active
-              writable={current().readonly ? false : undefined}
+              writable={file.readonly ? false : undefined}
               onClose={() => closeTab(file.name)}
             />
           )

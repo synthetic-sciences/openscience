@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import type { JSX } from "solid-js"
 import { createServer } from "vite"
 import solid from "vite-plugin-solid"
+import type { PaneFile } from "./FilesPane"
 
 const server = await createServer({
   root: fileURLToPath(new URL("../..", import.meta.url)),
@@ -487,6 +488,101 @@ describe("files pane", () => {
 
     expect(host.querySelector('[data-tab="train_lr.py"]')).toBeNull()
     expect(host.querySelector(".files-table")).not.toBeNull()
+  })
+
+  test("a tab keeps the source it was opened from, not whichever one is selected later", async () => {
+    // writable/subtitle used to read the picker's *current* source, so a file
+    // opened from a read-only grant became editable the moment the picker moved
+    // on — the read/write boundary followed the menu instead of the file.
+    const seen: PaneFile[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return new Response(JSON.stringify(snapshot([grant("fsg_1", "/home/keertan/data/pdebench", "read")])), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
+          return listing([
+            { name: "inputs.csv", type: "file", size: 4, path: "/home/keertan/data/pdebench/inputs.csv" },
+          ])
+        },
+        view: (file) => {
+          seen.push(file as PaneFile)
+          return document.createElement("p")
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>('[data-source-item="fsg_1"]')?.click()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="inputs.csv"]')?.click()
+    await settle()
+
+    expect(seen.at(-1)).toMatchObject({ name: "inputs.csv", source: "pdebench", readonly: true })
+
+    // Back to the browser, move the picker to the project, then return to the tab.
+    host.querySelector<HTMLButtonElement>('[data-tab="files"]')?.click()
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>('[data-source-item="project"]')?.click()
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-tab="inputs.csv"]')?.click()
+    await settle()
+
+    expect(seen.at(-1)).toMatchObject({ source: "pdebench", readonly: true })
+  })
+
+  test("keeps the picked source marked after the grant snapshot rebuilds the list", async () => {
+    // `sources()` is a memo: every snapshot refetch hands back fresh objects, so
+    // a selection remembered as an object stopped matching the rows the menu
+    // renders — the ✓ and aria-checked vanished from the source being browsed.
+    const store = { granted: false }
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path, init) => {
+          if (path === `/session/${SESSION}/filesystem` && init?.method === "POST") {
+            store.granted = true
+            return listing([])
+          }
+          if (path === `/session/${SESSION}/filesystem`)
+            return new Response(
+              JSON.stringify(snapshot(store.granted ? [grant("fsg_2", "/home/keertan/data/pdebench", "read")] : [])),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            )
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>('[data-source-item="trash"]')?.click()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    expect(host.querySelector('[data-source-item="trash"]')?.getAttribute("aria-checked")).toBe("true")
+    host.querySelector<HTMLButtonElement>("[data-source-add]")?.click()
+
+    const input = host.querySelector<HTMLInputElement>('[aria-label="Folder path"]')!
+    input.value = "/home/keertan/data/pdebench"
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+    host
+      .querySelector<HTMLFormElement>(".files-connect")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    expect(host.querySelector('[data-source-item="fsg_2"]')).not.toBeNull()
+    expect(host.querySelector('[data-source-item="trash"]')?.getAttribute("aria-checked")).toBe("true")
+    expect(host.querySelector("[data-trash-list]")).not.toBeNull()
   })
 
   test("wires Browse… through the dialog host to the FolderPicker and back into the path field", () => {
