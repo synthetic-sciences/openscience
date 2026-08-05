@@ -60,6 +60,7 @@ export function normalizeFilePath(value: string) {
 export function containsFilePath(root: string, target: string) {
   const base = normalizeFilePath(root).replace(/\/+$/, "") || "/"
   const file = normalizeFilePath(target)
+  if (base === "/") return file.startsWith("/")
   return file === base || file.startsWith(`${base}/`)
 }
 

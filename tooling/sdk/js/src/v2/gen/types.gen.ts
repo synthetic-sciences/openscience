@@ -3269,6 +3269,103 @@ export type SettingsComputeModalUpdateResponses = {
 export type SettingsComputeModalUpdateResponse =
   SettingsComputeModalUpdateResponses[keyof SettingsComputeModalUpdateResponses]
 
+export type SettingsComputeModalVolumesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/compute/modal/volumes"
+}
+
+export type SettingsComputeModalVolumesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalVolumesError =
+  SettingsComputeModalVolumesErrors[keyof SettingsComputeModalVolumesErrors]
+
+export type SettingsComputeModalVolumesResponses = {
+  /**
+   * Modal Volumes
+   */
+  200: Array<{
+    name: string
+  }>
+}
+
+export type SettingsComputeModalVolumesResponse =
+  SettingsComputeModalVolumesResponses[keyof SettingsComputeModalVolumesResponses]
+
+export type SettingsComputeModalVolumeFilesData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    path?: string
+  }
+  url: "/settings/compute/modal/volumes/{name}/files"
+}
+
+export type SettingsComputeModalVolumeFilesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalVolumeFilesError =
+  SettingsComputeModalVolumeFilesErrors[keyof SettingsComputeModalVolumeFilesErrors]
+
+export type SettingsComputeModalVolumeFilesResponses = {
+  /**
+   * Modal Volume files
+   */
+  200: Array<{
+    path: string
+    type: string
+    size: number
+    mtime?: number
+  }>
+}
+
+export type SettingsComputeModalVolumeFilesResponse =
+  SettingsComputeModalVolumeFilesResponses[keyof SettingsComputeModalVolumeFilesResponses]
+
+export type SettingsComputeModalVolumeFileData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query: {
+    path: string
+  }
+  url: "/settings/compute/modal/volumes/{name}/file"
+}
+
+export type SettingsComputeModalVolumeFileErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SettingsComputeModalVolumeFileError =
+  SettingsComputeModalVolumeFileErrors[keyof SettingsComputeModalVolumeFileErrors]
+
+export type SettingsComputeModalVolumeFileResponses = {
+  /**
+   * Modal Volume file
+   */
+  200: unknown
+}
+
 export type SettingsComputeModalConfigureData = {
   body?: never
   path?: never

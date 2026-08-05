@@ -41,7 +41,12 @@ async function fixture() {
       "    def read_file(self, requested):",
       "        with open(os.path.join(self.root, requested.lstrip('/')), 'rb') as source:",
       "            while chunk := source.read(3): yield chunk",
+      "class Objects:",
+      "    def list(self, environment_name=None):",
+      "        assert environment_name == 'main'",
+      "        return [SimpleNamespace(name='job-volume')]",
       "class Volume:",
+      "    objects = Objects()",
       "    @classmethod",
       "    def from_name(cls, name, environment_name=None, create_if_missing=False):",
       "        assert os.environ.get('MODAL_TOKEN_ID') == 'ak-test'",
@@ -54,21 +59,52 @@ async function fixture() {
   )
   const python = Bun.which("python3") ?? Bun.which("python")
   if (!python) throw new Error("Python is required for the Modal Volume driver test")
+  const run = "import runpy,sys; sys.path.insert(0,sys.argv[1]); runpy.run_path(sys.argv[2],run_name='__main__')"
   const context = {
     tokenId: "ak-test",
     tokenSecret: "as-test",
     environment: "main",
-    command: [python, await ModalVolume.driverPath()],
-    env: { ...process.env, PYTHONPATH: root, FAKE_MODAL_ROOT: volume },
+    command: [python, "-I", "-c", run, root, await ModalVolume.driverPath()],
+    env: { ...process.env, FAKE_MODAL_ROOT: volume },
   }
   return { context, staging }
 }
 
 describe("ModalVolume", () => {
+  test("accepts a system Python only when the pinned SDK is available in isolated mode", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-poison-"))
+    roots.push(root)
+    await Bun.write(path.join(root, "modal.py"), "raise RuntimeError('ambient modal module loaded')\n")
+
+    const selected = await ModalVolume.command({
+      tokenId: "ak-test",
+      tokenSecret: "as-test",
+      env: { ...process.env, PYTHONPATH: root },
+      python,
+      uv: "/test/uv",
+    })
+
+    expect(selected).toEqual([
+      "/test/uv",
+      "run",
+      "--no-project",
+      "--python",
+      "3.12",
+      "--with",
+      `modal==${ModalVolume.VERSION}`,
+      "python",
+      "-I",
+      await ModalVolume.driverPath(),
+    ])
+  })
+
   test("uses control-plane list and download operations without a sandbox", async () => {
     const item = await fixture()
 
     expect(await ModalVolume.check(item.context)).toBe("test-control-plane")
+    expect(await ModalVolume.volumes(item.context)).toEqual([{ name: "job-volume" }])
     const entries = await ModalVolume.list(item.context, "job-volume", "/", true)
     expect(entries).toContainEqual({ path: "outputs/model.bin", type: "file", size: 7, mtime: 1 })
 
@@ -83,6 +119,7 @@ describe("ModalVolume", () => {
       ".openscience-run.log",
       "outputs/model.bin",
     ])
+    expect(downloaded.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256))).toBe(true)
     expect(await Bun.file(path.join(item.staging, "outputs", "model.bin")).text()).toBe("weights")
   })
 

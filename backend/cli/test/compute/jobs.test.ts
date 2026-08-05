@@ -13,6 +13,27 @@ import { tmpdir, trustProject } from "../fixture/fixture"
 
 type StartOptions = NonNullable<Parameters<typeof ComputeJobs.start>[1]>
 
+const modal = {
+  app: "openscience-test",
+  image: "python:3.12-slim",
+  network: "none" as const,
+  timeoutMinutes: 10,
+  concurrency: 1,
+}
+const credentials = { ...modal, tokenId: "ak-test", tokenSecret: "as-test" }
+
+function modalProvider(overrides: Partial<ComputeJobs.ModalProvider> = {}): ComputeJobs.ModalProvider {
+  return {
+    volume: (project, id) => `test-${Bun.hash(`${project}\0${id}`)}`,
+    run: async () => ({ code: 0, outputs: [] }),
+    recover: async () => ({ code: 0, outputs: [] }),
+    find: async () => undefined,
+    close: async () => undefined,
+    release: async () => undefined,
+    ...overrides,
+  }
+}
+
 async function start(input: ComputeJobs.Input, options: StartOptions) {
   if (!options.workspace) throw new Error("Compute test start requires an explicit workspace")
   return Instance.provide({
@@ -507,35 +528,19 @@ describe("ComputeJobs Modal governance", () => {
   test("records a Modal sandbox timeout as a terminal timed-out job", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
-    const provider = {
-      volume: (project: string, id: string) => `test-${Bun.hash(`${project}\0${id}`)}`,
-      run: async (
-        _context: Parameters<ComputeJobs.ModalProvider["run"]>[0],
-        spec: Parameters<ComputeJobs.ModalProvider["run"]>[1],
-        hooks: Parameters<ComputeJobs.ModalProvider["run"]>[2],
-      ) => {
+    const provider = modalProvider({
+      run: async (_context, spec, hooks) => {
         await hooks.created(`sandbox-${spec.id}`)
         return { code: 124, outputs: [], timedOut: true }
       },
       recover: async () => ({ code: 124, outputs: [], timedOut: true }),
-      find: async () => undefined,
-      close: async () => undefined,
-      release: async () => undefined,
-    } satisfies ComputeJobs.ModalProvider
-    const modal = {
-      app: "openscience-test",
-      image: "python:3.12-slim",
-      network: "none" as const,
-      timeoutMinutes: 15,
-      concurrency: 1,
-    }
-    const credentials = { ...modal, tokenId: "ak-test", tokenSecret: "as-test" }
+    })
     const request = {
       name: "timed out modal job",
       command: "sleep 900",
       target: { kind: "modal" as const },
       gpu: "T4",
-      resources: { time_minutes: 15 },
+      resources: { time_minutes: 10 },
     }
     const prepared = await Instance.provide({
       directory: tmp.path,
@@ -558,7 +563,7 @@ describe("ComputeJobs Modal governance", () => {
 
     expect(finished.status).toBe("failed")
     expect(finished.exit_code).toBe(124)
-    expect(finished.error).toBe("Modal job timed out after 15 minutes")
+    expect(finished.error).toBe("Modal job timed out after 10 minutes")
     expect(finished.lifecycle).toMatchObject({
       execution: "timed_out",
       deadline_fired: true,
@@ -571,30 +576,14 @@ describe("ComputeJobs Modal governance", () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
     const gate = Promise.withResolvers<void>()
-    const provider = {
-      volume: (project: string, id: string) => `test-${Bun.hash(`${project}\0${id}`)}`,
-      run: async (
-        _context: Parameters<ComputeJobs.ModalProvider["run"]>[0],
-        spec: Parameters<ComputeJobs.ModalProvider["run"]>[1],
-        hooks: Parameters<ComputeJobs.ModalProvider["run"]>[2],
-      ) => {
+    const provider = modalProvider({
+      run: async (_context, spec, hooks) => {
         await hooks.created(`sandbox-${spec.id}`)
         await gate.promise
         return { code: 0, outputs: [] }
       },
-      recover: async () => ({ code: 0, outputs: [] }),
-      find: async () => undefined,
-      close: async () => gate.resolve(),
       release: async () => gate.resolve(),
-    } satisfies ComputeJobs.ModalProvider
-    const modal = {
-      app: "openscience-test",
-      image: "python:3.12-slim",
-      network: "none" as const,
-      timeoutMinutes: 10,
-      concurrency: 1,
-    }
-    const credentials = { ...modal, tokenId: "ak-test", tokenSecret: "as-test" }
+    })
     const request = {
       name: "held modal job",
       command: "sleep 30",
@@ -658,34 +647,18 @@ describe("ComputeJobs Modal governance", () => {
     const root = path.join(tmp.path, "state")
     const gate = Promise.withResolvers<void>()
     const releases = { count: 0 }
-    const provider = {
-      volume: (project: string, id: string) => `test-${Bun.hash(`${project}\0${id}`)}`,
-      run: async (
-        _context: Parameters<ComputeJobs.ModalProvider["run"]>[0],
-        spec: Parameters<ComputeJobs.ModalProvider["run"]>[1],
-        hooks: Parameters<ComputeJobs.ModalProvider["run"]>[2],
-      ) => {
+    const provider = modalProvider({
+      run: async (_context, spec, hooks) => {
         await hooks.created(`sandbox-${spec.id}`)
         await gate.promise
         return { code: 0, outputs: [] }
       },
-      recover: async () => ({ code: 0, outputs: [] }),
-      find: async () => undefined,
-      close: async () => undefined,
       release: async () => {
         gate.resolve()
         releases.count++
         if (releases.count === 1) throw new Error("provider unavailable")
       },
-    } satisfies ComputeJobs.ModalProvider
-    const modal = {
-      app: "openscience-test",
-      image: "python:3.12-slim",
-      network: "none" as const,
-      timeoutMinutes: 10,
-      concurrency: 1,
-    }
-    const credentials = { ...modal, tokenId: "ak-test", tokenSecret: "as-test" }
+    })
     const request = {
       name: "cancel modal job",
       command: "sleep 30",
@@ -728,32 +701,16 @@ describe("ComputeJobs Modal governance", () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
     const releases = { count: 0 }
-    const provider = {
-      volume: (project: string, id: string) => `test-${Bun.hash(`${project}\0${id}`)}`,
-      run: async (
-        _context: Parameters<ComputeJobs.ModalProvider["run"]>[0],
-        spec: Parameters<ComputeJobs.ModalProvider["run"]>[1],
-        hooks: Parameters<ComputeJobs.ModalProvider["run"]>[2],
-      ) => {
+    const provider = modalProvider({
+      run: async (_context, spec, hooks) => {
         await hooks.created(`sandbox-${spec.id}`)
         return { code: 0, outputs: [] }
       },
-      recover: async () => ({ code: 0, outputs: [] }),
-      find: async () => undefined,
-      close: async () => undefined,
       release: async () => {
         releases.count++
         if (releases.count === 1) throw new Error("provider unavailable")
       },
-    } satisfies ComputeJobs.ModalProvider
-    const modal = {
-      app: "openscience-test",
-      image: "python:3.12-slim",
-      network: "none" as const,
-      timeoutMinutes: 10,
-      concurrency: 1,
-    }
-    const credentials = { ...modal, tokenId: "ak-test", tokenSecret: "as-test" }
+    })
     const request = {
       name: "complete modal job",
       command: "true",
@@ -796,23 +753,13 @@ describe("ComputeJobs Modal governance", () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
     const calls = { run: 0, recover: 0, release: 0 }
-    const provider = {
-      volume: (project: string, id: string) => `test-${Bun.hash(`${project}\0${id}`)}`,
-      run: async (
-        _context: Parameters<ComputeJobs.ModalProvider["run"]>[0],
-        spec: Parameters<ComputeJobs.ModalProvider["run"]>[1],
-        hooks: Parameters<ComputeJobs.ModalProvider["run"]>[2],
-      ) => {
+    const provider = modalProvider({
+      run: async (_context, spec, hooks) => {
         calls.run++
         await hooks.created(`sandbox-${spec.id}`)
         return { code: 0, outputs: [{ path: "../escape", staging: tmp.path, size: 0 }] }
       },
-      recover: async (
-        _context: Parameters<ComputeJobs.ModalProvider["recover"]>[0],
-        spec: Parameters<ComputeJobs.ModalProvider["recover"]>[1],
-        id: Parameters<ComputeJobs.ModalProvider["recover"]>[2],
-        hooks: Parameters<ComputeJobs.ModalProvider["recover"]>[3],
-      ) => {
+      recover: async (_context, spec, id, hooks) => {
         calls.recover++
         expect(id).toBe(`sandbox-${spec.id}`)
         expect(await ComputeJobs.log(spec.id, { root, workspace: tmp.path })).toBe("last visible output\n")
@@ -821,20 +768,10 @@ describe("ComputeJobs Modal governance", () => {
         await Bun.write(staging, "recovered")
         return { code: 0, outputs: [{ path: "result.txt", staging, size: 9 }] }
       },
-      find: async () => undefined,
-      close: async () => undefined,
       release: async () => {
         calls.release++
       },
-    } satisfies ComputeJobs.ModalProvider
-    const modal = {
-      app: "openscience-test",
-      image: "python:3.12-slim",
-      network: "none" as const,
-      timeoutMinutes: 10,
-      concurrency: 1,
-    }
-    const credentials = { ...modal, tokenId: "ak-test", tokenSecret: "as-test" }
+    })
     const request = {
       name: "recover output",
       command: "printf recovered > result.txt",
@@ -894,13 +831,8 @@ describe("ComputeJobs Modal governance", () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
     const calls = { run: 0, recover: 0, release: 0 }
-    const provider = {
-      volume: (project: string, id: string) => `test-${Bun.hash(`${project}\0${id}`)}`,
-      run: async (
-        _context: Parameters<ComputeJobs.ModalProvider["run"]>[0],
-        spec: Parameters<ComputeJobs.ModalProvider["run"]>[1],
-        hooks: Parameters<ComputeJobs.ModalProvider["run"]>[2],
-      ) => {
+    const provider = modalProvider({
+      run: async (_context, spec, hooks) => {
         calls.run++
         await hooks.created(`sandbox-${spec.id}`)
         throw new ModalAdapter.HarvestError(0, new Error("control plane unavailable"))
@@ -909,20 +841,10 @@ describe("ComputeJobs Modal governance", () => {
         calls.recover++
         return { code: 0, outputs: [] }
       },
-      find: async () => undefined,
-      close: async () => undefined,
       release: async () => {
         calls.release++
       },
-    } satisfies ComputeJobs.ModalProvider
-    const modal = {
-      app: "openscience-test",
-      image: "python:3.12-slim",
-      network: "none" as const,
-      timeoutMinutes: 10,
-      concurrency: 1,
-    }
-    const credentials = { ...modal, tokenId: "ak-test", tokenSecret: "as-test" }
+    })
     const request = {
       name: "recover direct volume",
       command: "true",
@@ -973,6 +895,162 @@ describe("ComputeJobs Modal governance", () => {
     expect(recovered.status).toBe("succeeded")
     expect(recovered.lifecycle).toMatchObject({ delivery: "complete", resource: "closed", recoverable: false })
     expect(calls).toEqual({ run: 1, recover: 1, release: 1 })
+  })
+
+  test("retains the Volume when a declared output is missing, truncated, or corrupt", async () => {
+    for (const mismatch of ["missing", "truncated", "corrupt"] as const) {
+      await using tmp = await tmpdir()
+      const root = path.join(tmp.path, "state")
+      const calls = { release: 0 }
+      const staging = path.join(tmp.path, "staging", "result.txt")
+      await fs.mkdir(path.dirname(staging), { recursive: true })
+      await Bun.write(staging, "short")
+      const provider = modalProvider({
+        run: async (_context, spec, hooks) => {
+          await hooks.created(`sandbox-${spec.id}`)
+          return {
+            code: 0,
+            outputs:
+              mismatch === "missing"
+                ? []
+                : [{ path: "result.txt", staging, size: mismatch === "truncated" ? 100 : 5, sha256: "a".repeat(64) }],
+          }
+        },
+        release: async () => {
+          calls.release++
+        },
+      })
+      const request = {
+        name: `${mismatch} Modal output`,
+        command: "true",
+        target: { kind: "modal" as const },
+        gpu: "none",
+        artifacts: ["result.txt"],
+      }
+      const prepared = await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await trustProject()
+          const session = await Session.create({})
+          const plan = await ComputeJobs.plan(
+            { ...request, sessionID: session.id },
+            { root, workspace: tmp.path, modal },
+          )
+          return { session, plan }
+        },
+      })
+      const job = await Instance.provide({
+        directory: tmp.path,
+        fn: () =>
+          ComputeJobs.start(
+            { ...request, sessionID: prepared.session.id, approval: prepared.plan.digest },
+            { root, workspace: tmp.path, modal, credentials, provider },
+          ),
+      })
+
+      const finished = await ComputeJobs.wait(job.id, {
+        root,
+        workspace: tmp.path,
+        credentials,
+        provider,
+        timeout: 5_000,
+      })
+
+      expect(finished.lifecycle).toMatchObject({ delivery: "failed", resource: "unknown", recoverable: true })
+      expect(finished.capture_error).toContain(
+        mismatch === "missing" ? "did not produce" : mismatch === "truncated" ? "size changed" : "checksum changed",
+      )
+      expect(calls.release).toBe(0)
+    }
+  })
+
+  test("resumes terminal pending delivery after an OpenScience restart", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const calls = { credentials: 0, recover: 0, release: 0 }
+    const id = "terminal-pending"
+    const staging = path.join(tmp.path, "staging", "result.txt")
+    await fs.mkdir(path.dirname(staging), { recursive: true })
+    await Bun.write(staging, "recovered")
+    const provider = modalProvider({
+      recover: async () => {
+        calls.recover++
+        return { code: 0, outputs: [{ path: "result.txt", staging, size: 9 }] }
+      },
+      release: async () => {
+        calls.release++
+      },
+    })
+    const authority = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        return ExecutionAuthority.require({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          capability: "remote_job",
+        })
+      },
+    })
+    const volume = provider.volume(tmp.path, id)
+    const job = ComputeJobs.Job.parse({
+      id,
+      name: "restart delivery",
+      command: "true",
+      cwd: tmp.path,
+      target: { kind: "modal" },
+      target_label: "Modal",
+      scheduler: "none",
+      status: "succeeded",
+      created_at: new Date(Date.now() - 10_000).toISOString(),
+      started_at: new Date(Date.now() - 9_000).toISOString(),
+      completed_at: new Date(Date.now() - 1_000).toISOString(),
+      exit_code: 0,
+      artifact_patterns: ["result.txt"],
+      authority,
+      lifecycle: { execution: "succeeded", delivery: "pending", resource: "active", recoverable: false },
+      remote_id: "sandbox-terminal-pending",
+      modal: {
+        app: modal.app,
+        image: modal.image,
+        packages: [],
+        gpu: "none",
+        network: modal.network,
+        timeout_minutes: modal.timeoutMinutes,
+        uploads: [],
+        upload_bytes: 0,
+        approval: "a".repeat(64),
+        sdk: ModalAdapter.VERSION,
+        volume,
+      },
+    })
+    await fs.mkdir(root, { recursive: true })
+    await Bun.write(path.join(root, "jobs.json"), JSON.stringify([job]))
+
+    const finished = await ComputeJobs.wait(id, {
+      root,
+      workspace: tmp.path,
+      resolveCredentials: async () => {
+        calls.credentials++
+        return credentials
+      },
+      provider,
+      timeout: 5_000,
+    })
+    await ComputeJobs.list({
+      root,
+      workspace: tmp.path,
+      resolveCredentials: async () => {
+        calls.credentials++
+        return credentials
+      },
+      provider,
+    })
+
+    expect(finished.lifecycle).toMatchObject({ delivery: "complete", resource: "closed", recoverable: false })
+    expect(await Bun.file(path.join(tmp.path, "result.txt")).text()).toBe("recovered")
+    expect(calls).toEqual({ credentials: 1, recover: 1, release: 1 })
   })
 })
 

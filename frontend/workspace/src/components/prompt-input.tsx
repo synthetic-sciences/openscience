@@ -150,17 +150,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
   let modeRef: HTMLDetailsElement | undefined
-  const [modeOpen, setModeOpen] = createSignal(false)
-  const [reviewAuto, setReviewAuto] = createSignal(false)
-  const [reviewModel, setReviewModel] = createSignal<ReviewPreferences["model"]>(null)
-  const [memory, setMemory] = createSignal<MemoryPreference>({ enabled: true, categories: [] })
-  const [delegation, setDelegation] = createSignal(true)
-  const [specialist, setSpecialist] = createSignal<string | null>(null)
-  const [specialists, setSpecialists] = createSignal<SpecialistOption[]>([])
-  const [capabilityView, setCapabilityView] = createSignal<"main" | "specialists" | "reviewer">("main")
-  const [capabilityBusy, setCapabilityBusy] = createSignal(false)
-  const [computeOpen, setComputeOpen] = createSignal(false)
-  const [modal, setModal] = createSignal({ connected: false, enabled: false })
+  const [cap, setCap] = createStore({
+    modeOpen: false,
+    reviewAuto: false,
+    reviewModel: null as ReviewPreferences["model"],
+    memory: { enabled: true, categories: [] } as MemoryPreference,
+    delegation: true,
+    specialist: null as string | null,
+    specialists: [] as SpecialistOption[],
+    view: "main" as "main" | "specialists" | "reviewer",
+    busy: false,
+    computeOpen: false,
+    modal: { connected: false, enabled: false },
+  })
+  const modeOpen = () => cap.modeOpen
+  const setModeOpen = (value: boolean) => setCap("modeOpen", value)
+  const reviewAuto = () => cap.reviewAuto
+  const setReviewAuto = (value: boolean) => setCap("reviewAuto", value)
+  const reviewModel = () => cap.reviewModel
+  const setReviewModel = (value: ReviewPreferences["model"]) => setCap("reviewModel", value)
+  const memory = () => cap.memory
+  const setMemory = (value: MemoryPreference) => setCap("memory", value)
+  const delegation = () => cap.delegation
+  const setDelegation = (value: boolean) => setCap("delegation", value)
+  const specialist = () => cap.specialist
+  const setSpecialist = (value: string | null) => setCap("specialist", value)
+  const specialists = () => cap.specialists
+  const setSpecialists = (value: SpecialistOption[]) => setCap("specialists", value)
+  const capabilityView = () => cap.view
+  const setCapabilityView = (value: "main" | "specialists" | "reviewer") => setCap("view", value)
+  const capabilityBusy = () => cap.busy
+  const setCapabilityBusy = (value: boolean) => setCap("busy", value)
+  const computeOpen = () => cap.computeOpen
+  const setComputeOpen = (value: boolean) => setCap("computeOpen", value)
+  const modal = () => cap.modal
+  const setModal = (value: { connected: boolean; enabled: boolean }) => setCap("modal", value)
 
   const reviewModels = createMemo(() => {
     const options = [

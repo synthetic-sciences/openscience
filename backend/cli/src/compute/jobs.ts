@@ -212,7 +212,14 @@ export namespace ComputeJobs {
     hosts?: Host[]
     modal?: ModalAdapter.Config
     credentials?: ModalAdapter.Context
+    resolveCredentials?: () => Promise<ModalAdapter.Context>
     provider?: ModalProvider
+  }
+
+  async function modalContext(options: Options, message: string): Promise<ModalAdapter.Context> {
+    const context = options.credentials ?? (await options.resolveCredentials?.())
+    if (!context) throw new Error(message)
+    return context
   }
 
   type Runtime = {
@@ -378,10 +385,15 @@ export namespace ComputeJobs {
       await Promise.all(
         jobs.map(
           async (job): Promise<{ id: string; event: ComputeLifecycle.Event; value: Partial<Job> } | undefined> => {
-            if (terminal.has(job.status) || active.has(keyOf(root, job.id))) return
+            const lifecycle = job.lifecycle ?? ComputeLifecycle.from(job.status)
+            const settled =
+              terminal.has(job.status) &&
+              (lifecycle.recoverable || (lifecycle.delivery !== "pending" && lifecycle.resource === "closed"))
+            if (settled || active.has(keyOf(root, job.id))) return
             if (job.status === "queued" && Date.now() - Date.parse(job.created_at) < 5_000) return
             if (job.target.kind === "modal") {
-              if (!options.credentials || !job.authority) return
+              const credentials = options.credentials ?? (await options.resolveCredentials?.().catch(() => undefined))
+              if (!credentials || !job.authority) return
               const key = keyOf(root, job.id)
               active.set(key, {
                 detached: false,
@@ -389,9 +401,14 @@ export namespace ComputeJobs {
                 root,
                 workspace: scope.workspace,
                 id: job.id,
-                modal: options.credentials,
+                modal: credentials,
+                provider: options.provider,
               })
-              void recoverModal(job, scope, options.credentials, options.provider ?? ModalAdapter)
+              const task =
+                terminal.has(job.status) && lifecycle.delivery !== "pending"
+                  ? cleanupModal(job, scope, credentials, options.provider ?? ModalAdapter)
+                  : recoverModal(job, scope, credentials, options.provider ?? ModalAdapter)
+              void task
                 .catch(async (error) => {
                   const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
                   await event(root, job.id, `Modal recovery failed: ${message}`)
@@ -687,6 +704,12 @@ export namespace ComputeJobs {
     })
   }
 
+  async function checksum(file: string) {
+    const hash = new Bun.CryptoHasher("sha256")
+    for await (const chunk of createReadStream(file)) hash.update(chunk)
+    return hash.digest("hex")
+  }
+
   async function artifacts(root: string, patterns: string[]): Promise<Artifact[]> {
     const files = new Set<string>()
     for (const pattern of patterns) {
@@ -775,7 +798,13 @@ export namespace ComputeJobs {
     }
   }
 
-  async function deliver(root: string, found: ModalAdapter.Result["outputs"]): Promise<void> {
+  async function deliver(root: string, found: ModalAdapter.Result["outputs"], expected: string[]): Promise<void> {
+    const missing = expected.filter((pattern) => {
+      const glob = new Bun.Glob(pattern.split(path.sep).join("/"))
+      return !found.some((file) => glob.match(file.path.split(path.sep).join("/")))
+    })
+    if (missing.length)
+      throw new Error(`Modal did not produce declared output${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}`)
     for (const file of found) {
       await outputPath(root, file.path, "Modal output")
       const source = await Filesystem.canonical(file.staging)
@@ -783,9 +812,20 @@ export namespace ComputeJobs {
       if (!source || !staging || !Filesystem.contains(staging, source)) {
         throw new Error(`Modal output staging file is unavailable: ${file.path}`)
       }
+      const info = await fs.stat(source).catch(() => undefined)
+      if (!info?.isFile() || info.size !== file.size) {
+        throw new Error(`Modal output size changed during delivery: ${file.path}`)
+      }
+      if (file.sha256 && (await checksum(source)) !== file.sha256) {
+        throw new Error(`Modal output checksum changed during delivery: ${file.path}`)
+      }
       const target = path.resolve(root, file.path)
       await fs.mkdir(path.dirname(target), { recursive: true })
       await fs.copyFile(source, target)
+      const copied = await fs.stat(target)
+      if (copied.size !== file.size || (file.sha256 && (await checksum(target)) !== file.sha256)) {
+        throw new Error(`Modal output copy failed integrity verification: ${file.path}`)
+      }
     }
   }
 
@@ -1079,16 +1119,19 @@ export namespace ComputeJobs {
     })
     if (!finished) return
     if (job.artifact_patterns?.length || job.checkpoint_path) {
-      const received = await deliver(job.cwd!, result.outputs)
-        .then(() => ({ ok: true as const }))
+      const expected = [...(job.artifact_patterns ?? []), ...(job.checkpoint_path ? [job.checkpoint_path] : [])]
+      const received = await deliver(job.cwd!, result.outputs, expected)
+        .then(() => capture(job))
+        .then((captured) => ({ ok: true as const, captured }))
         .catch((error) => ({ ok: false as const, error }))
       if (!received.ok) {
         const message = received.error instanceof Error ? received.error.message : String(received.error)
         await change(scope.root, (jobs) => {
           const index = jobs.findIndex((item) => item.id === job.id)
           if (index < 0 || jobs[index]!.lifecycle?.delivery !== "pending") return
-          const draft = move(jobs[index]!, { type: "delivery_fail", message }, { capture_error: message })
-          jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+          const failed = move(jobs[index]!, { type: "delivery_fail", message }, { capture_error: message })
+          const unknown = move(failed, { type: "lose" })
+          jobs[index] = Job.parse({ ...unknown, provenance: provenance(unknown) })
         })
         return
       }
@@ -1096,7 +1139,8 @@ export namespace ComputeJobs {
         const index = jobs.findIndex((item) => item.id === job.id)
         if (index < 0 || jobs[index]!.lifecycle?.delivery !== "pending") return
         const draft = move(jobs[index]!, { type: "deliver" })
-        jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
+        const delivered = Job.parse({ ...draft, ...received.captured })
+        jobs[index] = Job.parse({ ...delivered, provenance: provenance(delivered) })
       })
     }
     await change(scope.root, (jobs) => {
@@ -1120,16 +1164,12 @@ export namespace ComputeJobs {
           released.error instanceof Error ? released.error.message : String(released.error),
         )}`
     if (warning) await event(scope.root, job.id, warning)
-    const captured = await capture(job)
-      .then((value) => ({ ...value, capture_error: undefined }))
-      .catch((error) => ({ capture_error: error instanceof Error ? error.message : String(error) }))
     await change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === job.id)
       if (index < 0 || jobs[index]!.lifecycle?.resource === "closed") return
       const ended = released.ok ? move(jobs[index]!, { type: "close" }) : move(jobs[index]!, { type: "lose" })
       const updated = Job.parse({
         ...ended,
-        ...captured,
         error: warning ?? jobs[index]!.error,
         provenance: provenance(ended),
       })
@@ -1218,6 +1258,36 @@ export namespace ComputeJobs {
     await completeModal(Job.parse({ ...job, remote_id: id }), scope, context, result, provider)
   }
 
+  async function cleanupModal(
+    job: Job,
+    scope: Scope,
+    context: ModalAdapter.Context,
+    provider: ModalProvider,
+  ): Promise<void> {
+    const current = await get(job.id, { root: scope.root, workspace: scope.workspace })
+    if (!current || current.lifecycle?.resource === "closed") return
+    const spec = modalSpec(current, [], scope)
+    const released = await provider.release(context, spec, current.remote_id).then(
+      () => ({ ok: true as const }),
+      (error) => ({ ok: false as const, error }),
+    )
+    if (released.ok && current.remote_id) await event(scope.root, job.id, `Closed Modal sandbox ${current.remote_id}`)
+    if (released.ok) await event(scope.root, job.id, `Released Modal volume ${spec.volume}`)
+    const message = released.ok
+      ? undefined
+      : `Modal cleanup failed. Its sandbox or durable volume may still be billing; retry cleanup. ${OpenScience.redactSecrets(
+          released.error instanceof Error ? released.error.message : String(released.error),
+        )}`
+    if (message) await event(scope.root, job.id, message)
+    await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0 || jobs[index]!.lifecycle?.resource === "closed") return
+      const ended = released.ok ? move(jobs[index]!, { type: "close" }) : move(jobs[index]!, { type: "lose" })
+      jobs[index] = Job.parse({ ...ended, error: message ?? jobs[index]!.error, provenance: provenance(ended) })
+    })
+    if (released.ok) await fs.rm(path.join(logsOf(scope.root), `${job.id}.modal`), { recursive: true, force: true })
+  }
+
   async function failModal(
     job: Job,
     scope: Scope,
@@ -1291,7 +1361,6 @@ export namespace ComputeJobs {
     const scope = await scoped(options)
     const key = keyOf(scope.root, id)
     if (active.has(key)) throw new Error(`Compute job ${id} already has an active recovery`)
-    if (!options.credentials) throw new Error("Enable Modal before retrying output delivery")
     const provider = options.provider ?? ModalAdapter
     const job = await change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === id)
@@ -1308,19 +1377,52 @@ export namespace ComputeJobs {
       jobs[index] = updated
       return updated
     })
+    const context = await modalContext(options, "Enable Modal before retrying output delivery")
     active.set(key, {
       detached: false,
       authority: job.authority!,
       root: scope.root,
       workspace: scope.workspace,
       id: job.id,
-      modal: options.credentials,
+      modal: context,
       provider,
     })
-    void recoverModal(job, scope, options.credentials, provider)
-      .catch((error) => failModal(job, scope, options.credentials!, error, provider))
+    void recoverModal(job, scope, context, provider)
+      .catch((error) => failModal(job, scope, context, error, provider))
       .finally(() => active.delete(key))
     return job
+  }
+
+  export async function release(id: string, options: Options = {}): Promise<Job> {
+    const scope = await scoped(options)
+    const key = keyOf(scope.root, id)
+    if (active.has(key)) throw new Error(`Compute job ${id} still has an active recovery`)
+    const job = await get(id, { root: scope.root, workspace: scope.workspace })
+    if (!job) throw new Error(`Compute job ${id} was not found`)
+    if (job.target.kind !== "modal" || !job.modal || !job.cwd) {
+      throw new Error(`Compute job ${id} has no Modal resources to release`)
+    }
+    if (!terminal.has(job.status)) throw new Error(`Cancel compute job ${id} before releasing its resources`)
+    if (job.lifecycle?.resource === "closed") return job
+    const context = await modalContext(options, "Enable Modal before releasing retained job resources")
+    const provider = options.provider ?? ModalAdapter
+    const spec = modalSpec(job, [], scope)
+    await provider.release(context, spec, job.remote_id)
+    if (job.remote_id) await event(scope.root, job.id, `Closed Modal sandbox ${job.remote_id}`)
+    await event(scope.root, job.id, `Released Modal volume ${spec.volume}`)
+    const released = await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === id)
+      if (index < 0) throw new Error(`Compute job ${id} was not found`)
+      const current = jobs[index]!
+      if (current.lifecycle?.resource === "closed") return current
+      const abandoned = current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
+      const closed = move(abandoned, { type: "close" })
+      const updated = Job.parse({ ...closed, provenance: provenance(closed) })
+      jobs[index] = updated
+      return updated
+    })
+    await fs.rm(path.join(logsOf(scope.root), `${job.id}.modal`), { recursive: true, force: true })
+    return released
   }
 
   export async function plan(input: Request, options: Options = {}): Promise<ModalPlan.Schema> {
@@ -1414,8 +1516,7 @@ export namespace ComputeJobs {
       },
     })
     if (prepared) {
-      const context = options.credentials
-      if (!context) throw new Error("Modal credentials were not resolved for dispatch")
+      const context = await modalContext(options, "Modal credentials were not resolved for dispatch")
       const key = keyOf(scope.root, draft.id)
       const busy =
         [...active.values()].filter((runtime) => runtime.root === scope.root && runtime.modal).length +
@@ -1541,7 +1642,13 @@ export namespace ComputeJobs {
   export async function cancel(id: string, options: Options = {}): Promise<Job> {
     const scope = await scoped(options)
     const runtime = active.get(keyOf(scope.root, id))
-    const context = runtime?.modal ?? options.credentials
+    const current = (await read(scope.root).catch((error) => preserve(scope.root, error))).find((job) => job.id === id)
+    if (!current) throw new Error(`Compute job ${id} was not found`)
+    const needs =
+      current.target.kind === "modal" && (!terminal.has(current.status) || current.lifecycle?.resource === "unknown")
+    const context =
+      runtime?.modal ??
+      (needs ? await modalContext(options, "Enable Modal before cancelling this recovered job") : undefined)
     const result = await change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === id)
       if (index < 0) throw new Error(`Compute job ${id} was not found`)
@@ -1634,7 +1741,9 @@ export namespace ComputeJobs {
     return change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === id)
       if (index < 0) throw new Error(`Compute job ${id} was not found`)
-      const closed = modalClosed ? move(jobs[index]!, { type: "close" }) : move(jobs[index]!, { type: "lose" })
+      const current = jobs[index]!
+      const abandoned = modalClosed && current.lifecycle?.recoverable ? move(current, { type: "abandon" }) : current
+      const closed = modalClosed ? move(abandoned, { type: "close" }) : move(abandoned, { type: "lose" })
       const warning =
         job.target.kind === "modal" && !modalClosed
           ? "Cancellation was recorded, but Modal did not confirm that the sandbox and durable volume stopped. It may still be billing; retry cancellation or check Modal."
@@ -1697,10 +1806,16 @@ export namespace ComputeJobs {
   export async function wait(id: string, options: Options & { timeout?: number } = {}): Promise<Job> {
     const started = Date.now()
     const timeout = options.timeout ?? 30_000
+    const scope = await scoped(options)
     for (;;) {
-      const job = (await list(options)).find((item) => item.id === id)
+      const job = (await list({ ...options, root: scope.root, workspace: scope.workspace })).find(
+        (item) => item.id === id,
+      )
       if (!job) throw new Error(`Compute job ${id} was not found`)
-      if (terminal.has(job.status)) return job
+      const lifecycle = job.lifecycle ?? ComputeLifecycle.from(job.status)
+      const pending =
+        lifecycle.delivery === "pending" || lifecycle.resource === "starting" || lifecycle.resource === "active"
+      if (terminal.has(job.status) && !pending && !active.has(keyOf(scope.root, id))) return job
       if (Date.now() - started >= timeout) throw new Error(`Timed out waiting for compute job ${id}`)
       await Bun.sleep(25)
     }

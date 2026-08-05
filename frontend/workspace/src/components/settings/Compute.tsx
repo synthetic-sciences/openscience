@@ -1,4 +1,5 @@
-import { For, Show, createEffect, createResource, createSignal, type Component, type JSX } from "solid-js"
+import { For, Show, createEffect, createResource, type Component, type JSX, type Setter } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
 import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
@@ -68,24 +69,71 @@ const Compute: Component = () => {
   const fetchFn = platform.fetch ?? fetch
   const call = <T,>(path = "", init?: RequestInit) => settingsApi<T>(sdk.url, fetchFn, `/settings/compute${path}`, init)
   const [data, control] = createResource(() => call<Info>())
-  const [adding, setAdding] = createSignal(false)
-  const [busy, setBusy] = createSignal<string>()
-  const [probes, setProbes] = createSignal<Record<string, Probe>>({})
-  const [label, setLabel] = createSignal("")
-  const [host, setHost] = createSignal("")
-  const [user, setUser] = createSignal("")
-  const [port, setPort] = createSignal("")
-  const [scheduler, setScheduler] = createSignal<Scheduler>("none")
-  const [workdir, setWorkdir] = createSignal("")
-  const [token, setToken] = createSignal("")
-  const [secret, setSecret] = createSignal("")
-  const [app, setApp] = createSignal("")
-  const [image, setImage] = createSignal("")
-  const [network, setNetwork] = createSignal<Modal["network"]>("none")
-  const [timeout, setTimeout] = createSignal("60")
-  const [concurrency, setConcurrency] = createSignal("10")
-  const [connection, setConnection] = createSignal<Notice>()
-  const [defaults, setDefaults] = createSignal<Notice>()
+  const [state, setState] = createStore({
+    adding: false,
+    busy: undefined as string | undefined,
+    probes: {} as Record<string, Probe>,
+    label: "",
+    host: "",
+    user: "",
+    port: "",
+    scheduler: "none" as Scheduler,
+    workdir: "",
+    token: "",
+    secret: "",
+    app: "",
+    image: "",
+    network: "none" as Modal["network"],
+    timeout: "60",
+    concurrency: "10",
+    connection: undefined as Notice | undefined,
+    defaults: undefined as Notice | undefined,
+  })
+  const adding = () => state.adding
+  const setAdding: Setter<boolean> = (value) => setState("adding", value)
+  const busy = () => state.busy
+  const setBusy = (value: string | undefined) => {
+    setState("busy", value)
+    return value
+  }
+  const probes = () => state.probes
+  const setProbes: Setter<Record<string, Probe>> = (value) => setState("probes", value)
+  const label = () => state.label
+  const setLabel: Setter<string> = (value) => setState("label", value)
+  const host = () => state.host
+  const setHost: Setter<string> = (value) => setState("host", value)
+  const user = () => state.user
+  const setUser: Setter<string> = (value) => setState("user", value)
+  const port = () => state.port
+  const setPort: Setter<string> = (value) => setState("port", value)
+  const scheduler = () => state.scheduler
+  const setScheduler: Setter<Scheduler> = (value) => setState("scheduler", value)
+  const workdir = () => state.workdir
+  const setWorkdir: Setter<string> = (value) => setState("workdir", value)
+  const token = () => state.token
+  const setToken: Setter<string> = (value) => setState("token", value)
+  const secret = () => state.secret
+  const setSecret: Setter<string> = (value) => setState("secret", value)
+  const app = () => state.app
+  const setApp: Setter<string> = (value) => setState("app", value)
+  const image = () => state.image
+  const setImage: Setter<string> = (value) => setState("image", value)
+  const network = () => state.network
+  const setNetwork: Setter<Modal["network"]> = (value) => setState("network", value)
+  const timeout = () => state.timeout
+  const setTimeout: Setter<string> = (value) => setState("timeout", value)
+  const concurrency = () => state.concurrency
+  const setConcurrency: Setter<string> = (value) => setState("concurrency", value)
+  const connection = () => state.connection
+  const setConnection = (value: Notice | undefined) => {
+    setState("connection", value)
+    return value
+  }
+  const defaults = () => state.defaults
+  const setDefaults = (value: Notice | undefined) => {
+    setState("defaults", value)
+    return value
+  }
   const modal = () => data()?.providers.find((item) => item.id === "modal")
   const dirty = () => {
     const value = data()?.modal
@@ -463,7 +511,7 @@ const Compute: Component = () => {
                     </select>
                   </label>
                   <Field
-                    label="Timeout (minutes)"
+                    label="Default timeout (minutes)"
                     value={timeout()}
                     placeholder="60"
                     inputMode="numeric"
@@ -477,6 +525,10 @@ const Compute: Component = () => {
                     onInput={setConcurrency}
                   />
                 </div>
+                <p class="text-11-regular text-text-weak">
+                  Agents use this as their starting limit and may choose a different timeout for the workload. Every
+                  approval card shows the final limit before dispatch.
+                </p>
                 <Show when={defaultsNotice()}>{(notice) => <NoticeBox notice={notice()} />}</Show>
                 <p class="text-11-regular text-text-weak">
                   The token is never added to agent shells. Turning Modal off prevents new credential resolution and

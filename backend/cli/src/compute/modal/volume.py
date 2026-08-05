@@ -7,6 +7,7 @@ No Modal Function or Sandbox is created by this driver.
 """
 
 import json
+import hashlib
 import os
 import posixpath
 import sys
@@ -64,7 +65,7 @@ def main():
     if not isinstance(spec, dict):
         fail("request must be an object")
     action = spec.get("action")
-    if action not in ("check", "list", "download"):
+    if action not in ("check", "volumes", "list", "download"):
         fail("unsupported action")
 
     try:
@@ -74,6 +75,14 @@ def main():
 
     if action == "check":
         print(json.dumps({"version": getattr(modal, "__version__", "unknown")}))
+        return
+
+    if action == "volumes":
+        environment = spec.get("environment")
+        if environment is not None and not isinstance(environment, str):
+            fail("environment must be a string")
+        rows = [{"name": item.name} for item in modal.Volume.objects.list(environment_name=environment)]
+        print(json.dumps(rows))
         return
 
     target = volume(modal, spec)
@@ -111,11 +120,13 @@ def main():
         local = destination(staging, remote)
         os.makedirs(os.path.dirname(local), mode=0o700, exist_ok=True)
         size = 0
+        digest = hashlib.sha256()
         with open(local, "wb") as output:
             for chunk in target.read_file(remote):
                 output.write(chunk)
                 size += len(chunk)
-        rows.append({"path": remote, "staging": local, "size": size})
+                digest.update(chunk)
+        rows.append({"path": remote, "staging": local, "size": size, "sha256": digest.hexdigest()})
     print(json.dumps(rows))
 
 

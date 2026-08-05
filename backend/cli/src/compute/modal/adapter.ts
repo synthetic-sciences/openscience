@@ -50,7 +50,7 @@ export namespace ModalAdapter {
 
   export type Result = {
     code: number
-    outputs: { path: string; staging: string; size: number }[]
+    outputs: { path: string; staging: string; size: number; sha256?: string }[]
     timedOut?: boolean
   }
 
@@ -161,7 +161,10 @@ export namespace ModalAdapter {
     if (!complete && fallback === undefined) throw new Error("Modal output Volume has no completed command result")
     const patterns = spec.outputs.map((pattern) => new Bun.Glob(pattern))
     const selected = entries.filter(
-      (entry) => entry.type === "file" && patterns.some((pattern) => pattern.match(clean(entry.path))),
+      (entry) =>
+        entry.type === "file" &&
+        !clean(entry.path).startsWith(".openscience-") &&
+        patterns.some((pattern) => pattern.match(clean(entry.path))),
     )
     const total = selected.reduce((sum, entry) => sum + entry.size, 0)
     if (total > 20 * 1024 * 1024 * 1024) throw new Error("Modal outputs exceed the 20 GiB recovery limit")

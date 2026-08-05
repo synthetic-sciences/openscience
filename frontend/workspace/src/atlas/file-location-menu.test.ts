@@ -96,6 +96,8 @@ const setup = (
     trash?: StoredArtifact[]
     onRestoreArtifact?: (artifact: StoredArtifact) => void
     onChoose?: (kind: "folder" | "file") => Promise<string | undefined>
+    volumes?: { name: string }[]
+    onOpenVolume?: (volume: { name: string }) => void
   } = {},
 ) =>
   mount(() =>
@@ -103,6 +105,7 @@ const setup = (
       artifacts,
       trash: options.trash ?? [],
       grants,
+      volumes: options.volumes,
       projectRoot: "/Users/aayam/kras-speedrun",
       sessionReady: true,
       onOpenProject: () => {},
@@ -111,6 +114,7 @@ const setup = (
       onInspectArtifact: () => {},
       onRestoreArtifact: options.onRestoreArtifact ?? (() => {}),
       onOpenGrant: () => {},
+      onOpenVolume: options.onOpenVolume,
       onRevoke: options.onRevoke ?? (() => {}),
       onConnect: options.onConnect ?? (() => {}),
       onChoose: options.onChoose,
@@ -118,6 +122,19 @@ const setup = (
   )
 
 describe("Files sources", () => {
+  test("opens a selected Modal Volume as a cloud file source", () => {
+    const opened: string[] = []
+    const host = setup({
+      volumes: [{ name: "openscience-job-results" }],
+      onOpenVolume: (volume) => opened.push(volume.name),
+    })
+
+    expect(host.querySelector("#modal-volumes-heading")?.textContent).toBe("Modal Volumes")
+    const button = host.querySelector('[aria-label="Open Modal Volume openscience-job-results"]') as HTMLButtonElement
+    button.click()
+    expect(opened).toEqual(["openscience-job-results"])
+  })
+
   test("renders accessible source groups without exposing host paths as product identity", () => {
     const host = setup()
 

@@ -188,13 +188,13 @@ test("configuring Modal migrates legacy compute defaults", async () => {
   })
 })
 
-test("Modal config discovery fails closed for missing and inactive profiles", async () => {
+test("Modal config discovery checks presence without resolving an inactive profile", async () => {
   await using tmp = await tmpdir()
   const missing = path.join(tmp.path, ".modal.toml")
   expect(await ComputeSettings.modalFile(missing)).toEqual({ found: false, ready: false })
 
   await Bun.write(missing, '[default]\ntoken_id = "ak-id"\ntoken_secret = "as-secret"\n')
-  expect(await ComputeSettings.modalFile(missing)).toEqual({ found: true, ready: false })
+  expect(await ComputeSettings.modalFile(missing)).toEqual({ found: true, ready: true })
   await expect(ComputeSettings.configureModal(missing)).rejects.toThrow("no active profile")
 })
 

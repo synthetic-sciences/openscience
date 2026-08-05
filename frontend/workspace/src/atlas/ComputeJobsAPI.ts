@@ -145,11 +145,11 @@ export function createComputeJobsAPI(request: ProjectRequest) {
     return response.json() as Promise<T>
   }
   return {
-    list: () => call<Job[]>(""),
+    list: () => call<Job[]>("", { cache: "no-store" }),
     plan: (input: JobInput) => call<Plan>("/plan", { method: "POST", body: JSON.stringify(input) }),
     start: (input: JobInput) => call<Job>("", { method: "POST", body: JSON.stringify(input) }),
-    log: (id: string) => call<{ log: string }>(`/${id}/log`),
-    events: (id: string) => call<{ events: string }>(`/${id}/events`),
+    log: (id: string) => call<{ log: string }>(`/${id}/log`, { cache: "no-store" }),
+    events: (id: string) => call<{ events: string }>(`/${id}/events`, { cache: "no-store" }),
     retry: (id: string) => call<Job>(`/${id}/retry`, { method: "POST" }),
     cancel: (id: string) => call<Job>(`/${id}/cancel`, { method: "POST" }),
     clear: () => call<{ cleared: number }>("/completed", { method: "DELETE" }),

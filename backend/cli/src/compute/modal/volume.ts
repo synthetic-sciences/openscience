@@ -12,6 +12,8 @@ export namespace ModalVolume {
     environment?: string
     command?: string[]
     env?: Record<string, string | undefined>
+    python?: string
+    uv?: string
   }
 
   export type Entry = {
@@ -21,14 +23,20 @@ export namespace ModalVolume {
     mtime?: number
   }
 
+  export type Volume = {
+    name: string
+  }
+
   export type Download = {
     path: string
     staging: string
     size: number
+    sha256: string
   }
 
   type Request =
     | { action: "check" }
+    | { action: "volumes"; environment?: string }
     | { action: "list"; volume: string; environment?: string; path: string; recursive: boolean }
     | { action: "download"; volume: string; environment?: string; paths: string[]; staging: string }
 
@@ -43,33 +51,53 @@ export namespace ModalVolume {
     return result
   }
 
-  let materialized: string | undefined
+  const cache: { path?: string } = {}
 
   export async function driverPath() {
-    if (materialized) return materialized
+    if (cache.path) return cache.path
     const source = Bun.file(driver)
     const target = path.join(Global.Path.data, "runtime", `modal-volume-${Bun.hash(await source.text())}.py`)
     await fs.mkdir(path.dirname(target), { recursive: true })
     await Bun.write(target, source)
-    materialized = target
+    cache.path = target
     return target
   }
 
-  async function command(context: Context) {
+  export async function command(context: Context) {
     if (context.command) return context.command
     const file = await driverPath()
-    const python = Bun.which("python3") ?? Bun.which("python")
+    const python = context.python ?? Bun.which("python3") ?? Bun.which("python")
     if (python) {
-      const probe = Bun.spawn([python, "-c", "import modal; assert hasattr(modal.Volume, 'read_file')"], {
-        stdin: "ignore",
-        stdout: "ignore",
-        stderr: "ignore",
-      })
-      if ((await probe.exited) === 0) return [python, file]
+      const probe = Bun.spawn(
+        [
+          python,
+          "-I",
+          "-c",
+          `import modal; assert modal.__version__ == '${VERSION}'; assert hasattr(modal.Volume, 'read_file')`,
+        ],
+        {
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+          env: environment(context.env ?? process.env),
+        },
+      )
+      if ((await probe.exited) === 0) return [python, "-I", file]
     }
-    const uv = Bun.which("uv")
-    if (uv) return [uv, "run", "--python", "3.12", "--with", `modal==${VERSION}`, "python", file]
+    const uv = context.uv ?? Bun.which("uv")
+    if (uv) {
+      return [uv, "run", "--no-project", "--python", "3.12", "--with", `modal==${VERSION}`, "python", "-I", file]
+    }
     throw new Error("Modal Volume access requires uv or a Python installation that can import the Modal SDK")
+  }
+
+  function environment(source: Record<string, string | undefined>) {
+    const env = { ...source }
+    for (const name of ["PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONINSPECT", "PYTHONUSERBASE"]) {
+      delete env[name]
+    }
+    env.PYTHONNOUSERSITE = "1"
+    return env
   }
 
   function kill(pid: number) {
@@ -94,7 +122,7 @@ export namespace ModalVolume {
   }
 
   async function invoke(request: Request, context: Context, timeout: number) {
-    const env = { ...(context.env ?? process.env) }
+    const env = environment(context.env ?? process.env)
     env.MODAL_TOKEN_ID = context.tokenId
     env.MODAL_TOKEN_SECRET = context.tokenSecret
     const proc = Bun.spawn(await command(context), {
@@ -137,9 +165,25 @@ export namespace ModalVolume {
     return result.version
   }
 
+  export async function volumes(context: Context): Promise<Volume[]> {
+    const result = await invoke({ action: "volumes", environment: context.environment }, context, LIST_TIMEOUT)
+    if (!Array.isArray(result)) throw new Error("Modal Volume discovery did not return an array")
+    return result.map((entry) => {
+      if (!entry || typeof entry !== "object" || !("name" in entry) || typeof entry.name !== "string") {
+        throw new Error("Modal Volume discovery returned an invalid name")
+      }
+      if (!entry.name.trim()) throw new Error("Modal Volume discovery returned an empty name")
+      return { name: entry.name }
+    })
+  }
+
   export async function list(context: Context, volume: string, root = "/", recursive = false): Promise<Entry[]> {
+    const requested = root.replaceAll("\\", "/")
+    if (requested.includes("\0") || requested.split("/").includes("..")) {
+      throw new Error(`Modal Volume list received an unsafe path: ${root}`)
+    }
     const result = await invoke(
-      { action: "list", volume, environment: context.environment, path: root, recursive },
+      { action: "list", volume, environment: context.environment, path: requested, recursive },
       context,
       LIST_TIMEOUT,
     )
@@ -186,12 +230,15 @@ export namespace ModalVolume {
       if (!("size" in entry) || typeof entry.size !== "number" || !Number.isSafeInteger(entry.size) || entry.size < 0) {
         throw new Error(`Modal Volume download returned an invalid size for ${entry.path}`)
       }
+      if (!("sha256" in entry) || typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
+        throw new Error(`Modal Volume download returned an invalid checksum for ${entry.path}`)
+      }
       const relative = safe(entry.path)
       const expected = path.resolve(staging, ...relative.split("/"))
       if (path.resolve(entry.staging) !== expected) {
         throw new Error(`Modal Volume download escaped its staging directory: ${entry.path}`)
       }
-      return { path: relative, staging: expected, size: entry.size }
+      return { path: relative, staging: expected, size: entry.size, sha256: entry.sha256 }
     })
   }
 }

@@ -27,10 +27,23 @@ test("system prompt describes enabled Modal as OpenScience-managed compute", asy
   expect(section[0]).toContain("GPU `none` for CPU-only work")
   expect(section[0]).toContain("Do not ask the user to copy these values into Compute manually")
   expect(section[0]).toContain("Only report dispatch, status, logs, or completion returned by the `modal` tool")
-  expect(section[0]).toContain("Questions about whether Modal is available, configured, connected, or enabled are read-only")
+  expect(section[0]).toContain(
+    "Questions about whether Modal is available, configured, connected, or enabled are read-only",
+  )
   expect(section[0]).toContain("Never call the `modal` tool to test availability")
   expect(section[0]).toContain("Only call it after the user explicitly asks to run a workload on Modal")
+  expect(section[0]).toContain("call the `modal` tool immediately")
+  expect(section[0]).toContain("Do not first present a prose approval card")
+  expect(section[0]).toContain("choose an explicit `timeout_minutes`")
+  expect(section[0]).toContain("configured default is 60 minutes")
+  expect(section[0]).toContain("Use it as the starting point")
   expect(section[0]).not.toContain(marker)
+
+  const configured = await SystemPrompt.compute({
+    providers: { modal: { enabled: true } },
+    modal: { timeout_minutes: 25 },
+  })
+  expect(configured[0]).toContain("configured default is 25 minutes")
 })
 
 test("system prompt reflects disabled and unconfigured Modal states", async () => {

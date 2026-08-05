@@ -1,4 +1,5 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, type JSX } from "solid-js"
+import { For, Show, createEffect, createMemo, createResource, onCleanup, type JSX, type Setter } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
@@ -44,37 +45,100 @@ export function ComputeJobs(props: { onEnsureSession?: () => Promise<string | un
     cache.value = value
     return value
   })
-  const [selected, setSelected] = createSignal<string>()
   const seeded = { value: false }
-  const [creating, setCreating] = createSignal(false)
-  const [reviewed, setReviewed] = createSignal(false)
-  const [busy, setBusy] = createSignal(false)
-  const [name, setName] = createSignal("")
-  const [command, setCommand] = createSignal("")
-  const [cwd, setCwd] = createSignal("")
-  const [target, setTarget] = createSignal<"local" | "modal">("local")
-  const [image, setImage] = createSignal("")
-  const [gpu, setGpu] = createSignal("T4")
-  const [uploads, setUploads] = createSignal("")
-  const [plan, setPlan] = createSignal<Plan>()
-  const [stamp, setStamp] = createSignal("")
+  const [state, setState] = createStore({
+    selected: undefined as string | undefined,
+    creating: false,
+    reviewed: false,
+    busy: false,
+    name: "",
+    command: "",
+    cwd: "",
+    target: "local" as "local" | "modal",
+    image: "",
+    gpu: "T4",
+    uploads: "",
+    plan: undefined as Plan | undefined,
+    stamp: "",
+    advanced: false,
+    cpus: "",
+    gpus: "",
+    memory: "",
+    time: "",
+    partition: "",
+    modules: "",
+    container: "",
+    artifacts: "",
+    checkpoint: "",
+    output: "",
+    events: "",
+    outputBusy: false,
+    eventsBusy: false,
+  })
+  const selected = () => state.selected
+  const setSelected = (value: string | undefined | ((prior: string | undefined) => string | undefined)) => {
+    const next = value instanceof Function ? value(state.selected) : value
+    setState("selected", next)
+    return next
+  }
+  const creating = () => state.creating
+  const setCreating: Setter<boolean> = (value) => setState("creating", value)
+  const reviewed = () => state.reviewed
+  const setReviewed: Setter<boolean> = (value) => setState("reviewed", value)
+  const busy = () => state.busy
+  const setBusy: Setter<boolean> = (value) => setState("busy", value)
+  const name = () => state.name
+  const setName: Setter<string> = (value) => setState("name", value)
+  const command = () => state.command
+  const setCommand: Setter<string> = (value) => setState("command", value)
+  const cwd = () => state.cwd
+  const setCwd: Setter<string> = (value) => setState("cwd", value)
+  const target = () => state.target
+  const setTarget: Setter<"local" | "modal"> = (value) => setState("target", value)
+  const image = () => state.image
+  const setImage: Setter<string> = (value) => setState("image", value)
+  const gpu = () => state.gpu
+  const setGpu: Setter<string> = (value) => setState("gpu", value)
+  const uploads = () => state.uploads
+  const setUploads: Setter<string> = (value) => setState("uploads", value)
+  const plan = () => state.plan
+  const setPlan = (value: Plan | undefined) => {
+    setState("plan", value)
+    return value
+  }
+  const stamp = () => state.stamp
+  const setStamp: Setter<string> = (value) => setState("stamp", value)
+  const advanced = () => state.advanced
+  const setAdvanced: Setter<boolean> = (value) => setState("advanced", value)
+  const cpus = () => state.cpus
+  const setCpus: Setter<string> = (value) => setState("cpus", value)
+  const gpus = () => state.gpus
+  const setGpus: Setter<string> = (value) => setState("gpus", value)
+  const memory = () => state.memory
+  const setMemory: Setter<string> = (value) => setState("memory", value)
+  const time = () => state.time
+  const setTime: Setter<string> = (value) => setState("time", value)
+  const partition = () => state.partition
+  const setPartition: Setter<string> = (value) => setState("partition", value)
+  const modules = () => state.modules
+  const setModules: Setter<string> = (value) => setState("modules", value)
+  const container = () => state.container
+  const setContainer: Setter<string> = (value) => setState("container", value)
+  const artifacts = () => state.artifacts
+  const setArtifacts: Setter<string> = (value) => setState("artifacts", value)
+  const checkpoint = () => state.checkpoint
+  const setCheckpoint: Setter<string> = (value) => setState("checkpoint", value)
+  const output = () => state.output
+  const setOutput: Setter<string> = (value) => setState("output", value)
+  const events = () => state.events
+  const setEvents: Setter<string> = (value) => setState("events", value)
+  const outputBusy = () => state.outputBusy
+  const setOutputBusy: Setter<boolean> = (value) => setState("outputBusy", value)
+  const eventsBusy = () => state.eventsBusy
+  const setEventsBusy: Setter<boolean> = (value) => setState("eventsBusy", value)
   const authority = useExecutionAuthority(() => (target() === "modal" ? "remote_job" : "local_job"))
-  const [advanced, setAdvanced] = createSignal(false)
-  const [cpus, setCpus] = createSignal("")
-  const [gpus, setGpus] = createSignal("")
-  const [memory, setMemory] = createSignal("")
-  const [time, setTime] = createSignal("")
-  const [partition, setPartition] = createSignal("")
-  const [modules, setModules] = createSignal("")
-  const [container, setContainer] = createSignal("")
-  const [artifacts, setArtifacts] = createSignal("")
-  const [checkpoint, setCheckpoint] = createSignal("")
   const current = createMemo(() => jobs()?.find((job) => job.id === selected()))
   const active = createMemo(() => jobs()?.filter((job) => !terminal.has(job.status)).length ?? 0)
-  const [output, setOutput] = createSignal("")
-  const [events, setEvents] = createSignal("")
-  const [outputBusy, setOutputBusy] = createSignal(false)
-  const [eventsBusy, setEventsBusy] = createSignal(false)
 
   const refresh = async (report = false) => {
     if (!cache.value) {

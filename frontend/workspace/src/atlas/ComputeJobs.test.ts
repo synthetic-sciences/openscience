@@ -72,6 +72,7 @@ describe("compute jobs surface", () => {
       "POST /settings/compute/jobs/job_1/cancel",
       "DELETE /settings/compute/jobs/completed",
     ])
+    for (const call of [calls[0], calls[2], calls[3]]) expect(call?.init?.cache).toBe("no-store")
     for (const call of calls) {
       expect(call.url.searchParams.get("directory")).toBeNull()
       const headers = new Headers(call.init?.headers)
@@ -127,7 +128,7 @@ describe("compute jobs surface", () => {
   test("preserves the real job, output, capture, and provenance API paths", () => {
     expect(source).toContain("createComputeJobsAPI(sdk.request)")
     expect(source).not.toContain("directory=${encodeURIComponent(sdk.directory)}")
-    expect(apiSource).toContain('call<Job[]>("")')
+    expect(apiSource).toContain('call<Job[]>("", { cache: "no-store" })')
     expect(apiSource).toContain('call<Job>("", { method: "POST"')
     expect(apiSource).toContain("call<Job>(`/${id}/retry`")
     expect(apiSource).toContain("call<Job>(`/${id}/cancel`")

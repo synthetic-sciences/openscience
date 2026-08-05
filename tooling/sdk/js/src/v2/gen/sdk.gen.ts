@@ -263,6 +263,12 @@ import type {
   SettingsComputeModalConfigureResponses,
   SettingsComputeModalUpdateErrors,
   SettingsComputeModalUpdateResponses,
+  SettingsComputeModalVolumeFileErrors,
+  SettingsComputeModalVolumeFileResponses,
+  SettingsComputeModalVolumeFilesErrors,
+  SettingsComputeModalVolumeFilesResponses,
+  SettingsComputeModalVolumesErrors,
+  SettingsComputeModalVolumesResponses,
   SettingsComputeProviderConnectErrors,
   SettingsComputeProviderConnectResponses,
   SettingsComputeProviderDisconnectResponses,
@@ -911,6 +917,72 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Volume extends HeyApiClient {
+  /**
+   * List files in a Modal Volume
+   */
+  public files<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SettingsComputeModalVolumeFilesResponses,
+      SettingsComputeModalVolumeFilesErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/modal/volumes/{name}/files",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Download a file from a Modal Volume
+   */
+  public file<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SettingsComputeModalVolumeFileResponses,
+      SettingsComputeModalVolumeFileErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/modal/volumes/{name}/file",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Modal extends HeyApiClient {
   /**
    * Update Modal compute defaults
@@ -956,6 +1028,17 @@ export class Modal extends HeyApiClient {
   }
 
   /**
+   * List Modal Volumes
+   */
+  public volumes<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      SettingsComputeModalVolumesResponses,
+      SettingsComputeModalVolumesErrors,
+      ThrowOnError
+    >({ url: "/settings/compute/modal/volumes", ...options })
+  }
+
+  /**
    * Configure Modal from the active ~/.modal.toml profile
    */
   public configure<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
@@ -975,6 +1058,11 @@ export class Modal extends HeyApiClient {
       SettingsComputeModalCheckErrors,
       ThrowOnError
     >({ url: "/settings/compute/modal/check", ...options })
+  }
+
+  private _volume?: Volume
+  get volume(): Volume {
+    return (this._volume ??= new Volume({ client: this.client }))
   }
 }
 

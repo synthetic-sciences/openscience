@@ -40,6 +40,7 @@ import { AtlasTool } from "./atlas"
 import { AtlasRecordTool } from "./atlas-record"
 import { ArtifactSnapshotTool } from "./artifact-snapshot"
 import { ModalTool } from "./modal"
+import { ComputeJobTool } from "./compute-job"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -143,6 +144,7 @@ export namespace ToolRegistry {
       LearnTool,
       MemoryTool,
       ModalTool,
+      ComputeJobTool,
       ...custom,
     ]
   }
@@ -186,7 +188,7 @@ export namespace ToolRegistry {
             return !!agent?.name && MEMORY_AGENTS.includes(agent.name)
           }
 
-          if (t.id === "modal") {
+          if (t.id === "modal" || t.id === "compute_job") {
             return !!agent?.name && MODAL_AGENTS.includes(agent.name)
           }
 

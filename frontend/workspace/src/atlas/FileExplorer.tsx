@@ -56,7 +56,11 @@ interface FileNode {
 interface Source {
   root: string
   name: string
-  kind: "project" | "session" | "connected"
+  kind: "project" | "session" | "connected" | "modal"
+}
+
+interface ModalVolume {
+  name: string
 }
 
 interface ConnectInput {
@@ -69,6 +73,7 @@ interface FilesSourceListProps {
   artifacts: StoredArtifact[]
   trash: StoredArtifact[]
   grants: FilesystemGrant[]
+  volumes?: ModalVolume[]
   projectRoot: string
   sessionReady: boolean
   busy?: boolean
@@ -79,6 +84,7 @@ interface FilesSourceListProps {
   onInspectArtifact: (artifact: StoredArtifact) => void
   onRestoreArtifact: (artifact: StoredArtifact) => void
   onOpenGrant: (grant: FilesystemGrant) => void
+  onOpenVolume?: (volume: ModalVolume) => void
   onRevoke: (grant: FilesystemGrant) => void
   onConnect: (input: ConnectInput) => void
   onChoose?: (kind: "folder" | "file") => Promise<string | undefined>
@@ -331,6 +337,38 @@ export function FilesSourceList(props: FilesSourceListProps): JSX.Element {
         </Show>
       </section>
 
+      <Show when={props.volumes?.length}>
+        <section aria-labelledby="modal-volumes-heading" style={group()}>
+          <GroupHeading
+            id="modal-volumes-heading"
+            title="Modal Volumes"
+            detail={`${props.volumes?.length ?? 0} available`}
+          />
+          <div role="list" aria-label="Modal Volumes" style={rows()}>
+            <For each={props.volumes}>
+              {(volume) => (
+                <button
+                  type="button"
+                  role="listitem"
+                  aria-label={`Open Modal Volume ${volume.name}`}
+                  onClick={() => props.onOpenVolume?.(volume)}
+                  style={sourceRow()}
+                >
+                  <span style={sourceIcon()}>
+                    <IconFolder size={18} strokeWidth={1.5} />
+                  </span>
+                  <span style={sourceCopy()}>
+                    <strong style={sourceTitle()}>{volume.name}</strong>
+                    <span style={sourceDetail()}>Durable cloud files</span>
+                  </span>
+                  <IconChevronRight size={16} strokeWidth={1.5} />
+                </button>
+              )}
+            </For>
+          </div>
+        </section>
+      </Show>
+
       <section aria-labelledby="connected-locations-heading" style={group()}>
         <GroupHeading
           id="connected-locations-heading"
@@ -533,6 +571,15 @@ export function FileExplorer(): JSX.Element {
         ),
       ).then(([active, trash]) => ({ active, trash })),
   )
+  const [volumes] = createResource(
+    () => sdk.directory,
+    () =>
+      sdk
+        .request("/settings/compute/modal/volumes")
+        .then(json)
+        .then((value) => (Array.isArray(value) ? (value as ModalVolume[]) : []))
+        .catch(() => []),
+  )
   onMount(() => {
     const refresh = () => void refetchArtifacts()
     window.addEventListener("openscience:artifacts-changed", refresh)
@@ -541,9 +588,32 @@ export function FileExplorer(): JSX.Element {
   const [entries] = createResource(
     () => {
       if (!view.source || !view.cwd) return
-      return [projectRoot(), view.cwd, sessionID(), view.refresh] as const
+      return [view.source.kind, view.source.name, projectRoot(), view.cwd, sessionID(), view.refresh] as const
     },
-    ([, path, session]) => {
+    ([kind, name, , path, session]) => {
+      if (kind === "modal") {
+        const volume = encodeURIComponent(name)
+        const root = encodeURIComponent(path)
+        return sdk
+          .request(`/settings/compute/modal/volumes/${volume}/files?path=${root}`)
+          .then(json)
+          .then((value) => {
+            if (!Array.isArray(value)) return []
+            return value.map((entry) => {
+              const file = entry as { path: string; type: string; size: number; mtime?: number }
+              const absolute = `/${file.path.replace(/^\/+/, "")}`
+              return {
+                name: file.path.split("/").at(-1) ?? file.path,
+                path: file.path,
+                absolute,
+                type: file.type === "directory" ? "directory" : "file",
+                ignored: false,
+                size: file.size,
+                mtime: file.mtime === undefined ? undefined : file.mtime * 1000,
+              } satisfies FileNode
+            })
+          })
+      }
       const input = { path, sessionID: session }
       return sdk.client.file.list(input).then((response) => {
         const value = data(response)
@@ -618,6 +688,26 @@ export function FileExplorer(): JSX.Element {
     if (node.type === "directory") {
       if (!view.source || !containsFilePath(view.source.root, node.absolute)) return
       setView({ cwd: node.absolute, filter: "" })
+      return
+    }
+    if (view.source?.kind === "modal") {
+      const volume = encodeURIComponent(view.source.name)
+      const file = encodeURIComponent(node.path)
+      sdk
+        .request(`/settings/compute/modal/volumes/${volume}/file?path=${file}`)
+        .then(async (response) => {
+          if (!response.ok) throw new Error(await response.text())
+          const url = URL.createObjectURL(await response.blob())
+          const anchor = document.createElement("a")
+          anchor.href = url
+          anchor.download = node.name
+          anchor.hidden = true
+          document.body.append(anchor)
+          anchor.click()
+          anchor.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 0)
+        })
+        .catch((error) => toast.error("download failed", errorMessage(error)))
       return
     }
     const path = view.source?.kind === "connected" ? node.absolute : node.path
@@ -801,6 +891,7 @@ export function FileExplorer(): JSX.Element {
           artifacts={artifacts.latest?.active ?? []}
           trash={artifacts.latest?.trash ?? []}
           grants={grants()}
+          volumes={volumes.latest ?? []}
           projectRoot={projectRoot()}
           sessionReady={Boolean(snapshot.latest)}
           busy={view.busy}
@@ -819,6 +910,7 @@ export function FileExplorer(): JSX.Element {
           onInspectArtifact={uiStore.openSaved}
           onRestoreArtifact={restore}
           onOpenGrant={openGrant}
+          onOpenVolume={(volume) => open({ root: "/", name: volume.name, kind: "modal" })}
           onRevoke={revoke}
           onConnect={connect}
           onChoose={choose}

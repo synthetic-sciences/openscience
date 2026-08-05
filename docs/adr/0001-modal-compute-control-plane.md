@@ -21,7 +21,7 @@ The following rules are mandatory:
 
 1. Saving a credential does not enable a provider.
 2. A disabled provider never resolves credentials and never constructs a provider client.
-3. Provider credentials are resolved only at dispatch, inside the trusted adapter. They are never added to a generic agent, shell, kernel, or job environment.
+3. Provider credentials are resolved only for an approved dispatch, an explicit lifecycle operation on an owned job (recovery, cancellation, delivery retry, or resource release), or an explicit control-plane browse of the user's Modal Volumes, inside the trusted adapter. Merely opening settings, listing settled jobs, or answering an availability question does not resolve them. They are never added to a generic agent, shell, kernel, or job environment.
 4. The agent may call the first-class `modal` tool, but it cannot authorize dispatch. The tool must show a one-run paid-dispatch approval whose digest still matches its command, inputs, image, packages, resources, timeout, network policy, and output contract. Credentials resolve only after this approval.
 5. Job inputs are explicit snapshots. The remote job does not inherit arbitrary host files, environment variables, or credentials.
 6. Provider resources carry durable OpenScience ownership metadata. Recovery and teardown verify that ownership before acting.
@@ -35,6 +35,8 @@ Delivery recovery is an explicit lifecycle operation. It reads the already-compu
 ## Modal SDK baseline
 
 Use the official JavaScript SDK, pinned as `modal` 0.9.0, for Sandbox creation, explicit client credentials, streaming logs, filesystem transfer, tags, reattachment, and cancellation. Use the official Python SDK, pinned as `modal` 1.1.4, only for control-plane Volume listing and reads that the JavaScript SDK does not expose. The Python bridge is embedded in the compiled binary and launched through `uv` when a compatible system Python is unavailable. Provider-specific SDK objects remain private to the Modal adapter.
+
+Both SDK versions are exact pins. Dependency updates must be reviewed as adapter migrations: run the Modal adapter, Volume bridge, lifecycle recovery, approval, type-check, and single-binary build suites before changing either pin. The bridge uses isolated Python mode, removes ambient Python path and startup variables, and accepts a system installation only when its reported version exactly matches the pin.
 
 ## Consequences
 

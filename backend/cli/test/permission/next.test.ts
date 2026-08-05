@@ -811,7 +811,20 @@ test("ask - spend permissions ignore wildcard allows", async () => {
         await expect(shaped).rejects.toBeInstanceOf(PermissionNext.RejectedError)
       }
 
-      // An explicit rule naming the permission still allows it.
+      const exactModal = PermissionNext.ask({
+        id: "permission_spend_modal_exact",
+        sessionID: "session_modal_exact",
+        permission: "modal",
+        patterns: ["approved-plan-digest"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "modal", pattern: "*", action: "allow" }],
+      })
+      expect(exactModal).toBeInstanceOf(Promise)
+      await PermissionNext.reply({ requestID: "permission_spend_modal_exact", reply: "reject" })
+      await expect(exactModal).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+
+      // Other spend permissions may still opt into explicit standing rules.
       const explicit = await PermissionNext.ask({
         sessionID: "session_test2",
         permission: "websearch",

@@ -19,6 +19,7 @@ import { SecretFile } from "../../../util/secret-file"
 import { OpenScience } from "../../../openscience"
 import { ModalAdapter } from "../../../compute/modal/adapter"
 import { ModalPlan } from "../../../compute/modal/plan"
+import { ModalVolume } from "../../../compute/modal/volume"
 
 const Directory = z.object({
   directory: z.string().trim().min(1).optional(),
@@ -301,8 +302,10 @@ export namespace ComputeSettings {
   }
 
   export async function modalFile(filepath?: string): Promise<ModalFile> {
-    const file = await readModal(filepath)
-    return { found: file.found, ready: Boolean(file.token && file.secret) }
+    const target = filepath ?? path.join(os.homedir(), ".modal.toml")
+    const info = await fs.stat(target).catch(() => undefined)
+    const found = info?.isFile() ?? false
+    return { found, ready: found }
   }
 
   export async function providerEnv(target: string): Promise<Record<string, string>> {
@@ -425,6 +428,14 @@ export namespace ComputeSettings {
     return { ...config, tokenId: env.MODAL_TOKEN_ID!, tokenSecret: env.MODAL_TOKEN_SECRET! }
   }
 
+  export function modalResolver() {
+    const cache: { value?: Promise<ModalAdapter.Context> } = {}
+    return () => {
+      cache.value ??= modalContext()
+      return cache.value
+    }
+  }
+
   export async function addSshHost(input: Omit<SshHost, "id">): Promise<Info> {
     const stored = await update((current) => {
       current.ssh_hosts.push({ id: id(), ...input })
@@ -522,6 +533,99 @@ export const ComputeSettingsRoutes = lazy(() =>
       }),
       validator("json", ComputeSettings.ModalPatch),
       async (c) => c.json(await ComputeSettings.updateModal(c.req.valid("json"))),
+    )
+    .get(
+      "/modal/volumes",
+      describeRoute({
+        summary: "List Modal Volumes",
+        operationId: "settings.compute.modal.volumes",
+        responses: {
+          200: {
+            description: "Modal Volumes",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ name: z.string() }).array()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      async (c) => c.json(await ModalVolume.volumes(await ComputeSettings.modalContext())),
+    )
+    .get(
+      "/modal/volumes/:name/files",
+      describeRoute({
+        summary: "List files in a Modal Volume",
+        operationId: "settings.compute.modal.volume.files",
+        responses: {
+          200: {
+            description: "Modal Volume files",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z
+                    .object({
+                      path: z.string(),
+                      type: z.string(),
+                      size: z.number().int().nonnegative(),
+                      mtime: z.number().optional(),
+                    })
+                    .array(),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("param", z.object({ name: z.string().trim().min(1) })),
+      validator("query", z.object({ path: z.string().default("/") })),
+      async (c) => {
+        const input = c.req.valid("param")
+        const query = c.req.valid("query")
+        const context = await ComputeSettings.modalContext()
+        return c.json(await ModalVolume.list(context, input.name, query.path, false))
+      },
+    )
+    .get(
+      "/modal/volumes/:name/file",
+      describeRoute({
+        summary: "Download a file from a Modal Volume",
+        operationId: "settings.compute.modal.volume.file",
+        responses: {
+          200: { description: "Modal Volume file" },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ name: z.string().trim().min(1) })),
+      validator("query", z.object({ path: z.string().trim().min(1) })),
+      async (c) => {
+        const input = c.req.valid("param")
+        const query = c.req.valid("query")
+        const context = await ComputeSettings.modalContext()
+        const entries = await ModalVolume.list(context, input.name, path.posix.dirname(query.path), false)
+        const entry = entries.find((item) => item.path === query.path.replace(/^\/+/, ""))
+        if (!entry || entry.type !== "file") return c.json({ error: "Modal Volume file not found" }, 404)
+        if (entry.size > 256 * 1024 * 1024) {
+          throw new HTTPException(400, { message: "Modal Volume browser downloads are limited to 256 MB." })
+        }
+        const staging = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-modal-volume-"))
+        const bytes = await ModalVolume.download(context, input.name, [entry.path], staging)
+          .then((files) => {
+            const file = files[0]
+            if (!file) throw new Error(`Modal Volume did not download ${entry.path}`)
+            return Bun.file(file.staging).arrayBuffer()
+          })
+          .finally(() => fs.rm(staging, { recursive: true, force: true }))
+        const filename = path.posix.basename(entry.path).replaceAll('"', "") || "download"
+        return new Response(bytes, {
+          headers: {
+            "content-type": "application/octet-stream",
+            "content-disposition": `attachment; filename="${filename}"`,
+          },
+        })
+      },
     )
     .post(
       "/modal/configure",
@@ -625,8 +729,8 @@ export const ComputeSettingsRoutes = lazy(() =>
         project(c, async () => {
           const settings = await ComputeSettings.get()
           const provider = settings.providers.find((item) => item.id === "modal")
-          const credentials = provider?.enabled ? await ComputeSettings.modalContext() : undefined
-          return c.json(await ComputeJobs.list({ credentials }))
+          const resolveCredentials = provider?.enabled ? ComputeSettings.modalResolver() : undefined
+          return c.json(await ComputeJobs.list({ resolveCredentials }))
         }),
     )
     .post(
@@ -676,8 +780,9 @@ export const ComputeSettingsRoutes = lazy(() =>
               409,
             )
           }
-          const credentials = input.target.kind === "modal" ? await ComputeSettings.modalContext() : undefined
-          return c.json(await ComputeJobs.start(input, { modal: credentials, credentials }))
+          const modal = input.target.kind === "modal" ? await ComputeSettings.modalConfig() : undefined
+          const resolveCredentials = input.target.kind === "modal" ? ComputeSettings.modalResolver() : undefined
+          return c.json(await ComputeJobs.start(input, { modal, resolveCredentials }))
         })
       },
     )
@@ -766,8 +871,7 @@ export const ComputeSettingsRoutes = lazy(() =>
         return project(c, async () => {
           const job = await ComputeJobs.get(c.req.valid("param").id)
           if (!job) return c.json({ error: "Compute job not found" }, 404)
-          const credentials = await ComputeSettings.modalContext()
-          return c.json(await ComputeJobs.retry(job.id, { credentials }))
+          return c.json(await ComputeJobs.retry(job.id, { resolveCredentials: ComputeSettings.modalResolver() }))
         })
       },
     )
@@ -789,9 +893,9 @@ export const ComputeSettingsRoutes = lazy(() =>
           const job = await ComputeJobs.get(c.req.valid("param").id)
           if (!job) return c.json({ error: "Compute job not found" }, 404)
           const provider = settings.providers.find((item) => item.id === "modal")
-          const credentials =
-            job.target.kind === "modal" && provider?.enabled ? await ComputeSettings.modalContext() : undefined
-          return c.json(await ComputeJobs.cancel(job.id, { hosts: settings.ssh_hosts, credentials }))
+          const resolveCredentials =
+            job.target.kind === "modal" && provider?.enabled ? ComputeSettings.modalResolver() : undefined
+          return c.json(await ComputeJobs.cancel(job.id, { hosts: settings.ssh_hosts, resolveCredentials }))
         })
       },
     ),

@@ -54,6 +54,17 @@ describe("file explorer surface", () => {
     expect(value).not.toContain("centerTabs")
   })
 
+  test("browses and downloads durable Modal Volume files through the control plane", () => {
+    const value = source()
+
+    expect(value).toContain('title="Modal Volumes"')
+    expect(value).toContain('request("/settings/compute/modal/volumes")')
+    expect(value).toContain("/settings/compute/modal/volumes/${volume}/files")
+    expect(value).toContain("/settings/compute/modal/volumes/${volume}/file")
+    expect(value).toContain('kind: "modal"')
+    expect(value).toContain("URL.createObjectURL")
+  })
+
   test("opens durable artifact rows in their immutable saved-artifact view", () => {
     const value = source()
 

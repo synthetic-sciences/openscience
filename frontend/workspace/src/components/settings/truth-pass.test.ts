@@ -64,6 +64,8 @@ describe("launch settings truth pass", () => {
     expect(compute).toContain('label="Modal token ID"')
     expect(compute).toContain('label="Modal token secret"')
     expect(compute).toContain('type="password"')
+    expect(compute).toContain('label="Default timeout (minutes)"')
+    expect(compute).toContain("Agents use this as their starting limit")
   })
 
   test("keeps Modal action results visible inside the compute panel", () => {
