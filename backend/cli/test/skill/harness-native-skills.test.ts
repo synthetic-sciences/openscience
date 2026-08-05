@@ -36,6 +36,19 @@ async function run(script: string, args: string[]) {
   return { code, stdout, stderr }
 }
 
+async function bun(script: string, args: string[]) {
+  const process = Bun.spawn(["bun", path.join(skills, script), ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [code, stdout, stderr] = await Promise.all([
+    process.exited,
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+  ])
+  return { code, stdout, stderr }
+}
+
 function objectivePlan() {
   const checksum = "a".repeat(64)
   return {
@@ -1963,5 +1976,70 @@ test("audit-benchmark-sources fails closed when a catalog pin is unreachable", a
     })
   } finally {
     await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
+test("run-proactive-evaluation commits a token-free score-history pool", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-proactive-evaluation-"))
+  const script = "research/run-proactive-evaluation/scripts/preflight.ts"
+  const input = path.join(dir, "private.jsonl")
+  const protocolFile = path.join(dir, "protocol.json")
+  const output = path.join(dir, "public.json")
+  const rows = [
+    { id: "case-b", hidden: { prompt: "secret-b", target: 2 }, sourceLosses: [0.2, 0.3, 0.4], stratum: "b" },
+    { id: "case-a", hidden: { prompt: "secret-a", target: 1 }, sourceLosses: [0.1, 0.2, 0.3], stratum: "a", weight: 2 },
+    { id: "case-c", hidden: { prompt: "secret-c", target: 3 }, sourceLosses: [0.5, 0.4, 0.3], stratum: "c" },
+  ]
+  const protocol = {
+    sourceModels: ["source-a", "source-b", "source-c"],
+    selectionSHA256: hash("gmm-selection"),
+    selectionMethod: "pca-gmm-profile-v1",
+    calibrationSamples: 2,
+    maxCalibrationMAE: 0.1,
+  }
+  try {
+    await Promise.all([
+      Bun.write(input, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`),
+      Bun.write(protocolFile, JSON.stringify(protocol)),
+    ])
+    const valid = await bun(script, ["--input", input, "--protocol", protocolFile, "--out", output])
+    expect(valid.code).toBe(0)
+    expect(JSON.parse(valid.stdout)).toMatchObject({ valid: true, tokenFree: true, probes: 3 })
+    const payload = JSON.parse(await Bun.file(output).text())
+    expect(payload.probes.map((probe: { id: string }) => probe.id)).toEqual(["case-a", "case-b", "case-c"])
+    expect(JSON.stringify(payload)).not.toContain("secret-")
+    expect(payload.transfer.poolSHA256).toBe(hash(JSON.stringify(payload.probes)))
+    expect(payload.transfer.sourceManifestSHA256).toBe(
+      hash(
+        JSON.stringify({
+          sourceModels: protocol.sourceModels,
+          scores: payload.probes.map((probe: { id: string; sourceLosses: number[] }) => ({
+            id: probe.id,
+            sourceLosses: probe.sourceLosses,
+          })),
+        }),
+      ),
+    )
+    expect(
+      HarnessContract.Audit.parse({
+        mode: "performance",
+        budget: 2,
+        minSamples: 2,
+        transfer: payload.transfer,
+        promotionRequired: true,
+      }).transfer,
+    ).toEqual(payload.transfer)
+
+    await Bun.write(input, `${JSON.stringify({ ...rows[0], sourceLosses: [0.1, 0.2] })}\n${JSON.stringify(rows[1])}\n`)
+    const drift = await bun(script, ["--input", input, "--protocol", protocolFile, "--out", output])
+    expect(drift.code).toBe(1)
+    expect(drift.stderr).toContain("source dimension drifted")
+
+    await Bun.write(protocolFile, JSON.stringify({ ...protocol, evaluatorToken: "must-not-touch-disk" }))
+    const token = await bun(script, ["--input", input, "--protocol", protocolFile, "--out", output])
+    expect(token.code).toBe(1)
+    expect(token.stderr).toContain("unknown fields")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
   }
 })

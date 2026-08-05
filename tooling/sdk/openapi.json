@@ -15707,7 +15707,10 @@
                     },
                     "protocolVersion": {
                       "type": "string",
-                      "const": "active-audit-v1"
+                      "enum": [
+                        "active-audit-v1",
+                        "proactive-audit-v2"
+                      ]
                     },
                     "auditID": {
                       "type": "string",
@@ -15839,6 +15842,68 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 512
+                        },
+                        "transfer": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "score-history-prior-v1"
+                            },
+                            "poolSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sourceManifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "selectionSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "selectionMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pca-gmm-profile-v1",
+                                "holdout-embedding-gmm-v1"
+                              ]
+                            },
+                            "sourceModels": {
+                              "minItems": 3,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              }
+                            },
+                            "calibrationSamples": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 64
+                            },
+                            "maxCalibrationMAE": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "poolSHA256",
+                            "sourceManifestSHA256",
+                            "selectionSHA256",
+                            "selectionMethod",
+                            "sourceModels",
+                            "calibrationSamples",
+                            "maxCalibrationMAE"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "promotionRequired": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -15883,7 +15948,7 @@
                           },
                           "features": {
                             "minItems": 1,
-                            "maxItems": 32,
+                            "maxItems": 64,
                             "type": "array",
                             "items": {
                               "type": "number"
@@ -15906,6 +15971,16 @@
                             "minimum": 0,
                             "maximum": 1
                           },
+                          "sourceLosses": {
+                            "minItems": 3,
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
                           "selection": {
                             "type": "object",
                             "properties": {
@@ -15918,6 +15993,14 @@
                                 "type": "integer",
                                 "exclusiveMinimum": 0,
                                 "maximum": 9007199254740991
+                              },
+                              "phase": {
+                                "type": "string",
+                                "enum": [
+                                  "calibration",
+                                  "adaptive",
+                                  "fallback"
+                                ]
                               },
                               "acquisition": {
                                 "type": "object",
@@ -16072,6 +16155,51 @@
                           "type": "number",
                           "minimum": 0,
                           "maximum": 1
+                        },
+                        "transfer": {
+                          "default": {
+                            "status": "not_configured",
+                            "observed": 0,
+                            "required": 0
+                          },
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "not_configured",
+                                "calibrating",
+                                "accepted",
+                                "rejected"
+                              ]
+                            },
+                            "observed": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "required": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "meanAbsoluteError": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "threshold": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "observed",
+                            "required"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -16186,50 +16314,96 @@
                     "maxItems": 2000,
                     "type": "array",
                     "items": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 240
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "commitment": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "features": {
+                              "minItems": 1,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              }
+                            },
+                            "stratum": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "weight": {
+                              "default": 1,
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000
+                            },
+                            "priorLoss": {
+                              "default": 0.5,
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "commitment",
+                            "features",
+                            "stratum"
+                          ],
+                          "additionalProperties": false
                         },
-                        "commitment": {
-                          "type": "string",
-                          "pattern": "^[a-f0-9]{64}$"
-                        },
-                        "features": {
-                          "minItems": 1,
-                          "maxItems": 32,
-                          "type": "array",
-                          "items": {
-                            "type": "number"
-                          }
-                        },
-                        "stratum": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 120
-                        },
-                        "weight": {
-                          "default": 1,
-                          "type": "number",
-                          "exclusiveMinimum": 0,
-                          "maximum": 1000
-                        },
-                        "priorLoss": {
-                          "default": 0.5,
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 1
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "commitment": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sourceLosses": {
+                              "minItems": 3,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              }
+                            },
+                            "stratum": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "weight": {
+                              "default": 1,
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "commitment",
+                            "sourceLosses",
+                            "stratum"
+                          ],
+                          "additionalProperties": false
                         }
-                      },
-                      "required": [
-                        "id",
-                        "commitment",
-                        "features",
-                        "stratum"
-                      ],
-                      "additionalProperties": false
+                      ]
                     }
                   }
                 },
@@ -16288,7 +16462,10 @@
                     },
                     "protocolVersion": {
                       "type": "string",
-                      "const": "active-audit-v1"
+                      "enum": [
+                        "active-audit-v1",
+                        "proactive-audit-v2"
+                      ]
                     },
                     "auditID": {
                       "type": "string",
@@ -16420,6 +16597,68 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 512
+                        },
+                        "transfer": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "score-history-prior-v1"
+                            },
+                            "poolSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sourceManifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "selectionSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "selectionMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pca-gmm-profile-v1",
+                                "holdout-embedding-gmm-v1"
+                              ]
+                            },
+                            "sourceModels": {
+                              "minItems": 3,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              }
+                            },
+                            "calibrationSamples": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 64
+                            },
+                            "maxCalibrationMAE": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "poolSHA256",
+                            "sourceManifestSHA256",
+                            "selectionSHA256",
+                            "selectionMethod",
+                            "sourceModels",
+                            "calibrationSamples",
+                            "maxCalibrationMAE"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "promotionRequired": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -16464,7 +16703,7 @@
                           },
                           "features": {
                             "minItems": 1,
-                            "maxItems": 32,
+                            "maxItems": 64,
                             "type": "array",
                             "items": {
                               "type": "number"
@@ -16487,6 +16726,16 @@
                             "minimum": 0,
                             "maximum": 1
                           },
+                          "sourceLosses": {
+                            "minItems": 3,
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
                           "selection": {
                             "type": "object",
                             "properties": {
@@ -16499,6 +16748,14 @@
                                 "type": "integer",
                                 "exclusiveMinimum": 0,
                                 "maximum": 9007199254740991
+                              },
+                              "phase": {
+                                "type": "string",
+                                "enum": [
+                                  "calibration",
+                                  "adaptive",
+                                  "fallback"
+                                ]
                               },
                               "acquisition": {
                                 "type": "object",
@@ -16653,6 +16910,51 @@
                           "type": "number",
                           "minimum": 0,
                           "maximum": 1
+                        },
+                        "transfer": {
+                          "default": {
+                            "status": "not_configured",
+                            "observed": 0,
+                            "required": 0
+                          },
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "not_configured",
+                                "calibrating",
+                                "accepted",
+                                "rejected"
+                              ]
+                            },
+                            "observed": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "required": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "meanAbsoluteError": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "threshold": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "observed",
+                            "required"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -16882,7 +17184,10 @@
                     },
                     "protocolVersion": {
                       "type": "string",
-                      "const": "active-audit-v1"
+                      "enum": [
+                        "active-audit-v1",
+                        "proactive-audit-v2"
+                      ]
                     },
                     "auditID": {
                       "type": "string",
@@ -17014,6 +17319,68 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 512
+                        },
+                        "transfer": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "score-history-prior-v1"
+                            },
+                            "poolSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sourceManifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "selectionSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "selectionMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pca-gmm-profile-v1",
+                                "holdout-embedding-gmm-v1"
+                              ]
+                            },
+                            "sourceModels": {
+                              "minItems": 3,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              }
+                            },
+                            "calibrationSamples": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 64
+                            },
+                            "maxCalibrationMAE": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "poolSHA256",
+                            "sourceManifestSHA256",
+                            "selectionSHA256",
+                            "selectionMethod",
+                            "sourceModels",
+                            "calibrationSamples",
+                            "maxCalibrationMAE"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "promotionRequired": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -17058,7 +17425,7 @@
                           },
                           "features": {
                             "minItems": 1,
-                            "maxItems": 32,
+                            "maxItems": 64,
                             "type": "array",
                             "items": {
                               "type": "number"
@@ -17081,6 +17448,16 @@
                             "minimum": 0,
                             "maximum": 1
                           },
+                          "sourceLosses": {
+                            "minItems": 3,
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
                           "selection": {
                             "type": "object",
                             "properties": {
@@ -17093,6 +17470,14 @@
                                 "type": "integer",
                                 "exclusiveMinimum": 0,
                                 "maximum": 9007199254740991
+                              },
+                              "phase": {
+                                "type": "string",
+                                "enum": [
+                                  "calibration",
+                                  "adaptive",
+                                  "fallback"
+                                ]
                               },
                               "acquisition": {
                                 "type": "object",
@@ -17247,6 +17632,51 @@
                           "type": "number",
                           "minimum": 0,
                           "maximum": 1
+                        },
+                        "transfer": {
+                          "default": {
+                            "status": "not_configured",
+                            "observed": 0,
+                            "required": 0
+                          },
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "not_configured",
+                                "calibrating",
+                                "accepted",
+                                "rejected"
+                              ]
+                            },
+                            "observed": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "required": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "meanAbsoluteError": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "threshold": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "observed",
+                            "required"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -17384,6 +17814,455 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.audit.observe({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/audits/{auditID}/receipt": {
+      "post": {
+        "operationId": "harness.audit.seal",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "auditID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Seal a terminal active-audit receipt",
+        "description": "Content-addresses the completed audit, exact subject artifact, committed pool, derived estimate, transfer qualification, and terminal revision for optional promotion gating.",
+        "responses": {
+          "200": {
+            "description": "Immutable active-audit receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "proactive-audit-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "auditID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "poolFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "run",
+                            "candidate"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "artifactSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "artifactSHA256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "performance",
+                            "failure",
+                            "hybrid"
+                          ]
+                        },
+                        "budget": {
+                          "type": "integer",
+                          "minimum": 2,
+                          "maximum": 512
+                        },
+                        "minSamples": {
+                          "type": "integer",
+                          "minimum": 2,
+                          "maximum": 512
+                        },
+                        "noiseVariance": {
+                          "default": 0.05,
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 2
+                        },
+                        "lengthscale": {
+                          "default": 1,
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 100
+                        },
+                        "beta": {
+                          "default": 1.96,
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 10
+                        },
+                        "failureThreshold": {
+                          "default": 0.5,
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "tolerance": {
+                          "default": 0.02,
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1
+                        },
+                        "maxUncertainty": {
+                          "default": 0.05,
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1
+                        },
+                        "estimationWeight": {
+                          "default": 0.5,
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "diversityWeight": {
+                          "default": 0.2,
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 0.5
+                        },
+                        "coverageWeight": {
+                          "default": 0.2,
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 0.5
+                        },
+                        "targetFailures": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 512
+                        },
+                        "transfer": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "score-history-prior-v1"
+                            },
+                            "poolSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sourceManifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "selectionSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "selectionMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pca-gmm-profile-v1",
+                                "holdout-embedding-gmm-v1"
+                              ]
+                            },
+                            "sourceModels": {
+                              "minItems": 3,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              }
+                            },
+                            "calibrationSamples": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 64
+                            },
+                            "maxCalibrationMAE": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "poolSHA256",
+                            "sourceManifestSHA256",
+                            "selectionSHA256",
+                            "selectionMethod",
+                            "sourceModels",
+                            "calibrationSamples",
+                            "maxCalibrationMAE"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "promotionRequired": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "budget",
+                        "minSamples"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "stopReason": {
+                      "type": "string",
+                      "enum": [
+                        "budget_exhausted",
+                        "precision_reached",
+                        "failure_target_reached",
+                        "pool_exhausted"
+                      ]
+                    },
+                    "estimate": {
+                      "type": "object",
+                      "properties": {
+                        "observed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "failures": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "meanLoss": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "standardDeviation": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "lower95": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "upper95": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "abstain": {
+                          "type": "boolean"
+                        },
+                        "effectivePoolSize": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "stratumCoverage": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "transfer": {
+                          "default": {
+                            "status": "not_configured",
+                            "observed": 0,
+                            "required": 0
+                          },
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "not_configured",
+                                "calibrating",
+                                "accepted",
+                                "rejected"
+                              ]
+                            },
+                            "observed": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "required": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "meanAbsoluteError": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "threshold": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "observed",
+                            "required"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "observed",
+                        "failures",
+                        "meanLoss",
+                        "standardDeviation",
+                        "lower95",
+                        "upper95",
+                        "abstain",
+                        "effectivePoolSize",
+                        "stratumCoverage"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "qualified": {
+                      "type": "boolean"
+                    },
+                    "completedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "sealedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "auditID",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "poolFingerprint",
+                    "subject",
+                    "config",
+                    "stopReason",
+                    "estimate",
+                    "revision",
+                    "qualified",
+                    "completedAt",
+                    "sealedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.audit.seal({\n  ...\n})"
           }
         ]
       }
@@ -35356,6 +36235,68 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 512
+                        },
+                        "transfer": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "score-history-prior-v1"
+                            },
+                            "poolSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sourceManifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "selectionSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "selectionMethod": {
+                              "type": "string",
+                              "enum": [
+                                "pca-gmm-profile-v1",
+                                "holdout-embedding-gmm-v1"
+                              ]
+                            },
+                            "sourceModels": {
+                              "minItems": 3,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              }
+                            },
+                            "calibrationSamples": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 64
+                            },
+                            "maxCalibrationMAE": {
+                              "type": "number",
+                              "exclusiveMinimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "poolSHA256",
+                            "sourceManifestSHA256",
+                            "selectionSHA256",
+                            "selectionMethod",
+                            "sourceModels",
+                            "calibrationSamples",
+                            "maxCalibrationMAE"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "promotionRequired": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -37875,6 +38816,68 @@
                         "type": "integer",
                         "exclusiveMinimum": 0,
                         "maximum": 512
+                      },
+                      "transfer": {
+                        "type": "object",
+                        "properties": {
+                          "protocolVersion": {
+                            "type": "string",
+                            "const": "score-history-prior-v1"
+                          },
+                          "poolSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "sourceManifestSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "selectionSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "selectionMethod": {
+                            "type": "string",
+                            "enum": [
+                              "pca-gmm-profile-v1",
+                              "holdout-embedding-gmm-v1"
+                            ]
+                          },
+                          "sourceModels": {
+                            "minItems": 3,
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            }
+                          },
+                          "calibrationSamples": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "maximum": 64
+                          },
+                          "maxCalibrationMAE": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1
+                          }
+                        },
+                        "required": [
+                          "protocolVersion",
+                          "poolSHA256",
+                          "sourceManifestSHA256",
+                          "selectionSHA256",
+                          "selectionMethod",
+                          "sourceModels",
+                          "calibrationSamples",
+                          "maxCalibrationMAE"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "promotionRequired": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -39708,6 +40711,10 @@
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
+                  "auditReceiptID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
                   "status": {
                     "type": "string",
                     "enum": [
@@ -41476,6 +42483,68 @@
                               "type": "integer",
                               "exclusiveMinimum": 0,
                               "maximum": 512
+                            },
+                            "transfer": {
+                              "type": "object",
+                              "properties": {
+                                "protocolVersion": {
+                                  "type": "string",
+                                  "const": "score-history-prior-v1"
+                                },
+                                "poolSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "sourceManifestSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "selectionSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "selectionMethod": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pca-gmm-profile-v1",
+                                    "holdout-embedding-gmm-v1"
+                                  ]
+                                },
+                                "sourceModels": {
+                                  "minItems": 3,
+                                  "maxItems": 64,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  }
+                                },
+                                "calibrationSamples": {
+                                  "type": "integer",
+                                  "minimum": 2,
+                                  "maximum": 64
+                                },
+                                "maxCalibrationMAE": {
+                                  "type": "number",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 1
+                                }
+                              },
+                              "required": [
+                                "protocolVersion",
+                                "poolSHA256",
+                                "sourceManifestSHA256",
+                                "selectionSHA256",
+                                "selectionMethod",
+                                "sourceModels",
+                                "calibrationSamples",
+                                "maxCalibrationMAE"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "promotionRequired": {
+                              "type": "boolean"
                             }
                           },
                           "required": [
@@ -43771,6 +44840,10 @@
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
                       },
+                      "auditReceiptID": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
                       "evaluator": {
                         "type": "object",
                         "properties": {
@@ -44203,6 +45276,10 @@
                           "pattern": "^[a-f0-9]{64}$"
                         },
                         "replicationReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "auditReceiptID": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },

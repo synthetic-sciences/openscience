@@ -8,6 +8,7 @@ import { HarnessSearch } from "./search"
 
 export namespace HarnessAudit {
   const Hash = z.string().regex(/^[a-f0-9]{64}$/)
+  const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
 
   export const Subject = z
     .object({
@@ -30,10 +31,24 @@ export namespace HarnessAudit {
     .strict()
   export type Probe = z.infer<typeof Probe>
 
+  export const TransferProbe = z
+    .object({
+      id: z.string().min(1).max(240),
+      commitment: Hash,
+      sourceLosses: z.array(z.number().min(0).max(1)).min(3).max(64),
+      stratum: z.string().min(1).max(120),
+      weight: z.number().positive().max(1_000).default(1),
+    })
+    .strict()
+  export type TransferProbe = z.infer<typeof TransferProbe>
+
+  const InputProbe = z.union([Probe, TransferProbe])
+
   export const Selection = z
     .object({
       round: z.number().int().positive(),
       selectedAt: z.number().int().positive(),
+      phase: z.enum(["calibration", "adaptive", "fallback"]).optional(),
       acquisition: z
         .object({
           posteriorLoss: z.number().min(0).max(1),
@@ -61,6 +76,8 @@ export namespace HarnessAudit {
   export type Observation = z.infer<typeof Observation>
 
   export const Entry = Probe.extend({
+    features: z.array(z.number().finite()).min(1).max(64),
+    sourceLosses: z.array(z.number().min(0).max(1)).min(3).max(64).optional(),
     selection: Selection.optional(),
     observation: Observation.optional(),
   })
@@ -71,6 +88,17 @@ export namespace HarnessAudit {
       }
     })
   export type Entry = z.infer<typeof Entry>
+
+  export const Transfer = z
+    .object({
+      status: z.enum(["not_configured", "calibrating", "accepted", "rejected"]),
+      observed: z.number().int().nonnegative(),
+      required: z.number().int().nonnegative(),
+      meanAbsoluteError: z.number().min(0).max(1).optional(),
+      threshold: z.number().positive().max(1).optional(),
+    })
+    .strict()
+  export type Transfer = z.infer<typeof Transfer>
 
   export const Estimate = z
     .object({
@@ -83,6 +111,7 @@ export namespace HarnessAudit {
       abstain: z.boolean(),
       effectivePoolSize: z.number().positive(),
       stratumCoverage: z.number().min(0).max(1),
+      transfer: Transfer.default({ status: "not_configured", observed: 0, required: 0 }),
     })
     .strict()
   export type Estimate = z.infer<typeof Estimate>
@@ -93,7 +122,7 @@ export namespace HarnessAudit {
   export const State = z
     .object({
       schemaVersion: z.literal(1),
-      protocolVersion: z.literal("active-audit-v1"),
+      protocolVersion: z.enum(["active-audit-v1", "proactive-audit-v2"]),
       auditID: Hash,
       runID: z.string().min(1),
       sessionID: z.string().min(1),
@@ -139,15 +168,98 @@ export namespace HarnessAudit {
         if (value.pool[id]) continue
         ctx.addIssue({ code: "custom", path: ["pool", id], message: "Audit probe is missing" })
       }
+      const expected = value.config.transfer ? "proactive-audit-v2" : "active-audit-v1"
+      if (value.protocolVersion !== expected) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["protocolVersion"],
+          message: "Audit protocol does not match its contract",
+        })
+      }
+      for (const id of value.order) {
+        const entry = value.pool[id]
+        if (!entry) continue
+        if (!value.config.transfer && !entry.sourceLosses) continue
+        if (!value.config.transfer || !entry.sourceLosses) {
+          ctx.addIssue({ code: "custom", path: ["pool", id], message: "Audit transfer probe shape is inconsistent" })
+          continue
+        }
+        if (entry.sourceLosses.length !== value.config.transfer.sourceModels.length) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["pool", id, "sourceLosses"],
+            message: "Audit source-loss dimension does not match the frozen source models",
+          })
+          continue
+        }
+        const priorLoss = entry.sourceLosses.reduce((sum, loss) => sum + loss, 0) / entry.sourceLosses.length
+        const features = entry.sourceLosses.map(
+          (loss) => (loss - priorLoss) / Math.sqrt(Math.max(entry.sourceLosses!.length - 1, 1)),
+        )
+        if (entry.priorLoss !== priorLoss || JSON.stringify(entry.features) !== JSON.stringify(features)) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["pool", id],
+            message: "Audit score-history prior was not derived by the backend",
+          })
+        }
+      }
     })
   export type State = z.infer<typeof State>
+
+  const ReceiptBase = z
+    .object({
+      schemaVersion: z.literal(1),
+      protocolVersion: z.literal("proactive-audit-receipt-v1"),
+      receiptID: Hash,
+      auditID: Hash,
+      runID: z.string().min(1),
+      sessionID: z.string().min(1),
+      contractFingerprint: Hash,
+      poolFingerprint: Hash,
+      subject: Subject,
+      config: HarnessContract.Audit,
+      stopReason: Stop,
+      estimate: Estimate,
+      revision: z.number().int().positive(),
+      qualified: z.boolean(),
+      completedAt: z.number().int().positive(),
+      sealedAt: z.number().int().positive(),
+    })
+    .strict()
+
+  export const Receipt = ReceiptBase.superRefine((value, ctx) => {
+    const stable = structuredClone(value) as Record<string, unknown>
+    delete stable.receiptID
+    if (digest(stable) !== value.receiptID) {
+      ctx.addIssue({ code: "custom", path: ["receiptID"], message: "Active audit receipt content hash is invalid" })
+    }
+    const qualified =
+      value.config.mode !== "failure" && value.estimate.transfer.status === "accepted" && !value.estimate.abstain
+    if (value.qualified !== qualified) {
+      ctx.addIssue({ code: "custom", path: ["qualified"], message: "Active audit receipt qualification drifted" })
+    }
+    if (value.completedAt > value.sealedAt) {
+      ctx.addIssue({ code: "custom", path: ["sealedAt"], message: "Active audit receipt predates completion" })
+    }
+    const auditID = digest({
+      contractFingerprint: value.contractFingerprint,
+      subject: value.subject,
+      poolFingerprint: value.poolFingerprint,
+      config: value.config,
+    })
+    if (value.auditID !== auditID) {
+      ctx.addIssue({ code: "custom", path: ["auditID"], message: "Active audit receipt identity is invalid" })
+    }
+  })
+  export type Receipt = z.infer<typeof Receipt>
 
   export const Initialize = z
     .object({
       sessionID: z.string().min(1).max(240),
       evaluatorToken: z.string().min(32).max(1_024),
       subject: Subject,
-      probes: z.array(Probe).min(2).max(2_000),
+      probes: z.array(InputProbe).min(2).max(2_000),
     })
     .strict()
   export type Initialize = z.input<typeof Initialize>
@@ -170,10 +282,11 @@ export namespace HarnessAudit {
   export type Observe = z.infer<typeof Observe>
 
   const root = path.join(Global.Path.data, "harness", "audits")
+  const receipts = path.join(Global.Path.data, "harness", "audit-receipts")
   const bases = new Map<string, { matrix: number[][]; features: number[][]; weights: number[]; meanKernel: number[] }>()
   const file = (sessionID: string, auditID: string) =>
     path.join(root, encodeURIComponent(sessionID), `${encodeURIComponent(auditID)}.json`)
-  const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
+  const receiptFile = (receiptID: string) => path.join(receipts, `${receiptID}.json`)
   const clamp = (value: number) => Math.max(0, Math.min(1, value))
   const dot = (left: number[], right: number[]) => left.reduce((sum, value, index) => sum + value * right[index]!, 0)
   const kernel = (left: number[], right: number[], lengthscale: number) =>
@@ -181,27 +294,53 @@ export namespace HarnessAudit {
       -left.reduce((sum, value, index) => sum + (value - right[index]!) ** 2, 0) / (2 * lengthscale * lengthscale),
     )
 
-  function parse(input: Record<string, unknown>) {
-    const state = State.parse(input)
-    const probes = state.order.map((id) => {
-      const entry = state.pool[id]!
-      return Probe.parse({
+  function derive(probe: TransferProbe): Entry {
+    const priorLoss = probe.sourceLosses.reduce((sum, loss) => sum + loss, 0) / probe.sourceLosses.length
+    const features = probe.sourceLosses.map(
+      (loss) => (loss - priorLoss) / Math.sqrt(Math.max(probe.sourceLosses.length - 1, 1)),
+    )
+    return Entry.parse({ ...probe, features, priorLoss })
+  }
+
+  function committed(entry: Entry, transfer: boolean) {
+    if (transfer) {
+      return TransferProbe.parse({
         id: entry.id,
         commitment: entry.commitment,
-        features: entry.features,
+        sourceLosses: entry.sourceLosses,
         stratum: entry.stratum,
         weight: entry.weight,
-        priorLoss: entry.priorLoss,
       })
+    }
+    return Probe.parse({
+      id: entry.id,
+      commitment: entry.commitment,
+      features: entry.features,
+      stratum: entry.stratum,
+      weight: entry.weight,
+      priorLoss: entry.priorLoss,
     })
-    if (digest(probes) !== state.poolFingerprint) throw new Error(`Active audit probe pool failed its commitment`)
+  }
+
+  function drift(state: State) {
+    const probes = state.order.map((id) => committed(state.pool[id]!, Boolean(state.config.transfer)))
+    if (digest(probes) !== state.poolFingerprint) return `Active audit probe pool failed its commitment`
     const auditID = digest({
       contractFingerprint: state.contractFingerprint,
       subject: state.subject,
       poolFingerprint: state.poolFingerprint,
       config: state.config,
     })
-    if (auditID !== state.auditID) throw new Error(`Active audit identity failed its commitment`)
+    if (auditID !== state.auditID) return `Active audit identity failed its commitment`
+    if (JSON.stringify(state.estimate) !== JSON.stringify(summarize(state))) {
+      return `Active audit estimate does not match its backend-derived posterior`
+    }
+  }
+
+  function parse(input: Record<string, unknown>) {
+    const state = State.parse(input)
+    const error = drift(state)
+    if (error) throw new Error(error)
     return state
   }
 
@@ -263,13 +402,17 @@ export namespace HarnessAudit {
   }
 
   function basis(state: State, entries: Entry[]) {
-    const key = `${state.poolFingerprint}:${state.config.lengthscale}`
+    const key = `${state.protocolVersion}:${state.poolFingerprint}:${state.config.lengthscale}`
     const cached = bases.get(key)
     if (cached) return cached
-    const features = scale(entries)
+    const features = state.config.transfer ? entries.map((entry) => entry.features) : scale(entries)
     const total = entries.reduce((sum, entry) => sum + entry.weight, 0)
     const weights = entries.map((entry) => entry.weight / total)
-    const matrix = features.map((left) => features.map((right) => kernel(left, right, state.config.lengthscale)))
+    const matrix = features.map((left) =>
+      features.map((right) =>
+        state.config.transfer ? dot(left, right) : kernel(left, right, state.config.lengthscale),
+      ),
+    )
     const meanKernel = matrix.map((row) => row.reduce((sum, value, index) => sum + weights[index]! * value, 0))
     const value = { matrix, features, weights, meanKernel }
     if (bases.size >= 4) {
@@ -296,7 +439,7 @@ export namespace HarnessAudit {
       const cross = observed.map((peer) => base.matrix[index]![peer]!)
       const projection = factor.length ? forward(factor, cross) : []
       const mean = clamp(entry.priorLoss + dot(cross, alpha))
-      const variance = Math.max(1 - dot(projection, projection), 1e-12)
+      const variance = Math.max(base.matrix[index]![index]! - dot(projection, projection), 1e-12)
       const covariance = base.meanKernel[index]! - dot(projection, weightedProjection)
       return {
         mean,
@@ -309,8 +452,33 @@ export namespace HarnessAudit {
     return { entries, weights: base.weights, features: base.features, observed, probes, integralVariance }
   }
 
+  function transfer(state: State): Transfer {
+    const protocol = state.config.transfer
+    if (!protocol) return { status: "not_configured", observed: 0, required: 0 }
+    const samples = state.order
+      .map((id) => state.pool[id]!)
+      .filter((entry) => entry.selection && entry.selection.round <= protocol.calibrationSamples && entry.observation)
+    const meanAbsoluteError = samples.length
+      ? samples.reduce((sum, entry) => sum + Math.abs(entry.observation!.loss - entry.priorLoss), 0) / samples.length
+      : undefined
+    const status =
+      samples.length < protocol.calibrationSamples
+        ? ("calibrating" as const)
+        : meanAbsoluteError! <= protocol.maxCalibrationMAE
+          ? ("accepted" as const)
+          : ("rejected" as const)
+    return Transfer.parse({
+      status,
+      observed: samples.length,
+      required: protocol.calibrationSamples,
+      meanAbsoluteError,
+      threshold: protocol.maxCalibrationMAE,
+    })
+  }
+
   function summarize(state: State): Estimate {
     const model = posterior(state)
+    const qualification = transfer(state)
     const meanLoss = clamp(model.probes.reduce((sum, probe, index) => sum + model.weights[index]! * probe.mean, 0))
     const standardDeviation = Math.sqrt(model.integralVariance)
     const strata = new Set(model.entries.map((entry) => entry.stratum))
@@ -323,9 +491,13 @@ export namespace HarnessAudit {
       standardDeviation,
       lower95: clamp(meanLoss - 1.96 * standardDeviation),
       upper95: clamp(meanLoss + 1.96 * standardDeviation),
-      abstain: model.observed.length < state.config.minSamples || standardDeviation > state.config.maxUncertainty,
+      abstain:
+        model.observed.length < state.config.minSamples ||
+        standardDeviation > state.config.maxUncertainty ||
+        (Boolean(state.config.transfer) && qualification.status !== "accepted"),
       effectivePoolSize: 1 / denominator,
       stratumCoverage: covered.size / strata.size,
+      transfer: qualification,
     })
   }
 
@@ -344,11 +516,13 @@ export namespace HarnessAudit {
 
   function choose(state: State) {
     const model = posterior(state)
+    const qualification = transfer(state)
     const candidates = model.entries.flatMap((entry, index) => (entry.selection ? [] : [{ entry, index }]))
     if (!candidates.length) throw new Error(`Audit probe pool is exhausted`)
     const reductions = candidates.map((candidate) => model.probes[candidate.index]!.varianceReduction)
     const low = Math.min(...reductions)
     const high = Math.max(...reductions)
+    const maximumVariance = Math.max(...candidates.map((candidate) => model.probes[candidate.index]!.variance))
     const failures = model.entries.flatMap((entry, index) => (entry.observation?.failure ? [index] : []))
     const counts: Record<string, number> = {}
     for (const entry of model.entries) {
@@ -359,16 +533,21 @@ export namespace HarnessAudit {
       const probe = model.probes[candidate.index]!
       const posteriorStd = Math.sqrt(probe.variance)
       const failureUCB = clamp(probe.mean + state.config.beta * posteriorStd)
-      const potential = clamp(
-        (failureUCB - state.config.failureThreshold) / Math.max(1 - state.config.failureThreshold, 1e-9),
-      )
+      const eligible = failureUCB >= state.config.failureThreshold
+      const potential = state.config.transfer
+        ? eligible
+          ? probe.variance / Math.max(maximumVariance, 1e-12)
+          : 0
+        : clamp((failureUCB - state.config.failureThreshold) / Math.max(1 - state.config.failureThreshold, 1e-9))
       const diversity = distance(candidate.index, failures, model.features)
       const coverage = 1 / Math.sqrt((counts[candidate.entry.stratum] ?? 0) + 1)
       const variance = high === low ? 1 : (probe.varianceReduction - low) / (high - low)
       const failure =
-        (1 - state.config.diversityWeight - state.config.coverageWeight) * potential +
-        state.config.diversityWeight * diversity +
-        state.config.coverageWeight * coverage
+        state.config.transfer && !eligible
+          ? 0
+          : (1 - state.config.diversityWeight - state.config.coverageWeight) * potential +
+            state.config.diversityWeight * diversity +
+            state.config.coverageWeight * coverage
       const score =
         state.config.mode === "performance"
           ? variance
@@ -388,9 +567,21 @@ export namespace HarnessAudit {
         },
       }
     })
-    return weighted.toSorted(
+    if (state.config.transfer && qualification.status !== "accepted") {
+      const phase = qualification.status === "calibrating" ? ("calibration" as const) : ("fallback" as const)
+      const selected = weighted.toSorted((left, right) => {
+        const leftEntry = state.pool[left.id]!
+        const rightEntry = state.pool[right.id]!
+        const leftKey = digest([state.config.transfer!.selectionSHA256, leftEntry.commitment, left.id])
+        const rightKey = digest([state.config.transfer!.selectionSHA256, rightEntry.commitment, right.id])
+        return leftKey.localeCompare(rightKey) || left.id.localeCompare(right.id)
+      })[0]!
+      return { ...selected, phase }
+    }
+    const selected = weighted.toSorted(
       (left, right) => right.acquisition.score - left.acquisition.score || left.id.localeCompare(right.id),
     )[0]!
+    return { ...selected, phase: "adaptive" as const }
   }
 
   function finish(state: State, now: number): State {
@@ -404,6 +595,7 @@ export namespace HarnessAudit {
       if (
         state.config.mode !== "failure" &&
         estimate.observed >= state.config.minSamples &&
+        !estimate.abstain &&
         estimate.standardDeviation <= state.config.tolerance
       ) {
         return "precision_reached" as const
@@ -437,21 +629,46 @@ export namespace HarnessAudit {
     if (!contract.audit) throw new Error(`The bound harness contract does not declare an active audit`)
     if (parsed.probes.length < contract.audit.budget) throw new Error(`Audit pool is smaller than the contract budget`)
     await verify(contract, parsed.subject)
-    const probes = parsed.probes.toSorted((left, right) => left.id.localeCompare(right.id))
+    const source = parsed.probes.toSorted((left, right) => left.id.localeCompare(right.id))
+    const probes = source.map((probe) => (contract.audit!.transfer ? TransferProbe.parse(probe) : Probe.parse(probe)))
     if (new Set(probes.map((probe) => probe.id)).size !== probes.length)
       throw new Error(`Audit probe ids must be unique`)
+    if (contract.audit.transfer) {
+      const invalid = probes.find(
+        (probe) => TransferProbe.parse(probe).sourceLosses.length !== contract.audit!.transfer!.sourceModels.length,
+      )
+      if (invalid) throw new Error(`Audit source-loss dimension does not match the frozen source models`)
+    }
     const poolFingerprint = digest(probes)
+    if (contract.audit.transfer && poolFingerprint !== contract.audit.transfer.poolSHA256) {
+      throw new Error(`Audit probe pool does not match the frozen transfer-pool commitment`)
+    }
+    if (contract.audit.transfer) {
+      const sourceManifestSHA256 = digest({
+        sourceModels: contract.audit.transfer.sourceModels,
+        scores: probes.map((probe) => {
+          const transfer = TransferProbe.parse(probe)
+          return { id: transfer.id, sourceLosses: transfer.sourceLosses }
+        }),
+      })
+      if (sourceManifestSHA256 !== contract.audit.transfer.sourceManifestSHA256) {
+        throw new Error(`Audit source scores do not match the frozen source manifest`)
+      }
+    }
     const auditID = digest({
       contractFingerprint: HarnessContract.fingerprint(contract),
       subject: parsed.subject,
       poolFingerprint,
       config: contract.audit,
     })
-    const pool = Object.fromEntries(probes.map((probe) => [probe.id, Entry.parse(probe)]))
+    const entries = probes.map((probe) =>
+      contract.audit!.transfer ? derive(TransferProbe.parse(probe)) : Entry.parse(Probe.parse(probe)),
+    )
+    const pool = Object.fromEntries(entries.map((probe) => [probe.id, probe]))
     const now = Date.now()
     const base = {
       schemaVersion: 1 as const,
-      protocolVersion: "active-audit-v1" as const,
+      protocolVersion: contract.audit.transfer ? ("proactive-audit-v2" as const) : ("active-audit-v1" as const),
       auditID,
       runID: contract.runID,
       sessionID: contract.sessionID,
@@ -462,12 +679,15 @@ export namespace HarnessAudit {
       config: contract.audit,
       status: "active" as const,
       pool,
-      order: probes.map((probe) => probe.id),
+      order: entries.map((probe) => probe.id),
       revision: 0,
       createdAt: now,
       updatedAt: now,
     }
-    const initial = State.parse({ ...base, estimate: summarize(State.parse({ ...base, estimate: seed(probes) })) })
+    const initial = State.parse({
+      ...base,
+      estimate: summarize(State.parse({ ...base, estimate: seed(entries, contract.audit) })),
+    })
     await JsonStore.update(file(parsed.sessionID, auditID), (data) => {
       if (!Object.keys(data).length) return initial
       const current = parse(data)
@@ -479,12 +699,12 @@ export namespace HarnessAudit {
     return read(parsed.sessionID, auditID)
   }
 
-  function seed(probes: Probe[]): Estimate {
+  function seed(probes: Entry[], config: HarnessContract.Audit): Estimate {
     const total = probes.reduce((sum, probe) => sum + probe.weight, 0)
     const weights = probes.map((probe) => probe.weight / total)
     const meanLoss = clamp(probes.reduce((sum, probe, index) => sum + weights[index]! * probe.priorLoss, 0))
     const denominator = weights.reduce((sum, weight) => sum + weight * weight, 0)
-    return {
+    return Estimate.parse({
       observed: 0,
       failures: 0,
       meanLoss,
@@ -494,7 +714,15 @@ export namespace HarnessAudit {
       abstain: true,
       effectivePoolSize: 1 / denominator,
       stratumCoverage: 0,
-    }
+      transfer: config.transfer
+        ? {
+            status: "calibrating",
+            observed: 0,
+            required: config.transfer.calibrationSamples,
+            threshold: config.transfer.maxCalibrationMAE,
+          }
+        : { status: "not_configured", observed: 0, required: 0 },
+    })
   }
 
   export async function read(sessionID: string, auditID: string) {
@@ -526,7 +754,12 @@ export namespace HarnessAudit {
           ...state.pool,
           [selected.id]: {
             ...state.pool[selected.id]!,
-            selection: { round: state.estimate.observed + 1, selectedAt: now, acquisition: selected.acquisition },
+            selection: {
+              round: state.estimate.observed + 1,
+              selectedAt: now,
+              phase: selected.phase,
+              acquisition: selected.acquisition,
+            },
           },
         },
         revision: state.revision + 1,
@@ -541,6 +774,7 @@ export namespace HarnessAudit {
       probeID: entry.id,
       commitment: entry.commitment,
       round: entry.selection!.round,
+      phase: entry.selection!.phase ?? "adaptive",
       acquisition: entry.selection!.acquisition,
       revision: state.revision,
     }
@@ -580,5 +814,113 @@ export namespace HarnessAudit {
       return finish(next, now)
     })
     return read(observation.sessionID, auditID)
+  }
+
+  export async function seal(auditID: string, input: Access) {
+    const access = Access.parse(input)
+    const contract = await HarnessAdapter.authorize(access.sessionID, access.evaluatorToken)
+    const state = await read(access.sessionID, auditID)
+    match(state, contract)
+    if (state.status !== "completed" || !state.stopReason) {
+      throw new Error(`Active audit must reach a terminal state before sealing`)
+    }
+    const stable = {
+      schemaVersion: 1 as const,
+      protocolVersion: "proactive-audit-receipt-v1" as const,
+      auditID: state.auditID,
+      runID: state.runID,
+      sessionID: state.sessionID,
+      contractFingerprint: state.contractFingerprint,
+      poolFingerprint: state.poolFingerprint,
+      subject: state.subject,
+      config: state.config,
+      stopReason: state.stopReason,
+      estimate: state.estimate,
+      revision: state.revision,
+      qualified:
+        state.config.mode !== "failure" && state.estimate.transfer.status === "accepted" && !state.estimate.abstain,
+      completedAt: state.updatedAt,
+      sealedAt: state.updatedAt,
+    }
+    const receipt = Receipt.parse({ ...stable, receiptID: digest(stable) })
+    await JsonStore.update(receiptFile(receipt.receiptID), (data) => {
+      if (!Object.keys(data).length) return receipt
+      const current = Receipt.parse(data)
+      if (current.receiptID === receipt.receiptID) return current
+      throw new Error(`Active audit receipt is immutable once recorded`)
+    })
+    const saved = await readReceipt(receipt.receiptID)
+    if (!saved) throw new Error(`Active audit receipt was not durable after recording`)
+    return saved
+  }
+
+  export async function readReceipt(receiptID: string) {
+    const id = Hash.parse(receiptID)
+    const parsed = Receipt.safeParse(await JsonStore.read(receiptFile(id)))
+    if (!parsed.success || parsed.data.receiptID !== id) return null
+    const data = await JsonStore.read(file(parsed.data.sessionID, parsed.data.auditID))
+    const parsedState = State.safeParse(data)
+    if (!parsedState.success || drift(parsedState.data)) return null
+    const state = parsedState.data
+    const snapshot = {
+      auditID: state.auditID,
+      runID: state.runID,
+      sessionID: state.sessionID,
+      contractFingerprint: state.contractFingerprint,
+      poolFingerprint: state.poolFingerprint,
+      subject: state.subject,
+      config: state.config,
+      stopReason: state.stopReason,
+      estimate: state.estimate,
+      revision: state.revision,
+      completedAt: state.updatedAt,
+    }
+    const receipt = {
+      auditID: parsed.data.auditID,
+      runID: parsed.data.runID,
+      sessionID: parsed.data.sessionID,
+      contractFingerprint: parsed.data.contractFingerprint,
+      poolFingerprint: parsed.data.poolFingerprint,
+      subject: parsed.data.subject,
+      config: parsed.data.config,
+      stopReason: parsed.data.stopReason,
+      estimate: parsed.data.estimate,
+      revision: parsed.data.revision,
+      completedAt: parsed.data.completedAt,
+    }
+    return state.status === "completed" && JSON.stringify(snapshot) === JSON.stringify(receipt) ? parsed.data : null
+  }
+
+  export async function assert(input: {
+    contract: HarnessContract.Info
+    receiptID: string
+    subject: { type: "run" | "candidate"; id: string }
+    evaluatedAt: number
+    recordedAt: number
+    requireQualified: boolean
+  }) {
+    const receipt = await readReceipt(input.receiptID)
+    if (!receipt) throw new Error(`Unknown or corrupt active audit receipt ${input.receiptID}`)
+    if (!input.contract.audit)
+      throw new Error(`Evaluation cites an audit receipt without a bound active audit protocol`)
+    if (receipt.contractFingerprint !== HarnessContract.fingerprint(input.contract)) {
+      throw new Error(`Active audit receipt does not match the bound harness contract`)
+    }
+    if (receipt.sessionID !== input.contract.sessionID || receipt.runID !== input.contract.runID) {
+      throw new Error(`Active audit receipt belongs to a different harness run`)
+    }
+    if (receipt.subject.type !== input.subject.type || receipt.subject.id !== input.subject.id) {
+      throw new Error(`Active audit receipt belongs to a different evaluation subject`)
+    }
+    if (receipt.completedAt < input.contract.createdAt) {
+      throw new Error(`Active audit receipt predates the bound harness contract`)
+    }
+    if (receipt.completedAt > input.evaluatedAt || receipt.sealedAt > input.recordedAt) {
+      throw new Error(`Evaluation predates its active audit receipt`)
+    }
+    if (input.requireQualified && !receipt.qualified) {
+      throw new Error(`A passing final evaluation requires a qualified non-abstaining active audit receipt`)
+    }
+    return receipt
   }
 }

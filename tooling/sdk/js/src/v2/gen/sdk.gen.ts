@@ -100,6 +100,8 @@ import type {
   HarnessAuditInitializeResponses,
   HarnessAuditObserveErrors,
   HarnessAuditObserveResponses,
+  HarnessAuditSealErrors,
+  HarnessAuditSealResponses,
   HarnessAuditSelectErrors,
   HarnessAuditSelectResponses,
   HarnessAuditStatusErrors,
@@ -3752,14 +3754,23 @@ export class Audit extends HeyApiClient {
         id: string
         artifactSHA256: string
       }
-      probes?: Array<{
-        id: string
-        commitment: string
-        features: Array<number>
-        stratum: string
-        weight?: number
-        priorLoss?: number
-      }>
+      probes?: Array<
+        | {
+            id: string
+            commitment: string
+            features: Array<number>
+            stratum: string
+            weight?: number
+            priorLoss?: number
+          }
+        | {
+            id: string
+            commitment: string
+            sourceLosses: Array<number>
+            stratum: string
+            weight?: number
+          }
+      >
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3918,6 +3929,45 @@ export class Audit extends HeyApiClient {
         },
       },
     )
+  }
+
+  /**
+   * Seal a terminal active-audit receipt
+   *
+   * Content-addresses the completed audit, exact subject artifact, committed pool, derived estimate, transfer qualification, and terminal revision for optional promotion gating.
+   */
+  public seal<ThrowOnError extends boolean = false>(
+    parameters: {
+      auditID: string
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "auditID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessAuditSealResponses, HarnessAuditSealErrors, ThrowOnError>({
+      url: "/harness/audits/{auditID}/receipt",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
   }
 }
 
@@ -5900,6 +5950,17 @@ export class Harness extends HeyApiClient {
         diversityWeight?: number
         coverageWeight?: number
         targetFailures?: number
+        transfer?: {
+          protocolVersion: "score-history-prior-v1"
+          poolSHA256: string
+          sourceManifestSHA256: string
+          selectionSHA256: string
+          selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
+          sourceModels: Array<string>
+          calibrationSamples: number
+          maxCalibrationMAE: number
+        }
+        promotionRequired?: boolean
       }
       launch?: {
         protocolVersion: "benchmark-launch-v1"
@@ -6333,6 +6394,7 @@ export class Harness extends HeyApiClient {
       evaluatorAuditReceiptID?: string
       semanticReceiptID?: string
       replicationReceiptID?: string
+      auditReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
       metrics?: {
@@ -6376,6 +6438,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "evaluatorAuditReceiptID" },
             { in: "body", key: "semanticReceiptID" },
             { in: "body", key: "replicationReceiptID" },
+            { in: "body", key: "auditReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
             { in: "body", key: "metrics" },

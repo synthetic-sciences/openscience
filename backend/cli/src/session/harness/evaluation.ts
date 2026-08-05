@@ -92,6 +92,10 @@ export namespace HarnessEvaluation {
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
+      auditReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       evaluator: z
         .object({
           name: z.string().min(1).max(200),
@@ -377,6 +381,31 @@ export namespace HarnessEvaluation {
         evaluatedAt: evaluation.evaluatedAt,
         recordedAt: evaluation.recordedAt!,
         requirePassed: evaluation.status === "passed" && final(evaluation),
+      })
+    }
+    if (evaluation.auditReceiptID && !contract.audit) {
+      throw new Error(`Evaluation references an active audit receipt without a bound active audit protocol`)
+    }
+    if (
+      contract.audit?.promotionRequired &&
+      evaluation.status === "passed" &&
+      final(evaluation) &&
+      !evaluation.auditReceiptID
+    ) {
+      throw new Error(`A passing final evaluation must reference a qualified active audit receipt`)
+    }
+    if (evaluation.auditReceiptID) {
+      const { HarnessAudit } = await import("./audit")
+      await HarnessAudit.assert({
+        contract,
+        receiptID: evaluation.auditReceiptID,
+        subject:
+          evaluation.subject?.type === "candidate"
+            ? { type: "candidate", id: evaluation.subject.id }
+            : { type: "run", id: contract.runID },
+        evaluatedAt: evaluation.evaluatedAt,
+        recordedAt: evaluation.recordedAt!,
+        requireQualified: evaluation.status === "passed" && final(evaluation),
       })
     }
     if (evaluation.status === "passed" && final(evaluation)) {

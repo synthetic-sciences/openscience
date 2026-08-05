@@ -233,6 +233,10 @@ export namespace HarnessAdapter {
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
+      auditReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       status: HarnessEvaluation.Status,
       score: z.number().finite().optional(),
       metrics: z
@@ -622,6 +626,7 @@ export namespace HarnessAdapter {
       evaluatorAuditReceiptID: value.evaluatorAuditReceiptID,
       semanticReceiptID: value.semanticReceiptID,
       replicationReceiptID: value.replicationReceiptID,
+      auditReceiptID: value.auditReceiptID,
       evaluator: binding.evaluator,
       status: value.status,
       score: value.score,

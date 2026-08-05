@@ -194,6 +194,26 @@ export namespace HarnessContract {
     })
   export type Orchestration = z.infer<typeof Orchestration>
 
+  const Hash = z.string().regex(/^[a-f0-9]{64}$/)
+
+  export const AuditTransfer = z
+    .object({
+      protocolVersion: z.literal("score-history-prior-v1"),
+      poolSHA256: Hash,
+      sourceManifestSHA256: Hash,
+      selectionSHA256: Hash,
+      selectionMethod: z.enum(["pca-gmm-profile-v1", "holdout-embedding-gmm-v1"]),
+      sourceModels: z
+        .array(z.string().min(1).max(240))
+        .min(3)
+        .max(64)
+        .refine((items) => new Set(items).size === items.length, "Audit transfer source models must be unique"),
+      calibrationSamples: z.number().int().min(2).max(64),
+      maxCalibrationMAE: z.number().positive().max(1),
+    })
+    .strict()
+  export type AuditTransfer = z.infer<typeof AuditTransfer>
+
   export const Audit = z
     .object({
       mode: z.enum(["performance", "failure", "hybrid"]),
@@ -209,6 +229,8 @@ export namespace HarnessContract {
       diversityWeight: z.number().min(0).max(0.5).default(0.2),
       coverageWeight: z.number().min(0).max(0.5).default(0.2),
       targetFailures: z.number().int().positive().max(512).optional(),
+      transfer: AuditTransfer.optional(),
+      promotionRequired: z.boolean().optional(),
     })
     .strict()
     .superRefine((value, ctx) => {
@@ -221,10 +243,29 @@ export namespace HarnessContract {
       if (value.targetFailures !== undefined && value.targetFailures > value.budget) {
         ctx.addIssue({ code: "custom", path: ["targetFailures"], message: "Audit failure target exceeds its budget" })
       }
+      if (value.transfer && value.transfer.calibrationSamples > value.budget) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["transfer", "calibrationSamples"],
+          message: "Audit transfer calibration exceeds its budget",
+        })
+      }
+      if (value.promotionRequired && !value.transfer) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["promotionRequired"],
+          message: "Audit promotion requires a transfer-qualified proactive audit",
+        })
+      }
+      if (value.promotionRequired && value.mode === "failure") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["mode"],
+          message: "A failure-only audit cannot qualify a population performance evaluation",
+        })
+      }
     })
   export type Audit = z.infer<typeof Audit>
-
-  const Hash = z.string().regex(/^[a-f0-9]{64}$/)
 
   export const ObjectiveAudit = z
     .object({

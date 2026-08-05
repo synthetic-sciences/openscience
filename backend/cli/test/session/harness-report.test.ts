@@ -260,6 +260,21 @@ describe("harness quality-cost reports", () => {
     expect(() => HarnessReport.compare([a, b], "simulation-one")).toThrow("only comparable")
   })
 
+  test("keeps active-audit protocols and receipts in report provenance", () => {
+    const base = contract("audit-report-base")
+    const audited = HarnessContract.Info.parse({
+      ...contract("audit-report-qualified"),
+      audit: { mode: "performance", budget: 3, minSamples: 2 },
+    })
+    const plain = HarnessReport.compile({ contract: base, evaluations: [evaluation(base, 0.8)], generatedAt: 3 })
+    const receiptID = "a".repeat(64)
+    const result = HarnessEvaluation.Info.parse({ ...evaluation(audited, 0.8), auditReceiptID: receiptID })
+    const report = HarnessReport.compile({ contract: audited, evaluations: [result], generatedAt: 3 })
+    expect(report.quality.auditReceiptID).toBe(receiptID)
+    expect(report.comparisonKey).not.toBe(plain.comparisonKey)
+    expect(() => HarnessReport.compare([plain, report], plain.runID)).toThrow("only comparable")
+  })
+
   test("refuses comparisons across different evaluator qualification protocols", () => {
     const audit = HarnessContract.EvaluatorAudit.parse({
       protocolVersion: "evaluator-audit-v1",

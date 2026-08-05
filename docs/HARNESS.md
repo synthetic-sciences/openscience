@@ -469,11 +469,17 @@ The evaluator initializes an audit with an immutable subject artifact plus two t
 
 The hidden prompt, target, and expected output never enter OpenScience. Numeric features are standardized inside the audit before applying an RBF Gaussian-process surrogate.
 
+`proactive-audit-v2` adds an opt-in transfer-qualified path based on ProEval's score-feature prior. The contract freezes the exact probe-pool digest, source-score manifest, source-selection artifact, PCA/GMM selection method, at least three unique source-model IDs, calibration size, calibration-error threshold, and whether a qualified terminal receipt is required for promotion. The evaluator preflight and backend independently derive the source-score manifest from the same ordered model IDs and per-probe loss matrix. Each v2 probe supplies that loss vector instead of caller-authored features or a prior mean. OpenScience derives the mean and centered `1 / sqrt(N - 1)` score features, so their linear kernel exactly reconstructs the empirical source-model covariance. A caller cannot substitute an RBF embedding, covariance feature, or favorable prior loss.
+
+The first calibration probes follow a digest order fixed by the selection commitment, probe commitment, and probe ID. Their order is independent of target outcomes. When their mean absolute prior error exceeds the frozen threshold, transfer becomes `rejected`; remaining selection falls back to that outcome-independent order and the population estimate permanently abstains. Accepted transfer unlocks weighted Bayesian-quadrature variance reduction in performance mode and an uncertainty-weighted superlevel set in failure mode. This calibration rule is a conservative negative-transfer guard, not a statistical guarantee.
+
 At each round, the audit selects exactly one probe. Performance mode maximizes the reduction in weighted integral variance. Failure mode combines posterior loss UCB with distance from already-discovered failures and under-covered strata. Hybrid mode combines both acquisitions using the contract weight. Selection is deterministic, persisted, and restart-idempotent.
 
 Only the bound evaluator capability can initialize, select, read, or submit outcomes. An observation must cite evidence, cannot be changed later, and must label failure consistently with the frozen loss threshold. The audit stops on its sample budget, pool exhaustion, requested failure count, or—outside pure failure mode—sufficient posterior precision after the minimum sample count.
 
-The report carries posterior mean loss, standard deviation, a clipped 95% interval, failure count, stratum coverage, and an explicit abstention bit. This is an audit estimate, not an official result. The external evaluator must attach its receipt to an ordinary authenticated evaluation before it can affect benchmark state.
+The audit state and terminal receipt carry posterior mean loss, standard deviation, a clipped 95% interval, failure count, stratum coverage, transfer status/error, and an explicit abstention bit; the quality report carries the cited receipt ID. Generated/adversarial cases are not population samples and must use a separate future generation stream; they cannot enter this pool or change its Bayesian-quadrature estimate.
+
+A terminal audit can be sealed into a content-addressed receipt bound to the exact contract, subject artifact, committed pool, terminal revision, derived estimate, stop reason, and timestamps. Receipt parsing re-derives its content hash, identity, qualification, and the audit posterior. When `promotionRequired` is true, a passing final evaluation must cite a matching completed receipt whose transfer was accepted and estimate did not abstain. Missing, rejected, incomplete, corrupt, future, wrong-contract, wrong-subject, or cherry-picked-pool receipts fail closed. The receipt qualifies the audit protocol; it does not replace the benchmark's official authenticated score.
 
 ### 7. Authenticate numerical simulation claims
 
@@ -629,6 +635,7 @@ Every adapter is version-agnostic. A development/validation run must still bind 
 | `POST` | `/harness/audits/:auditID/status`                    | Read capability-protected posterior and stopping state        |
 | `POST` | `/harness/audits/:auditID/selection`                 | Select the next opaque probe commitment                       |
 | `POST` | `/harness/audits/:auditID/observations`              | Record an immutable evaluator-authenticated probe outcome     |
+| `POST` | `/harness/audits/:auditID/receipt`                   | Seal a content-addressed terminal active-audit receipt        |
 | `POST` | `/harness/ablations`                                 | Freeze a same-seed, one-factor matched ablation               |
 | `POST` | `/harness/ablations/:planID/assessment`              | Derive an immutable paired-effect assessment                  |
 | `POST` | `/harness/evaluators/qualifications`                 | Audit a judge on a committed hidden fault suite               |

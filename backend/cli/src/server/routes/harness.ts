@@ -136,6 +136,25 @@ export const HarnessRoutes = lazy(() =>
       async (c) => c.json(await HarnessAudit.observe(c.req.valid("param").auditID, c.req.valid("json"))),
     )
     .post(
+      "/audits/:auditID/receipt",
+      describeRoute({
+        summary: "Seal a terminal active-audit receipt",
+        description:
+          "Content-addresses the completed audit, exact subject artifact, committed pool, derived estimate, transfer qualification, and terminal revision for optional promotion gating.",
+        operationId: "harness.audit.seal",
+        responses: {
+          200: {
+            description: "Immutable active-audit receipt",
+            content: { "application/json": { schema: resolver(HarnessAudit.Receipt) } },
+          },
+          ...errors(400, 403, 404, 409),
+        },
+      }),
+      validator("param", z.object({ auditID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessAudit.Access),
+      async (c) => c.json(await HarnessAudit.seal(c.req.valid("param").auditID, c.req.valid("json"))),
+    )
+    .post(
       "/ablations",
       describeRoute({
         summary: "Freeze a matched scientific ablation plan",

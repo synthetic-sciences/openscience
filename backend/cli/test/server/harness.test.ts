@@ -10,6 +10,7 @@ import { HarnessRoutes } from "../../src/server/routes/harness"
 const sessionID = "route-harness-adapter"
 const token = "route-evaluator-capability-token-000000000000000000"
 const skill = "route-harness-skill"
+const receipts = new Set<string>()
 const hash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
 
 afterEach(async () => {
@@ -22,6 +23,12 @@ afterEach(async () => {
     recursive: true,
     force: true,
   })
+  await Promise.all(
+    [...receipts].map((receiptID) =>
+      fs.rm(path.join(Global.Path.data, "harness", "audit-receipts", `${receiptID}.json`), { force: true }),
+    ),
+  )
+  receipts.clear()
   await Promise.all(
     ["learned-skill-proposals", "learned-skills"].map((name) =>
       fs.rm(path.join(Global.Path.data, name, skill), { recursive: true, force: true }),
@@ -180,6 +187,34 @@ describe("/harness routes", () => {
     })
     expect(observed.status).toBe(200)
     expect(await observed.json()).toMatchObject({ estimate: { observed: 1 }, revision: 2 })
+    const selectedAgain = await app.request(`/audits/${auditState.auditID}/selection`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionID, evaluatorToken: token }),
+    })
+    const second = (await selectedAgain.json()) as { probeID: string }
+    const completed = await app.request(`/audits/${auditState.auditID}/observations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionID,
+        evaluatorToken: token,
+        probeID: second.probeID,
+        loss: 0.3,
+        failure: false,
+        evidence: ["route:second-probe-receipt"],
+      }),
+    })
+    expect(await completed.json()).toMatchObject({ status: "completed", estimate: { observed: 2 } })
+    const sealed = await app.request(`/audits/${auditState.auditID}/receipt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionID, evaluatorToken: token }),
+    })
+    expect(sealed.status).toBe(200)
+    const receipt = (await sealed.json()) as { receiptID: string; qualified: boolean }
+    receipts.add(receipt.receiptID)
+    expect(receipt.qualified).toBe(false)
 
     const checks = HarnessDomain.compose(contract.packs).map((check) => ({
       id: check.id,

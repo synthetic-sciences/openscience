@@ -7740,14 +7740,23 @@ export type HarnessAuditInitializeData = {
       id: string
       artifactSHA256: string
     }
-    probes: Array<{
-      id: string
-      commitment: string
-      features: Array<number>
-      stratum: string
-      weight?: number
-      priorLoss?: number
-    }>
+    probes: Array<
+      | {
+          id: string
+          commitment: string
+          features: Array<number>
+          stratum: string
+          weight?: number
+          priorLoss?: number
+        }
+      | {
+          id: string
+          commitment: string
+          sourceLosses: Array<number>
+          stratum: string
+          weight?: number
+        }
+    >
   }
   path?: never
   query?: {
@@ -7771,7 +7780,7 @@ export type HarnessAuditInitializeResponses = {
    */
   200: {
     schemaVersion: 1
-    protocolVersion: "active-audit-v1"
+    protocolVersion: "active-audit-v1" | "proactive-audit-v2"
     auditID: string
     runID: string
     sessionID: string
@@ -7797,6 +7806,17 @@ export type HarnessAuditInitializeResponses = {
       diversityWeight?: number
       coverageWeight?: number
       targetFailures?: number
+      transfer?: {
+        protocolVersion: "score-history-prior-v1"
+        poolSHA256: string
+        sourceManifestSHA256: string
+        selectionSHA256: string
+        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
+        sourceModels: Array<string>
+        calibrationSamples: number
+        maxCalibrationMAE: number
+      }
+      promotionRequired?: boolean
     }
     status: "active" | "completed"
     stopReason?: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
@@ -7808,9 +7828,11 @@ export type HarnessAuditInitializeResponses = {
         stratum: string
         weight?: number
         priorLoss?: number
+        sourceLosses?: Array<number>
         selection?: {
           round: number
           selectedAt: number
+          phase?: "calibration" | "adaptive" | "fallback"
           acquisition: {
             posteriorLoss: number
             posteriorStd: number
@@ -7841,6 +7863,13 @@ export type HarnessAuditInitializeResponses = {
       abstain: boolean
       effectivePoolSize: number
       stratumCoverage: number
+      transfer?: {
+        status: "not_configured" | "calibrating" | "accepted" | "rejected"
+        observed: number
+        required: number
+        meanAbsoluteError?: number
+        threshold?: number
+      }
     }
     revision: number
     createdAt: number
@@ -7883,7 +7912,7 @@ export type HarnessAuditStatusResponses = {
    */
   200: {
     schemaVersion: 1
-    protocolVersion: "active-audit-v1"
+    protocolVersion: "active-audit-v1" | "proactive-audit-v2"
     auditID: string
     runID: string
     sessionID: string
@@ -7909,6 +7938,17 @@ export type HarnessAuditStatusResponses = {
       diversityWeight?: number
       coverageWeight?: number
       targetFailures?: number
+      transfer?: {
+        protocolVersion: "score-history-prior-v1"
+        poolSHA256: string
+        sourceManifestSHA256: string
+        selectionSHA256: string
+        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
+        sourceModels: Array<string>
+        calibrationSamples: number
+        maxCalibrationMAE: number
+      }
+      promotionRequired?: boolean
     }
     status: "active" | "completed"
     stopReason?: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
@@ -7920,9 +7960,11 @@ export type HarnessAuditStatusResponses = {
         stratum: string
         weight?: number
         priorLoss?: number
+        sourceLosses?: Array<number>
         selection?: {
           round: number
           selectedAt: number
+          phase?: "calibration" | "adaptive" | "fallback"
           acquisition: {
             posteriorLoss: number
             posteriorStd: number
@@ -7953,6 +7995,13 @@ export type HarnessAuditStatusResponses = {
       abstain: boolean
       effectivePoolSize: number
       stratumCoverage: number
+      transfer?: {
+        status: "not_configured" | "calibrating" | "accepted" | "rejected"
+        observed: number
+        required: number
+        meanAbsoluteError?: number
+        threshold?: number
+      }
     }
     revision: number
     createdAt: number
@@ -8034,7 +8083,7 @@ export type HarnessAuditObserveResponses = {
    */
   200: {
     schemaVersion: 1
-    protocolVersion: "active-audit-v1"
+    protocolVersion: "active-audit-v1" | "proactive-audit-v2"
     auditID: string
     runID: string
     sessionID: string
@@ -8060,6 +8109,17 @@ export type HarnessAuditObserveResponses = {
       diversityWeight?: number
       coverageWeight?: number
       targetFailures?: number
+      transfer?: {
+        protocolVersion: "score-history-prior-v1"
+        poolSHA256: string
+        sourceManifestSHA256: string
+        selectionSHA256: string
+        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
+        sourceModels: Array<string>
+        calibrationSamples: number
+        maxCalibrationMAE: number
+      }
+      promotionRequired?: boolean
     }
     status: "active" | "completed"
     stopReason?: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
@@ -8071,9 +8131,11 @@ export type HarnessAuditObserveResponses = {
         stratum: string
         weight?: number
         priorLoss?: number
+        sourceLosses?: Array<number>
         selection?: {
           round: number
           selectedAt: number
+          phase?: "calibration" | "adaptive" | "fallback"
           acquisition: {
             posteriorLoss: number
             posteriorStd: number
@@ -8104,6 +8166,13 @@ export type HarnessAuditObserveResponses = {
       abstain: boolean
       effectivePoolSize: number
       stratumCoverage: number
+      transfer?: {
+        status: "not_configured" | "calibrating" | "accepted" | "rejected"
+        observed: number
+        required: number
+        meanAbsoluteError?: number
+        threshold?: number
+      }
     }
     revision: number
     createdAt: number
@@ -8112,6 +8181,105 @@ export type HarnessAuditObserveResponses = {
 }
 
 export type HarnessAuditObserveResponse = HarnessAuditObserveResponses[keyof HarnessAuditObserveResponses]
+
+export type HarnessAuditSealData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    auditID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/audits/{auditID}/receipt"
+}
+
+export type HarnessAuditSealErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessAuditSealError = HarnessAuditSealErrors[keyof HarnessAuditSealErrors]
+
+export type HarnessAuditSealResponses = {
+  /**
+   * Immutable active-audit receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "proactive-audit-receipt-v1"
+    receiptID: string
+    auditID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    poolFingerprint: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+      artifactSHA256: string
+    }
+    config: {
+      mode: "performance" | "failure" | "hybrid"
+      budget: number
+      minSamples: number
+      noiseVariance?: number
+      lengthscale?: number
+      beta?: number
+      failureThreshold?: number
+      tolerance?: number
+      maxUncertainty?: number
+      estimationWeight?: number
+      diversityWeight?: number
+      coverageWeight?: number
+      targetFailures?: number
+      transfer?: {
+        protocolVersion: "score-history-prior-v1"
+        poolSHA256: string
+        sourceManifestSHA256: string
+        selectionSHA256: string
+        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
+        sourceModels: Array<string>
+        calibrationSamples: number
+        maxCalibrationMAE: number
+      }
+      promotionRequired?: boolean
+    }
+    stopReason: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
+    estimate: {
+      observed: number
+      failures: number
+      meanLoss: number
+      standardDeviation: number
+      lower95: number
+      upper95: number
+      abstain: boolean
+      effectivePoolSize: number
+      stratumCoverage: number
+      transfer?: {
+        status: "not_configured" | "calibrating" | "accepted" | "rejected"
+        observed: number
+        required: number
+        meanAbsoluteError?: number
+        threshold?: number
+      }
+    }
+    revision: number
+    qualified: boolean
+    completedAt: number
+    sealedAt: number
+  }
+}
+
+export type HarnessAuditSealResponse = HarnessAuditSealResponses[keyof HarnessAuditSealResponses]
 
 export type HarnessAblationInitializeData = {
   body?: {
@@ -12335,6 +12503,17 @@ export type HarnessBindData = {
       diversityWeight?: number
       coverageWeight?: number
       targetFailures?: number
+      transfer?: {
+        protocolVersion: "score-history-prior-v1"
+        poolSHA256: string
+        sourceManifestSHA256: string
+        selectionSHA256: string
+        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
+        sourceModels: Array<string>
+        calibrationSamples: number
+        maxCalibrationMAE: number
+      }
+      promotionRequired?: boolean
     }
     launch?: {
       protocolVersion: "benchmark-launch-v1"
@@ -12814,6 +12993,17 @@ export type HarnessBindResponses = {
       diversityWeight?: number
       coverageWeight?: number
       targetFailures?: number
+      transfer?: {
+        protocolVersion: "score-history-prior-v1"
+        poolSHA256: string
+        sourceManifestSHA256: string
+        selectionSHA256: string
+        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
+        sourceModels: Array<string>
+        calibrationSamples: number
+        maxCalibrationMAE: number
+      }
+      promotionRequired?: boolean
     }
     launch?: {
       protocolVersion: "benchmark-launch-v1"
@@ -13275,6 +13465,7 @@ export type HarnessEvaluateData = {
     evaluatorAuditReceiptID?: string
     semanticReceiptID?: string
     replicationReceiptID?: string
+    auditReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
     metrics?: {
@@ -13732,6 +13923,17 @@ export type HarnessContractResponses = {
       diversityWeight?: number
       coverageWeight?: number
       targetFailures?: number
+      transfer?: {
+        protocolVersion: "score-history-prior-v1"
+        poolSHA256: string
+        sourceManifestSHA256: string
+        selectionSHA256: string
+        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
+        sourceModels: Array<string>
+        calibrationSamples: number
+        maxCalibrationMAE: number
+      }
+      promotionRequired?: boolean
     }
     launch?: {
       protocolVersion: "benchmark-launch-v1"
@@ -14221,6 +14423,7 @@ export type HarnessEvaluationsResponses = {
     evaluatorAuditReceiptID?: string
     semanticReceiptID?: string
     replicationReceiptID?: string
+    auditReceiptID?: string
     evaluator: {
       name: string
       version: string
@@ -14346,6 +14549,7 @@ export type HarnessReportResponses = {
       evaluatorAuditReceiptID?: string
       semanticReceiptID?: string
       replicationReceiptID?: string
+      auditReceiptID?: string
       confirmationReceiptID?: string
       evaluations: number
     }
