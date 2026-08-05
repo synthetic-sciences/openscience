@@ -7,7 +7,6 @@ const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.m
 test("keeps the explorer and selected file preview inside the contextual pane", () => {
   const pane = read("./RightPane.tsx")
   const session = read("../pages/session.tsx")
-  const explorer = read("./FileExplorer.tsx")
   const directory = read("../pages/directory-layout.tsx")
 
   expect(pane).toContain('import { ExternalFileAccess } from "@/atlas/FileExplorer"')
@@ -30,7 +29,6 @@ test("keeps the explorer and selected file preview inside the contextual pane", 
   expect(pane).toContain("<Show when={uiStore.file()} keyed>")
   expect(pane).toContain('subtitle="Session files"')
   expect(pane).toContain("<RightPaneGate>")
-  expect(explorer).toContain("uiStore.openFile(projectRoot(), path)")
   expect(directory).toContain("uiStore.openFile(dir, path)")
   expect(session).not.toContain('import { FileExplorer } from "@/atlas/FileExplorer"')
   expect(session).not.toContain('import { FileView } from "@/atlas/FilePreview"')

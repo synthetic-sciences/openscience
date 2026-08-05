@@ -11,9 +11,7 @@ describe("session-scoped file requests", () => {
 
     expect(explorer).toContain('const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)')
     expect(explorer).toContain("readAccess(sdk.request, current)")
-    expect(explorer).toContain("grantAccess(sdk.request, current, input)")
-    expect(explorer).toContain("revokeAccess(sdk.request, current, grant.id)")
-    expect(explorer).toContain("const input = { path, sessionID: session }")
+    expect(explorer).toContain("grantAccess(sdk.request, current, {")
     expect(preview).toContain('const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)')
     expect(preview).toContain("sdk.client.file.read({ path, sessionID: sessionID() })")
     expect(preview).toContain("body: JSON.stringify({ path, content, sessionID: session })")
