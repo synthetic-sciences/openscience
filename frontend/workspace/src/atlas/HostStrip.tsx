@@ -1,4 +1,4 @@
-import { For, createResource, onCleanup, type JSX } from "solid-js"
+import { Index, createMemo, createResource, onCleanup, type JSX } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { hostTiles, type Capacity } from "@/atlas/host-tiles"
 import "@/atlas/HostStrip.css"
@@ -32,23 +32,28 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
     clearInterval(timer)
     document.removeEventListener("visibilitychange", refresh)
   })
+  // The tile list is always exactly memory, cpu, kernels, in that order. Memoize
+  // it so a poll only reallocates when the resource itself changes, and key the
+  // render by position (Index) rather than by object (For) so the three DOM
+  // nodes persist across polls instead of being torn down every 2.5s.
+  const tiles = createMemo(() => hostTiles(data()))
 
   return (
     <section class="host-strip" aria-label="Host capacity" data-testid="host-strip">
-      <For each={hostTiles(data())}>
+      <Index each={tiles()}>
         {(tile) => (
-          <div class="host-strip__tile" data-host-tile={tile.key}>
+          <div class="host-strip__tile" data-host-tile={tile().key}>
             <div class="host-strip__reading">
-              <strong class="host-strip__value">{tile.value}</strong>
-              <span class="host-strip__caption">{tile.caption}</span>
+              <strong class="host-strip__value">{tile().value}</strong>
+              <span class="host-strip__caption">{tile().caption}</span>
             </div>
             <div class="host-strip__meter" role="presentation">
-              <span class="host-strip__fill" style={{ width: `${tile.fill * 100}%` }} />
-              <span class="host-strip__share" style={{ width: `${tile.share * 100}%` }} />
+              <span class="host-strip__fill" style={{ width: `${tile().fill * 100}%` }} />
+              <span class="host-strip__share" style={{ width: `${tile().share * 100}%` }} />
             </div>
           </div>
         )}
-      </For>
+      </Index>
     </section>
   )
 }

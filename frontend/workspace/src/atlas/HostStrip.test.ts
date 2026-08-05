@@ -147,6 +147,49 @@ describe("host strip", () => {
     expect(paths).toEqual(["/notebook/compute"])
   })
 
+  test("keeps the same tile nodes mounted across a poll that changes the data", async () => {
+    // The regression this guards: For is keyed by referential identity, and
+    // every poll parses a brand new response body. Swapping For for Index (and
+    // memoizing the tile computation) should mean a data change patches text
+    // and meter widths in place rather than tearing down and remounting the
+    // tile. Capturing the node before the second poll and asserting `toBe`
+    // (identity, not toEqual) after it is what actually catches a regression
+    // back to For — a component that just re-renders correct values would
+    // still pass a toEqual check on text alone.
+    let capacity = {
+      memory: { total: 16_000_000_000, available: 9_300_000_000, kernels: 412_000_000 },
+      cpu: { cores: 8, busy: 2.1, kernels: 0.4 },
+      kernels: { live: 2, running: 1 },
+    }
+    const respond = async () =>
+      new Response(JSON.stringify(capacity), { headers: { "content-type": "application/json" } })
+    const calls: Array<Promise<Response>> = []
+    const host = guard(() => subject.HostStrip({ request: track(respond, calls) }))
+    await settle(calls)
+
+    const memoryTile = host.querySelector('[data-host-tile="memory"]')
+    const cpuTile = host.querySelector('[data-host-tile="cpu"]')
+    const kernelsTile = host.querySelector('[data-host-tile="kernels"]')
+    expect(memoryTile).not.toBeNull()
+    expect(values(host)).toEqual(["412 MB", "0.4 cores", "2"])
+
+    capacity = {
+      memory: { total: 16_000_000_000, available: 5_000_000_000, kernels: 900_000_000 },
+      cpu: { cores: 8, busy: 4.4, kernels: 1.1 },
+      kernels: { live: 5, running: 3 },
+    }
+    document.dispatchEvent(new Event("visibilitychange"))
+    await settle(calls)
+
+    // Identity: the very same element instances are still the ones mounted.
+    expect(host.querySelector('[data-host-tile="memory"]')).toBe(memoryTile)
+    expect(host.querySelector('[data-host-tile="cpu"]')).toBe(cpuTile)
+    expect(host.querySelector('[data-host-tile="kernels"]')).toBe(kernelsTile)
+    expect(host.contains(memoryTile)).toBe(true)
+    // Freshness: the values inside those same nodes actually moved.
+    expect(values(host)).toEqual(["900 MB", "1.1 cores", "5"])
+  })
+
   test("refreshes when the tab is shown again and polls nothing after unmount", async () => {
     const calls: Array<Promise<Response>> = []
     guard(() => subject.HostStrip({ request: track(serving, calls) }))
