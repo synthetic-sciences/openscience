@@ -457,7 +457,13 @@ export function FilesPane(
             rows={current().kind === "artifacts" ? stored() : rows()}
             empty={current().kind === "artifacts" ? "No artifacts saved yet." : undefined}
             depth={path().length}
-            onUp={() => setPath(path().slice(0, -1))}
+            onUp={() => {
+              setPath(path().slice(0, -1))
+              // Symmetric with descending: a query typed for the folder being
+              // left does not describe the one being returned to, and leaving
+              // it applied reports the parent as empty.
+              setFilter("")
+            }}
             onOpen={(row) => {
               if (row.type === "directory") {
                 setPath([...path(), row.name])

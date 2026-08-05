@@ -125,6 +125,42 @@ describe("files pane", () => {
     expect(host.querySelector("[data-file-name]")?.textContent).toBe("train_lr.py")
   })
 
+  test("clears the search box on the way back up, not only on the way down", async () => {
+    // Descending cleared the filter but `..` did not, so returning to a folder
+    // re-entered it with a stale query still applied and the table announced
+    // "This folder is empty." over a folder that was not.
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (_path, _init, query) =>
+          query?.path?.endsWith("/data")
+            ? listing([{ name: "nested.txt", type: "file", size: 24 }])
+            : listing([
+                { name: "data", type: "directory" },
+                { name: "train.py", type: "file", size: 104 },
+              ]),
+        directory: DIRECTORY,
+        session: SESSION,
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="data"]')?.click()
+    await settle()
+
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!
+    search.value = "nest"
+    search.dispatchEvent(new Event("input", { bubbles: true }))
+    await settle()
+    expect(host.querySelectorAll("[data-file-row]").length).toBe(1)
+
+    host.querySelector<HTMLButtonElement>("[data-file-up]")?.click()
+    await settle()
+
+    expect(search.value).toBe("")
+    expect([...host.querySelectorAll("[data-file-name]")].map((node) => node.textContent)).toEqual(["data", "train.py"])
+    expect(host.textContent).not.toContain("This folder is empty.")
+  })
+
   test("a failed listing degrades in place instead of throwing to the boundary", async () => {
     // The pane must not reach the app-wide ErrorBoundary. Mount it inside a real
     // one and assert the fallback never renders — reading an errored resource
