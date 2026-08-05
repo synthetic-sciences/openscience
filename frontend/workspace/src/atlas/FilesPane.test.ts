@@ -75,6 +75,16 @@ const trashed = (id: string, title: string) => ({
   },
 })
 
+// The same record in its active state — what "All artifacts" is supposed to
+// list. `size` and `sourcePath` differ from the trashed fixture so a row
+// proves it read the artifact, not some other row's fields.
+const saved = (id: string, title: string) => ({
+  ...trashed(id, title),
+  state: "active",
+  trashedAt: undefined,
+  current: { ...trashed(id, title).current, size: 2048, sourcePath: `/store/${title}` },
+})
+
 const DIRECTORY = "/home/keertan/proj"
 const SESSION = "ses_1"
 
@@ -171,6 +181,86 @@ describe("files pane", () => {
 
     expect(calls).toContainEqual({ path: "/file/artifact-store/art_1/restore", method: "POST" })
     expect(host.querySelector('[data-trash-row="art_1"]')).toBeNull()
+  })
+
+  test("lists saved artifacts under All artifacts rather than reporting an empty folder", async () => {
+    // The artifacts source short-circuited to [] and fell through to the file
+    // table's "This folder is empty." — so a project with artifacts in it said
+    // it had none. The active half of the snapshot was already being loaded
+    // for the trash view; only the rendering was missing.
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
+          if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "peak_fit.ipynb")])
+          // A real listing would answer here; reaching it for the artifacts
+          // source is the bug that mislabels project files as artifacts.
+          return listing([{ name: "SHOULD_NOT_APPEAR.py", type: "file", size: 1 }])
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    await settle()
+
+    const names = [...host.querySelectorAll("[data-file-name]")].map((node) => node.textContent)
+    expect(names).toEqual(["peak_fit.ipynb"])
+    expect(host.textContent).not.toContain("This folder is empty.")
+    expect(host.querySelector("[data-file-size]")?.textContent).toBe("2.0 KB")
+  })
+
+  test("says no artifacts are saved rather than calling the artifact store an empty folder", async () => {
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          if (path.startsWith("/file/artifact-store")) return listing([])
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    await settle()
+
+    expect(host.textContent).toContain("No artifacts saved yet.")
+    expect(host.textContent).not.toContain("This folder is empty.")
+  })
+
+  test("opens a saved artifact by its stored path, not by the browsed folder", async () => {
+    // An artifact's bytes live wherever the store put them — often outside the
+    // project root — so the tab must carry current.sourcePath verbatim.
+    const seen: Array<{ name: string; path: string }> = []
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
+          if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "peak_fit.ipynb")])
+          return listing([])
+        },
+        // A real node, not null: `props.view?.(file) ?? <FileView/>` treats a
+        // null return as "no seam" and mounts the provider-hungry viewer.
+        view: (file) => {
+          seen.push({ name: file.name, path: file.path })
+          const node = document.createElement("p")
+          node.dataset.stubView = file.path
+          return node
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="peak_fit.ipynb"]')?.click()
+    await settle()
+
+    expect(seen).toContainEqual({ name: "peak_fit.ipynb", path: "/store/peak_fit.ipynb" })
   })
 
   test("revokes a connected grant from the source menu and drops it from the snapshot", async () => {

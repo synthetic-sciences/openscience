@@ -225,6 +225,25 @@ export function FilesPane(
     return query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
   })
 
+  // The artifact store is not a directory, so no listing is fetched for it —
+  // but the snapshot that feeds Trash already carries the active half. Folding
+  // it into the same row shape is what makes "All artifacts" tell the truth;
+  // the thumbnail grid this eventually becomes is Plan 2's job.
+  const stored = createMemo((): FileRow[] => {
+    const query = filter().trim().toLowerCase()
+    const list = artifacts.latest?.active ?? []
+    const found = query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
+    // An artifact's bytes live wherever the store put them, routinely outside
+    // the project root, so the row carries its own path rather than letting
+    // `open` derive one from the folder being browsed.
+    return found.map((item) => ({
+      name: item.title,
+      type: "file",
+      size: item.current.size,
+      path: item.current.sourcePath,
+    }))
+  })
+
   // Tabs are keyed by name because that is what the strip shows. Re-opening a
   // name from a different folder re-points the existing tab rather than
   // stacking a second, indistinguishable one.
@@ -435,7 +454,8 @@ export function FilesPane(
         when={current().kind === "trash"}
         fallback={
           <FileTable
-            rows={rows()}
+            rows={current().kind === "artifacts" ? stored() : rows()}
+            empty={current().kind === "artifacts" ? "No artifacts saved yet." : undefined}
             depth={path().length}
             onUp={() => setPath(path().slice(0, -1))}
             onOpen={(row) => {
