@@ -9,6 +9,10 @@
 }
 
 .host-strip__tile {
+  /* Each tile is its own query container, and the grid above gives all three
+     the same width, so they change layout together rather than each wrapping
+     at whatever width its own caption happens to need. */
+  container-type: inline-size;
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -19,6 +23,19 @@
   align-items: baseline;
   gap: 6px;
   min-width: 0;
+}
+
+/* Beside the value there is room for the caption only while the tile is wide
+   enough for both. Narrower than that, the caption drops onto its own line
+   under the number and takes the full tile width, which is far more readable
+   than squeezing "~0 of 8 cores busy" into a few characters per line. Widen
+   the pane and it returns to the side. */
+@container (max-width: 180px) {
+  .host-strip__reading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
 }
 
 .host-strip__value {
