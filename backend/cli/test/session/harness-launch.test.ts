@@ -10,7 +10,7 @@ import { HarnessLaunch } from "../../src/session/harness/launch"
 import { HarnessOrchestrator } from "../../src/session/harness/orchestrator"
 import { HarnessReport } from "../../src/session/harness/report"
 import { HarnessSearch } from "../../src/session/harness/search"
-import { launchProtocol, launchSubmit } from "../fixture/harness"
+import { launchProtocol, launchSubmit, recipeSelection } from "../fixture/harness"
 
 const sessions = new Set<string>()
 const token = "launch-evaluator-capability-token-00000000000000000"
@@ -29,6 +29,7 @@ afterEach(async () => {
 
 function task(sessionID: string): HarnessAdapter.Task {
   sessions.add(sessionID)
+  const recipe = recipeSelection("mle")
   return HarnessAdapter.Task.parse({
     schemaVersion: 1,
     runID: `run-${sessionID}`,
@@ -39,7 +40,8 @@ function task(sessionID: string): HarnessAdapter.Task {
     split: "held_out",
     evaluator: { name: "official-runner", version: "3", source: "benchmark", token },
     objective: "Improve the exact official benchmark without weakening its evaluator",
-    launch: launchProtocol("mle"),
+    launch: launchProtocol("mle", recipe),
+    recipe,
     metric: { name: "score", direction: "maximize" },
     model: { provider: "test", name: "model" },
     tools: ["read", "bash"],

@@ -48,6 +48,12 @@ Create JSON matching this shape. Paths are relative to the manifest unless they 
     "entrypoint": "benchmark/run.py",
     "command": ["python", "benchmark/run.py", "--task", "task-17"],
     "commandSHA256": "sha256-of-canonical-command-array",
+    "recipe": {
+      "artifact": "/evaluator/evidence/materialized-recipe.json",
+      "artifactSHA256": "64-hex",
+      "recipeSHA256": "64-hex",
+      "driverSHA256": "64-hex"
+    },
     "environment": {
       "files": ["pyproject.toml", "uv.lock"],
       "sha256": "sha256-of-sorted-path-and-file-hash-records"
@@ -86,6 +92,8 @@ Create JSON matching this shape. Paths are relative to the manifest unless they 
 
 Derive command and environment hashes with canonical JSON: UTF-8, sorted object keys, and separators `,` and `:`. The validator reports the observed hashes on mismatch; never weaken the manifest to make a failed checkout pass.
 
+For adapters whose `/harness/benchmarks` manifest reports `recipe.status: source_verified`, materialize the recipe through `POST /harness/benchmarks/:benchmark/recipe`, save the exact response outside the candidate workspace, and include the optional `runner.recipe` block above. The validator independently checks the response bytes, native launch-stage driver digest, recipe commitment, and entrypoint. Omit the block only for adapters that explicitly report a pending or not-applicable recipe; held-out/release runs for a source-verified adapter will reject that omission.
+
 ## Validate and bind
 
 Run:
@@ -109,6 +117,7 @@ Bind the report's `protocol` before the agent starts. Submit its `validator`, `c
 Stop instead of substituting components when:
 
 - Git origin, revision, or cleanliness differs;
+- a source-verified recipe artifact, native driver, or entrypoint differs;
 - any lock, dataset, task, evaluator, or baseline byte hash differs;
 - a hidden canary is readable from the agent sandbox;
 - deterministic outputs or serialization round-trips differ byte-for-byte;

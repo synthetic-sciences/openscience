@@ -104,6 +104,8 @@ import type {
   HarnessAuditSelectResponses,
   HarnessAuditStatusErrors,
   HarnessAuditStatusResponses,
+  HarnessBenchmarkRecipeErrors,
+  HarnessBenchmarkRecipeResponses,
   HarnessBenchmarksResponses,
   HarnessBindErrors,
   HarnessBindResponses,
@@ -3661,6 +3663,53 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Benchmark extends HeyApiClient {
+  /**
+   * Materialize a source-verified benchmark execution recipe
+   *
+   * Resolves typed bindings into the pinned benchmark's native stages, artifacts, metrics, and launch-driver commitments without executing the external repository.
+   */
+  public recipe<ThrowOnError extends boolean = false>(
+    parameters: {
+      benchmark: string
+      directory?: string
+      recipeID?: string
+      bindings?: {
+        [key: string]: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "benchmark" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "recipeID" },
+            { in: "body", key: "bindings" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessBenchmarkRecipeResponses,
+      HarnessBenchmarkRecipeErrors,
+      ThrowOnError
+    >({
+      url: "/harness/benchmarks/{benchmark}/recipe",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Audit extends HeyApiClient {
   /**
    * Initialize an evaluator-owned active audit
@@ -4072,6 +4121,8 @@ export class Launch extends HeyApiClient {
           entrypoint: string
           commandSHA256: string
           environmentSHA256: string
+          recipeSHA256?: string
+          driverSHA256?: string
         }
         dataset: {
           name: string
@@ -4987,6 +5038,8 @@ export class Harness extends HeyApiClient {
           entrypoint: string
           commandSHA256: string
           environmentSHA256: string
+          recipeSHA256?: string
+          driverSHA256?: string
         }
         dataset: {
           name: string
@@ -5002,6 +5055,12 @@ export class Harness extends HeyApiClient {
           artifactSHA256: string
           expectedScore?: number
           tolerance?: number
+        }
+      }
+      recipe?: {
+        recipeID: string
+        bindings: {
+          [key: string]: string
         }
       }
       integrity?: {
@@ -5176,6 +5235,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "orchestration" },
             { in: "body", key: "audit" },
             { in: "body", key: "launch" },
+            { in: "body", key: "recipe" },
             { in: "body", key: "integrity" },
             { in: "body", key: "simulation" },
             { in: "body", key: "evaluatorAudit" },
@@ -5423,6 +5483,11 @@ export class Harness extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _benchmark?: Benchmark
+  get benchmark(): Benchmark {
+    return (this._benchmark ??= new Benchmark({ client: this.client }))
   }
 
   private _audit?: Audit

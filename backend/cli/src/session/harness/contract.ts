@@ -3,6 +3,7 @@ import z from "zod"
 import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
 import { HarnessPack } from "./pack"
+import { HarnessRecipe } from "./recipe"
 
 export namespace HarnessContract {
   export const Profile = z.enum(["react", "optimize", "reproduce", "theory", "numerical", "training", "forecast"])
@@ -145,8 +146,14 @@ export namespace HarnessContract {
           entrypoint: z.string().min(1).max(1_000),
           commandSHA256: Hash,
           environmentSHA256: Hash,
+          recipeSHA256: Hash.optional(),
+          driverSHA256: Hash.optional(),
         })
-        .strict(),
+        .strict()
+        .refine(
+          (value) => (value.recipeSHA256 === undefined) === (value.driverSHA256 === undefined),
+          "Recipe and native-driver hashes must be declared together",
+        ),
       dataset: z
         .object({
           name: z.string().min(1).max(200),
@@ -397,6 +404,7 @@ export namespace HarnessContract {
       orchestration: Orchestration.optional(),
       audit: Audit.optional(),
       launch: Launch.optional(),
+      recipe: HarnessRecipe.Materialized.optional(),
       integrity: Integrity.optional(),
       simulation: Simulation.optional(),
       evaluatorAudit: EvaluatorAudit.optional(),
@@ -509,6 +517,33 @@ export namespace HarnessContract {
           code: "custom",
           path: ["launch", "baseline", "expectedScore"],
           message: "Numeric benchmark launches require a replayable baseline score and tolerance",
+        })
+      }
+      if (value.recipe && !value.launch) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["recipe"],
+          message: "A materialized benchmark recipe requires a bound launch protocol",
+        })
+      }
+      if (
+        value.recipe &&
+        (value.recipe.benchmark !== value.benchmark.name ||
+          value.recipe.entrypoint !== value.launch?.runner.entrypoint ||
+          value.recipe.recipeSHA256 !== value.launch?.runner.recipeSHA256 ||
+          value.recipe.driverSHA256 !== value.launch?.runner.driverSHA256)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["recipe"],
+          message: "Materialized benchmark recipe does not match the bound native launch driver",
+        })
+      }
+      if (!value.recipe && value.launch?.runner.recipeSHA256) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["launch", "runner", "recipeSHA256"],
+          message: "A recipe-bound launch must retain its materialized recipe",
         })
       }
       if (

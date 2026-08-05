@@ -1,21 +1,41 @@
 import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessLaunch } from "../../src/session/harness/launch"
 import { HarnessBenchmark } from "../../src/session/harness/benchmark"
+import { HarnessRecipe } from "../../src/session/harness/recipe"
 
 export const harnessHash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
 
-export function launchProtocol(key = "official") {
+export function recipeSelection(key: HarnessRecipe.Verified): HarnessRecipe.Selection {
+  const bindings = {
+    bixbench: {},
+    pde: { dataRoot: "data", datasetStem: "1D_Advection_Sols_beta0.1" },
+    chembench: { runID: "fixture-run" },
+    mle: {
+      competitionList: "fixtures/competitions.txt",
+      dataDir: "fixtures/data",
+      submissionManifest: "fixtures/submissions.jsonl",
+      outputDir: "fixtures/results",
+    },
+    researchclaw: { config: "eval_configs/fixture.yaml" },
+  } satisfies Record<HarnessRecipe.Verified, Record<string, string>>
+  return HarnessRecipe.Selection.parse({ recipeID: HarnessRecipe.catalog[key].id, bindings: bindings[key] })
+}
+
+export function launchProtocol(key = "official", selection?: HarnessRecipe.Selection) {
   const id = HarnessBenchmark.Id.safeParse(key)
   const benchmark = id.success ? HarnessBenchmark.catalog[id.data] : undefined
   const source = benchmark?.source.status === "methodology_only" ? undefined : benchmark?.source
+  const recipe = selection ? HarnessRecipe.materialize(key, selection) : undefined
   return HarnessContract.Launch.parse({
     protocolVersion: "benchmark-launch-v1",
     runner: {
       repository: source?.repository ?? `https://example.org/${key}/benchmark.git`,
       revision: source?.revision ?? harnessHash(`${key}-runner`).slice(0, 40),
-      entrypoint: "benchmark/run.py",
+      entrypoint: recipe?.entrypoint ?? "benchmark/run.py",
       commandSHA256: harnessHash(`${key}-command`),
       environmentSHA256: harnessHash(`${key}-environment`),
+      recipeSHA256: recipe?.recipeSHA256,
+      driverSHA256: recipe?.driverSHA256,
     },
     dataset: {
       name: `${key}-dataset`,

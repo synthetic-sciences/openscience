@@ -23,6 +23,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 15. **A benchmark name is not a runnable integration.** Held-out and release runs must pin an official runner revision, environment, dataset manifest, task manifest, evaluator artifact, and replayable baseline. Search and orchestration remain blocked until the external evaluator proves the complete launch suite and records a content-addressed readiness receipt.
 16. **Official means source-identical.** Every named open benchmark adapter records its official repository at an exact commit and, when published separately, its dataset source. A launch using a fork, replacement runner, or replacement dataset is rejected rather than reported under the official benchmark name. Methodology families are labeled as such, and public reproduction subsets cannot be bound as hidden or release runs.
 17. **A clean score requires a clean execution trace.** A strict runtime-integrity protocol commits its validator, trace schema, assigned model, forbidden model artifacts, independent contamination/API/lookup auditors, and hidden canaries before execution. Final success requires a content-addressed receipt for the exact run or candidate; OpenScience derives the six gates and rejects missing, failed, substituted, post-hoc, or cross-subject receipts.
+18. **Native interfaces stay native.** A source-verified execution recipe records the official environment, entrypoint, ordered stages, typed bindings, produced artifacts, score selectors, and known limitations. CLI benchmarks remain argv contracts and Python libraries remain Python API contracts. Held-out or release runs for a verified recipe must bind its exact recipe and launch-driver digests; an unrelated generic command cannot pose as the official benchmark.
 
 ## System boundary
 
@@ -30,6 +31,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 flowchart LR
     O["Benchmark orchestrator\nsecret evaluator capability + hidden tests"]
     L["Official benchmark launcher\npinned runner + data + baseline"]
+    N["Source-verified native recipe\ntyped bindings + artifacts + metric"]
     C["Immutable run contract"]
     A["OpenScience agent session\nprofile + domain packs"]
     Q["Conditional scientific coalition\npersisted role DAG + bounded workers"]
@@ -48,6 +50,8 @@ flowchart LR
 
     O -->|bind| C
     O -->|authenticated launch checks| L
+    O -->|materialize exact native interface| N
+    N -->|recipe + driver commitments| L
     L -->|readiness receipt| C
     C --> A
     A --> Q
@@ -120,11 +124,13 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
   "launch": {
     "protocolVersion": "benchmark-launch-v1",
     "runner": {
-      "repository": "https://github.com/owner/official-benchmark",
-      "revision": "0123456789abcdef0123456789abcdef01234567",
-      "entrypoint": "benchmark/run.py",
+      "repository": "https://github.com/openai/mle-bench",
+      "revision": "507f92e1138bb6e40dac5c6ee7a6758e6424bf97",
+      "entrypoint": "mlebench/cli.py",
       "commandSHA256": "1111111111111111111111111111111111111111111111111111111111111111",
-      "environmentSHA256": "2222222222222222222222222222222222222222222222222222222222222222"
+      "environmentSHA256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "recipeSHA256": "abababababababababababababababababababababababababababababababab",
+      "driverSHA256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
     },
     "dataset": {
       "name": "official-held-out-data",
@@ -140,6 +146,15 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
       "artifactSHA256": "6666666666666666666666666666666666666666666666666666666666666666",
       "expectedScore": 0.5,
       "tolerance": 1e-9
+    }
+  },
+  "recipe": {
+    "recipeID": "mlebench-official-v1",
+    "bindings": {
+      "competitionList": "manifests/competitions.txt",
+      "dataDir": "datasets/mlebench",
+      "submissionManifest": "submissions/run.jsonl",
+      "outputDir": "results/grading"
     }
   },
   "integrity": {
@@ -239,6 +254,10 @@ Catalog entries distinguish three source states:
 - `official_subset` identifies a public reproduction subset, its exact scope, and its integrity files; and
 - `methodology_only` makes explicit that the adapter is a reusable scientific method, not an official benchmark integration.
 
+They separately distinguish recipe readiness: `source_verified` means the native driver, environment anchors, artifacts, and metric selectors have been inspected at the pinned revision; `pending_source_verification` means the source is pinned but the executable contract is not yet trusted; and `not_applicable` is reserved for methodology families without one official runner. OpenScience currently publishes source-verified recipes for BixBench, PDEBench, ChemBench, MLE-bench, and ResearchClawBench. This status is deliberately narrower than “runnable”: real data, credentials, evaluator isolation, replay artifacts, and baseline evidence still have to pass launch readiness.
+
+Materialize a verified recipe with `POST /harness/benchmarks/:benchmark/recipe`. Bindings are typed as confined relative paths, identifiers, integers, or closed choices; stage inputs, outputs, and artifacts are checkout-relative, while a driver may explicitly document a path relative to its confined working directory. The materializer rejects missing or undeclared keys, absolute and escaping paths, invalid identifiers, out-of-range integers, substituted choices, and recipe/benchmark mismatch. Its output preserves the official interface rather than flattening it: BixBench and MLE-bench use argv stages, ChemBench uses `ChemBenchmark` Python calls, PDEBench preserves its exact one-dimensional advection FNO Hydra overrides, derived checkpoint/result names, and six evaluator metrics, and ResearchClawBench preserves its batch CLI plus workspace judge output.
+
 For a named official adapter, the bound runner repository and commit must match the catalog pin, and a separately published dataset must match its catalog source. OpenScience deliberately rejects source-substituted launches. GeneBench-Pro is currently cataloged as the 10-case public package out of 129 total cases, so it can support validation and reproduction but cannot be labeled as a hidden or release benchmark run.
 
 Use the bundled `audit-benchmark-sources` skill to maintain those records. Its executable auditor fetches every pinned commit without blobs, verifies the catalog-declared runner/evaluator paths at that commit, resolves the current default head, probes separately published dataset endpoints, validates public-subset cardinality, and emits a content-addressed report. An unreachable pin, missing required path, unresolved head, unavailable dataset, or future-dated check fails the audit. A newer upstream head or an old check date creates a review item but never moves a trusted pin automatically. Updating a pin requires inspecting upstream changes and rerunning `verify-benchmark-launch` against the proposed revision.
@@ -252,7 +271,7 @@ Use the bundled `audit-benchmark-sources` skill to maintain those records. Its e
 - artifact round-trip; and
 - pinned baseline replay.
 
-Use the bundled `verify-benchmark-launch` skill from the evaluator-owned launcher to inspect the real Git checkout, environment locks, dataset and task bytes, evaluator bytes, hidden-mount canaries, replay outputs, serialization round trip, and public baseline. Bind the report's `protocol` before agent execution, then submit its `validator`, `checks`, `baselineScore`, and evidence. The contract pins the validator script SHA-256; the receipt is rejected if its exact executable does not match.
+Use the bundled `verify-benchmark-launch` skill from the evaluator-owned launcher to inspect the real Git checkout, environment locks, dataset and task bytes, evaluator bytes, hidden-mount canaries, replay outputs, serialization round trip, and public baseline. For a source-verified adapter, give the validator the exact materialized recipe artifact; it independently verifies the artifact bytes, native launch-stage driver digest, recipe commitment, and entrypoint. Bind the report's `protocol` before agent execution, then submit its `validator`, `checks`, `baselineScore`, and evidence. The contract pins the validator script SHA-256; the receipt is rejected if its exact executable does not match.
 
 OpenScience derives the pass state. It rejects a partial or substituted check set, a substituted validator, and recomputes baseline error against the frozen tolerance. Failed attempts remain in the append-only journal. Receipts bind the full contract fingerprint, evaluator identity, protocol, validator and manifest identity, evidence, evaluator timestamp, and server-owned record time into their SHA-256 identity; edited storage fails validation. A separate content-derived submission ID preserves retry idempotence without trusting the submitter's clock. The bearer capability never enters the receipt.
 
@@ -477,6 +496,7 @@ Every adapter is version-agnostic. A development/validation run must still bind 
 | Method | Route                                                | Purpose                                                       |
 | ------ | ---------------------------------------------------- | ------------------------------------------------------------- |
 | `GET`  | `/harness/benchmarks`                                | List adapter manifests                                        |
+| `POST` | `/harness/benchmarks/:benchmark/recipe`              | Materialize a typed source-verified native execution recipe   |
 | `POST` | `/harness/runs`                                      | Bind the immutable run and hashed evaluator capability        |
 | `POST` | `/harness/runs/:sessionID/orchestration`             | Select and initialize a persisted scientific role DAG         |
 | `GET`  | `/harness/runs/:sessionID/orchestration`             | Resume the current orchestration state                        |

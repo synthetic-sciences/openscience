@@ -41,10 +41,37 @@ describe("/harness routes", () => {
       repository: "https://github.com/openai/mle-bench",
       revision: "507f92e1138bb6e40dac5c6ee7a6758e6424bf97",
     })
+    expect(catalog.find((item) => item.id === "mle")?.recipe).toEqual({
+      status: "source_verified",
+      id: "mlebench-official-v1",
+      schemaVersion: 1,
+      checkedAt: "2026-08-05",
+    })
     expect(catalog.find((item) => item.id === "genebench")?.source).toMatchObject({
       status: "official_subset",
       publicTasks: 10,
       totalTasks: 129,
+    })
+
+    const recipe = await app.request("/benchmarks/mle/recipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipeID: "mlebench-official-v1",
+        bindings: {
+          competitionList: "fixtures/competitions.txt",
+          dataDir: "fixtures/data",
+          submissionManifest: "fixtures/submissions.jsonl",
+          outputDir: "fixtures/results",
+        },
+      }),
+    })
+    expect(recipe.status).toBe(200)
+    expect(await recipe.json()).toMatchObject({
+      benchmark: "mle",
+      recipeID: "mlebench-official-v1",
+      entrypoint: "mlebench/cli.py",
+      stages: [{ id: "prepare" }, { id: "grade" }],
     })
 
     const bound = await app.request("/runs", {

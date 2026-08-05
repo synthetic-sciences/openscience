@@ -8,6 +8,7 @@ import { HarnessContract } from "./contract"
 import { HarnessEvaluation } from "./evaluation"
 import { HarnessMemory } from "./memory"
 import { HarnessPack } from "./pack"
+import { HarnessRecipe } from "./recipe"
 import { HarnessSearch } from "./search"
 
 export namespace HarnessAdapter {
@@ -35,6 +36,7 @@ export namespace HarnessAdapter {
       orchestration: HarnessContract.Orchestration.optional(),
       audit: HarnessContract.Audit.optional(),
       launch: HarnessContract.Launch.optional(),
+      recipe: HarnessRecipe.Selection.optional(),
       integrity: HarnessContract.Integrity.optional(),
       simulation: HarnessContract.Simulation.optional(),
       evaluatorAudit: z
@@ -111,6 +113,9 @@ export namespace HarnessAdapter {
           path: ["launch"],
           message: "Held-out and release runs require a pinned official benchmark launch protocol",
         })
+      }
+      if (value.recipe && !value.launch) {
+        ctx.addIssue({ code: "custom", path: ["recipe"], message: "A benchmark recipe requires a launch protocol" })
       }
       if (value.evaluatorAudit && value.evaluatorAudit.token === value.evaluator.token) {
         ctx.addIssue({
@@ -246,6 +251,7 @@ export namespace HarnessAdapter {
   export async function bind(input: Task) {
     const task = Task.parse(input)
     const benchmark = HarnessBenchmark.resolve(task.benchmark)
+    const recipe = task.recipe ? HarnessRecipe.materialize(benchmark.id, task.recipe) : undefined
     const profile = task.profile ?? benchmark.profile
     if (!benchmark.profiles.includes(profile)) {
       throw new Error(`Profile ${profile} is not valid for the ${benchmark.id} adapter`)
@@ -261,6 +267,13 @@ export namespace HarnessAdapter {
         `${benchmark.title} exposes only ${benchmark.source.publicTasks} public tasks and cannot represent the ${benchmark.source.totalTasks}-task hidden benchmark`,
       )
     }
+    if (
+      benchmark.recipe.status === "source_verified" &&
+      (task.split === "held_out" || task.split === "release") &&
+      !recipe
+    ) {
+      throw new Error(`Held-out and release runs for ${benchmark.title} require its source-verified execution recipe`)
+    }
     if (task.launch && benchmark.source.status !== "methodology_only") {
       if (
         repository(task.launch.runner.repository) !== repository(benchmark.source.repository) ||
@@ -271,6 +284,14 @@ export namespace HarnessAdapter {
       if (benchmark.source.dataset && repository(task.launch.dataset.source) !== repository(benchmark.source.dataset)) {
         throw new Error(`Benchmark launch does not match the catalog-pinned official dataset source`)
       }
+    }
+    if (
+      recipe &&
+      (task.launch?.runner.entrypoint !== recipe.entrypoint ||
+        task.launch.runner.recipeSHA256 !== recipe.recipeSHA256 ||
+        task.launch.runner.driverSHA256 !== recipe.driverSHA256)
+    ) {
+      throw new Error(`Benchmark launch does not match the materialized source-verified native driver`)
     }
     const packs = [...benchmark.packs, ...task.extraPacks].filter((pack, index, items) => items.indexOf(pack) === index)
     if (task.simulation && !packs.some((pack) => ["physics", "pde", "chemistry"].includes(pack))) {
@@ -298,6 +319,7 @@ export namespace HarnessAdapter {
       orchestration: task.orchestration,
       audit: task.audit,
       launch: task.launch,
+      recipe,
       integrity: task.integrity,
       simulation: task.simulation,
       evaluatorAudit: task.evaluatorAudit?.protocol,

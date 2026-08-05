@@ -13,6 +13,7 @@ import { HarnessLaunch } from "@/session/harness/launch"
 import { HarnessIntegrity } from "@/session/harness/integrity"
 import { HarnessOrchestrator } from "@/session/harness/orchestrator"
 import { HarnessReport } from "@/session/harness/report"
+import { HarnessRecipe } from "@/session/harness/recipe"
 import { HarnessSimulation } from "@/session/harness/simulation"
 import { HarnessSkill } from "@/session/harness/skill"
 import { errors } from "../error"
@@ -42,6 +43,25 @@ export const HarnessRoutes = lazy(() =>
         },
       }),
       (c) => c.json(Object.values(HarnessBenchmark.catalog)),
+    )
+    .post(
+      "/benchmarks/:benchmark/recipe",
+      describeRoute({
+        summary: "Materialize a source-verified benchmark execution recipe",
+        description:
+          "Resolves typed bindings into the pinned benchmark's native stages, artifacts, metrics, and launch-driver commitments without executing the external repository.",
+        operationId: "harness.benchmark.recipe",
+        responses: {
+          200: {
+            description: "Immutable source-verified benchmark recipe",
+            content: { "application/json": { schema: resolver(HarnessRecipe.Materialized) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ benchmark: z.string().min(1).max(120) })),
+      validator("json", HarnessRecipe.Selection),
+      (c) => c.json(HarnessRecipe.materialize(c.req.valid("param").benchmark, c.req.valid("json"))),
     )
     .post(
       "/audits",

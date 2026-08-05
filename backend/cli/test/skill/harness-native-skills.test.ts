@@ -102,6 +102,21 @@ async function launchFixture() {
     files.map(async (name) => ({ path: name, sha256: await fileHash(path.join(workspace, name)) })),
   )
   const command = ["python", "benchmark/run.py", "--task", "task-17"]
+  const driver = { kind: "argv", entrypoint: "benchmark/run.py", cwd: ".", argv: command }
+  const recipe = path.join(dir, "recipe.json")
+  const recipeSHA256 = digest({ id: "fixture-official-v1" })
+  const driverSHA256 = digest(driver)
+  await Bun.write(
+    recipe,
+    JSON.stringify({
+      schemaVersion: 1,
+      recipeSHA256,
+      driverSHA256,
+      entrypoint: "benchmark/run.py",
+      launchStage: "run",
+      stages: [{ id: "run", driver }],
+    }),
+  )
   const manifest = path.join(dir, "launch.json")
   await Bun.write(
     manifest,
@@ -115,6 +130,12 @@ async function launchFixture() {
         entrypoint: "benchmark/run.py",
         command,
         commandSHA256: digest(command),
+        recipe: {
+          artifact: recipe,
+          artifactSHA256: await fileHash(recipe),
+          recipeSHA256,
+          driverSHA256,
+        },
         environment: { files, sha256: digest(locks.toSorted((left, right) => left.path.localeCompare(right.path))) },
       },
       dataset: {
@@ -153,7 +174,7 @@ async function launchFixture() {
       },
     }),
   )
-  return { dir, manifest, results }
+  return { dir, manifest, recipe, results }
 }
 
 test("active-failure-audit builds an opaque committed probe manifest", async () => {
@@ -536,6 +557,8 @@ test("verify-benchmark-launch validates real Git state and replay artifacts", as
       ["baseline_replay", "passed"],
     ])
     expect(report.protocol.validatorSHA256).toBe(report.validator.scriptSHA256)
+    expect(report.protocol.runner.recipeSHA256).toMatch(/^[0-9a-f]{64}$/)
+    expect(report.protocol.runner.driverSHA256).toMatch(/^[0-9a-f]{64}$/)
   } finally {
     await fs.rm(fixture.dir, { recursive: true, force: true })
   }
@@ -554,6 +577,25 @@ test("verify-benchmark-launch fails a nondeterministic official replay", async (
     expect(report.status).toBe("failed")
     expect(report.checks.find((item: { id: string }) => item.id === "deterministic_replay").status).toBe("failed")
     expect(report.failures).toContain("deterministic_replay:replay-mismatch")
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
+test("verify-benchmark-launch rejects a substituted native recipe driver", async () => {
+  const fixture = await launchFixture()
+  try {
+    const recipe = JSON.parse(await Bun.file(fixture.recipe).text())
+    recipe.stages[0].driver.argv.push("--substituted")
+    await Bun.write(fixture.recipe, JSON.stringify(recipe))
+    const result = await run("research/verify-benchmark-launch/scripts/validate_launch.py", [
+      "validate",
+      fixture.manifest,
+    ])
+    expect(result.code).toBe(1)
+    const report = JSON.parse(result.stdout)
+    expect(report.checks.find((item: { id: string }) => item.id === "locked_environment").status).toBe("failed")
+    expect(report.failures).toContain("locked_environment:command-environment-or-recipe-mismatch")
   } finally {
     await fs.rm(fixture.dir, { recursive: true, force: true })
   }

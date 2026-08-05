@@ -211,6 +211,41 @@ def validate(args: argparse.Namespace) -> int:
     if not isinstance(command, list) or not command or any(not isinstance(item, str) or not item for item in command):
         fail("runner.command must be a non-empty string array")
     command_hash = expected_hash(runner.get("commandSHA256"), "runner.commandSHA256")
+    native = runner.get("recipe")
+    recipe_hash = None
+    driver_hash = None
+    native_ok = True
+    native_evidence = []
+    if native is not None:
+        native = mapping(native, "runner.recipe")
+        native_artifact = regular(root(base, native.get("artifact"), "runner.recipe.artifact"), "recipe artifact")
+        native_artifact_hash = expected_hash(native.get("artifactSHA256"), "runner.recipe.artifactSHA256")
+        recipe_hash = expected_hash(native.get("recipeSHA256"), "runner.recipe.recipeSHA256")
+        driver_hash = expected_hash(native.get("driverSHA256"), "runner.recipe.driverSHA256")
+        native_data = mapping(json.loads(native_artifact.read_text(encoding="utf-8")), "recipe artifact")
+        stages = native_data.get("stages")
+        launch_stage = native_data.get("launchStage")
+        launch_driver = None
+        if isinstance(stages, list):
+            for stage in stages:
+                if isinstance(stage, dict) and stage.get("id") == launch_stage:
+                    launch_driver = stage.get("driver")
+                    break
+        actual_native_artifact_hash = file_hash(native_artifact)
+        actual_driver_hash = digest(launch_driver) if isinstance(launch_driver, dict) else ""
+        native_ok = (
+            actual_native_artifact_hash == native_artifact_hash
+            and native_data.get("schemaVersion") == 1
+            and native_data.get("recipeSHA256") == recipe_hash
+            and native_data.get("driverSHA256") == driver_hash
+            and native_data.get("entrypoint") == runner.get("entrypoint")
+            and actual_driver_hash == driver_hash
+        )
+        native_evidence = [
+            f"recipe-artifact-sha256:{actual_native_artifact_hash}",
+            f"recipe-sha256:{recipe_hash}",
+            f"driver-sha256:{actual_driver_hash}",
+        ]
     environment = mapping(runner.get("environment"), "runner.environment")
     files = environment.get("files")
     if not isinstance(files, list) or not files or any(not isinstance(item, str) or not item for item in files):
@@ -320,10 +355,10 @@ def validate(args: argparse.Namespace) -> int:
         check("clean_checkout", clean, [f"git:{head}", f"origin:{repository(origin)}"], failures, "git-state-mismatch"),
         check(
             "locked_environment",
-            actual_command_hash == command_hash and actual_environment_hash == environment_hash,
-            [f"command-sha256:{actual_command_hash}", f"environment-sha256:{actual_environment_hash}"],
+            actual_command_hash == command_hash and actual_environment_hash == environment_hash and native_ok,
+            [f"command-sha256:{actual_command_hash}", f"environment-sha256:{actual_environment_hash}", *native_evidence],
             failures,
-            "command-or-environment-mismatch",
+            "command-environment-or-recipe-mismatch",
         ),
         check(
             "task_manifest_load",
@@ -405,6 +440,9 @@ def validate(args: argparse.Namespace) -> int:
             "tolerance": float(tolerance),
         },
     }
+    if recipe_hash is not None and driver_hash is not None:
+        protocol["runner"]["recipeSHA256"] = recipe_hash
+        protocol["runner"]["driverSHA256"] = driver_hash
     report = {
         "schemaVersion": 1,
         "protocol": protocol,

@@ -83,6 +83,30 @@ export namespace HarnessBenchmark {
     })
   export type Source = z.infer<typeof Source>
 
+  export const Recipe = z.discriminatedUnion("status", [
+    z
+      .object({
+        status: z.literal("source_verified"),
+        id: z.string().regex(/^[a-z][a-z0-9-]*-official-v1$/),
+        schemaVersion: z.literal(1),
+        checkedAt: Date,
+      })
+      .strict(),
+    z
+      .object({
+        status: z.literal("pending_source_verification"),
+        reason: z.string().min(1).max(1_000),
+      })
+      .strict(),
+    z
+      .object({
+        status: z.literal("not_applicable"),
+        reason: z.string().min(1).max(1_000),
+      })
+      .strict(),
+  ])
+  export type Recipe = z.infer<typeof Recipe>
+
   export const Manifest = z
     .object({
       id: Id,
@@ -94,6 +118,7 @@ export namespace HarnessBenchmark {
       packs: z.array(HarnessPack.Id),
       execution: z.literal("external_runner_required"),
       source: Source,
+      recipe: Recipe,
       task: z.string().min(1),
     })
     .strict()
@@ -110,10 +135,31 @@ export namespace HarnessBenchmark {
     })
   export type Manifest = z.infer<typeof Manifest>
 
-  const item = (input: Omit<Manifest, "execution">) =>
-    Manifest.parse({ ...input, execution: "external_runner_required" })
-
   const checkedAt = "2026-08-05"
+  const recipes = {
+    bixbench: "bixbench-official-v1",
+    pde: "pdebench-official-v1",
+    chembench: "chembench-official-v1",
+    mle: "mlebench-official-v1",
+    researchclaw: "researchclawbench-official-v1",
+  } as const
+  const item = (input: Omit<Manifest, "execution" | "recipe">) => {
+    const id = input.id as keyof typeof recipes
+    const recipe = recipes[id]
+      ? { status: "source_verified" as const, id: recipes[id], schemaVersion: 1 as const, checkedAt }
+      : input.source.status === "methodology_only"
+        ? {
+            status: "not_applicable" as const,
+            reason: "This methodology adapter has no single official external runner.",
+          }
+        : {
+            status: "pending_source_verification" as const,
+            reason:
+              "The official source is pinned, but its native driver and score-artifact recipe are not yet verified.",
+          }
+    return Manifest.parse({ ...input, execution: "external_runner_required", recipe })
+  }
+
   const source = (repository: string, revision: string, homepage: string, requiredPaths: string[], dataset?: string) =>
     Source.parse({ status: "official_open", repository, revision, homepage, requiredPaths, dataset, checkedAt })
   const subset = (input: Omit<Extract<Source, { status: "official_subset" }>, "status" | "checkedAt">) =>
@@ -144,7 +190,15 @@ export namespace HarnessBenchmark {
         "https://github.com/Future-House/BixBench",
         "49311180bdacb324c596f2e07596c126f2004008",
         "https://arxiv.org/abs/2503.00096",
-        ["bixbench/graders.py", "scripts/run_agentic.sh"],
+        [
+          "pyproject.toml",
+          "uv.lock",
+          "bixbench/graders.py",
+          "bixbench/generate_trajectories.py",
+          "bixbench/postprocessing.py",
+          "bixbench/run_configuration/v1.5_paper_results.yaml",
+          "scripts/run_agentic.sh",
+        ],
         "https://huggingface.co/datasets/futurehouse/BixBench",
       ),
       task: "Computational biology analysis with reproducible data, code, and biological validation.",
@@ -220,7 +274,13 @@ export namespace HarnessBenchmark {
         "https://github.com/pdebench/PDEBench",
         "4ff3e3a4aa1561721b5571fa3a048a0a463e0568",
         "https://github.com/pdebench/PDEBench",
-        ["pdebench/models"],
+        [
+          "pyproject.toml",
+          "pdebench/models/train_models_forward.py",
+          "pdebench/models/metrics.py",
+          "pdebench/models/run_forward_1D.sh",
+          "pdebench/models/config/args/config_Adv.yaml",
+        ],
       ),
       task: "Numerical PDE work with exact problem statements, convergence, stability, and reference checks.",
     }),
@@ -236,7 +296,8 @@ export namespace HarnessBenchmark {
         "https://github.com/lamalab-org/chembench",
         "45f8bad062fe552810c52be3a328d5da8597ed30",
         "https://www.chembench.org/",
-        ["src/chembench/evaluate.py"],
+        ["pyproject.toml", "src/chembench/evaluate.py", "src/chembench/metrics.py", "src/chembench/task.py"],
+        "https://huggingface.co/datasets/jablonkagroup/ChemBench",
       ),
       task: "Chemistry reasoning or prediction with identity, representation, conditions, and validity controls.",
     }),
@@ -269,7 +330,14 @@ export namespace HarnessBenchmark {
         "https://github.com/openai/mle-bench",
         "507f92e1138bb6e40dac5c6ee7a6758e6424bf97",
         "https://arxiv.org/abs/2410.07095",
-        ["mlebench/grade.py", "environment/grading_server.py"],
+        [
+          "pyproject.toml",
+          "mlebench/cli.py",
+          "mlebench/grade.py",
+          "mlebench/grade_helpers.py",
+          "experiments/aggregate_grading_reports.py",
+          "environment/grading_server.py",
+        ],
       ),
       task: "Iterative machine-learning engineering against an immutable held-out evaluator and budget.",
     }),
@@ -334,7 +402,13 @@ export namespace HarnessBenchmark {
         "https://github.com/InternScience/ResearchClawBench",
         "595f318eae447b20c440fe4e56cdb62c0c06327e",
         "https://internscience.github.io/ResearchClawBench-Home/",
-        ["evaluation/score.py", "evaluation/run_task.py"],
+        [
+          "evaluation/requirements.txt",
+          "evaluation/cli_eval.py",
+          "evaluation/score.py",
+          "evaluation/run_task.py",
+          "evaluation/config.py",
+        ],
         "https://huggingface.co/datasets/InternScience/ResearchClawBench",
       ),
       task: "General research execution with benchmark-specific packs added without silently changing the evaluator.",

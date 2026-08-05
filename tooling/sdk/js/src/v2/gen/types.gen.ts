@@ -7539,11 +7539,144 @@ export type HarnessBenchmarksResponses = {
           status: "methodology_only"
           reason: string
         }
+    recipe:
+      | {
+          status: "source_verified"
+          id: string
+          schemaVersion: 1
+          checkedAt: string
+        }
+      | {
+          status: "pending_source_verification"
+          reason: string
+        }
+      | {
+          status: "not_applicable"
+          reason: string
+        }
     task: string
   }>
 }
 
 export type HarnessBenchmarksResponse = HarnessBenchmarksResponses[keyof HarnessBenchmarksResponses]
+
+export type HarnessBenchmarkRecipeData = {
+  body?: {
+    recipeID: string
+    bindings: {
+      [key: string]: string
+    }
+  }
+  path: {
+    benchmark: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/benchmarks/{benchmark}/recipe"
+}
+
+export type HarnessBenchmarkRecipeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessBenchmarkRecipeError = HarnessBenchmarkRecipeErrors[keyof HarnessBenchmarkRecipeErrors]
+
+export type HarnessBenchmarkRecipeResponses = {
+  /**
+   * Immutable source-verified benchmark recipe
+   */
+  200: {
+    schemaVersion: 1
+    recipeID: string
+    benchmark:
+      | "statistics"
+      | "bixbench"
+      | "lifescience"
+      | "genebench"
+      | "biomni"
+      | "physics"
+      | "pde"
+      | "chembench"
+      | "matscibench"
+      | "mle"
+      | "posttrain"
+      | "ale"
+      | "weather"
+      | "researchclaw"
+      | "paperbench"
+      | "corebench"
+      | "scienceagentbench"
+      | "discoverybench"
+      | "scicode"
+      | "labbench"
+      | "sciagentarena"
+      | "ainsteinbench"
+      | "critpt"
+    recipeSHA256: string
+    bindingsSHA256: string
+    driverSHA256: string
+    entrypoint: string
+    bindings: {
+      [key: string]: string
+    }
+    environment: {
+      manager: "uv" | "pip" | "hatch" | "setuptools"
+      python: string
+      files: Array<string>
+    }
+    anchors: Array<string>
+    stages: Array<{
+      id: string
+      role: "prepare" | "execute" | "evaluate" | "aggregate"
+      driver:
+        | {
+            kind: "argv"
+            entrypoint: string
+            cwd: string | "."
+            argv: Array<string>
+          }
+        | {
+            kind: "python_api"
+            entrypoint: string
+            module: string
+            symbol: string
+            kwargs: {
+              [key: string]: string
+            }
+            runtimeInputs: Array<string>
+          }
+      inputs: Array<string>
+      outputs: Array<string>
+      environment: Array<string>
+    }>
+    launchStage: string
+    artifacts: Array<{
+      id: string
+      path: string
+      format: "json" | "jsonl" | "csv" | "pickle" | "directory"
+      producedBy: string
+      owner: "runner" | "evaluator"
+    }>
+    metrics: Array<{
+      name: string
+      artifact: string
+      selector: string
+      direction: "maximize" | "minimize" | "pass"
+      aggregation: "identity" | "mean" | "sum" | "count"
+    }>
+    limitations: Array<string>
+  }
+}
+
+export type HarnessBenchmarkRecipeResponse = HarnessBenchmarkRecipeResponses[keyof HarnessBenchmarkRecipeResponses]
 
 export type HarnessAuditInitializeData = {
   body?: {
@@ -8407,6 +8540,8 @@ export type HarnessLaunchRecordData = {
         entrypoint: string
         commandSHA256: string
         environmentSHA256: string
+        recipeSHA256?: string
+        driverSHA256?: string
       }
       dataset: {
         name: string
@@ -8580,6 +8715,8 @@ export type HarnessLaunchRecordResponses = {
         entrypoint: string
         commandSHA256: string
         environmentSHA256: string
+        recipeSHA256?: string
+        driverSHA256?: string
       }
       dataset: {
         name: string
@@ -8772,6 +8909,8 @@ export type HarnessLaunchReceiptResponses = {
         entrypoint: string
         commandSHA256: string
         environmentSHA256: string
+        recipeSHA256?: string
+        driverSHA256?: string
       }
       dataset: {
         name: string
@@ -10161,6 +10300,8 @@ export type HarnessBindData = {
         entrypoint: string
         commandSHA256: string
         environmentSHA256: string
+        recipeSHA256?: string
+        driverSHA256?: string
       }
       dataset: {
         name: string
@@ -10176,6 +10317,12 @@ export type HarnessBindData = {
         artifactSHA256: string
         expectedScore?: number
         tolerance?: number
+      }
+    }
+    recipe?: {
+      recipeID: string
+      bindings: {
+        [key: string]: string
       }
     }
     integrity?: {
@@ -10430,6 +10577,8 @@ export type HarnessBindResponses = {
         entrypoint: string
         commandSHA256: string
         environmentSHA256: string
+        recipeSHA256?: string
+        driverSHA256?: string
       }
       dataset: {
         name: string
@@ -10446,6 +10595,87 @@ export type HarnessBindResponses = {
         expectedScore?: number
         tolerance?: number
       }
+    }
+    recipe?: {
+      schemaVersion: 1
+      recipeID: string
+      benchmark:
+        | "statistics"
+        | "bixbench"
+        | "lifescience"
+        | "genebench"
+        | "biomni"
+        | "physics"
+        | "pde"
+        | "chembench"
+        | "matscibench"
+        | "mle"
+        | "posttrain"
+        | "ale"
+        | "weather"
+        | "researchclaw"
+        | "paperbench"
+        | "corebench"
+        | "scienceagentbench"
+        | "discoverybench"
+        | "scicode"
+        | "labbench"
+        | "sciagentarena"
+        | "ainsteinbench"
+        | "critpt"
+      recipeSHA256: string
+      bindingsSHA256: string
+      driverSHA256: string
+      entrypoint: string
+      bindings: {
+        [key: string]: string
+      }
+      environment: {
+        manager: "uv" | "pip" | "hatch" | "setuptools"
+        python: string
+        files: Array<string>
+      }
+      anchors: Array<string>
+      stages: Array<{
+        id: string
+        role: "prepare" | "execute" | "evaluate" | "aggregate"
+        driver:
+          | {
+              kind: "argv"
+              entrypoint: string
+              cwd: string | "."
+              argv: Array<string>
+            }
+          | {
+              kind: "python_api"
+              entrypoint: string
+              module: string
+              symbol: string
+              kwargs: {
+                [key: string]: string
+              }
+              runtimeInputs: Array<string>
+            }
+        inputs: Array<string>
+        outputs: Array<string>
+        environment: Array<string>
+      }>
+      launchStage: string
+      artifacts: Array<{
+        id: string
+        path: string
+        format: "json" | "jsonl" | "csv" | "pickle" | "directory"
+        producedBy: string
+        owner: "runner" | "evaluator"
+      }>
+      metrics: Array<{
+        name: string
+        artifact: string
+        selector: string
+        direction: "maximize" | "minimize" | "pass"
+        aggregation: "identity" | "mean" | "sum" | "count"
+      }>
+      limitations: Array<string>
     }
     integrity?: {
       protocolVersion: "benchmark-integrity-v1"
@@ -11030,6 +11260,8 @@ export type HarnessContractResponses = {
         entrypoint: string
         commandSHA256: string
         environmentSHA256: string
+        recipeSHA256?: string
+        driverSHA256?: string
       }
       dataset: {
         name: string
@@ -11046,6 +11278,87 @@ export type HarnessContractResponses = {
         expectedScore?: number
         tolerance?: number
       }
+    }
+    recipe?: {
+      schemaVersion: 1
+      recipeID: string
+      benchmark:
+        | "statistics"
+        | "bixbench"
+        | "lifescience"
+        | "genebench"
+        | "biomni"
+        | "physics"
+        | "pde"
+        | "chembench"
+        | "matscibench"
+        | "mle"
+        | "posttrain"
+        | "ale"
+        | "weather"
+        | "researchclaw"
+        | "paperbench"
+        | "corebench"
+        | "scienceagentbench"
+        | "discoverybench"
+        | "scicode"
+        | "labbench"
+        | "sciagentarena"
+        | "ainsteinbench"
+        | "critpt"
+      recipeSHA256: string
+      bindingsSHA256: string
+      driverSHA256: string
+      entrypoint: string
+      bindings: {
+        [key: string]: string
+      }
+      environment: {
+        manager: "uv" | "pip" | "hatch" | "setuptools"
+        python: string
+        files: Array<string>
+      }
+      anchors: Array<string>
+      stages: Array<{
+        id: string
+        role: "prepare" | "execute" | "evaluate" | "aggregate"
+        driver:
+          | {
+              kind: "argv"
+              entrypoint: string
+              cwd: string | "."
+              argv: Array<string>
+            }
+          | {
+              kind: "python_api"
+              entrypoint: string
+              module: string
+              symbol: string
+              kwargs: {
+                [key: string]: string
+              }
+              runtimeInputs: Array<string>
+            }
+        inputs: Array<string>
+        outputs: Array<string>
+        environment: Array<string>
+      }>
+      launchStage: string
+      artifacts: Array<{
+        id: string
+        path: string
+        format: "json" | "jsonl" | "csv" | "pickle" | "directory"
+        producedBy: string
+        owner: "runner" | "evaluator"
+      }>
+      metrics: Array<{
+        name: string
+        artifact: string
+        selector: string
+        direction: "maximize" | "minimize" | "pass"
+        aggregation: "identity" | "mean" | "sum" | "count"
+      }>
+      limitations: Array<string>
     }
     integrity?: {
       protocolVersion: "benchmark-integrity-v1"

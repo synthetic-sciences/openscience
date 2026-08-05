@@ -8,7 +8,7 @@ import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessDomain } from "../../src/session/harness/domain"
 import { HarnessEvaluation } from "../../src/session/harness/evaluation"
 import { HarnessSearch } from "../../src/session/harness/search"
-import { launchProtocol } from "../fixture/harness"
+import { launchProtocol, recipeSelection } from "../fixture/harness"
 
 const sessions = new Set<string>()
 const token = "benchmark-evaluator-capability-token-0000000000000000"
@@ -91,7 +91,11 @@ describe("benchmark adapters", () => {
     const paths = Object.values(HarnessBenchmark.catalog).flatMap((manifest) =>
       manifest.source.status === "methodology_only" ? [] : manifest.source.requiredPaths,
     )
-    expect(paths).toHaveLength(34)
+    expect(paths).toHaveLength(53)
+    const recipes = Object.values(HarnessBenchmark.catalog).map((manifest) => manifest.recipe.status)
+    expect(recipes.filter((status) => status === "source_verified")).toHaveLength(5)
+    expect(recipes.filter((status) => status === "pending_source_verification")).toHaveLength(15)
+    expect(recipes.filter((status) => status === "not_applicable")).toHaveLength(3)
   })
 
   test("resolves common benchmark spellings without fuzzy guessing", () => {
@@ -154,6 +158,40 @@ describe("benchmark adapters", () => {
         launch: launchProtocol("genebench"),
       }),
     ).rejects.toThrow("cannot represent the 129-task hidden benchmark")
+  })
+
+  test("binds the exact native recipe driver and rejects recipe or entrypoint substitution", async () => {
+    const recipe = recipeSelection("mle")
+    const launch = launchProtocol("mle", recipe)
+    const bound = await HarnessAdapter.bind({
+      ...task("mle", "adapter-native-recipe"),
+      split: "held_out",
+      launch,
+      recipe,
+    })
+    expect(bound.recipe).toMatchObject({
+      recipeID: "mlebench-official-v1",
+      entrypoint: "mlebench/cli.py",
+      recipeSHA256: launch.runner.recipeSHA256,
+      driverSHA256: launch.runner.driverSHA256,
+    })
+
+    await expect(
+      HarnessAdapter.bind({
+        ...task("mle", "adapter-native-recipe-missing"),
+        split: "held_out",
+        launch: launchProtocol("mle"),
+      }),
+    ).rejects.toThrow("source-verified execution recipe")
+
+    await expect(
+      HarnessAdapter.bind({
+        ...task("mle", "adapter-native-recipe-substituted"),
+        split: "held_out",
+        launch: { ...launch, runner: { ...launch.runner, entrypoint: "environment/grading_server.py" } },
+        recipe,
+      }),
+    ).rejects.toThrow("native driver")
   })
 
   test("requires the out-of-band evaluator capability and exact bound metric", async () => {
