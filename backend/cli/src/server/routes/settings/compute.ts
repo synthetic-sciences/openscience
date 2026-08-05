@@ -405,11 +405,8 @@ export namespace ComputeSettings {
   }
 
   export async function configureModal(filepath = path.join(os.homedir(), ".modal.toml")): Promise<Info> {
-    const file = await readModal(filepath)
+    const file = await modalFile(filepath)
     if (!file.found) throw new HTTPException(400, { message: "Modal config was not found at ~/.modal.toml." })
-    if (!file.token || !file.secret) {
-      throw new HTTPException(400, { message: "Modal config has no active profile with a token ID and secret." })
-    }
     const stored = await update((current) => {
       const existing = current.providers.modal
       current.providers.modal = {
@@ -420,7 +417,7 @@ export namespace ComputeSettings {
         last_used: existing?.last_used ?? null,
       }
     })
-    return view(stored, Promise.resolve({ found: true, ready: true }))
+    return view(stored, Promise.resolve(file))
   }
 
   export async function disconnectProvider(target: string): Promise<Info> {

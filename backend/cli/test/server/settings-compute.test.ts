@@ -188,14 +188,21 @@ test("configuring Modal migrates legacy compute defaults", async () => {
   })
 })
 
-test("Modal config discovery checks presence without resolving an inactive profile", async () => {
+test("Modal config discovery defers inactive profile resolution until an enabled operation", async () => {
   await using tmp = await tmpdir()
   const missing = path.join(tmp.path, ".modal.toml")
   expect(await ComputeSettings.modalFile(missing)).toEqual({ found: false, ready: false })
 
   await Bun.write(missing, '[default]\ntoken_id = "ak-id"\ntoken_secret = "as-secret"\n')
   expect(await ComputeSettings.modalFile(missing)).toEqual({ found: true, ready: true })
-  await expect(ComputeSettings.configureModal(missing)).rejects.toThrow("no active profile")
+  const configured = await ComputeSettings.configureModal(missing)
+  expect(configured.providers.find((item) => item.id === "modal")).toMatchObject({
+    connected: true,
+    enabled: true,
+    source: "modal_toml",
+  })
+  await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("invalid credentials")
+  await ComputeSettings.disconnectProvider("modal")
 })
 
 test("connecting a provider does not overwrite an explicit shell export", async () => {
