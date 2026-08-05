@@ -36,20 +36,36 @@ const mount = (view: () => JSX.Element) => {
 describe("file tabs", () => {
   test("always offers the Files tab and marks the active one", () => {
     const host = mount(() =>
-      subject.FileTabs({ open: ["train_lr.py"], active: "files", onSelect: () => {}, onClose: () => {} }),
+      subject.FileTabs({ open: ["train_lr.py"], active: undefined, onSelect: () => {}, onClose: () => {} }),
     )
 
     expect(host.querySelector('[data-tab="files"]')?.getAttribute("aria-selected")).toBe("true")
     expect(host.querySelector('[data-tab="train_lr.py"]')?.getAttribute("aria-selected")).toBe("false")
   })
 
+  // The browser is "no open file", not a reserved name: a file really can be
+  // called `files`, and a sentinel string would hand it the browser's own tab.
+  test("keeps the browser tab distinct from an open file that shares its name", () => {
+    const picked: Array<string | undefined> = []
+    const host = mount(() =>
+      subject.FileTabs({ open: ["files"], active: "files", onSelect: (id) => picked.push(id), onClose: () => {} }),
+    )
+    const tabs = [...host.querySelectorAll<HTMLButtonElement>("[data-tab]")]
+
+    expect(tabs.map((node) => node.getAttribute("aria-selected"))).toEqual(["false", "true"])
+
+    tabs[0]!.click()
+
+    expect(picked).toEqual([undefined])
+  })
+
   test("selecting and closing report separately, and closing does not select", () => {
-    const picked: string[] = []
+    const picked: Array<string | undefined> = []
     const closed: string[] = []
     const host = mount(() =>
       subject.FileTabs({
         open: ["train_lr.py"],
-        active: "files",
+        active: undefined,
         onSelect: (id) => picked.push(id),
         onClose: (id) => closed.push(id),
       }),
@@ -60,6 +76,23 @@ describe("file tabs", () => {
 
     expect(picked).toEqual(["train_lr.py"])
     expect(closed).toEqual(["train_lr.py"])
+  })
+
+  test("keeps close a sibling of the tab it closes, not a control inside it", () => {
+    // Nested interactive content is invalid, and the nested label folds into the
+    // parent's accessible name: the tab would announce as "train_lr.py Close
+    // train_lr.py", one control with two purposes.
+    const host = mount(() =>
+      subject.FileTabs({ open: ["train_lr.py"], active: undefined, onSelect: () => {}, onClose: () => {} }),
+    )
+    const tab = host.querySelector<HTMLElement>('[data-tab="train_lr.py"]')!
+    const close = host.querySelector<HTMLElement>('[data-tab-close="train_lr.py"]')!
+
+    expect(tab.contains(close)).toBe(false)
+    expect(tab.querySelector("button, [role='button']")).toBeNull()
+    expect(close.tagName).toBe("BUTTON")
+    expect(close.getAttribute("tabindex")).toBeNull()
+    expect(close.getAttribute("aria-label")).toBe("Close train_lr.py")
   })
 
   test("truncates a long filename in the middle so the extension survives", () => {
