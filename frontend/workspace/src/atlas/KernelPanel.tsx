@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createResource, onCleanup, type JSX } from "solid-js"
+import { For, Show, createMemo, createResource, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
@@ -8,7 +8,7 @@ import { useExecutionAuthority } from "./use-execution-authority"
 import { useKernelList } from "./use-kernel-list"
 import { KernelCard, type KernelAction } from "./KernelCard"
 
-type Response = { kernels: KernelStatus[] }
+type KernelsPayload = { kernels: KernelStatus[] }
 type ControlResponse = KernelStatus & { state_preserved?: boolean }
 
 const time = (value: number | null) => {
@@ -20,8 +20,17 @@ const time = (value: number | null) => {
   return `${Math.round(minutes / 60)}h ago`
 }
 
-export function KernelPanel(props: { onEnsureSession?: () => Promise<string | undefined> } = {}): JSX.Element {
-  const sdk = useSDK()
+type KernelPanelProps = {
+  onEnsureSession?: () => Promise<string | undefined>
+  // The transport is a prop so a poll-behavior test can mount the real
+  // component against a controlled response instead of a live SDK; the
+  // session SDK supplies it in the product. See HostStrip.tsx for the same
+  // seam.
+  request?: (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
+}
+
+export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
+  const transport = props.request ?? useSDK().request
   const params = useParams()
   const authority = useExecutionAuthority("kernel")
   const [view, setView] = createStore<{
@@ -44,14 +53,14 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
     language: "python",
   })
   const request = async <T,>(path: string, init?: RequestInit, query?: Record<string, string>) => {
-    const response = await sdk.request(path, init, query)
+    const response = await transport(path, init, query)
     if (response.ok) return response.json() as Promise<T>
     const detail = await response.text().catch(() => "")
     throw new Error(detail || `${response.status} ${response.statusText}`)
   }
   const load = () => {
     if (!params.id || params.id === "new") return Promise.resolve({ kernels: [] })
-    return request<Response>("/notebook/kernels", undefined, { sessionID: params.id }).then(
+    return request<KernelsPayload>("/notebook/kernels", undefined, { sessionID: params.id }).then(
       (value) => {
         setView({ error: "", updated: Date.now() })
         return value
@@ -161,10 +170,22 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
       .catch((error) => setView("problem", error instanceof Error ? error.message : String(error)))
       .finally(() => setView("action", ""))
   }
-  createEffect(() => {
-    if (summary().running === 0 && summary().queued === 0) return
-    const timer = setInterval(() => void api.refetch(), 2_500)
-    onCleanup(() => clearInterval(timer))
+  // Polls unconditionally while the panel is mounted — not just while a
+  // kernel is already running or queued. Gating on summary() created a
+  // chicken-and-egg: a fresh session starts at {live: 0, running: 0, queued:
+  // 0}, so the poll that would ever discover a kernel starting never began.
+  // See HostStrip.tsx for the identical shape: a hidden tab skips its polls,
+  // and returning to it refreshes immediately rather than waiting out the
+  // interval.
+  const refresh = () => {
+    if (document.hidden) return
+    void api.refetch()
+  }
+  const timer = setInterval(refresh, 2_500)
+  document.addEventListener("visibilitychange", refresh)
+  onCleanup(() => {
+    clearInterval(timer)
+    document.removeEventListener("visibilitychange", refresh)
   })
 
   return (
