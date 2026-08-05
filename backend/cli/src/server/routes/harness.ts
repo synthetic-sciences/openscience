@@ -8,6 +8,7 @@ import { HarnessAudit } from "@/session/harness/audit"
 import { HarnessBenchmark } from "@/session/harness/benchmark"
 import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
+import { HarnessEvolution } from "@/session/harness/evolution"
 import { HarnessJudge } from "@/session/harness/judge"
 import { HarnessLaunch } from "@/session/harness/launch"
 import { HarnessIntegrity } from "@/session/harness/integrity"
@@ -301,6 +302,62 @@ export const HarnessRoutes = lazy(() =>
         const input = c.req.valid("json")
         await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
         return c.json(await HarnessIntegrity.read(input.sessionID, c.req.valid("param").receiptID))
+      },
+    )
+    .post(
+      "/evolution/receipts",
+      describeRoute({
+        summary: "Record evaluator-authenticated evolutionary provenance",
+        description:
+          "Binds a candidate snapshot and every parent delta to immutable search lineage, then derives replay and ancestral line-reintroduction diagnostics without changing fitness.",
+        operationId: "harness.evolution.record",
+        responses: {
+          200: {
+            description: "Immutable evolution trace receipt",
+            content: {
+              "application/json": {
+                schema: resolver(HarnessEvolution.Info as z.ZodType<Record<string, unknown>>),
+              },
+            },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessEvolution.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json((await HarnessEvolution.record(input, contract)) as Record<string, unknown>)
+      },
+    )
+    .post(
+      "/evolution/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected evolution trace receipt",
+        operationId: "harness.evolution.receipt",
+        responses: {
+          200: {
+            description: "Evolution trace receipt",
+            content: {
+              "application/json": {
+                schema: resolver(HarnessEvolution.Info.nullable() as z.ZodType<Record<string, unknown> | null>),
+              },
+            },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessEvolution.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(
+          (await HarnessEvolution.read(input.sessionID, c.req.valid("param").receiptID)) as Record<
+            string,
+            unknown
+          > | null,
+        )
       },
     )
     .post(

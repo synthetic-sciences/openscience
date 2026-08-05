@@ -278,6 +278,58 @@ export namespace HarnessContract {
     })
   export type Integrity = z.infer<typeof Integrity>
 
+  const SourcePath = z
+    .string()
+    .min(1)
+    .max(1_000)
+    .refine(
+      (value) =>
+        value === "." ||
+        (!value.startsWith("/") &&
+          !value.endsWith("/") &&
+          !value.includes("\\") &&
+          !value.split("/").some((part) => !part || part === "." || part === "..")),
+      "Evolution trace paths must be normalized relative POSIX paths",
+    )
+
+  export const Evolution = z
+    .object({
+      protocolVersion: z.literal("evolution-trace-v1"),
+      validatorSHA256: Hash,
+      manifestSchemaSHA256: Hash,
+      lineAlgorithm: z.literal("sha256-exact-line-v1"),
+      roots: z
+        .array(SourcePath)
+        .min(1)
+        .max(32)
+        .refine((items) => new Set(items).size === items.length, "Evolution trace roots must be unique"),
+      extensions: z
+        .array(z.string().regex(/^\.[a-zA-Z0-9][a-zA-Z0-9._+-]{0,31}$/))
+        .min(1)
+        .max(128)
+        .refine((items) => new Set(items).size === items.length, "Evolution trace extensions must be unique"),
+      exclude: z
+        .array(SourcePath)
+        .max(128)
+        .refine((items) => new Set(items).size === items.length, "Evolution trace exclusions must be unique")
+        .default([]),
+      maxFiles: z.number().int().min(1).max(100_000),
+      maxFileBytes: z.number().int().min(1).max(1_000_000_000),
+      maxTotalBytes: z.number().int().min(1).max(10_000_000_000),
+      maxSourceLines: z.number().int().min(1).max(10_000_000),
+      maxChangedLines: z.number().int().min(1).max(2_000_000),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (value.maxFileBytes <= value.maxTotalBytes) return
+      ctx.addIssue({
+        code: "custom",
+        path: ["maxFileBytes"],
+        message: "Evolution trace file limit cannot exceed its total byte limit",
+      })
+    })
+  export type Evolution = z.infer<typeof Evolution>
+
   export const SimulationStress = z.enum([
     "timestep_sensitivity",
     "solver_tolerance_sensitivity",
@@ -440,6 +492,7 @@ export namespace HarnessContract {
       launch: Launch.optional(),
       recipe: HarnessRecipe.Materialized.optional(),
       integrity: Integrity.optional(),
+      evolution: Evolution.optional(),
       simulation: Simulation.optional(),
       evaluatorAudit: EvaluatorAudit.optional(),
       packs: z
@@ -525,7 +578,7 @@ export namespace HarnessContract {
         })
       }
       if (
-        (value.launch || value.integrity || value.simulation || value.evaluatorAudit) &&
+        (value.launch || value.integrity || value.evolution || value.simulation || value.evaluatorAudit) &&
         !value.benchmark.evaluatorVersion
       ) {
         ctx.addIssue({
@@ -535,7 +588,7 @@ export namespace HarnessContract {
         })
       }
       if (
-        (value.launch || value.integrity || value.simulation || value.evaluatorAudit) &&
+        (value.launch || value.integrity || value.evolution || value.simulation || value.evaluatorAudit) &&
         !value.benchmark.evaluatorSource
       ) {
         ctx.addIssue({
@@ -563,6 +616,20 @@ export namespace HarnessContract {
           code: "custom",
           path: ["benchmark", "evaluatorSource"],
           message: "Runtime integrity validation requires a capability-authenticated evaluator source",
+        })
+      }
+      if (value.evolution && value.profile !== "optimize") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["evolution"],
+          message: "Evolution trace validation requires the optimize profile",
+        })
+      }
+      if (value.evolution && value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Evolution trace validation requires a capability-authenticated evaluator source",
         })
       }
       if (

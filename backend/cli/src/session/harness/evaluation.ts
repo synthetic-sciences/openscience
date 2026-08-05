@@ -7,6 +7,7 @@ import { HarnessDomain } from "./domain"
 import { HarnessJudge } from "./judge"
 import { HarnessLaunch } from "./launch"
 import { HarnessIntegrity } from "./integrity"
+import { HarnessEvolution } from "./evolution"
 import { HarnessSimulation } from "./simulation"
 
 export namespace HarnessEvaluation {
@@ -65,6 +66,10 @@ export namespace HarnessEvaluation {
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
       integrityReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      evolutionReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -222,6 +227,30 @@ export namespace HarnessEvaluation {
             ? { type: "candidate", id: evaluation.subject.id }
             : { type: "run", id: contract.runID },
         requirePassed: evaluation.status === "passed" && final(evaluation),
+        evaluatedAt: evaluation.evaluatedAt,
+        recordedAt: evaluation.recordedAt!,
+      })
+    }
+    if (evaluation.evolutionReceiptID && !contract.evolution) {
+      throw new Error(`Evaluation references an evolution receipt without a bound evolution trace protocol`)
+    }
+    if (evaluation.evolutionReceiptID && evaluation.subject?.type !== "candidate") {
+      throw new Error(`Only a candidate evaluation may reference an evolution receipt`)
+    }
+    if (
+      contract.evolution &&
+      evaluation.subject?.type === "candidate" &&
+      evaluation.status === "passed" &&
+      final(evaluation) &&
+      !evaluation.evolutionReceiptID
+    ) {
+      throw new Error(`A passing final candidate evaluation must reference an evolution trace receipt`)
+    }
+    if (evaluation.evolutionReceiptID && evaluation.subject?.type === "candidate") {
+      await HarnessEvolution.assert({
+        contract,
+        receiptID: evaluation.evolutionReceiptID,
+        candidateID: evaluation.subject.id,
         evaluatedAt: evaluation.evaluatedAt,
         recordedAt: evaluation.recordedAt!,
       })

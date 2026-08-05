@@ -9578,6 +9578,311 @@ export type HarnessIntegrityReceiptResponses = {
 
 export type HarnessIntegrityReceiptResponse = HarnessIntegrityReceiptResponses[keyof HarnessIntegrityReceiptResponses]
 
+export type HarnessEvolutionRecordData = {
+  body?: {
+    schemaVersion: 1
+    runID: string
+    sessionID: string
+    evaluatorToken: string
+    protocol: {
+      protocolVersion: "evolution-trace-v1"
+      validatorSHA256: string
+      manifestSchemaSHA256: string
+      lineAlgorithm: "sha256-exact-line-v1"
+      roots: Array<string>
+      extensions: Array<string>
+      exclude?: Array<string>
+      maxFiles: number
+      maxFileBytes: number
+      maxTotalBytes: number
+      maxSourceLines: number
+      maxChangedLines: number
+    }
+    subject: {
+      type: "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    snapshot: {
+      artifact: {
+        uri: string
+        sha256: string
+      }
+      schemaSHA256: string
+      files: Array<{
+        path: string
+        sha256: string
+        bytes: number
+        lineHashes: Array<string>
+      }>
+    }
+    parents: Array<{
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+      receiptID: string
+      snapshotSHA256: string
+      delta: {
+        uri: string
+        sha256: string
+      }
+    }>
+    validator: {
+      name: "trace-evolutionary-candidate"
+      version: 1
+      scriptSHA256: string
+    }
+    evidence: Array<string>
+    evaluatedAt: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/evolution/receipts"
+}
+
+export type HarnessEvolutionRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessEvolutionRecordError = HarnessEvolutionRecordErrors[keyof HarnessEvolutionRecordErrors]
+
+export type HarnessEvolutionRecordResponses = {
+  /**
+   * Immutable evolution trace receipt
+   */
+  200: {
+    schemaVersion: 1
+    receiptID: string
+    submissionID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "external"
+    }
+    protocol: {
+      protocolVersion: "evolution-trace-v1"
+      validatorSHA256: string
+      manifestSchemaSHA256: string
+      lineAlgorithm: "sha256-exact-line-v1"
+      roots: Array<string>
+      extensions: Array<string>
+      exclude?: Array<string>
+      maxFiles: number
+      maxFileBytes: number
+      maxTotalBytes: number
+      maxSourceLines: number
+      maxChangedLines: number
+    }
+    snapshot: {
+      artifact: {
+        uri: string
+        sha256: string
+      }
+      schemaSHA256: string
+      files: Array<{
+        path: string
+        sha256: string
+        bytes: number
+        lineHashes: Array<string>
+      }>
+    }
+    parents: Array<{
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+      receiptID: string
+      snapshotSHA256: string
+      delta: {
+        uri: string
+        sha256: string
+      }
+    }>
+    validator: {
+      name: "trace-evolutionary-candidate"
+      version: 1
+      scriptSHA256: string
+    }
+    diagnostics: {
+      files: number
+      bytes: number
+      sourceLines: number
+      depth: number
+      ancestors: number
+      addedLines: number
+      deletedLines: number
+      ancestralDeletedLines: number
+      reintroducedLines: number
+      reintroducedHashes: number
+      reintroducedFraction: number
+      novelLines: number
+      sourceChanged: boolean
+      cycleDetected: boolean
+      parents: Array<{
+        id: string
+        receiptID: string
+        filesChanged: number
+        addedLines: number
+        deletedLines: number
+      }>
+    }
+    evidence: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessEvolutionRecordResponse = HarnessEvolutionRecordResponses[keyof HarnessEvolutionRecordResponses]
+
+export type HarnessEvolutionReceiptData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/evolution/receipts/{receiptID}"
+}
+
+export type HarnessEvolutionReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessEvolutionReceiptError = HarnessEvolutionReceiptErrors[keyof HarnessEvolutionReceiptErrors]
+
+export type HarnessEvolutionReceiptResponses = {
+  /**
+   * Evolution trace receipt
+   */
+  200: {
+    schemaVersion: 1
+    receiptID: string
+    submissionID: string
+    runID: string
+    sessionID: string
+    contractFingerprint: string
+    subject: {
+      type: "candidate"
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+    }
+    evaluator: {
+      name: string
+      version: string
+      source: "benchmark" | "gate" | "external"
+    }
+    protocol: {
+      protocolVersion: "evolution-trace-v1"
+      validatorSHA256: string
+      manifestSchemaSHA256: string
+      lineAlgorithm: "sha256-exact-line-v1"
+      roots: Array<string>
+      extensions: Array<string>
+      exclude?: Array<string>
+      maxFiles: number
+      maxFileBytes: number
+      maxTotalBytes: number
+      maxSourceLines: number
+      maxChangedLines: number
+    }
+    snapshot: {
+      artifact: {
+        uri: string
+        sha256: string
+      }
+      schemaSHA256: string
+      files: Array<{
+        path: string
+        sha256: string
+        bytes: number
+        lineHashes: Array<string>
+      }>
+    }
+    parents: Array<{
+      id: string
+      artifact: {
+        uri: string
+        sha256: string
+      }
+      receiptID: string
+      snapshotSHA256: string
+      delta: {
+        uri: string
+        sha256: string
+      }
+    }>
+    validator: {
+      name: "trace-evolutionary-candidate"
+      version: 1
+      scriptSHA256: string
+    }
+    diagnostics: {
+      files: number
+      bytes: number
+      sourceLines: number
+      depth: number
+      ancestors: number
+      addedLines: number
+      deletedLines: number
+      ancestralDeletedLines: number
+      reintroducedLines: number
+      reintroducedHashes: number
+      reintroducedFraction: number
+      novelLines: number
+      sourceChanged: boolean
+      cycleDetected: boolean
+      parents: Array<{
+        id: string
+        receiptID: string
+        filesChanged: number
+        addedLines: number
+        deletedLines: number
+      }>
+    }
+    evidence: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  } | null
+}
+
+export type HarnessEvolutionReceiptResponse = HarnessEvolutionReceiptResponses[keyof HarnessEvolutionReceiptResponses]
+
 export type HarnessSimulationRecordData = {
   body?: {
     schemaVersion: 1
@@ -10490,6 +10795,20 @@ export type HarnessBindData = {
       hiddenCanaryManifestSHA256: string
       minHiddenCanaries: number
     }
+    evolution?: {
+      protocolVersion: "evolution-trace-v1"
+      validatorSHA256: string
+      manifestSchemaSHA256: string
+      lineAlgorithm: "sha256-exact-line-v1"
+      roots: Array<string>
+      extensions: Array<string>
+      exclude?: Array<string>
+      maxFiles: number
+      maxFileBytes: number
+      maxTotalBytes: number
+      maxSourceLines: number
+      maxChangedLines: number
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -10910,6 +11229,20 @@ export type HarnessBindResponses = {
       hiddenCanaryManifestSHA256: string
       minHiddenCanaries: number
     }
+    evolution?: {
+      protocolVersion: "evolution-trace-v1"
+      validatorSHA256: string
+      manifestSchemaSHA256: string
+      lineAlgorithm: "sha256-exact-line-v1"
+      roots: Array<string>
+      extensions: Array<string>
+      exclude?: Array<string>
+      maxFiles: number
+      maxFileBytes: number
+      maxTotalBytes: number
+      maxSourceLines: number
+      maxChangedLines: number
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -11022,6 +11355,7 @@ export type HarnessEvaluateData = {
     simulationReceiptID?: string
     launchReceiptID?: string
     integrityReceiptID?: string
+    evolutionReceiptID?: string
     evaluatorAuditReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
@@ -11650,6 +11984,20 @@ export type HarnessContractResponses = {
       hiddenCanaryManifestSHA256: string
       minHiddenCanaries: number
     }
+    evolution?: {
+      protocolVersion: "evolution-trace-v1"
+      validatorSHA256: string
+      manifestSchemaSHA256: string
+      lineAlgorithm: "sha256-exact-line-v1"
+      roots: Array<string>
+      extensions: Array<string>
+      exclude?: Array<string>
+      maxFiles: number
+      maxFileBytes: number
+      maxTotalBytes: number
+      maxSourceLines: number
+      maxChangedLines: number
+    }
     simulation?: {
       kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
       engine: {
@@ -11790,6 +12138,7 @@ export type HarnessEvaluationsResponses = {
     simulationReceiptID?: string
     launchReceiptID?: string
     integrityReceiptID?: string
+    evolutionReceiptID?: string
     evaluatorAuditReceiptID?: string
     evaluator: {
       name: string
@@ -11909,6 +12258,7 @@ export type HarnessReportResponses = {
       simulationReceiptID?: string
       launchReceiptID?: string
       integrityReceiptID?: string
+      evolutionReceiptID?: string
       evaluatorAuditReceiptID?: string
       evaluations: number
     }

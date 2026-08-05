@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syntheticsciences.ai/schemas/evolution-source-manifest-v1.json",
+  "title": "OpenScience evaluator-owned evolution source manifest",
+  "type": "object",
+  "required": ["schemaVersion", "lineAlgorithm", "files"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "lineAlgorithm": { "const": "sha256-exact-line-v1" },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "bytes", "lineHashes"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "lineHashes": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

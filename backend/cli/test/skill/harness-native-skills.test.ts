@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { HarnessContract } from "../../src/session/harness/contract"
+import { HarnessEvolution } from "../../src/session/harness/evolution"
 import { HarnessLaunch } from "../../src/session/harness/launch"
 
 const skills = path.resolve(import.meta.dir, "../../skills")
@@ -712,6 +713,178 @@ test("verify-benchmark-integrity rejects a non-contiguous trace", async () => {
     ])
     expect(result.code).toBe(2)
     expect(result.stderr).toContain("trace sequence must be contiguous")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("trace-evolutionary-candidate captures exact snapshots and deterministic parent deltas", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-evolution-"))
+  const parentRoot = path.join(dir, "parent")
+  const childRoot = path.join(dir, "child")
+  const parentArtifacts = path.join(dir, "parent-artifacts")
+  const childArtifacts = path.join(dir, "child-artifacts")
+  const contract = path.join(dir, "contract.json")
+  const parentSubject = path.join(dir, "parent-subject.json")
+  const childSubject = path.join(dir, "child-subject.json")
+  const parentOutput = path.join(dir, "parent-submission.json")
+  const childOutput = path.join(dir, "child-submission.json")
+  const parentSpec = path.join(dir, "parent.json")
+  const report = path.join(dir, "child-report.json")
+  await Promise.all([
+    fs.mkdir(path.join(parentRoot, "src"), { recursive: true }),
+    fs.mkdir(path.join(childRoot, "src"), { recursive: true }),
+  ])
+  await Promise.all([
+    Bun.write(path.join(parentRoot, "src", "main.py"), "alpha\nold\n"),
+    Bun.write(path.join(childRoot, "src", "main.py"), "alpha\nnew\n"),
+  ])
+  const commitments = await run("research/trace-evolutionary-candidate/scripts/trace_candidate.py", ["commitments"])
+  expect(commitments.code).toBe(0)
+  const pins = JSON.parse(commitments.stdout)
+  const protocol = HarnessContract.Evolution.parse({
+    protocolVersion: "evolution-trace-v1",
+    validatorSHA256: pins.validatorSHA256,
+    manifestSchemaSHA256: pins.manifestSchemaSHA256,
+    lineAlgorithm: "sha256-exact-line-v1",
+    roots: ["src"],
+    extensions: [".py"],
+    exclude: [],
+    maxFiles: 10,
+    maxFileBytes: 10_000,
+    maxTotalBytes: 100_000,
+    maxSourceLines: 1_000,
+    maxChangedLines: 100,
+  })
+  await Promise.all([
+    Bun.write(contract, JSON.stringify(protocol)),
+    Bun.write(
+      parentSubject,
+      JSON.stringify({
+        type: "candidate",
+        id: hash("parent-id"),
+        artifact: { uri: "artifact:parent.tar", sha256: hash("parent-artifact") },
+      }),
+    ),
+    Bun.write(
+      childSubject,
+      JSON.stringify({
+        type: "candidate",
+        id: hash("child-id"),
+        artifact: { uri: "artifact:child.tar", sha256: hash("child-artifact") },
+      }),
+    ),
+  ])
+
+  try {
+    const root = await run("research/trace-evolutionary-candidate/scripts/trace_candidate.py", [
+      "build",
+      "--contract",
+      contract,
+      "--subject",
+      parentSubject,
+      "--candidate-root",
+      parentRoot,
+      "--artifact-dir",
+      parentArtifacts,
+      "--run-id",
+      "run-1",
+      "--session-id",
+      "session-1",
+      "--evaluated-at",
+      "1000",
+      "--output",
+      parentOutput,
+    ])
+    expect(root.code).toBe(0)
+    const parent = JSON.parse(await Bun.file(parentOutput).text())
+    expect(parent.parents).toEqual([])
+    expect(parent.snapshot.files).toEqual([
+      expect.objectContaining({
+        path: "src/main.py",
+        lineHashes: [hash("alpha"), hash("old")],
+      }),
+    ])
+    expect(parent.snapshot.artifact.sha256).toBe(await fileHash(parent.snapshot.artifact.uri))
+    expect(parent.snapshot.artifact.sha256).toBe(HarnessEvolution.manifestSHA256(protocol, parent.snapshot.files))
+    await Bun.write(
+      parentSpec,
+      JSON.stringify({
+        id: parent.subject.id,
+        artifact: parent.subject.artifact,
+        receiptID: hash("parent-receipt"),
+        snapshot: parent.snapshot.artifact,
+        root: parentRoot,
+      }),
+    )
+    const child = await run("research/trace-evolutionary-candidate/scripts/trace_candidate.py", [
+      "build",
+      "--contract",
+      contract,
+      "--subject",
+      childSubject,
+      "--candidate-root",
+      childRoot,
+      "--parent",
+      parentSpec,
+      "--artifact-dir",
+      childArtifacts,
+      "--run-id",
+      "run-1",
+      "--session-id",
+      "session-1",
+      "--evaluated-at",
+      "1100",
+      "--output",
+      childOutput,
+      "--report",
+      report,
+    ])
+    expect(child.code).toBe(0)
+    const submission = JSON.parse(await Bun.file(childOutput).text())
+    expect(submission.evaluatorToken).toBeUndefined()
+    expect(submission.parents).toHaveLength(1)
+    const delta = JSON.parse(await Bun.file(submission.parents[0].delta.uri).text())
+    expect(delta).toMatchObject({
+      parent: { id: parent.subject.id, snapshotSHA256: parent.snapshot.artifact.sha256 },
+      candidate: { id: submission.subject.id, snapshotSHA256: submission.snapshot.artifact.sha256 },
+      addedLineHashes: [hash("new")],
+      deletedLineHashes: [hash("old")],
+    })
+    expect(submission.parents[0].delta.sha256).toBe(digest(delta))
+    expect(submission.parents[0].delta.sha256).toBe(
+      HarnessEvolution.deltaSHA256({
+        subject: submission.subject,
+        snapshot: submission.snapshot,
+        parent: { subject: parent.subject, snapshot: parent.snapshot },
+      }),
+    )
+    expect(JSON.parse(await Bun.file(report).text())).toMatchObject({
+      files: 1,
+      sourceLines: 2,
+      parents: [{ filesChanged: 1, addedLines: 1, deletedLines: 1 }],
+    })
+
+    await Bun.write(path.join(parentRoot, "src", "main.py"), "substituted\n")
+    const rejected = await run("research/trace-evolutionary-candidate/scripts/trace_candidate.py", [
+      "build",
+      "--contract",
+      contract,
+      "--subject",
+      childSubject,
+      "--candidate-root",
+      childRoot,
+      "--parent",
+      parentSpec,
+      "--artifact-dir",
+      path.join(dir, "rejected-artifacts"),
+      "--run-id",
+      "run-1",
+      "--session-id",
+      "session-1",
+    ])
+    expect(rejected.code).toBe(2)
+    expect(rejected.stderr).toContain("does not match its immutable snapshot")
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
   }

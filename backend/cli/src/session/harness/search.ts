@@ -4,6 +4,7 @@ import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
 import { HarnessContract } from "./contract"
 import { HarnessEvaluation } from "./evaluation"
+import { HarnessEvolution } from "./evolution"
 import { HarnessLaunch } from "./launch"
 
 export namespace HarnessSearch {
@@ -47,6 +48,11 @@ export namespace HarnessSearch {
     .strict()
   export type Artifact = z.infer<typeof Artifact>
 
+  export const Evolution = HarnessEvolution.Diagnostics.extend({
+    receiptID: z.string().regex(/^[a-f0-9]{64}$/),
+  }).strict()
+  export type Evolution = z.infer<typeof Evolution>
+
   export const Result = z
     .object({
       source: z.enum(["observed", "screened", "verified"]),
@@ -65,6 +71,7 @@ export namespace HarnessSearch {
         .optional(),
       feedback: z.string().max(8_000).optional(),
       evaluator: z.string().max(200).optional(),
+      evolution: Evolution.optional(),
       evaluatedAt: z.number().int().positive(),
     })
     .strict()
@@ -892,6 +899,9 @@ export namespace HarnessSearch {
     if (evaluation.subject?.type !== "candidate" || evaluation.subject.id !== input.candidateID) {
       throw new Error(`The recorded evaluation is not bound to candidate ${input.candidateID}`)
     }
+    const evolution = evaluation.evolutionReceiptID
+      ? await HarnessEvolution.read(input.sessionID, evaluation.evolutionReceiptID)
+      : undefined
     await JsonStore.update(file(input.sessionID), (data) => {
       const state = parse(data)
       const candidate = state.candidates[input.candidateID]
@@ -917,6 +927,7 @@ export namespace HarnessSearch {
         usage: evaluation.usage,
         fidelity: evaluation.fidelity,
         evaluator: evaluation.evaluator.name,
+        evolution: evolution ? { receiptID: evolution.receiptID, ...evolution.diagnostics } : undefined,
         feedback: evaluation.notes,
         evaluatedAt: evaluation.evaluatedAt,
       })
@@ -967,6 +978,9 @@ export namespace HarnessSearch {
     }
     const index = plan.findIndex((item) => item.id === evaluation.fidelity?.stage)
     if (index < 0) throw new Error(`Screening fidelity stage is not in the bound contract`)
+    const evolution = evaluation.evolutionReceiptID
+      ? await HarnessEvolution.read(input.sessionID, evaluation.evolutionReceiptID)
+      : undefined
     await JsonStore.update(file(input.sessionID), (data) => {
       const state = parse(data)
       const candidate = state.candidates[input.candidateID]
@@ -982,6 +996,7 @@ export namespace HarnessSearch {
         usage: evaluation.usage,
         fidelity: evaluation.fidelity,
         evaluator: evaluation.evaluator.name,
+        evolution: evolution ? { receiptID: evolution.receiptID, ...evolution.diagnostics } : undefined,
         feedback: evaluation.notes,
         evaluatedAt: evaluation.evaluatedAt,
       })

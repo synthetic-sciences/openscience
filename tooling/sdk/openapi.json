@@ -22273,6 +22273,1524 @@
         ]
       }
     },
+    "/harness/evolution/receipts": {
+      "post": {
+        "operationId": "harness.evolution.record",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Record evaluator-authenticated evolutionary provenance",
+        "description": "Binds a candidate snapshot and every parent delta to immutable search lineage, then derives replay and ancestral line-reintroduction diagnostics without changing fitness.",
+        "responses": {
+          "200": {
+            "description": "Immutable evolution trace receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "submissionID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "contractFingerprint": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "subject": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "candidate"
+                        },
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "artifact"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "evaluator": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "benchmark",
+                            "gate",
+                            "external"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "protocol": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "evolution-trace-v1"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "manifestSchemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "lineAlgorithm": {
+                          "type": "string",
+                          "const": "sha256-exact-line-v1"
+                        },
+                        "roots": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "extensions": {
+                          "minItems": 1,
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^\\.[a-zA-Z0-9][a-zA-Z0-9._+-]{0,31}$"
+                          }
+                        },
+                        "exclude": {
+                          "default": [],
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "maxFiles": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000
+                        },
+                        "maxFileBytes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000000000
+                        },
+                        "maxTotalBytes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000000000
+                        },
+                        "maxSourceLines": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000000
+                        },
+                        "maxChangedLines": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 2000000
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "validatorSHA256",
+                        "manifestSchemaSHA256",
+                        "lineAlgorithm",
+                        "roots",
+                        "extensions",
+                        "maxFiles",
+                        "maxFileBytes",
+                        "maxTotalBytes",
+                        "maxSourceLines",
+                        "maxChangedLines"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "snapshot": {
+                      "type": "object",
+                      "properties": {
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "schemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "files": {
+                          "minItems": 1,
+                          "maxItems": 100000,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1000000000
+                              },
+                              "lineHashes": {
+                                "maxItems": 1000000,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "sha256",
+                              "bytes",
+                              "lineHashes"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "artifact",
+                        "schemaSHA256",
+                        "files"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "parents": {
+                      "maxItems": 2,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "artifact": {
+                            "type": "object",
+                            "properties": {
+                              "uri": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2048
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "uri",
+                              "sha256"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "receiptID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "snapshotSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "delta": {
+                            "type": "object",
+                            "properties": {
+                              "uri": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2048
+                              },
+                              "sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "uri",
+                              "sha256"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "artifact",
+                          "receiptID",
+                          "snapshotSHA256",
+                          "delta"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "validator": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "const": "trace-evolutionary-candidate"
+                        },
+                        "version": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "scriptSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version",
+                        "scriptSHA256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "diagnostics": {
+                      "type": "object",
+                      "properties": {
+                        "files": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "bytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "sourceLines": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "depth": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "ancestors": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "addedLines": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "deletedLines": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "ancestralDeletedLines": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "reintroducedLines": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "reintroducedHashes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "reintroducedFraction": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "novelLines": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "sourceChanged": {
+                          "type": "boolean"
+                        },
+                        "cycleDetected": {
+                          "type": "boolean"
+                        },
+                        "parents": {
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "receiptID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "filesChanged": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "addedLines": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "deletedLines": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "receiptID",
+                              "filesChanged",
+                              "addedLines",
+                              "deletedLines"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "files",
+                        "bytes",
+                        "sourceLines",
+                        "depth",
+                        "ancestors",
+                        "addedLines",
+                        "deletedLines",
+                        "ancestralDeletedLines",
+                        "reintroducedLines",
+                        "reintroducedHashes",
+                        "reintroducedFraction",
+                        "novelLines",
+                        "sourceChanged",
+                        "cycleDetected",
+                        "parents"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "receiptID",
+                    "submissionID",
+                    "runID",
+                    "sessionID",
+                    "contractFingerprint",
+                    "subject",
+                    "evaluator",
+                    "protocol",
+                    "snapshot",
+                    "parents",
+                    "validator",
+                    "diagnostics",
+                    "evidence",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "runID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "protocol": {
+                    "type": "object",
+                    "properties": {
+                      "protocolVersion": {
+                        "type": "string",
+                        "const": "evolution-trace-v1"
+                      },
+                      "validatorSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "manifestSchemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "lineAlgorithm": {
+                        "type": "string",
+                        "const": "sha256-exact-line-v1"
+                      },
+                      "roots": {
+                        "minItems": 1,
+                        "maxItems": 32,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000
+                        }
+                      },
+                      "extensions": {
+                        "minItems": 1,
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^\\.[a-zA-Z0-9][a-zA-Z0-9._+-]{0,31}$"
+                        }
+                      },
+                      "exclude": {
+                        "default": [],
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000
+                        }
+                      },
+                      "maxFiles": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000
+                      },
+                      "maxFileBytes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000000000
+                      },
+                      "maxTotalBytes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000000000
+                      },
+                      "maxSourceLines": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000000
+                      },
+                      "maxChangedLines": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2000000
+                      }
+                    },
+                    "required": [
+                      "protocolVersion",
+                      "validatorSHA256",
+                      "manifestSchemaSHA256",
+                      "lineAlgorithm",
+                      "roots",
+                      "extensions",
+                      "maxFiles",
+                      "maxFileBytes",
+                      "maxTotalBytes",
+                      "maxSourceLines",
+                      "maxChangedLines"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "subject": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "candidate"
+                      },
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "artifact": {
+                        "type": "object",
+                        "properties": {
+                          "uri": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "uri",
+                          "sha256"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id",
+                      "artifact"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "snapshot": {
+                    "type": "object",
+                    "properties": {
+                      "artifact": {
+                        "type": "object",
+                        "properties": {
+                          "uri": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "uri",
+                          "sha256"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "schemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "files": {
+                        "minItems": 1,
+                        "maxItems": 100000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 1000000000
+                            },
+                            "lineHashes": {
+                              "maxItems": 1000000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "sha256",
+                            "bytes",
+                            "lineHashes"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "artifact",
+                      "schemaSHA256",
+                      "files"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "parents": {
+                    "maxItems": 2,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "artifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "receiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "snapshotSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "delta": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "artifact",
+                        "receiptID",
+                        "snapshotSHA256",
+                        "delta"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "validator": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "const": "trace-evolutionary-candidate"
+                      },
+                      "version": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "scriptSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "version",
+                      "scriptSHA256"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "evidence": {
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "evaluatedAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "runID",
+                  "sessionID",
+                  "evaluatorToken",
+                  "protocol",
+                  "subject",
+                  "snapshot",
+                  "parents",
+                  "validator",
+                  "evidence",
+                  "evaluatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.evolution.record({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/evolution/receipts/{receiptID}": {
+      "post": {
+        "operationId": "harness.evolution.receipt",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receiptID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a capability-protected evolution trace receipt",
+        "responses": {
+          "200": {
+            "description": "Evolution trace receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "receiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "submissionID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "contractFingerprint": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "subject": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "candidate"
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "artifact": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id",
+                            "artifact"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "evaluator": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "benchmark",
+                                "gate",
+                                "external"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "source"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "protocol": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "evolution-trace-v1"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "manifestSchemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "lineAlgorithm": {
+                              "type": "string",
+                              "const": "sha256-exact-line-v1"
+                            },
+                            "roots": {
+                              "minItems": 1,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              }
+                            },
+                            "extensions": {
+                              "minItems": 1,
+                              "maxItems": 128,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^\\.[a-zA-Z0-9][a-zA-Z0-9._+-]{0,31}$"
+                              }
+                            },
+                            "exclude": {
+                              "default": [],
+                              "maxItems": 128,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              }
+                            },
+                            "maxFiles": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100000
+                            },
+                            "maxFileBytes": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1000000000
+                            },
+                            "maxTotalBytes": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000000000
+                            },
+                            "maxSourceLines": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000000
+                            },
+                            "maxChangedLines": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2000000
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "validatorSHA256",
+                            "manifestSchemaSHA256",
+                            "lineAlgorithm",
+                            "roots",
+                            "extensions",
+                            "maxFiles",
+                            "maxFileBytes",
+                            "maxTotalBytes",
+                            "maxSourceLines",
+                            "maxChangedLines"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "snapshot": {
+                          "type": "object",
+                          "properties": {
+                            "artifact": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "schemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "files": {
+                              "minItems": 1,
+                              "maxItems": 100000,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1000
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "bytes": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 1000000000
+                                  },
+                                  "lineHashes": {
+                                    "maxItems": 1000000,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "sha256",
+                                  "bytes",
+                                  "lineHashes"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "artifact",
+                            "schemaSHA256",
+                            "files"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "parents": {
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "artifact": {
+                                "type": "object",
+                                "properties": {
+                                  "uri": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "uri",
+                                  "sha256"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "receiptID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "snapshotSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "delta": {
+                                "type": "object",
+                                "properties": {
+                                  "uri": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "uri",
+                                  "sha256"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "artifact",
+                              "receiptID",
+                              "snapshotSHA256",
+                              "delta"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "validator": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "const": "trace-evolutionary-candidate"
+                            },
+                            "version": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "scriptSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "scriptSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "diagnostics": {
+                          "type": "object",
+                          "properties": {
+                            "files": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "sourceLines": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "depth": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "ancestors": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "addedLines": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "deletedLines": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "ancestralDeletedLines": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "reintroducedLines": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "reintroducedHashes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "reintroducedFraction": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "novelLines": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "sourceChanged": {
+                              "type": "boolean"
+                            },
+                            "cycleDetected": {
+                              "type": "boolean"
+                            },
+                            "parents": {
+                              "maxItems": 2,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "receiptID": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "filesChanged": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "addedLines": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "deletedLines": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "receiptID",
+                                  "filesChanged",
+                                  "addedLines",
+                                  "deletedLines"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "files",
+                            "bytes",
+                            "sourceLines",
+                            "depth",
+                            "ancestors",
+                            "addedLines",
+                            "deletedLines",
+                            "ancestralDeletedLines",
+                            "reintroducedLines",
+                            "reintroducedHashes",
+                            "reintroducedFraction",
+                            "novelLines",
+                            "sourceChanged",
+                            "cycleDetected",
+                            "parents"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "evaluatedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "recordedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "receiptID",
+                        "submissionID",
+                        "runID",
+                        "sessionID",
+                        "contractFingerprint",
+                        "subject",
+                        "evaluator",
+                        "protocol",
+                        "snapshot",
+                        "parents",
+                        "validator",
+                        "diagnostics",
+                        "evidence",
+                        "evaluatedAt",
+                        "recordedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.evolution.receipt({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/simulations/receipts": {
       "post": {
         "operationId": "harness.simulation.record",
@@ -27326,6 +28844,95 @@
                       ],
                       "additionalProperties": false
                     },
+                    "evolution": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "evolution-trace-v1"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "manifestSchemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "lineAlgorithm": {
+                          "type": "string",
+                          "const": "sha256-exact-line-v1"
+                        },
+                        "roots": {
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "extensions": {
+                          "minItems": 1,
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^\\.[a-zA-Z0-9][a-zA-Z0-9._+-]{0,31}$"
+                          }
+                        },
+                        "exclude": {
+                          "default": [],
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "maxFiles": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100000
+                        },
+                        "maxFileBytes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000000000
+                        },
+                        "maxTotalBytes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000000000
+                        },
+                        "maxSourceLines": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000000
+                        },
+                        "maxChangedLines": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 2000000
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "validatorSHA256",
+                        "manifestSchemaSHA256",
+                        "lineAlgorithm",
+                        "roots",
+                        "extensions",
+                        "maxFiles",
+                        "maxFileBytes",
+                        "maxTotalBytes",
+                        "maxSourceLines",
+                        "maxChangedLines"
+                      ],
+                      "additionalProperties": false
+                    },
                     "simulation": {
                       "type": "object",
                       "properties": {
@@ -28434,6 +30041,95 @@
                     ],
                     "additionalProperties": false
                   },
+                  "evolution": {
+                    "type": "object",
+                    "properties": {
+                      "protocolVersion": {
+                        "type": "string",
+                        "const": "evolution-trace-v1"
+                      },
+                      "validatorSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "manifestSchemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "lineAlgorithm": {
+                        "type": "string",
+                        "const": "sha256-exact-line-v1"
+                      },
+                      "roots": {
+                        "minItems": 1,
+                        "maxItems": 32,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000
+                        }
+                      },
+                      "extensions": {
+                        "minItems": 1,
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^\\.[a-zA-Z0-9][a-zA-Z0-9._+-]{0,31}$"
+                        }
+                      },
+                      "exclude": {
+                        "default": [],
+                        "maxItems": 128,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000
+                        }
+                      },
+                      "maxFiles": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000
+                      },
+                      "maxFileBytes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000000000
+                      },
+                      "maxTotalBytes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000000000
+                      },
+                      "maxSourceLines": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000000
+                      },
+                      "maxChangedLines": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2000000
+                      }
+                    },
+                    "required": [
+                      "protocolVersion",
+                      "validatorSHA256",
+                      "manifestSchemaSHA256",
+                      "lineAlgorithm",
+                      "roots",
+                      "extensions",
+                      "maxFiles",
+                      "maxFileBytes",
+                      "maxTotalBytes",
+                      "maxSourceLines",
+                      "maxChangedLines"
+                    ],
+                    "additionalProperties": false
+                  },
                   "simulation": {
                     "type": "object",
                     "properties": {
@@ -29125,6 +30821,10 @@
                     "pattern": "^[a-f0-9]{64}$"
                   },
                   "integrityReceiptID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "evolutionReceiptID": {
                     "type": "string",
                     "pattern": "^[a-f0-9]{64}$"
                   },
@@ -31699,6 +33399,95 @@
                           ],
                           "additionalProperties": false
                         },
+                        "evolution": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "evolution-trace-v1"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "manifestSchemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "lineAlgorithm": {
+                              "type": "string",
+                              "const": "sha256-exact-line-v1"
+                            },
+                            "roots": {
+                              "minItems": 1,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              }
+                            },
+                            "extensions": {
+                              "minItems": 1,
+                              "maxItems": 128,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^\\.[a-zA-Z0-9][a-zA-Z0-9._+-]{0,31}$"
+                              }
+                            },
+                            "exclude": {
+                              "default": [],
+                              "maxItems": 128,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              }
+                            },
+                            "maxFiles": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100000
+                            },
+                            "maxFileBytes": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1000000000
+                            },
+                            "maxTotalBytes": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000000000
+                            },
+                            "maxSourceLines": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000000
+                            },
+                            "maxChangedLines": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2000000
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "validatorSHA256",
+                            "manifestSchemaSHA256",
+                            "lineAlgorithm",
+                            "roots",
+                            "extensions",
+                            "maxFiles",
+                            "maxFileBytes",
+                            "maxTotalBytes",
+                            "maxSourceLines",
+                            "maxChangedLines"
+                          ],
+                          "additionalProperties": false
+                        },
                         "simulation": {
                           "type": "object",
                           "properties": {
@@ -32281,6 +34070,10 @@
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
                       },
+                      "evolutionReceiptID": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
                       "evaluatorAuditReceiptID": {
                         "type": "string",
                         "pattern": "^[a-f0-9]{64}$"
@@ -32687,6 +34480,10 @@
                           "pattern": "^[a-f0-9]{64}$"
                         },
                         "integrityReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "evolutionReceiptID": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },
