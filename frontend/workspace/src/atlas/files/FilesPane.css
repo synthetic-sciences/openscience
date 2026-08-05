@@ -38,8 +38,11 @@
   inset: 0;
   z-index: 5;
 }
+/* Fixed, not absolute: the wrap is only as big as the trigger, so an absolute
+   scrim caught clicks on the button alone and every click elsewhere in the pane
+   left the menu hanging open. */
 .files-menu__scrim {
-  position: absolute;
+  position: fixed;
   inset: 0;
   width: 100%;
   border: 0;
@@ -132,6 +135,15 @@
   /* Truncate from the left: the tail of a path is what distinguishes sources. */
   direction: rtl;
   text-align: left;
+}
+/* An RTL paragraph resolves the leading "/" of "/home/you/data" as a neutral at
+   the paragraph edge and renders it at the far right — "home/you/data/". A
+   zero-width LEFT-TO-RIGHT MARK ahead of it gives the slash an L neighbour on
+   both sides, so it stays put. `unicode-bidi: plaintext` fixes the same thing
+   but moves the ellipsis back to the right, which is the whole point of the
+   rule above. */
+.files-menu__sub::before {
+  content: "\200e";
 }
 .files-menu__tail {
   display: inline-flex;
@@ -328,7 +340,8 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 210px;
   padding: 7px 10px;
   border: 0;
@@ -340,26 +353,59 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.files-tab:hover {
+.files-tab--home {
+  flex: 0 0 auto;
+}
+.files-tab--home:hover {
   background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+.files-tab--home[aria-selected="true"] {
+  background: var(--color-surface);
   color: var(--color-text);
 }
 .files-tab:focus-visible {
   outline: 1px solid var(--color-text);
   outline-offset: -2px;
 }
-.files-tab[aria-selected="true"] {
-  background: var(--color-surface);
-  color: var(--color-text);
-}
 .files-tab__label {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The pair carries the tab's chrome so its two controls read as one tab. */
+.files-tab-pair {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 210px;
+  padding-right: 5px;
+  border-radius: 7px;
+}
+.files-tab-pair:hover {
+  background: var(--color-bg-subtle);
+}
+.files-tab-pair:hover .files-tab {
+  color: var(--color-text);
+}
+.files-tab-pair--active {
+  background: var(--color-surface);
+}
+.files-tab-pair--active .files-tab {
+  color: var(--color-text);
+}
 .files-tab__close {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 4px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
   color: var(--color-text-faint);
+  font: inherit;
   font-size: 14px;
   line-height: 1;
+  cursor: pointer;
 }
 .files-tab__close:hover {
   color: var(--color-text);
@@ -367,7 +413,6 @@
 .files-tab__close:focus-visible {
   outline: 1px solid var(--color-text);
   outline-offset: 1px;
-  border-radius: 3px;
 }
 
 .files-pane {
