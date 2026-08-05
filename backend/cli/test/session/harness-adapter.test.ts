@@ -12,6 +12,13 @@ import { launchProtocol, recipeSelection } from "../fixture/harness"
 
 const sessions = new Set<string>()
 const token = "benchmark-evaluator-capability-token-0000000000000000"
+const objectiveAudit: HarnessContract.ObjectiveAudit = {
+  schemaVersion: 1,
+  planSHA256: "b".repeat(64),
+  validatorSHA256: "c".repeat(64),
+  contractSHA256: "d".repeat(64),
+  guardIDs: ["semantic-regression"],
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -134,9 +141,17 @@ describe("benchmark adapters", () => {
   test("binds evaluator-declared secondary objectives without changing the primary metric", async () => {
     await expect(
       HarnessAdapter.bind({
+        ...task("mle", "adapter-objectives-audit-missing"),
+        profile: "optimize",
+        objectives: [{ metric: "robustness", direction: "maximize" }],
+      }),
+    ).rejects.toThrow("preflighted objective audit")
+    await expect(
+      HarnessAdapter.bind({
         ...task("statistics", "adapter-objectives-profile"),
         profile: "reproduce",
         objectives: [{ metric: "robustness", direction: "maximize" }],
+        objectiveAudit,
       }),
     ).rejects.toThrow("optimize profile")
     const contract = await HarnessAdapter.bind({
@@ -146,6 +161,7 @@ describe("benchmark adapters", () => {
         { metric: "robustness", direction: "maximize" },
         { metric: "latency", direction: "minimize" },
       ],
+      objectiveAudit,
     })
     expect(contract.benchmark).toMatchObject({
       metric: "score",
@@ -154,6 +170,7 @@ describe("benchmark adapters", () => {
         { metric: "robustness", direction: "maximize" },
         { metric: "latency", direction: "minimize" },
       ],
+      objectiveAudit,
     })
     await HarnessSearch.initialize({ sessionID: contract.sessionID, candidates: 3 })
     const candidate = await HarnessSearch.add({

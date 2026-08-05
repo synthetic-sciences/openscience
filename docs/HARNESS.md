@@ -336,7 +336,7 @@ The optimizer is an open candidate graph rather than a single mutable working fi
 - The graph admits multiple independent roots early, bounded by `min(4, max(2, ceil(sqrt(candidate budget))))`.
 - A root must use a distinct branch while another live root with that branch exists.
 - Descendants require final, evaluator-verified passing parents. A cheap screening pass is insufficient.
-- A numeric contract may predeclare up to eight unique secondary evaluator metrics and their directions. Every passing final candidate must supply the complete vector.
+- A numeric adapter contract may predeclare up to eight unique secondary evaluator metrics and their directions only with a `design-benchmark-objectives` audit commitment. The audit pins the canonical plan, validator, normalized safety contract, and blocking guard IDs. Every passing final candidate must supply the complete vector.
 - The search persists the non-dominated primary-plus-secondary Pareto archive. Auxiliary metrics preserve complementary candidates, but never change the official primary-score `bestID`, target, or SOTA claim.
 - Early selection opens independent roots and then applies branch-level UCB-style exploration with minimum-visit protection.
 - After half the candidate budget, selection exploits the strongest verified branch.
@@ -344,7 +344,7 @@ The optimizer is an open candidate graph rather than a single mutable working fi
 - Self-reported observations remain visible for debugging but cannot enter elite state or lineage.
 - Passing, failing, and inconclusive final evaluations are immutable and retained as hindsight.
 
-This combines breadth, multi-metric diversity, exploitation, fusion, and escape from strategy stagnation without allowing the model to award itself fitness. Quality-cost reports separately expose the archive size and objective contract, so an auxiliary evaluator metric cannot be confused with the benchmark's official score.
+This combines breadth, multi-metric diversity, exploitation, fusion, and escape from strategy stagnation without allowing the model to award itself fitness. Quality-cost reports separately expose the archive size, objective vector, and objective-audit commitment, so an auxiliary evaluator metric cannot be confused with the benchmark's official score.
 
 ### 5. Cascade evaluation
 
@@ -443,15 +443,16 @@ If later evidence introduces a regression before promotion, qualification return
 
 The bundled skill catalog includes executable protocols for work that is otherwise easy to describe but hard to audit:
 
-| Skill                        | Executable contract                                                                                                                                                                                               |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `active-failure-audit`       | Converts evaluator-private JSONL cases into a public manifest of opaque IDs and SHA-256 commitments without copying hidden case content.                                                                          |
-| `simulator-validation`       | Rejects refinement studies that miss decreasing resolution/error, expected convergence order, residual bounds, or declared invariants.                                                                            |
-| `scientific-ablation-design` | Rejects attribution plans without exactly one budget-, seed-, split-, and evaluator-matched isolation arm for every predeclared mechanism.                                                                        |
-| `verify-benchmark-launch`    | Inspects an exact Git checkout, locks, task/data/evaluator bytes, hidden boundary, deterministic replay, artifact round trip, and pinned baseline before official execution.                                      |
-| `run-benchmark-pilot`        | Preflights and executes a source-pinned recipe v2 outside the candidate session, preserving native argv/Python value flow and emitting hashed stage, artifact, and typed-metric evidence.                         |
-| `audit-benchmark-sources`    | Fetches every official pin, verifies required paths and datasets, checks subset cardinality, and reports upstream drift without silently changing trusted revisions.                                              |
-| `verify-benchmark-integrity` | Validates evaluator-owned trace structure, derives observable model/lookup/canary counts, verifies committed auditor identities, and builds the token-free input for a backend-derived runtime-integrity receipt. |
+| Skill                         | Executable contract                                                                                                                                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `active-failure-audit`        | Converts evaluator-private JSONL cases into a public manifest of opaque IDs and SHA-256 commitments without copying hidden case content.                                                                          |
+| `design-benchmark-objectives` | Separates optimization and claim splits, checks numeric directions, evaluator-owned delayed signals, anti-gaming guards, primary-score authority, and complete-vector policy, then emits a hashed adapter patch.  |
+| `simulator-validation`        | Rejects refinement studies that miss decreasing resolution/error, expected convergence order, residual bounds, or declared invariants.                                                                            |
+| `scientific-ablation-design`  | Rejects attribution plans without exactly one budget-, seed-, split-, and evaluator-matched isolation arm for every predeclared mechanism.                                                                        |
+| `verify-benchmark-launch`     | Inspects an exact Git checkout, locks, task/data/evaluator bytes, hidden boundary, deterministic replay, artifact round trip, and pinned baseline before official execution.                                      |
+| `run-benchmark-pilot`         | Preflights and executes a source-pinned recipe v2 outside the candidate session, preserving native argv/Python value flow and emitting hashed stage, artifact, and typed-metric evidence.                         |
+| `audit-benchmark-sources`     | Fetches every official pin, verifies required paths and datasets, checks subset cardinality, and reports upstream drift without silently changing trusted revisions.                                              |
+| `verify-benchmark-integrity`  | Validates evaluator-owned trace structure, derives observable model/lookup/canary counts, verifies committed auditor identities, and builds the token-free input for a backend-derived runtime-integrity receipt. |
 
 Their scripts return machine-readable JSON and nonzero failure codes, so an orchestrator can use them as blocking gates instead of relying on prompt compliance. They validate the protocol and reported measurements; they do not manufacture hidden data, run an unavailable simulator, or turn an internal result into official benchmark evidence.
 
@@ -477,7 +478,7 @@ This mechanism does not claim that a finite meta-evaluation suite makes a judge 
 
 ### 15. Compare only compatible runs
 
-Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, launch, runtime-integrity, simulation, and evaluator-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface the launch, integrity, simulation, and evaluator-audit receipts used by the selected final evaluation.
+Reports choose only a final evaluation. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, launch, runtime-integrity, simulation, evaluator-audit and objective-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface the launch, integrity, simulation, and evaluator-audit receipts used by the selected final evaluation.
 
 Cost and wall time include both the agent trace and evaluator-reported stage usage. Direction-aware score deltas and the Pareto frontier are available through `POST /harness/compare`.
 
@@ -538,7 +539,7 @@ The implementation borrows principles, not source code, from the following prima
 
 | Source                                                                                                                     | Principle reflected here                                                                                                                                               |
 | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [AlphaEvolve paper](https://arxiv.org/abs/2506.13131)                                                                     | Programs receive multiple objective evaluator scores; a MAP-Elites/island-inspired database preserves diverse high performers for later evolution.                     |
+| [AlphaEvolve paper](https://arxiv.org/abs/2506.13131)                                                                      | Programs receive multiple objective evaluator scores; a MAP-Elites/island-inspired database preserves diverse high performers for later evolution.                     |
 | [Google DeepMind Co-Scientist](https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/) | Generate diverse hypotheses, critique/rank them, combine strong ideas, and spend substantial compute on verification.                                                  |
 | [ProEval](https://deepmind.google/research/publications/238239/)                                                           | Actively discover failure regions and estimate capability from a small, strategically chosen evaluation subset.                                                        |
 | [TRACE: Towards Structural Understanding of LLM Overthinking](https://deepmind.google/research/publications/203490/)       | Detect verification and exploration that continue after their marginal utility has collapsed; stop against a predeclared control rule.                                 |

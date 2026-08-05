@@ -60,6 +60,7 @@ export namespace HarnessAdapter {
         .strict()
         .default({ direction: "pass" }),
       objectives: HarnessContract.Objectives.optional(),
+      objectiveAudit: HarnessContract.ObjectiveAudit.optional(),
       fidelities: HarnessContract.FidelityPlan.optional(),
       model: z
         .object({
@@ -123,6 +124,13 @@ export namespace HarnessAdapter {
           code: "custom",
           path: ["evaluatorAudit", "token"],
           message: "Evaluator and independent auditor capabilities must differ",
+        })
+      }
+      if (Boolean(value.objectives?.length) !== Boolean(value.objectiveAudit)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["objectiveAudit"],
+          message: "Secondary objectives require exactly one preflighted objective audit",
         })
       }
     })
@@ -322,6 +330,7 @@ export namespace HarnessAdapter {
         direction: task.metric.direction,
         target: task.metric.target,
         objectives: task.objectives,
+        objectiveAudit: task.objectiveAudit,
       },
       profile,
       orchestration: task.orchestration,

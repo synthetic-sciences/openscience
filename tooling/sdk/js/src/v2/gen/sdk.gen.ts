@@ -5183,6 +5183,13 @@ export class Harness extends HeyApiClient {
         metric: string
         direction: "maximize" | "minimize"
       }>
+      objectiveAudit?: {
+        schemaVersion: 1
+        planSHA256: string
+        validatorSHA256: string
+        contractSHA256: string
+        guardIDs: Array<string>
+      }
       fidelities?: Array<{
         id: string
         final: boolean
@@ -5246,6 +5253,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "extraPacks" },
             { in: "body", key: "metric" },
             { in: "body", key: "objectives" },
+            { in: "body", key: "objectiveAudit" },
             { in: "body", key: "fidelities" },
             { in: "body", key: "model" },
             { in: "body", key: "tools" },

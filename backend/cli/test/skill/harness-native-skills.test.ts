@@ -35,6 +35,69 @@ async function run(script: string, args: string[]) {
   return { code, stdout, stderr }
 }
 
+function objectivePlan() {
+  const checksum = "a".repeat(64)
+  return {
+    schemaVersion: 1,
+    benchmark: {
+      id: "mle",
+      optimizationSplit: "validation",
+      claimSplit: "official-hidden",
+      evaluator: { name: "official-evaluator", version: "2026.08", sha256: checksum, owner: "evaluator" },
+    },
+    primary: {
+      metric: "score",
+      direction: "maximize",
+      unit: "fraction",
+      official: true,
+      anchors: { poor: 0.2, good: 0.8 },
+    },
+    objectives: [
+      {
+        metric: "robustness",
+        direction: "maximize",
+        role: "diversity",
+        unit: "fraction",
+        signal: "validation-perturbations",
+        anchors: { poor: 0.3, good: 0.7 },
+        risks: ["may reward invariance to scientifically meaningful changes"],
+        guardIDs: ["semantic-regression"],
+      },
+    ],
+    signals: [
+      {
+        id: "validation-perturbations",
+        owner: "evaluator",
+        scope: "optimization",
+        candidateReadable: false,
+        valueRelease: "after_final",
+        sourceSHA256: checksum,
+      },
+    ],
+    guards: [
+      {
+        id: "semantic-regression",
+        kind: "regression",
+        argv: ["python", "eval_semantics.py", "--held-back"],
+        blocking: true,
+        scope: "optimization",
+        sourceSHA256: checksum,
+        protects: ["robustness"],
+      },
+    ],
+    policy: {
+      winnerMetric: "score",
+      targetMetric: "score",
+      archive: "pareto",
+      promotion: "final_only",
+      missingObjective: "reject",
+      valueRelease: "after_final",
+      claimSplitUsage: "post_search_only",
+      candidateCanReadObjectiveValues: false,
+    },
+  }
+}
+
 async function exec(args: string[], cwd: string) {
   const process = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" })
   const [code, stdout, stderr] = await Promise.all([
@@ -784,6 +847,112 @@ test("scientific-ablation-design rejects budget drift", async () => {
     const result = await run("research/scientific-ablation-design/scripts/validate_ablation_plan.py", [source])
     expect(result.code).toBe(2)
     expect(result.stderr).toContain("drifts seed, budget, split, or evaluator")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("design-benchmark-objectives emits a content-addressed harness adapter patch", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-objectives-"))
+  const source = path.join(dir, "objectives.json")
+  const output = path.join(dir, "audit.json")
+  await Bun.write(source, JSON.stringify(objectivePlan()))
+
+  try {
+    const result = await run("research/design-benchmark-objectives/scripts/audit_objectives.py", [
+      "audit",
+      source,
+      "--output",
+      output,
+    ])
+    expect(result.code).toBe(0)
+    const report = JSON.parse(await Bun.file(output).text())
+    expect(report).toMatchObject({
+      schemaVersion: 1,
+      status: "passed",
+      adapterPatch: {
+        profile: "optimize",
+        metric: { name: "score", direction: "maximize" },
+        objectives: [{ metric: "robustness", direction: "maximize" }],
+        objectiveAudit: { schemaVersion: 1, guardIDs: ["semantic-regression"] },
+      },
+      signals: 1,
+      guards: 1,
+    })
+    expect(report.contract.guards).toMatchObject([{ id: "semantic-regression", protects: ["robustness"] }])
+    expect(HarnessContract.Objectives.parse(report.adapterPatch.objectives)).toEqual(report.adapterPatch.objectives)
+    expect(HarnessContract.ObjectiveAudit.parse(report.adapterPatch.objectiveAudit)).toEqual(
+      report.adapterPatch.objectiveAudit,
+    )
+    expect(report.checks).toContain("primary_score_authority")
+    expect(report.checks).toContain("proxy_guards")
+    expect(report.inputSHA256).toMatch(/^[a-f0-9]{64}$/)
+    expect(report.planSHA256).toMatch(/^[a-f0-9]{64}$/)
+    expect(report.contractSHA256).toMatch(/^[a-f0-9]{64}$/)
+    expect(report.validatorSHA256).toMatch(/^[a-f0-9]{64}$/)
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("design-benchmark-objectives rejects authority, direction, leakage, guard, and vector-policy failures", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-objective-adversary-"))
+  const cases = [
+    {
+      name: "authority",
+      message: "winnerMetric must equal primary metric score",
+      change: (plan: ReturnType<typeof objectivePlan>) => (plan.policy.winnerMetric = "robustness"),
+    },
+    {
+      name: "direction",
+      message: "good must be greater than poor for maximize",
+      change: (plan: ReturnType<typeof objectivePlan>) => (plan.objectives[0]!.anchors = { poor: 0.9, good: 0.2 }),
+    },
+    {
+      name: "leakage",
+      message: "cannot use claim-only signal",
+      change: (plan: ReturnType<typeof objectivePlan>) => (plan.signals[0]!.scope = "claim"),
+    },
+    {
+      name: "guard",
+      message: "guardIDs must be a non-empty array",
+      change: (plan: ReturnType<typeof objectivePlan>) => (plan.objectives[0]!.guardIDs = []),
+    },
+    {
+      name: "vector-policy",
+      message: "missingObjective must be reject",
+      change: (plan: ReturnType<typeof objectivePlan>) => (plan.policy.missingObjective = "ignore"),
+    },
+  ]
+
+  try {
+    for (const item of cases) {
+      const plan = objectivePlan()
+      item.change(plan)
+      const source = path.join(dir, `${item.name}.json`)
+      await Bun.write(source, JSON.stringify(plan))
+      const result = await run("research/design-benchmark-objectives/scripts/audit_objectives.py", ["audit", source])
+      expect(result.code).toBe(2)
+      expect(result.stderr).toContain(item.message)
+    }
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("design-benchmark-objectives rejects ambiguous duplicate JSON fields", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-objective-duplicate-"))
+  const source = path.join(dir, "duplicate.json")
+  const plan = JSON.stringify(objectivePlan()).replace(
+    '"winnerMetric":"score"',
+    '"winnerMetric":"score","winnerMetric":"robustness"',
+  )
+  await Bun.write(source, plan)
+
+  try {
+    const result = await run("research/design-benchmark-objectives/scripts/audit_objectives.py", ["audit", source])
+    expect(result.code).toBe(2)
+    expect(result.stderr).toContain("duplicate JSON field winnerMetric")
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
   }

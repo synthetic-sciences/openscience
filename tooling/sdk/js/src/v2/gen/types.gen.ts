@@ -10498,6 +10498,13 @@ export type HarnessBindData = {
       metric: string
       direction: "maximize" | "minimize"
     }>
+    objectiveAudit?: {
+      schemaVersion: 1
+      planSHA256: string
+      validatorSHA256: string
+      contractSHA256: string
+      guardIDs: Array<string>
+    }
     fidelities?: Array<{
       id: string
       final: boolean
@@ -10579,6 +10586,13 @@ export type HarnessBindResponses = {
         metric: string
         direction: "maximize" | "minimize"
       }>
+      objectiveAudit?: {
+        schemaVersion: 1
+        planSHA256: string
+        validatorSHA256: string
+        contractSHA256: string
+        guardIDs: Array<string>
+      }
     }
     profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
     orchestration?: {
@@ -11312,6 +11326,13 @@ export type HarnessContractResponses = {
         metric: string
         direction: "maximize" | "minimize"
       }>
+      objectiveAudit?: {
+        schemaVersion: 1
+        planSHA256: string
+        validatorSHA256: string
+        contractSHA256: string
+        guardIDs: Array<string>
+      }
     }
     profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
     orchestration?: {
@@ -11851,6 +11872,13 @@ export type HarnessReportResponses = {
         metric: string
         direction: "maximize" | "minimize"
       }>
+      objectiveAudit?: {
+        schemaVersion: 1
+        planSHA256: string
+        validatorSHA256: string
+        contractSHA256: string
+        guardIDs: Array<string>
+      }
       archive: number
     }
     generatedAt: number

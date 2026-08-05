@@ -101,6 +101,7 @@ export namespace HarnessReport {
           generations: z.number().int().nonnegative(),
           stalled: z.number().int().nonnegative(),
           objectives: HarnessContract.Objectives,
+          objectiveAudit: HarnessContract.ObjectiveAudit.optional(),
           archive: z.number().int().nonnegative(),
         })
         .strict()
@@ -170,6 +171,7 @@ export namespace HarnessReport {
       direction,
       target: contract.benchmark.target,
       objectives: contract.benchmark.objectives,
+      objectiveAudit: contract.benchmark.objectiveAudit,
       packs: (contract.packs ?? []).toSorted(),
       simulation: contract.simulation,
       launch: contract.launch,
@@ -266,6 +268,7 @@ export namespace HarnessReport {
             generations: Math.max(0, ...candidates.map((item) => item.generation)),
             stalled: input.search.stalled,
             objectives: input.search.objectives,
+            objectiveAudit: contract.benchmark.objectiveAudit,
             archive: HarnessSearch.frontier(input.search).length,
           }
         : undefined,

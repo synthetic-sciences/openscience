@@ -3,6 +3,7 @@ import { HarnessAdapter } from "../../src/session/harness/adapter"
 import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessEvaluation } from "../../src/session/harness/evaluation"
 import { HarnessReport } from "../../src/session/harness/report"
+import { HarnessSearch } from "../../src/session/harness/search"
 
 function contract(runID: string, direction: "maximize" | "minimize" = "maximize"): HarnessContract.Info {
   return HarnessContract.Info.parse({
@@ -121,6 +122,13 @@ describe("harness quality-cost reports", () => {
       benchmark: {
         ...contract("objective-multi").benchmark,
         objectives: [{ metric: "robustness", direction: "maximize" }],
+        objectiveAudit: {
+          schemaVersion: 1,
+          planSHA256: "b".repeat(64),
+          validatorSHA256: "c".repeat(64),
+          contractSHA256: "d".repeat(64),
+          guardIDs: ["semantic-regression"],
+        },
       },
     })
     const first = HarnessReport.compile({ contract: base, evaluations: [evaluation(base, 0.8)], generatedAt: 3 })
@@ -128,9 +136,45 @@ describe("harness quality-cost reports", () => {
       ...evaluation(multi, 0.8),
       metrics: { score: 0.8, robustness: 0.7 },
     })
-    const second = HarnessReport.compile({ contract: multi, evaluations: [result], generatedAt: 3 })
+    const search = HarnessSearch.State.parse({
+      schemaVersion: 1,
+      runID: multi.runID,
+      sessionID: multi.sessionID,
+      objective: multi.objective,
+      evaluator: multi.benchmark.evaluator,
+      metric: "score",
+      direction: "maximize",
+      objectives: multi.benchmark.objectives,
+      budget: { candidates: 10, stall: 5 },
+      status: "active",
+      candidates: {},
+      archiveIDs: [],
+      stalled: 0,
+      revision: 0,
+      startedAt: 1,
+      updatedAt: 1,
+    })
+    const second = HarnessReport.compile({ contract: multi, evaluations: [result], search, generatedAt: 3 })
+    expect(second.search?.objectiveAudit).toEqual(multi.benchmark.objectiveAudit)
     expect(first.comparisonKey).not.toBe(second.comparisonKey)
     expect(() => HarnessReport.compare([first, second], "objective-base")).toThrow("only comparable")
+    const changed = HarnessContract.Info.parse({
+      ...multi,
+      runID: "objective-audit-changed",
+      sessionID: "session-objective-audit-changed",
+      benchmark: {
+        ...multi.benchmark,
+        objectiveAudit: { ...multi.benchmark.objectiveAudit!, contractSHA256: "e".repeat(64) },
+      },
+    })
+    const changedResult = HarnessEvaluation.Info.parse({
+      ...result,
+      runID: changed.runID,
+      sessionID: changed.sessionID,
+    })
+    const third = HarnessReport.compile({ contract: changed, evaluations: [changedResult], generatedAt: 3 })
+    expect(second.comparisonKey).not.toBe(third.comparisonKey)
+    expect(() => HarnessReport.compare([second, third], "objective-multi")).toThrow("only comparable")
   })
 
   test("refuses comparisons across different simulator protocols", () => {

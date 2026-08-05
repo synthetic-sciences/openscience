@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Benchmark Objectives"
+  short_description: "Audit safe multi-metric benchmark objectives"
+  default_prompt: "Use $design-benchmark-objectives to predeclare and audit a benchmark objective contract before optimization."

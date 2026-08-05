@@ -141,6 +141,21 @@ export namespace HarnessContract {
 
   const Hash = z.string().regex(/^[a-f0-9]{64}$/)
 
+  export const ObjectiveAudit = z
+    .object({
+      schemaVersion: z.literal(1),
+      planSHA256: Hash,
+      validatorSHA256: Hash,
+      contractSHA256: Hash,
+      guardIDs: z
+        .array(z.string().min(1).max(200))
+        .min(1)
+        .max(64)
+        .refine((items) => new Set(items).size === items.length, "Objective audit guards must be unique"),
+    })
+    .strict()
+  export type ObjectiveAudit = z.infer<typeof ObjectiveAudit>
+
   export const LaunchCheck = z.enum([
     "clean_checkout",
     "locked_environment",
@@ -416,6 +431,7 @@ export namespace HarnessContract {
           direction: z.enum(["maximize", "minimize", "pass"]).optional(),
           target: z.number().finite().optional(),
           objectives: Objectives.optional(),
+          objectiveAudit: ObjectiveAudit.optional(),
         })
         .strict(),
       profile: Profile,
@@ -499,6 +515,13 @@ export namespace HarnessContract {
           code: "custom",
           path: ["benchmark", "objectives"],
           message: "Secondary objectives require the optimize profile",
+        })
+      }
+      if (value.benchmark.objectiveAudit && !value.benchmark.objectives?.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "objectiveAudit"],
+          message: "An objective audit requires declared secondary objectives",
         })
       }
       if (

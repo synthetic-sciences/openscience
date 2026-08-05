@@ -25705,6 +25705,45 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "objectiveAudit": {
+                          "type": "object",
+                          "properties": {
+                            "schemaVersion": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "planSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "contractSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "guardIDs": {
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              }
+                            }
+                          },
+                          "required": [
+                            "schemaVersion",
+                            "planSHA256",
+                            "validatorSHA256",
+                            "contractSHA256",
+                            "guardIDs"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -28359,6 +28398,45 @@
                       "additionalProperties": false
                     }
                   },
+                  "objectiveAudit": {
+                    "type": "object",
+                    "properties": {
+                      "schemaVersion": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "planSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "validatorSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "contractSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "guardIDs": {
+                        "minItems": 1,
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        }
+                      }
+                    },
+                    "required": [
+                      "schemaVersion",
+                      "planSHA256",
+                      "validatorSHA256",
+                      "contractSHA256",
+                      "guardIDs"
+                    ],
+                    "additionalProperties": false
+                  },
                   "fidelities": {
                     "minItems": 2,
                     "maxItems": 8,
@@ -30000,6 +30078,45 @@
                                 ],
                                 "additionalProperties": false
                               }
+                            },
+                            "objectiveAudit": {
+                              "type": "object",
+                              "properties": {
+                                "schemaVersion": {
+                                  "type": "number",
+                                  "const": 1
+                                },
+                                "planSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "validatorSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "contractSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "guardIDs": {
+                                  "minItems": 1,
+                                  "maxItems": 64,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  }
+                                }
+                              },
+                              "required": [
+                                "schemaVersion",
+                                "planSHA256",
+                                "validatorSHA256",
+                                "contractSHA256",
+                                "guardIDs"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
@@ -32332,6 +32449,45 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "objectiveAudit": {
+                          "type": "object",
+                          "properties": {
+                            "schemaVersion": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "planSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "contractSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "guardIDs": {
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              }
+                            }
+                          },
+                          "required": [
+                            "schemaVersion",
+                            "planSHA256",
+                            "validatorSHA256",
+                            "contractSHA256",
+                            "guardIDs"
+                          ],
+                          "additionalProperties": false
                         },
                         "archive": {
                           "type": "integer",
