@@ -177,7 +177,7 @@ async function launchFixture() {
   return { dir, manifest, recipe, results }
 }
 
-async function pilotFixture(malformed = false) {
+async function pilotFixture(malformed = false, mutate = false) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-pilot-"))
   const workspace = path.join(dir, "checkout")
   const results = path.join(dir, "results")
@@ -192,15 +192,19 @@ async function pilotFixture(malformed = false) {
         "parser = argparse.ArgumentParser()",
         "parser.add_argument('--output', required=True)",
         "parser.add_argument('--rows', required=True)",
+        "parser.add_argument('--candidate', required=True)",
         "args = parser.parse_args()",
+        "open(args.candidate, encoding='utf-8').read()",
         "open(args.output, 'w', encoding='utf-8').write(json.dumps({'scores': [1, 0, 1]}))",
         malformed
           ? "open(args.rows, 'w', encoding='utf-8').write('{\"success_rate\": 1}\\n\\n{\"success_rate\": 0}')"
           : "open(args.rows, 'w', encoding='utf-8').write('\\n'.join(json.dumps({'success_rate': value}) for value in [1, 0, 1]))",
+        mutate ? "open('pyproject.toml', 'a', encoding='utf-8').write('\\n# mutated\\n')" : "",
       ].join("\n"),
     ),
     Bun.write(path.join(workspace, "pyproject.toml"), "[project]\nname='pilot-fixture'\nversion='1.0.0'\n"),
-    Bun.write(path.join(workspace, ".gitignore"), "pilot-score.json\npilot-rows.jsonl\n"),
+    Bun.write(path.join(workspace, "candidate.txt"), "candidate-v1\n"),
+    Bun.write(path.join(workspace, ".gitignore"), "candidate.txt\npilot-score.json\npilot-rows.jsonl\n"),
   ])
   await exec(["git", "init", "--initial-branch=main", "-q"], workspace)
   await exec(["git", "config", "user.name", "Benchmark Test"], workspace)
@@ -213,7 +217,16 @@ async function pilotFixture(malformed = false) {
     kind: "argv",
     entrypoint: "runner.py",
     cwd: ".",
-    argv: ["python", "runner.py", "--output", "pilot-score.json", "--rows", "pilot-rows.jsonl"],
+    argv: [
+      "python",
+      "runner.py",
+      "--output",
+      "pilot-score.json",
+      "--rows",
+      "pilot-rows.jsonl",
+      "--candidate",
+      "candidate.txt",
+    ],
   }
   await Bun.write(
     recipe,
@@ -234,7 +247,7 @@ async function pilotFixture(malformed = false) {
           id: "evaluate",
           role: "evaluate",
           driver,
-          inputs: [],
+          inputs: ["runner.py", "candidate.txt"],
           outputs: ["pilot-score.json", "pilot-rows.jsonl"],
           environment: [],
         },
@@ -288,6 +301,7 @@ async function pilotFixture(malformed = false) {
       source: { repository: "https://github.com/example/pilot-benchmark", revision },
       recipe,
       timeoutSeconds: 30,
+      inputs: { "candidate.txt": await fileHash(path.join(workspace, "candidate.txt")) },
       runtime: {},
     }),
   )
@@ -877,6 +891,11 @@ test("run-benchmark-pilot executes a clean native argv recipe and extracts typed
     })
     expect(value.receiptSHA256).toMatch(/^[0-9a-f]{64}$/)
     expect(value.stages).toHaveLength(1)
+    expect(value.stages[0].inputs).toEqual([
+      expect.objectContaining({ path: "runner.py", origin: "source" }),
+      expect.objectContaining({ path: "candidate.txt", origin: "committed" }),
+    ])
+    expect(value.inputs).toEqual([expect.objectContaining({ path: "candidate.txt", origin: "committed" })])
     expect(value.artifacts[0].paths).toHaveLength(1)
   } finally {
     await fs.rm(fixture.dir, { recursive: true, force: true })
@@ -894,7 +913,78 @@ test("run-benchmark-pilot rejects stale outputs before execution", async () => {
       path.join(fixture.dir, "preflight.json"),
     ])
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain("artifact path is not clean before launch")
+    expect(result.stderr).toContain("stage output is not clean before launch")
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
+test("run-benchmark-pilot rejects an ignored candidate input without a content commitment", async () => {
+  const fixture = await pilotFixture()
+  try {
+    const manifest = JSON.parse(await Bun.file(fixture.manifest).text())
+    delete manifest.inputs
+    await Bun.write(fixture.manifest, JSON.stringify(manifest))
+    const result = await run("research/run-benchmark-pilot/scripts/run_pilot.py", [
+      "preflight",
+      fixture.manifest,
+      "--output",
+      path.join(fixture.dir, "preflight.json"),
+    ])
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain("non-source stage input is not content committed")
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
+test("run-benchmark-pilot rejects candidate bytes changed after input commitment", async () => {
+  const fixture = await pilotFixture()
+  try {
+    await Bun.write(path.join(fixture.workspace, "candidate.txt"), "candidate-v2\n")
+    const result = await run("research/run-benchmark-pilot/scripts/run_pilot.py", [
+      "preflight",
+      fixture.manifest,
+      "--output",
+      path.join(fixture.dir, "preflight.json"),
+    ])
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain("input commitment hash mismatch")
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
+test("run-benchmark-pilot rejects unused or redundant input commitments", async () => {
+  const fixture = await pilotFixture()
+  try {
+    const manifest = JSON.parse(await Bun.file(fixture.manifest).text())
+    manifest.inputs["runner.py"] = await fileHash(path.join(fixture.workspace, "runner.py"))
+    await Bun.write(fixture.manifest, JSON.stringify(manifest))
+    const result = await run("research/run-benchmark-pilot/scripts/run_pilot.py", [
+      "preflight",
+      fixture.manifest,
+      "--output",
+      path.join(fixture.dir, "preflight.json"),
+    ])
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain("input commitments are not external recipe inputs")
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
+test("run-benchmark-pilot rejects a stage that mutates pinned source files", async () => {
+  const fixture = await pilotFixture(false, true)
+  try {
+    const result = await run("research/run-benchmark-pilot/scripts/run_pilot.py", [
+      "run",
+      fixture.manifest,
+      "--output",
+      path.join(fixture.dir, "receipt.json"),
+    ])
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain("modified source-tracked benchmark files")
   } finally {
     await fs.rm(fixture.dir, { recursive: true, force: true })
   }

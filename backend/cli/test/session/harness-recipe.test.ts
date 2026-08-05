@@ -8,6 +8,7 @@ describe("source-verified benchmark recipes", () => {
     const ids: HarnessRecipe.Verified[] = [
       "bixbench",
       "biomni",
+      "genebench",
       "pde",
       "chembench",
       "matscibench",
@@ -19,6 +20,8 @@ describe("source-verified benchmark recipes", () => {
       "discoverybench",
       "scicode",
       "labbench",
+      "sciagentarena",
+      "ainsteinbench",
     ]
     const families = new Set<string>()
     for (const id of ids) {
@@ -67,6 +70,16 @@ describe("source-verified benchmark recipes", () => {
     )
     expect(HarnessRecipe.materialize("labbench", recipeSelection("labbench")).runtime).toContainEqual(
       expect.objectContaining({ name: "agent", kind: "python_object", owner: "runner" }),
+    )
+    expect(HarnessRecipe.materialize("genebench", recipeSelection("genebench")).runtime).toEqual([
+      expect.objectContaining({ name: "config", kind: "json", owner: "evaluator" }),
+      expect.objectContaining({ name: "submission", kind: "json", owner: "runner" }),
+    ])
+    expect(HarnessRecipe.materialize("sciagentarena", recipeSelection("sciagentarena")).metrics).toContainEqual(
+      expect.objectContaining({ name: "strategic-success", selector: { kind: "jsonpath", path: "$.score.strategic_success" } }),
+    )
+    expect(HarnessRecipe.materialize("ainsteinbench", recipeSelection("ainsteinbench")).metrics).toContainEqual(
+      expect.objectContaining({ name: "overall-score", selector: { kind: "jsonpath", path: "$[*].score_result.overall_score" } }),
     )
   })
 
@@ -225,7 +238,7 @@ describe("source-verified benchmark recipes", () => {
     ).toThrow("selector is incompatible")
   })
 
-  test("distinguishes pending and upstream-blocked adapters instead of inventing a generic recipe", () => {
+  test("distinguishes upstream-blocked and methodology adapters instead of inventing a generic recipe", () => {
     expect(HarnessBenchmark.catalog.corebench.recipe).toMatchObject({
       status: "blocked_upstream",
       anchor: "README.md",

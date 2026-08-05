@@ -9,6 +9,7 @@ export function recipeSelection(key: HarnessRecipe.Verified): HarnessRecipe.Sele
   const bindings = {
     bixbench: {},
     biomni: {},
+    genebench: {},
     pde: { dataRoot: "data", datasetStem: "1D_Advection_Sols_beta0.1" },
     chembench: { runID: "fixture-run" },
     matscibench: { outputDir: "fixtures/matsci-results" },
@@ -33,6 +34,17 @@ export function recipeSelection(key: HarnessRecipe.Verified): HarnessRecipe.Sele
     },
     discoverybench: { datasetType: "real" },
     labbench: { tag: "seqqa2", mode: "file" },
+    sciagentarena: {
+      taskID: "tech_01_hard_mw",
+      agentPath: "evaluations/dd/results/generated/openscience.py",
+      resultArtifact: "evaluations/dd/results/openscience.json",
+    },
+    ainsteinbench: {
+      questions: "data/questions/et_converted.jsonl",
+      answersDir: "outputs/openscience",
+      outputArtifact: "evaluation_results.json",
+      maxExamples: "1",
+    },
     scicode: {
       codeDir: "fixtures/scicode/code",
       logDir: "fixtures/scicode/logs",

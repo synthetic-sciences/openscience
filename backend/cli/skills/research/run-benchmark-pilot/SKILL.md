@@ -37,9 +37,14 @@ Create JSON outside the checkout:
   },
   "recipe": "/evaluator/pilots/materialized-recipe.json",
   "timeoutSeconds": 3600,
+  "inputs": {
+    "results/generated/candidate.py": "64-hex-SHA-256-of-the-file"
+  },
   "runtime": {}
 }
 ```
+
+`inputs` content-addresses every stage input that is not already tracked by the pinned source revision and is not produced by an earlier recipe stage. Keys are exact checkout-relative file or directory paths; directory hashes commit the sorted relative path and SHA-256 of every contained file. Omit source-tracked inputs because the Git revision already commits them. Never rely on `.gitignore` or a path-only recipe binding to identify candidate bytes.
 
 The `runtime` object must exactly match `recipe.runtime`:
 
@@ -63,10 +68,11 @@ Preflight fails unless:
 - Git origin, clean state, and revision equal the official pin;
 - recipe, binding, and launch-driver commitments are valid;
 - every anchor, environment file, entrypoint, runtime artifact, and required environment variable exists;
+- every external non-source stage input has an exact matching content commitment, with no unused commitments;
 - result storage is outside the checkout and initially empty; and
-- no declared artifact already exists, preventing stale-output selection.
+- no declared stage output or artifact already exists, preventing stale-output selection.
 
-Execution never invokes a shell. It runs argv stages directly, preserves Python values across named API stages, requires every stage input/output, enforces artifact cardinality, hashes logs and artifacts, applies typed selectors, aggregates metrics, and writes a content-addressed receipt without secret values.
+Execution never invokes a shell. It runs argv stages directly, preserves Python values across named API stages, requires every stage input/output, records each input as source-tracked, content-committed, or prior-stage-derived, rejects source-file mutation, enforces artifact cardinality, hashes logs and artifacts, applies typed selectors, aggregates metrics, and writes a content-addressed receipt without secret values.
 
 For a `python_object` runtime input, the content-addressed adapter source may import the clean benchmark checkout. This supports official extension protocols such as LABBench2 external runners without copying candidate code into, or dirtying, the pinned checkout.
 

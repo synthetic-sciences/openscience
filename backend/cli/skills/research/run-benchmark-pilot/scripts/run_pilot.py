@@ -137,9 +137,52 @@ def tree_hash(path: Path) -> str:
     if not path.is_dir():
         fail(f"artifact disappeared: {path}")
     rows = []
+    base = path.resolve()
     for item in sorted(value for value in path.rglob("*") if value.is_file()):
+        try:
+            item.resolve().relative_to(base)
+        except ValueError:
+            fail(f"directory content escapes its declared root: {item}")
         rows.append({"path": item.relative_to(path).as_posix(), "sha256": file_hash(item)})
     return digest(rows)
+
+
+def tracked_tree(workspace: Path, path: Path, tracked: set[str]) -> bool:
+    if path.is_file():
+        return path.relative_to(workspace).as_posix() in tracked
+    files = [item for item in path.rglob("*") if item.is_file()]
+    return bool(files) and all(item.relative_to(workspace).as_posix() in tracked for item in files)
+
+
+def derived(path: Path, produced: set[Path]) -> bool:
+    return any(path == item or item in path.parents for item in produced)
+
+
+def input_records(
+    workspace: Path,
+    patterns: list,
+    stage: str,
+    commitments: dict[str, str],
+    tracked: set[str],
+    produced: set[Path],
+) -> list[dict]:
+    records = []
+    for pattern in patterns:
+        matches = glob(workspace, text(pattern, f"stage {stage} input"), f"stage {stage} input")
+        if not matches:
+            fail(f"stage {stage} input does not exist: {pattern}")
+        for path in matches:
+            relative = path.relative_to(workspace).as_posix()
+            actual = tree_hash(path)
+            origin = "derived" if derived(path, produced) else "source" if tracked_tree(workspace, path, tracked) else "committed"
+            if origin == "committed":
+                expected = commitments.get(relative)
+                if expected is None:
+                    fail(f"non-source stage input is not content committed: {relative}")
+                if actual != expected:
+                    fail(f"input commitment hash mismatch: {relative}")
+            records.append({"path": relative, "sha256": actual, "origin": origin})
+    return records
 
 
 def resolve(module: object, symbol: str) -> object:
@@ -189,7 +232,16 @@ def runtime_value(spec: dict, kind: str, base: Path) -> tuple[object, dict]:
 
 def preflight(manifest_path: Path) -> dict:
     manifest = mapping(json.loads(regular(manifest_path, "pilot manifest").read_text(encoding="utf-8")), "manifest")
-    allowed = {"schemaVersion", "workspace", "resultsRoot", "source", "recipe", "timeoutSeconds", "runtime"}
+    allowed = {
+        "schemaVersion",
+        "workspace",
+        "resultsRoot",
+        "source",
+        "recipe",
+        "timeoutSeconds",
+        "runtime",
+        "inputs",
+    }
     if set(manifest) - allowed or not {"schemaVersion", "workspace", "resultsRoot", "source", "recipe", "runtime"} <= set(manifest):
         fail("pilot manifest fields do not match the schema")
     if manifest.get("schemaVersion") != 1:
@@ -217,6 +269,7 @@ def preflight(manifest_path: Path) -> dict:
         fail("checkout origin does not match the pilot source pin")
     if git(workspace, "status", "--porcelain", "--untracked-files=all"):
         fail("benchmark checkout must be clean")
+    tracked = {value for value in git(workspace, "ls-files", "-z").split("\0") if value}
 
     recipe_path = regular(root(base, manifest.get("recipe"), "recipe"), "materialized recipe")
     recipe = mapping(json.loads(recipe_path.read_text(encoding="utf-8")), "recipe")
@@ -254,6 +307,17 @@ def preflight(manifest_path: Path) -> dict:
 
     missing_environment = []
     artifacts = array(recipe.get("artifacts"), "recipe.artifacts")
+    commitments = mapping(manifest.get("inputs", {}), "inputs")
+    for relative, expected in commitments.items():
+        target = inside(workspace, relative, "input commitment path")
+        if not valid_hash(expected):
+            fail(f"input commitment must be a lowercase SHA-256: {relative}")
+        if not target.is_file() and not target.is_dir():
+            fail(f"input commitment target does not exist: {relative}")
+        if tree_hash(target) != expected:
+            fail(f"input commitment hash mismatch: {relative}")
+    external = []
+    outputs = set()
     for stage in stages:
         row = mapping(stage, "recipe stage")
         driver = mapping(row.get("driver"), "stage driver")
@@ -261,12 +325,23 @@ def preflight(manifest_path: Path) -> dict:
         missing_environment.extend(
             name for name in array(row.get("environment"), "stage environment") if not os.environ.get(str(name))
         )
+        patterns = array(row.get("inputs"), "stage inputs")
+        external.extend(pattern for pattern in patterns if pattern not in outputs)
+        for pattern in array(row.get("outputs"), "stage outputs"):
+            if glob(workspace, text(pattern, "stage output"), "stage output"):
+                fail(f"stage output is not clean before launch: {pattern}")
+            outputs.add(pattern)
     if missing_environment:
         fail(f"required environment is missing: {', '.join(sorted(set(missing_environment)))}")
     for artifact in artifacts:
         row = mapping(artifact, "recipe artifact")
         if row.get("kind") == "file" and glob(workspace, text(row.get("path"), "artifact path"), "artifact path"):
             fail(f"artifact path is not clean before launch: {row.get('path')}")
+    initial = input_records(workspace, external, "preflight", commitments, tracked, set())
+    referenced = {item["path"] for item in initial if item["origin"] == "committed"}
+    extra = sorted(set(commitments) - referenced)
+    if extra:
+        fail(f"input commitments are not external recipe inputs: {', '.join(extra)}")
 
     timeout = manifest.get("timeoutSeconds", 3600)
     if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1 or timeout > 604800:
@@ -283,6 +358,9 @@ def preflight(manifest_path: Path) -> dict:
         "recipe": recipe,
         "runtime": runtime,
         "runtimeEvidence": runtime_evidence,
+        "inputEvidence": [item for item in initial if item["origin"] == "committed"],
+        "commitments": commitments,
+        "tracked": tracked,
         "timeout": timeout,
     }
 
@@ -429,14 +507,22 @@ def execute(state: dict) -> dict:
     values = dict(state["runtime"])
     returns = {}
     records = []
+    produced = set()
     started = int(time.time() * 1000)
     sys.path.insert(0, str(workspace))
     for index, stage in enumerate(recipe["stages"]):
         identifier = text(stage.get("id"), "stage id")
-        require_inputs(workspace, array(stage.get("inputs"), "stage inputs"), identifier)
+        inputs = input_records(
+            workspace,
+            array(stage.get("inputs"), "stage inputs"),
+            identifier,
+            state["commitments"],
+            state["tracked"],
+            produced,
+        )
         driver = mapping(stage.get("driver"), "stage driver")
         begin = int(time.time() * 1000)
-        record = {"id": identifier, "driver": driver.get("kind"), "startedAt": begin}
+        record = {"id": identifier, "driver": driver.get("kind"), "inputs": inputs, "startedAt": begin}
         if driver.get("kind") == "argv":
             cwd = inside(workspace, driver.get("cwd"), "stage cwd") if driver.get("cwd") != "." else workspace
             argv = array(driver.get("argv"), "stage argv")
@@ -495,6 +581,10 @@ def execute(state: dict) -> dict:
         else:
             fail(f"unsupported stage driver: {driver.get('kind')}")
         require_outputs(workspace, array(stage.get("outputs"), "stage outputs"), identifier)
+        for pattern in array(stage.get("outputs"), "stage outputs"):
+            produced.update(path.resolve() for path in glob(workspace, text(pattern, "stage output"), "stage output"))
+        if git(workspace, "status", "--porcelain", "--untracked-files=no"):
+            fail(f"stage {identifier} modified source-tracked benchmark files")
         record["completedAt"] = int(time.time() * 1000)
         records.append(record)
 
@@ -554,6 +644,7 @@ def execute(state: dict) -> dict:
             "driverSHA256": recipe["driverSHA256"],
         },
         "runtime": state["runtimeEvidence"],
+        "inputs": state["inputEvidence"],
         "startedAt": started,
         "completedAt": int(time.time() * 1000),
         "stages": records,
@@ -585,6 +676,7 @@ def main() -> int:
             "recipeArtifactSHA256": state["recipeArtifactSHA256"],
             "source": state["source"],
             "runtime": state["runtimeEvidence"],
+            "inputs": state["inputEvidence"],
         }
         write(output, {**payload, "preflightSHA256": digest(payload)})
         print(json.dumps({"status": "passed", "output": str(output)}))
