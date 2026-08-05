@@ -1402,6 +1402,36 @@ describe("/notebook routes", () => {
     })
   })
 
+  test("measures each named client's own window rather than letting the first starve the rest", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const app = NotebookRoutes()
+        const busy = (body: unknown) => (body as { cpu: { busy?: number } }).cpu.busy
+        // Two browser tabs with the Compute pane open, each polling every 2.5s
+        // and offset by 150ms. Sharing one window on the server, whichever tab
+        // lands first each cycle advances it and the other measures only that
+        // 150ms gap — refused by the one-second floor, every cycle, forever.
+        const poll = async (client: string, offset: number) => {
+          await Bun.sleep(offset)
+          const seen: Array<number | undefined> = []
+          for (let round = 0; round < 3; round += 1) {
+            seen.push(busy(await (await app.request(`/compute?client=${client}`)).json()))
+            await Bun.sleep(2_500)
+          }
+          return seen
+        }
+        const [first, second] = await Promise.all([poll("tab-a", 0), poll("tab-b", 150)])
+
+        for (const seen of [first, second]) {
+          expect(seen.length).toBe(3)
+          for (const value of seen) expect(typeof value).toBe("number")
+        }
+      },
+    })
+  }, 30_000)
+
   test("omits a live kernel's figure on its first compute poll instead of fabricating zero", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

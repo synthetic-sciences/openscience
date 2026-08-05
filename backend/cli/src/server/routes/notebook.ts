@@ -119,10 +119,19 @@ export const NotebookRoutes = lazy(() =>
         responses: { 200: { description: "Machine capacity and the share kernels hold" } },
       }),
       async (c) => {
-        const host = await KernelHost.snapshot()
+        // Both samplers measure across the window since THIS caller's previous
+        // poll, so the caller has to name itself. Several surfaces poll this one
+        // route independently — two browser tabs on their own 2.5s offsets are
+        // the ordinary case — and a window shared between them is truncated to
+        // the gap between their polls, which the one-second floor then refuses
+        // for whichever of them polled second, every cycle, forever. A client
+        // that sends no identity shares the default window, which is the
+        // behaviour before this parameter existed.
+        const caller = c.req.query("client")?.slice(0, 128) || "anonymous"
+        const host = await KernelHost.snapshot(caller)
         const live = KernelRuntime.list().filter((kernel) => kernel.active)
         const samples = await KernelMetrics.sampleAll(
-          "compute",
+          `compute:${caller}`,
           live.flatMap((kernel) => (kernel.process_id === null ? [] : [kernel.process_id])),
         )
         const usage = [...samples.values()]

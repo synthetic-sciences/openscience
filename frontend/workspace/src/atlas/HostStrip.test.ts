@@ -135,19 +135,40 @@ describe("host strip", () => {
     expect(host.textContent).toContain("~2 of 8 cores busy")
   })
 
-  test("asks the route the compute strip is served from", async () => {
+  test("asks the route the compute strip is served from, naming itself to the server", async () => {
     const paths: string[] = []
+    const track = (path: string) => {
+      paths.push(path)
+      return serving()
+    }
+    guard(() => subject.HostStrip({ request: track }))
+    await Bun.sleep(20)
+
+    expect(paths.length).toBe(1)
+    const asked = new URL(paths[0] ?? "", "http://host")
+    expect(asked.pathname).toBe("/notebook/compute")
+
+    // Both CPU figures the route serves are measured across the window since
+    // the SAME client's previous poll, so a second tab sharing this identity
+    // would truncate that window to the gap between the two tabs' polls — under
+    // the server's one-second floor, which then refuses whichever polled
+    // second, every cycle. A second mount must therefore not reuse the first's.
+    const client = asked.searchParams.get("client")
+    expect(client).toBeTruthy()
+
+    const others: string[] = []
     guard(() =>
       subject.HostStrip({
         request: (path: string) => {
-          paths.push(path)
+          others.push(path)
           return serving()
         },
       }),
     )
     await Bun.sleep(20)
 
-    expect(paths).toEqual(["/notebook/compute"])
+    expect(others.length).toBe(1)
+    expect(new URL(others[0] ?? "", "http://host").searchParams.get("client")).not.toBe(client)
   })
 
   test("keeps the same tile nodes mounted across a poll that changes the data", async () => {

@@ -7,8 +7,20 @@ import "@/atlas/HostStrip.css"
 // endpoint that really fails; the session SDK supplies it in the product.
 type HostStripProps = { request?: (path: string) => Promise<Response> }
 
+// Names this mounted strip to the server. Both host and kernel CPU figures are
+// measured across the window since the same client's previous poll, so two tabs
+// sharing one identity would truncate each other's window to the gap between
+// their polls — under the server's one-second floor, which then refuses a
+// reading for whichever polled second, every cycle. Per mount rather than per
+// module: two tabs are two page loads, but two strips in one page would collide
+// on a module-level value. crypto.randomUUID needs a secure context, which
+// localhost is, but the fallback keeps a reload from ever reusing an identity.
+const identify = () =>
+  globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
+
 export function HostStrip(props: HostStripProps = {}): JSX.Element {
   const request = props.request ?? useSDK().request
+  const client = identify()
   // A poll that fails resolves to no capacity instead of rejecting. An errored
   // resource re-throws where it is read, and the nearest ErrorBoundary wraps the
   // entire workspace, so a server restart or a sleep/wake while this pane is
@@ -16,7 +28,7 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
   // absent capacity as "Unavailable" on every tile, which is the designed
   // degraded state — never a 0, never a blank tile, never a thrown boundary.
   const load = () =>
-    request("/notebook/compute")
+    request(`/notebook/compute?client=${encodeURIComponent(client)}`)
       .then((response) => (response.ok ? (response.json() as Promise<Capacity>) : undefined))
       .catch(() => undefined)
   const [data, api] = createResource(load)

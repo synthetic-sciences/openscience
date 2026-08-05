@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, setSystemTime, test } from "bun:test"
 import os from "node:os"
 import { KernelHost } from "../../../src/science/kernel/host"
 
@@ -112,11 +112,11 @@ describe("kernel host snapshot", () => {
   })
 
   test("never answers concurrent snapshots with a fabricated 0 or a fully pegged host", async () => {
-    // The empirical half of the floor: real concurrent callers against the real
-    // rolling baseline, with one core genuinely held so neither extreme can be
-    // the truth. 5ms straddles the 10ms jiffy, so a window in which exactly one
-    // core ticked once — the corruption the floor exists to refuse — happens
-    // repeatedly over 60 rounds.
+    // The empirical half of the floor: real concurrent callers against ONE
+    // caller's rolling baseline, with one core genuinely held so neither
+    // extreme can be the truth. 5ms straddles the 10ms jiffy, so a window in
+    // which exactly one core ticked once — the corruption the floor exists to
+    // refuse — happens repeatedly over 60 rounds.
     const spinner = Bun.spawn(["sh", "-c", "while :; do :; done"], {
       detached: true,
       stdout: "ignore",
@@ -126,7 +126,7 @@ describe("kernel host snapshot", () => {
       const cores = os.cpus().length
       const readings: Array<number | undefined> = []
       for (let round = 0; round < 60; round += 1) {
-        const pair = await Promise.all([KernelHost.snapshot(), KernelHost.snapshot()])
+        const pair = await Promise.all([KernelHost.snapshot("strip"), KernelHost.snapshot("strip")])
         readings.push(...pair.map((snapshot) => snapshot.cpu.busy))
         await Bun.sleep(5)
       }
@@ -146,4 +146,65 @@ describe("kernel host snapshot", () => {
       await spinner.exited
     }
   }, 30_000)
+
+  test("gives two honest 2.5s pollers their own window instead of starving the second", async () => {
+    // Two browser tabs with the Compute pane open, each polling
+    // /notebook/compute every 2.5s, offset by 150ms — the ordinary case, not a
+    // contrived race. On one shared baseline whichever tab lands first each
+    // cycle advances it, so the second measures only that 150ms gap, is refused
+    // by the one-second floor, and is refused again every cycle after:
+    // measured 7 of 8 polls absent, its caption stuck on the bare core count.
+    // Neither poller is doing anything wrong, so neither may be starved.
+    const spinner = Bun.spawn(["sh", "-c", "while :; do :; done"], {
+      detached: true,
+      stdout: "ignore",
+      stderr: "ignore",
+    })
+    const cores = os.cpus().length
+    const poll = async (caller: string, offset: number) => {
+      await Bun.sleep(offset)
+      const seen: Array<number | undefined> = []
+      for (let round = 0; round < 4; round += 1) {
+        seen.push((await KernelHost.snapshot(caller)).cpu.busy)
+        await Bun.sleep(2_500)
+      }
+      return seen
+    }
+    try {
+      const [first, second] = await Promise.all([poll("tab-a", 0), poll("tab-b", 150)])
+
+      for (const seen of [first, second]) {
+        expect(seen.length).toBe(4)
+        for (const value of seen) {
+          // Every poll of an honest 2.5s poller reads a real figure: the first
+          // from its own cold 200ms sample, the rest from its own baseline.
+          expect(typeof value).toBe("number")
+          expect(value).toBeGreaterThan(0)
+          expect(value).toBeLessThanOrEqual(cores)
+        }
+      }
+      // Two callers, two baselines — and nothing left behind by a third.
+      expect(KernelHost.tracked().sort()).toEqual(["tab-a", "tab-b"])
+    } finally {
+      spinner.kill()
+      await spinner.exited
+    }
+  }, 30_000)
+
+  test("forgets a caller that stopped polling rather than holding its mark forever", async () => {
+    await KernelHost.snapshot("closed-tab")
+
+    expect(KernelHost.tracked()).toEqual(["closed-tab"])
+
+    // The tab closed. One staleness bound later any other caller's poll sweeps
+    // it — the clock moves rather than the test waiting 30s.
+    setSystemTime(new Date(Date.now() + KernelHost.stale + 1_000))
+    try {
+      await KernelHost.snapshot("still-open")
+
+      expect(KernelHost.tracked()).toEqual(["still-open"])
+    } finally {
+      setSystemTime()
+    }
+  })
 })

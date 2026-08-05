@@ -63,25 +63,54 @@ export namespace KernelHost {
 
   const mark = (): Mark => ({ times: times(os.cpus()), at: Date.now() })
 
-  // Rolling baseline: a 2.5s poll compares against the previous poll and pays
-  // nothing. A cold call, or one whose baseline is too old to average
-  // meaningfully, takes a single 200ms sample instead.
-  let baseline: ReturnType<typeof mark> | undefined
+  // How old a baseline may be and still measure a window, and how long an
+  // abandoned caller's entry survives. The same bound KernelMetrics uses.
+  export const stale = 30_000
 
-  // Drops the rolling baseline so the next snapshot takes the cold 200ms
+  // Rolling baselines, one PER CALLER. A 2.5s poll compares against that
+  // caller's previous poll and pays nothing; a cold caller, or one whose
+  // baseline is too old to average meaningfully, takes a single 200ms sample.
+  //
+  // Keyed rather than shared because the one-second floor above turns a shared
+  // baseline into a race the first poller always wins. Two browser tabs both
+  // polling /notebook/compute on their own ~2.5s cadence, staggered by 150ms:
+  // whichever lands first each cycle advances the single mark, so the other
+  // measures only the 150ms gap to it, is refused by the floor, and is refused
+  // again every cycle after. Measured before this keying: 7 of 8 polls absent
+  // for the second tab, its CPU caption stuck on the bare core count with no
+  // busy figure at all, indefinitely. Two honest 2.5s pollers must each get a
+  // 2.5s window; the floor is there to refuse windows that are genuinely too
+  // short, not to hand the only window to whoever asked first.
+  const baseline = new Map<string, Mark>()
+
+  // Drops every rolling baseline so the next snapshot takes the cold 200ms
   // sample. Without it a caller inherits whatever window an earlier caller in
   // the same process left behind, and a window that has not advanced yields no
   // busy figure at all — an outcome that depends on call order, not on code.
   export function reset() {
-    baseline = undefined
+    baseline.clear()
   }
 
-  const load = async (cores: number) => {
-    const previous = baseline
+  // The caller keys currently held, so a leaked baseline is visible to a test.
+  export function tracked() {
+    return [...baseline.keys()]
+  }
+
+  // A caller that stopped asking — a closed tab, a client that reloaded and
+  // came back under a fresh identity — leaves its mark behind, and `load`
+  // refuses a mark this old anyway. Sweeping keeps the map bounded by the
+  // number of callers actually polling rather than by every caller that ever
+  // has.
+  const evict = (now: number) => {
+    for (const [id, held] of baseline) if (now - held.at > stale) baseline.delete(id)
+  }
+
+  const load = async (caller: string, cores: number) => {
+    const previous = baseline.get(caller)
     const fresh = mark()
-    if (previous && fresh.at - previous.at <= 30_000) {
+    if (previous && fresh.at - previous.at <= stale) {
       const result = advance(previous, fresh, cores)
-      baseline = result.baseline
+      baseline.set(caller, result.baseline)
       return result.reading
     }
     // The cold sample keeps its own 200ms window rather than the 1s floor
@@ -91,12 +120,19 @@ export namespace KernelHost {
     // gain precision nobody asked for is the worse trade.
     await Bun.sleep(200)
     const next = mark()
-    baseline = next
+    baseline.set(caller, next)
     const value = busy(fresh.times, next.times, cores)
     return value === undefined ? {} : { busy: value }
   }
 
-  export async function snapshot() {
+  // `caller` identifies the polling surface, not the route: /notebook/compute
+  // is a single route that several clients poll independently. Callers that
+  // cannot name themselves share the default key and so share one window, which
+  // is the pre-keying behaviour and still safe — the floor refuses the
+  // sub-second windows they truncate for each other rather than fabricating a
+  // reading from them.
+  export async function snapshot(caller = "anonymous") {
+    evict(Date.now())
     const meminfo = await Bun.file("/proc/meminfo")
       .text()
       .catch(() => "")
@@ -105,7 +141,7 @@ export namespace KernelHost {
     const cores = os.cpus().length
     return {
       memory: { total, available: Math.min(total, free) },
-      cpu: { cores, ...(await load(cores)) },
+      cpu: { cores, ...(await load(caller, cores)) },
     }
   }
 }
