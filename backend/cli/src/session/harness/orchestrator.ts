@@ -10,6 +10,7 @@ import { HarnessSemantic } from "./semantic"
 import { HarnessReplication } from "./replication"
 import { HarnessSynthesis } from "./synthesis"
 import { HarnessAutonomy } from "./autonomy"
+import { HarnessBlueprint } from "./blueprint"
 import { HarnessFormal } from "./formal"
 
 export namespace HarnessOrchestrator {
@@ -1043,6 +1044,7 @@ export namespace HarnessOrchestrator {
         ...(contract.synthesis ? [HarnessSynthesis.prompt(contract)] : []),
         ...(contract.autonomy ? [HarnessAutonomy.prompt(contract)] : []),
         ...(contract.formalProof ? [HarnessFormal.prompt(contract)] : []),
+        ...(contract.formalProof?.blueprint ? [HarnessBlueprint.prompt(contract)] : []),
         ...(contract.replication ? [HarnessReplication.prompt(contract)] : []),
         ...(contract.confirmation ? [HarnessConfirmation.prompt(contract)] : []),
         instruction(role),

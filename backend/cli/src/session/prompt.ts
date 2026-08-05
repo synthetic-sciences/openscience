@@ -67,6 +67,8 @@ import { HarnessProfile } from "./harness/profile"
 import { HarnessMemory } from "./harness/memory"
 import { HarnessClaims } from "./harness/claims"
 import { HarnessDomain } from "./harness/domain"
+import { HarnessBlueprint } from "./harness/blueprint"
+import { HarnessFormal } from "./harness/formal"
 import { HarnessSemantic } from "./harness/semantic"
 import { HarnessReplication } from "./harness/replication"
 import { HarnessSynthesis } from "./harness/synthesis"
@@ -841,9 +843,13 @@ export namespace SessionPrompt {
       const claims = profile.id === "react" ? "" : await HarnessClaims.prompt(sessionID).catch(() => "")
       const domain = await HarnessDomain.resolve({ sessionID, agent: agent.name, profile: profile.id, text: request })
       const methodology = HarnessDomain.prompt(domain)
-      const semantics = await HarnessSemantic.context(sessionID).catch(() => "")
-      const synthesis = await HarnessSynthesis.context(sessionID).catch(() => "")
-      const replication = await HarnessReplication.context(sessionID).catch(() => "")
+      const [semantics, synthesis, replication, formal, blueprint] = await Promise.all([
+        HarnessSemantic.context(sessionID).catch(() => ""),
+        HarnessSynthesis.context(sessionID).catch(() => ""),
+        HarnessReplication.context(sessionID).catch(() => ""),
+        HarnessFormal.context(sessionID).catch(() => ""),
+        HarnessBlueprint.context(sessionID).catch(() => ""),
+      ])
       await SessionTraceStore.recordProfile({
         sessionID,
         messageID: lastUser.id,
@@ -903,6 +909,8 @@ export namespace SessionPrompt {
         ...(semantics ? [semantics] : []),
         ...(synthesis ? [synthesis] : []),
         ...(replication ? [replication] : []),
+        ...(formal ? [formal] : []),
+        ...(blueprint ? [blueprint] : []),
         ...artifactContext,
       ]
 

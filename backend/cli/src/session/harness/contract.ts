@@ -946,6 +946,53 @@ export namespace HarnessContract {
     })
     .strict()
 
+  export const ProofBlueprint = z
+    .object({
+      protocolVersion: z.literal("proof-blueprint-v1"),
+      graphSchemaSHA256: Hash,
+      compilerArtifactSHA256: Hash,
+      sketchValidatorArtifactSHA256: Hash,
+      reviewerArtifactSHA256: Hash,
+      reviewerPromptSHA256: Hash,
+      nodePolicy: z.literal("and-or-monotone-v1"),
+      failurePolicy: z.literal("preserve-and-refine"),
+      memoization: z.literal("goal-sha256"),
+      finalAuthority: z.literal("formal-proof-v1"),
+      directAttemptFirst: z.literal(true),
+      verifiedSketchRequired: z.literal(true),
+      completeFailureHistoryRequired: z.literal(true),
+      maxNodes: z.number().int().min(2).max(512),
+      maxDepth: z.number().int().min(1).max(32),
+      maxParallel: z.number().int().min(1).max(32),
+      maxAttemptsPerGoal: z.number().int().min(1).max(16),
+      maxRefinementsPerGoal: z.number().int().min(0).max(16),
+      leaseDurationMs: z.number().int().min(1_000).max(3_600_000),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (value.maxParallel > value.maxNodes) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["maxParallel"],
+          message: "Proof blueprint parallelism cannot exceed its graph node budget",
+        })
+      }
+      const artifacts = [
+        value.graphSchemaSHA256,
+        value.compilerArtifactSHA256,
+        value.sketchValidatorArtifactSHA256,
+        value.reviewerArtifactSHA256,
+        value.reviewerPromptSHA256,
+      ]
+      if (new Set(artifacts).size === artifacts.length) return
+      ctx.addIssue({
+        code: "custom",
+        path: ["graphSchemaSHA256"],
+        message: "Proof blueprint schema, compiler, validator, reviewer, and rubric require distinct artifacts",
+      })
+    })
+  export type ProofBlueprint = z.infer<typeof ProofBlueprint>
+
   export const FormalProof = z
     .object({
       protocolVersion: z.literal("formal-proof-v1"),
@@ -968,6 +1015,7 @@ export namespace HarnessContract {
       completeManifestRequired: z.literal(true),
       warningPolicy: z.literal("fail"),
       semanticPolicy: z.literal("formal_statement_only"),
+      blueprint: ProofBlueprint.optional(),
     })
     .strict()
     .superRefine((value, ctx) => {
@@ -1024,6 +1072,14 @@ export namespace HarnessContract {
           code: "custom",
           path: ["allowedAxioms"],
           message: "A formal proof protocol can never allow sorryAx",
+        })
+      }
+      const kernel = value.verifiers.find((item) => item.role === "lean_kernel")
+      if (value.blueprint && value.blueprint.compilerArtifactSHA256 !== kernel?.artifactSHA256) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["blueprint", "compilerArtifactSHA256"],
+          message: "Proof blueprint sketches and attempts must use the formal protocol's frozen Lean kernel",
         })
       }
     })

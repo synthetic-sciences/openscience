@@ -11671,6 +11671,469 @@ export type HarnessAutonomyReceiptResponses = {
 
 export type HarnessAutonomyReceiptResponse = HarnessAutonomyReceiptResponses[keyof HarnessAutonomyReceiptResponses]
 
+export type HarnessBlueprintInitializeData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/proofs/blueprints"
+}
+
+export type HarnessBlueprintInitializeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessBlueprintInitializeError = HarnessBlueprintInitializeErrors[keyof HarnessBlueprintInitializeErrors]
+
+export type HarnessBlueprintInitializeResponses = {
+  /**
+   * Canonical proof blueprint view
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "proof-blueprint-view-v1"
+    runID: string
+    sessionID: string
+    rootGoalID: string
+    summary: {
+      blueprintID: string
+      status: "open" | "proved" | "refuted" | "exhausted"
+      goals: number
+      proved: number
+      refuted: number
+      exhausted: number
+      decompositions: number
+      attempts: number
+      rejected: number
+      refinements: number
+      openLeases: number
+      revision: number
+    }
+    goals: Array<{
+      statementSHA256: string
+      declaration: string
+      module: string
+      id: string
+      createdAt: number
+      status: "open" | "proved" | "refuted" | "exhausted"
+      ready: boolean
+    }>
+    decompositions: Array<{
+      id: string
+      parentID: string
+      childIDs: Array<string>
+      informalPlanSHA256: string
+      sketchArtifactSHA256: string
+      sketchTranscriptSHA256: string
+      reviewerTranscriptSHA256: string
+      attemptID: string
+      createdAt: number
+      status: "open" | "closed" | "blocked"
+    }>
+    attempts: Array<{
+      id: string
+      ordinal: number
+      goalID: string
+      leaseID: string
+      kind: "direct" | "decomposition"
+      artifactSHA256: string
+      result: "proved" | "refuted" | "failed" | "accepted" | "rejected"
+      claim?: "proof" | "refutation" | "failure"
+      decompositionID?: string
+      transcriptSHA256: string
+      feedbackSHA256: string
+      failures: Array<string>
+      startedAt: number
+      endedAt: number
+      recordedAt: number
+    }>
+    leases: Array<{
+      id: string
+      goalID: string
+      revision: number
+      ordinal: number
+      status: "open" | "consumed" | "expired"
+      issuedAt: number
+      expiresAt: number
+      consumedAt?: number
+    }>
+  }
+}
+
+export type HarnessBlueprintInitializeResponse =
+  HarnessBlueprintInitializeResponses[keyof HarnessBlueprintInitializeResponses]
+
+export type HarnessBlueprintStatusData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/proofs/blueprints/status"
+}
+
+export type HarnessBlueprintStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessBlueprintStatusError = HarnessBlueprintStatusErrors[keyof HarnessBlueprintStatusErrors]
+
+export type HarnessBlueprintStatusResponses = {
+  /**
+   * Backend-derived goal, decomposition, attempt, and lease state
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "proof-blueprint-view-v1"
+    runID: string
+    sessionID: string
+    rootGoalID: string
+    summary: {
+      blueprintID: string
+      status: "open" | "proved" | "refuted" | "exhausted"
+      goals: number
+      proved: number
+      refuted: number
+      exhausted: number
+      decompositions: number
+      attempts: number
+      rejected: number
+      refinements: number
+      openLeases: number
+      revision: number
+    }
+    goals: Array<{
+      statementSHA256: string
+      declaration: string
+      module: string
+      id: string
+      createdAt: number
+      status: "open" | "proved" | "refuted" | "exhausted"
+      ready: boolean
+    }>
+    decompositions: Array<{
+      id: string
+      parentID: string
+      childIDs: Array<string>
+      informalPlanSHA256: string
+      sketchArtifactSHA256: string
+      sketchTranscriptSHA256: string
+      reviewerTranscriptSHA256: string
+      attemptID: string
+      createdAt: number
+      status: "open" | "closed" | "blocked"
+    }>
+    attempts: Array<{
+      id: string
+      ordinal: number
+      goalID: string
+      leaseID: string
+      kind: "direct" | "decomposition"
+      artifactSHA256: string
+      result: "proved" | "refuted" | "failed" | "accepted" | "rejected"
+      claim?: "proof" | "refutation" | "failure"
+      decompositionID?: string
+      transcriptSHA256: string
+      feedbackSHA256: string
+      failures: Array<string>
+      startedAt: number
+      endedAt: number
+      recordedAt: number
+    }>
+    leases: Array<{
+      id: string
+      goalID: string
+      revision: number
+      ordinal: number
+      status: "open" | "consumed" | "expired"
+      issuedAt: number
+      expiresAt: number
+      consumedAt?: number
+    }>
+  }
+}
+
+export type HarnessBlueprintStatusResponse = HarnessBlueprintStatusResponses[keyof HarnessBlueprintStatusResponses]
+
+export type HarnessBlueprintLeaseData = {
+  body?: {
+    sessionID: string
+    evaluatorToken: string
+    count: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/proofs/blueprints/leases"
+}
+
+export type HarnessBlueprintLeaseErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessBlueprintLeaseError = HarnessBlueprintLeaseErrors[keyof HarnessBlueprintLeaseErrors]
+
+export type HarnessBlueprintLeaseResponses = {
+  /**
+   * Issued leases and updated proof blueprint
+   */
+  200: {
+    leases: Array<{
+      id: string
+      goalID: string
+      revision: number
+      ordinal: number
+      status: "open" | "consumed" | "expired"
+      issuedAt: number
+      expiresAt: number
+      consumedAt?: number
+    }>
+    state: {
+      schemaVersion: 1
+      protocolVersion: "proof-blueprint-view-v1"
+      runID: string
+      sessionID: string
+      rootGoalID: string
+      summary: {
+        blueprintID: string
+        status: "open" | "proved" | "refuted" | "exhausted"
+        goals: number
+        proved: number
+        refuted: number
+        exhausted: number
+        decompositions: number
+        attempts: number
+        rejected: number
+        refinements: number
+        openLeases: number
+        revision: number
+      }
+      goals: Array<{
+        statementSHA256: string
+        declaration: string
+        module: string
+        id: string
+        createdAt: number
+        status: "open" | "proved" | "refuted" | "exhausted"
+        ready: boolean
+      }>
+      decompositions: Array<{
+        id: string
+        parentID: string
+        childIDs: Array<string>
+        informalPlanSHA256: string
+        sketchArtifactSHA256: string
+        sketchTranscriptSHA256: string
+        reviewerTranscriptSHA256: string
+        attemptID: string
+        createdAt: number
+        status: "open" | "closed" | "blocked"
+      }>
+      attempts: Array<{
+        id: string
+        ordinal: number
+        goalID: string
+        leaseID: string
+        kind: "direct" | "decomposition"
+        artifactSHA256: string
+        result: "proved" | "refuted" | "failed" | "accepted" | "rejected"
+        claim?: "proof" | "refutation" | "failure"
+        decompositionID?: string
+        transcriptSHA256: string
+        feedbackSHA256: string
+        failures: Array<string>
+        startedAt: number
+        endedAt: number
+        recordedAt: number
+      }>
+      leases: Array<{
+        id: string
+        goalID: string
+        revision: number
+        ordinal: number
+        status: "open" | "consumed" | "expired"
+        issuedAt: number
+        expiresAt: number
+        consumedAt?: number
+      }>
+    }
+  }
+}
+
+export type HarnessBlueprintLeaseResponse = HarnessBlueprintLeaseResponses[keyof HarnessBlueprintLeaseResponses]
+
+export type HarnessBlueprintRecordData = {
+  body?:
+    | {
+        sessionID: string
+        evaluatorToken: string
+        kind: "direct"
+        leaseID: string
+        artifactSHA256: string
+        claim: "proof" | "refutation" | "failure"
+        verification: {
+          compilerArtifactSHA256: string
+          statementMatched: boolean
+          exitCode: number
+          warnings: number
+          transcriptSHA256: string
+          feedbackSHA256: string
+          startedAt: number
+          endedAt: number
+        }
+      }
+    | {
+        sessionID: string
+        evaluatorToken: string
+        kind: "decomposition"
+        leaseID: string
+        informalPlanSHA256: string
+        artifactSHA256: string
+        children: Array<{
+          statementSHA256: string
+          declaration: string
+          module: string
+        }>
+        verification: {
+          compilerArtifactSHA256: string
+          statementMatched: boolean
+          exitCode: number
+          warnings: number
+          transcriptSHA256: string
+          feedbackSHA256: string
+          startedAt: number
+          endedAt: number
+          validatorArtifactSHA256: string
+          placeholderDeclarations: Array<string>
+          validatorTranscriptSHA256: string
+        }
+        review: {
+          reviewerArtifactSHA256: string
+          promptSHA256: string
+          relevant: boolean
+          easier: boolean
+          plausible: boolean
+          transcriptSHA256: string
+        }
+      }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/proofs/blueprints/attempts"
+}
+
+export type HarnessBlueprintRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessBlueprintRecordError = HarnessBlueprintRecordErrors[keyof HarnessBlueprintRecordErrors]
+
+export type HarnessBlueprintRecordResponses = {
+  /**
+   * Recorded attempt and updated proof blueprint
+   */
+  200: {
+    attemptID?: string
+    decompositionID?: string
+    state: {
+      schemaVersion: 1
+      protocolVersion: "proof-blueprint-view-v1"
+      runID: string
+      sessionID: string
+      rootGoalID: string
+      summary: {
+        blueprintID: string
+        status: "open" | "proved" | "refuted" | "exhausted"
+        goals: number
+        proved: number
+        refuted: number
+        exhausted: number
+        decompositions: number
+        attempts: number
+        rejected: number
+        refinements: number
+        openLeases: number
+        revision: number
+      }
+      goals: Array<{
+        statementSHA256: string
+        declaration: string
+        module: string
+        id: string
+        createdAt: number
+        status: "open" | "proved" | "refuted" | "exhausted"
+        ready: boolean
+      }>
+      decompositions: Array<{
+        id: string
+        parentID: string
+        childIDs: Array<string>
+        informalPlanSHA256: string
+        sketchArtifactSHA256: string
+        sketchTranscriptSHA256: string
+        reviewerTranscriptSHA256: string
+        attemptID: string
+        createdAt: number
+        status: "open" | "closed" | "blocked"
+      }>
+      attempts: Array<{
+        id: string
+        ordinal: number
+        goalID: string
+        leaseID: string
+        kind: "direct" | "decomposition"
+        artifactSHA256: string
+        result: "proved" | "refuted" | "failed" | "accepted" | "rejected"
+        claim?: "proof" | "refutation" | "failure"
+        decompositionID?: string
+        transcriptSHA256: string
+        feedbackSHA256: string
+        failures: Array<string>
+        startedAt: number
+        endedAt: number
+        recordedAt: number
+      }>
+      leases: Array<{
+        id: string
+        goalID: string
+        revision: number
+        ordinal: number
+        status: "open" | "consumed" | "expired"
+        issuedAt: number
+        expiresAt: number
+        consumedAt?: number
+      }>
+    }
+  }
+}
+
+export type HarnessBlueprintRecordResponse = HarnessBlueprintRecordResponses[keyof HarnessBlueprintRecordResponses]
+
 export type HarnessFormalRecordData = {
   body?: {
     sessionID: string
@@ -14661,6 +15124,27 @@ export type HarnessBindData = {
       completeManifestRequired: true
       warningPolicy: "fail"
       semanticPolicy: "formal_statement_only"
+      blueprint?: {
+        protocolVersion: "proof-blueprint-v1"
+        graphSchemaSHA256: string
+        compilerArtifactSHA256: string
+        sketchValidatorArtifactSHA256: string
+        reviewerArtifactSHA256: string
+        reviewerPromptSHA256: string
+        nodePolicy: "and-or-monotone-v1"
+        failurePolicy: "preserve-and-refine"
+        memoization: "goal-sha256"
+        finalAuthority: "formal-proof-v1"
+        directAttemptFirst: true
+        verifiedSketchRequired: true
+        completeFailureHistoryRequired: true
+        maxNodes: number
+        maxDepth: number
+        maxParallel: number
+        maxAttemptsPerGoal: number
+        maxRefinementsPerGoal: number
+        leaseDurationMs: number
+      }
     }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
@@ -15427,6 +15911,27 @@ export type HarnessBindResponses = {
       completeManifestRequired: true
       warningPolicy: "fail"
       semanticPolicy: "formal_statement_only"
+      blueprint?: {
+        protocolVersion: "proof-blueprint-v1"
+        graphSchemaSHA256: string
+        compilerArtifactSHA256: string
+        sketchValidatorArtifactSHA256: string
+        reviewerArtifactSHA256: string
+        reviewerPromptSHA256: string
+        nodePolicy: "and-or-monotone-v1"
+        failurePolicy: "preserve-and-refine"
+        memoization: "goal-sha256"
+        finalAuthority: "formal-proof-v1"
+        directAttemptFirst: true
+        verifiedSketchRequired: true
+        completeFailureHistoryRequired: true
+        maxNodes: number
+        maxDepth: number
+        maxParallel: number
+        maxAttemptsPerGoal: number
+        maxRefinementsPerGoal: number
+        leaseDurationMs: number
+      }
     }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
@@ -16522,6 +17027,27 @@ export type HarnessContractResponses = {
       completeManifestRequired: true
       warningPolicy: "fail"
       semanticPolicy: "formal_statement_only"
+      blueprint?: {
+        protocolVersion: "proof-blueprint-v1"
+        graphSchemaSHA256: string
+        compilerArtifactSHA256: string
+        sketchValidatorArtifactSHA256: string
+        reviewerArtifactSHA256: string
+        reviewerPromptSHA256: string
+        nodePolicy: "and-or-monotone-v1"
+        failurePolicy: "preserve-and-refine"
+        memoization: "goal-sha256"
+        finalAuthority: "formal-proof-v1"
+        directAttemptFirst: true
+        verifiedSketchRequired: true
+        completeFailureHistoryRequired: true
+        maxNodes: number
+        maxDepth: number
+        maxParallel: number
+        maxAttemptsPerGoal: number
+        maxRefinementsPerGoal: number
+        leaseDurationMs: number
+      }
     }
     replication?: {
       protocolVersion: "replicated-evaluation-v1"
@@ -16793,6 +17319,20 @@ export type HarnessReportResponses = {
         tier: "kernel" | "fresh_recheck" | "external_crosscheck"
         relation: "exact_proof" | "exact_refutation" | "repaired_proof"
         status?: "passed" | "failed"
+        blueprint?: {
+          blueprintID: string
+          status: "open" | "proved" | "refuted" | "exhausted"
+          goals: number
+          proved: number
+          refuted: number
+          exhausted: number
+          decompositions: number
+          attempts: number
+          rejected: number
+          refinements: number
+          openLeases: number
+          revision: number
+        }
       }
       seed: number
     }

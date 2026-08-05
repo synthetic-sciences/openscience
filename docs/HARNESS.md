@@ -32,6 +32,7 @@ This is a **state-of-the-art-oriented harness architecture**, not a claim of sta
 24. **Scientific synthesis must prove its clean room and its arithmetic.** An optional synthesis protocol freezes the hidden reference and atomic-fact commitments, publication cutoff, allowed retrieval tools, complete trace/filter schemas, independent decomposer and judges, thresholds, and judge-failure policy. The backend replays every source decision, treats judge errors as inconclusive, derives factual precision, recall, contradiction penalty, and F1, and accepts only one canonical receipt for the exact run or candidate.
 25. **Autonomy is a derived provenance claim, not a label.** An optional evaluator-owned protocol freezes the interaction recorder, schema, contribution policy, claimed A/C/H level, disclosure policy, and full-run event ceiling. OpenScience hash-chains the complete benchmark/human/agent trace, binds its last artifact transition to the evaluated bytes, derives the actual contribution level, treats unclear classifications as inconclusive, and rejects a passing final result without the one canonical matching receipt.
 26. **A compiled theorem is not yet trusted proof evidence.** An optional Lean 4 protocol freezes the exact challenge, formal statement, claim relation, declaration, complete file and dependency manifests, toolchain, verifier binaries, source-escape policy, transitive axiom allowlist, and an escalating kernel/fresh/external trust tier. Promotion requires one canonical evaluator-authenticated receipt for the exact artifact; repaired statements and formal refutations remain distinct from proofs of the original claim.
+27. **Proof search is a verifier-grounded graph, not a persuasive transcript.** An optional proof blueprint freezes distinct graph, compiler, sketch-validator, reviewer, and rubric artifacts plus hard node, depth, parallelism, attempt, refinement, and lease limits. The backend derives a content-addressed acyclic AND/OR graph, requires a direct attempt before decomposition, memoizes identical goals, preserves rejected work, and reopens only blocked parents. Graph closure remains provisional and can never replace the canonical formal-proof receipt.
 
 ## System boundary
 
@@ -64,6 +65,7 @@ flowchart LR
     HA["Evaluator-owned human-AI recorder\ncomplete raw interaction log"]
     AR["Autonomy receipt\nbackend-derived A / C / H level"]
     FP["Evaluator-owned formal verifier\nsource + kernel + axiom + fresh/external checks"]
+    PB["Evaluator-owned proof blueprint\nleased AND/OR goals + verified sketches"]
     PR["Formal proof receipt\nexact relation + environment + artifact"]
     J["Immutable evaluation journal"]
     M["Verified hindsight memory"]
@@ -117,6 +119,9 @@ flowchart LR
     HA -->|hash-chained trace + final artifact| AR
     AR -->|required provenance gate| E
     C -->|frozen theorem + trust tier| FP
+    C -->|frozen graph + search budgets| PB
+    O -->|authenticated leases + compiler evidence| PB
+    PB -->|provisional root route only| FP
     O -->|trusted challenge + evaluator capability| FP
     G -->|exact proof artifact| FP
     FP -->|authenticated verification evidence| PR
@@ -336,7 +341,28 @@ The orchestrator calls `POST /harness/runs` before the model sees the task. The 
     "maxFiles": 1000,
     "completeManifestRequired": true,
     "warningPolicy": "fail",
-    "semanticPolicy": "formal_statement_only"
+    "semanticPolicy": "formal_statement_only",
+    "blueprint": {
+      "protocolVersion": "proof-blueprint-v1",
+      "graphSchemaSHA256": "2727272727272727272727272727272727272727272727272727272727272727",
+      "compilerArtifactSHA256": "2424242424242424242424242424242424242424242424242424242424242424",
+      "sketchValidatorArtifactSHA256": "2828282828282828282828282828282828282828282828282828282828282828",
+      "reviewerArtifactSHA256": "2929292929292929292929292929292929292929292929292929292929292929",
+      "reviewerPromptSHA256": "3030303030303030303030303030303030303030303030303030303030303030",
+      "nodePolicy": "and-or-monotone-v1",
+      "failurePolicy": "preserve-and-refine",
+      "memoization": "goal-sha256",
+      "finalAuthority": "formal-proof-v1",
+      "directAttemptFirst": true,
+      "verifiedSketchRequired": true,
+      "completeFailureHistoryRequired": true,
+      "maxNodes": 128,
+      "maxDepth": 12,
+      "maxParallel": 8,
+      "maxAttemptsPerGoal": 4,
+      "maxRefinementsPerGoal": 3,
+      "leaseDurationMs": 900000
+    }
   },
   "simulation": {
     "kind": "pde",
@@ -724,7 +750,15 @@ Each run or candidate gets exactly one immutable content-addressed receipt, boun
 
 This proves only the frozen formal statement relative to the accepted axioms and environment. It does not prove that autoformalization matches the intended informal theorem, that definitions are non-vacuous, or that a result is novel or important. Those remain semantic-review and scientific-evidence obligations; strict public claims should use `external_crosscheck`.
 
-### 20. Compare only compatible runs
+### 20. Search formal proofs through a bounded AND/OR blueprint
+
+`proof-blueprint-v1` is an optional search layer nested inside `formal-proof-v1`. The root is derived from the exact frozen statement, declaration, and module. Goals are content-addressed OR nodes, so an identical helper statement is solved once even when several decompositions need it. Accepted decompositions are AND nodes: the frozen Lean compiler and sketch validator must confirm that the parent follows assuming only the exact introduced child declarations, and every child must close before the branch closes.
+
+The evaluator owns all transitions. Atomic leases select distinct deepest-ready goals up to the frozen parallelism limit; expired, consumed, substituted-verifier, and cross-session work fails closed. A direct attempt must precede decomposition. Failed compiler attempts and reviewer rejections consume their leases and remain in a contiguous history. While an accepted branch is open its parent pauses; when a child is refuted or exhausted, the blocked parent may add a bounded alternative without rewriting any proved goal. Every update rechecks reachability, content identities, acyclicity, depth, and all budgets.
+
+The relevance/easier/plausible reviewer controls search admission but has no proof authority. A `proved` blueprint is only a compiler-grounded route through provisional lemmas. Passing final evaluation still requires the exact artifact's `formal-proof-v1` receipt with its source, axiom, fresh-replay, and independent-checker gates. The bundled `operate-proof-blueprint` skill freezes architecture artifacts, hashes private attempt evidence, derives exact placeholder lists, rejects path and symlink escapes, and emits no evaluator capability.
+
+### 21. Compare only compatible runs
 
 Legacy reports choose only a final evaluation. Confirmation-enabled reports choose only a canonical sealed claim receipt and exclude provisional optimization scores from comparison. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, adaptive-search, launch, runtime-integrity, evolution, controlled-intervention, simulation, evaluator-audit, semantic-audit, replicated-evaluation, sealed-confirmation, scientific-synthesis, human-AI-autonomy, formal-proof, and objective-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface controller telemetry alongside the applicable evidence receipt.
 
@@ -792,6 +826,10 @@ Every adapter is version-agnostic. A development/validation run must still bind 
 | `POST` | `/harness/autonomy/receipts/:id`                     | Read a capability-protected autonomy receipt                  |
 | `POST` | `/harness/proofs/receipts`                           | Derive and freeze one formal proof verification receipt       |
 | `POST` | `/harness/proofs/receipts/:id`                       | Read a capability-protected formal proof receipt              |
+| `POST` | `/harness/proofs/blueprints`                         | Initialize an exact evaluator-owned AND/OR proof graph        |
+| `POST` | `/harness/proofs/blueprints/status`                  | Read backend-derived blueprint state                          |
+| `POST` | `/harness/proofs/blueprints/leases`                  | Atomically lease bounded deepest-ready proof goals            |
+| `POST` | `/harness/proofs/blueprints/attempts`                | Retain a verifier-authenticated proof or sketch outcome       |
 | `POST` | `/harness/evaluations`                               | Record a staged evaluator-authenticated result                |
 | `GET`  | `/harness/runs/:sessionID/contract`                  | Inspect the bound protocol                                    |
 | `GET`  | `/harness/runs/:sessionID/evaluations`               | Inspect the immutable evaluation journal                      |

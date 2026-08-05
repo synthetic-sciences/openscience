@@ -115,6 +115,14 @@ import type {
   HarnessBenchmarksResponses,
   HarnessBindErrors,
   HarnessBindResponses,
+  HarnessBlueprintInitializeErrors,
+  HarnessBlueprintInitializeResponses,
+  HarnessBlueprintLeaseErrors,
+  HarnessBlueprintLeaseResponses,
+  HarnessBlueprintRecordErrors,
+  HarnessBlueprintRecordResponses,
+  HarnessBlueprintStatusErrors,
+  HarnessBlueprintStatusResponses,
   HarnessCompareErrors,
   HarnessCompareResponses,
   HarnessConfirmationReceiptErrors,
@@ -5400,6 +5408,222 @@ export class Autonomy extends HeyApiClient {
   }
 }
 
+export class Blueprint extends HeyApiClient {
+  /**
+   * Initialize an evaluator-grounded formal proof blueprint
+   *
+   * Creates the content-addressed root of a bounded LEAP-inspired AND/OR proof graph without granting the graph final proof authority.
+   */
+  public initialize<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessBlueprintInitializeResponses,
+      HarnessBlueprintInitializeErrors,
+      ThrowOnError
+    >({
+      url: "/harness/proofs/blueprints",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read an evaluator-grounded formal proof blueprint
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessBlueprintStatusResponses,
+      HarnessBlueprintStatusErrors,
+      ThrowOnError
+    >({
+      url: "/harness/proofs/blueprints/status",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Lease bounded ready goals from a formal proof blueprint
+   *
+   * Atomically expires stale work and leases distinct deepest-ready goals up to the frozen parallelism limit.
+   */
+  public lease<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      evaluatorToken?: string
+      count?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "evaluatorToken" },
+            { in: "body", key: "count" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessBlueprintLeaseResponses,
+      HarnessBlueprintLeaseErrors,
+      ThrowOnError
+    >({
+      url: "/harness/proofs/blueprints/leases",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Record an evaluator-authenticated proof or decomposition attempt
+   *
+   * Consumes one active goal lease, retains failed verifier or reviewer outcomes, and admits only exact compiler-checked sketches into the monotone acyclic graph.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      body?:
+        | {
+            sessionID: string
+            evaluatorToken: string
+            kind: "direct"
+            leaseID: string
+            artifactSHA256: string
+            claim: "proof" | "refutation" | "failure"
+            verification: {
+              compilerArtifactSHA256: string
+              statementMatched: boolean
+              exitCode: number
+              warnings: number
+              transcriptSHA256: string
+              feedbackSHA256: string
+              startedAt: number
+              endedAt: number
+            }
+          }
+        | {
+            sessionID: string
+            evaluatorToken: string
+            kind: "decomposition"
+            leaseID: string
+            informalPlanSHA256: string
+            artifactSHA256: string
+            children: Array<{
+              statementSHA256: string
+              declaration: string
+              module: string
+            }>
+            verification: {
+              compilerArtifactSHA256: string
+              statementMatched: boolean
+              exitCode: number
+              warnings: number
+              transcriptSHA256: string
+              feedbackSHA256: string
+              startedAt: number
+              endedAt: number
+              validatorArtifactSHA256: string
+              placeholderDeclarations: Array<string>
+              validatorTranscriptSHA256: string
+            }
+            review: {
+              reviewerArtifactSHA256: string
+              promptSHA256: string
+              relevant: boolean
+              easier: boolean
+              plausible: boolean
+              transcriptSHA256: string
+            }
+          }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessBlueprintRecordResponses,
+      HarnessBlueprintRecordErrors,
+      ThrowOnError
+    >({
+      url: "/harness/proofs/blueprints/attempts",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Formal extends HeyApiClient {
   /**
    * Record an evaluator-authenticated formal proof verification
@@ -7057,6 +7281,27 @@ export class Harness extends HeyApiClient {
         completeManifestRequired: true
         warningPolicy: "fail"
         semanticPolicy: "formal_statement_only"
+        blueprint?: {
+          protocolVersion: "proof-blueprint-v1"
+          graphSchemaSHA256: string
+          compilerArtifactSHA256: string
+          sketchValidatorArtifactSHA256: string
+          reviewerArtifactSHA256: string
+          reviewerPromptSHA256: string
+          nodePolicy: "and-or-monotone-v1"
+          failurePolicy: "preserve-and-refine"
+          memoization: "goal-sha256"
+          finalAuthority: "formal-proof-v1"
+          directAttemptFirst: true
+          verifiedSketchRequired: true
+          completeFailureHistoryRequired: true
+          maxNodes: number
+          maxDepth: number
+          maxParallel: number
+          maxAttemptsPerGoal: number
+          maxRefinementsPerGoal: number
+          leaseDurationMs: number
+        }
       }
       replication?: {
         protocolVersion: "replicated-evaluation-v1"
@@ -7540,6 +7785,11 @@ export class Harness extends HeyApiClient {
   private _autonomy?: Autonomy
   get autonomy(): Autonomy {
     return (this._autonomy ??= new Autonomy({ client: this.client }))
+  }
+
+  private _blueprint?: Blueprint
+  get blueprint(): Blueprint {
+    return (this._blueprint ??= new Blueprint({ client: this.client }))
   }
 
   private _formal?: Formal

@@ -33557,6 +33557,2281 @@
         ]
       }
     },
+    "/harness/proofs/blueprints": {
+      "post": {
+        "operationId": "harness.blueprint.initialize",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Initialize an evaluator-grounded formal proof blueprint",
+        "description": "Creates the content-addressed root of a bounded LEAP-inspired AND/OR proof graph without granting the graph final proof authority.",
+        "responses": {
+          "200": {
+            "description": "Canonical proof blueprint view",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "proof-blueprint-view-v1"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "rootGoalID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "blueprintID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "proved",
+                            "refuted",
+                            "exhausted"
+                          ]
+                        },
+                        "goals": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "proved": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "refuted": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "exhausted": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "decompositions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "attempts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "rejected": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "refinements": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "openLeases": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "blueprintID",
+                        "status",
+                        "goals",
+                        "proved",
+                        "refuted",
+                        "exhausted",
+                        "decompositions",
+                        "attempts",
+                        "rejected",
+                        "refinements",
+                        "openLeases",
+                        "revision"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "goals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "statementSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "declaration": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "module": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "createdAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "proved",
+                              "refuted",
+                              "exhausted"
+                            ]
+                          },
+                          "ready": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "statementSHA256",
+                          "declaration",
+                          "module",
+                          "id",
+                          "createdAt",
+                          "status",
+                          "ready"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "decompositions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "parentID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "childIDs": {
+                            "minItems": 1,
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "informalPlanSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "sketchArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "sketchTranscriptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "reviewerTranscriptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "attemptID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "createdAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "closed",
+                              "blocked"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "parentID",
+                          "childIDs",
+                          "informalPlanSHA256",
+                          "sketchArtifactSHA256",
+                          "sketchTranscriptSHA256",
+                          "reviewerTranscriptSHA256",
+                          "attemptID",
+                          "createdAt",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "attempts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "ordinal": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "goalID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "leaseID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "direct",
+                              "decomposition"
+                            ]
+                          },
+                          "artifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "result": {
+                            "type": "string",
+                            "enum": [
+                              "proved",
+                              "refuted",
+                              "failed",
+                              "accepted",
+                              "rejected"
+                            ]
+                          },
+                          "claim": {
+                            "type": "string",
+                            "enum": [
+                              "proof",
+                              "refutation",
+                              "failure"
+                            ]
+                          },
+                          "decompositionID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "transcriptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "feedbackSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "failures": {
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "startedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "endedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "recordedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "ordinal",
+                          "goalID",
+                          "leaseID",
+                          "kind",
+                          "artifactSHA256",
+                          "result",
+                          "transcriptSHA256",
+                          "feedbackSHA256",
+                          "failures",
+                          "startedAt",
+                          "endedAt",
+                          "recordedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "leases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "goalID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "ordinal": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "consumed",
+                              "expired"
+                            ]
+                          },
+                          "issuedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "expiresAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "consumedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "goalID",
+                          "revision",
+                          "ordinal",
+                          "status",
+                          "issuedAt",
+                          "expiresAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "runID",
+                    "sessionID",
+                    "rootGoalID",
+                    "summary",
+                    "goals",
+                    "decompositions",
+                    "attempts",
+                    "leases"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.blueprint.initialize({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/proofs/blueprints/status": {
+      "post": {
+        "operationId": "harness.blueprint.status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Read an evaluator-grounded formal proof blueprint",
+        "responses": {
+          "200": {
+            "description": "Backend-derived goal, decomposition, attempt, and lease state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "proof-blueprint-view-v1"
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "sessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "rootGoalID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "blueprintID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "proved",
+                            "refuted",
+                            "exhausted"
+                          ]
+                        },
+                        "goals": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "proved": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "refuted": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "exhausted": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "decompositions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "attempts": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "rejected": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "refinements": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "openLeases": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "blueprintID",
+                        "status",
+                        "goals",
+                        "proved",
+                        "refuted",
+                        "exhausted",
+                        "decompositions",
+                        "attempts",
+                        "rejected",
+                        "refinements",
+                        "openLeases",
+                        "revision"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "goals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "statementSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "declaration": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "module": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "createdAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "proved",
+                              "refuted",
+                              "exhausted"
+                            ]
+                          },
+                          "ready": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "statementSHA256",
+                          "declaration",
+                          "module",
+                          "id",
+                          "createdAt",
+                          "status",
+                          "ready"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "decompositions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "parentID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "childIDs": {
+                            "minItems": 1,
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "informalPlanSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "sketchArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "sketchTranscriptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "reviewerTranscriptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "attemptID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "createdAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "closed",
+                              "blocked"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "parentID",
+                          "childIDs",
+                          "informalPlanSHA256",
+                          "sketchArtifactSHA256",
+                          "sketchTranscriptSHA256",
+                          "reviewerTranscriptSHA256",
+                          "attemptID",
+                          "createdAt",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "attempts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "ordinal": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "goalID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "leaseID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "direct",
+                              "decomposition"
+                            ]
+                          },
+                          "artifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "result": {
+                            "type": "string",
+                            "enum": [
+                              "proved",
+                              "refuted",
+                              "failed",
+                              "accepted",
+                              "rejected"
+                            ]
+                          },
+                          "claim": {
+                            "type": "string",
+                            "enum": [
+                              "proof",
+                              "refutation",
+                              "failure"
+                            ]
+                          },
+                          "decompositionID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "transcriptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "feedbackSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "failures": {
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "startedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "endedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "recordedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "ordinal",
+                          "goalID",
+                          "leaseID",
+                          "kind",
+                          "artifactSHA256",
+                          "result",
+                          "transcriptSHA256",
+                          "feedbackSHA256",
+                          "failures",
+                          "startedAt",
+                          "endedAt",
+                          "recordedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "leases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "goalID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "ordinal": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "consumed",
+                              "expired"
+                            ]
+                          },
+                          "issuedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "expiresAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "consumedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "goalID",
+                          "revision",
+                          "ordinal",
+                          "status",
+                          "issuedAt",
+                          "expiresAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "runID",
+                    "sessionID",
+                    "rootGoalID",
+                    "summary",
+                    "goals",
+                    "decompositions",
+                    "attempts",
+                    "leases"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.blueprint.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/proofs/blueprints/leases": {
+      "post": {
+        "operationId": "harness.blueprint.lease",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Lease bounded ready goals from a formal proof blueprint",
+        "description": "Atomically expires stale work and leases distinct deepest-ready goals up to the frozen parallelism limit.",
+        "responses": {
+          "200": {
+            "description": "Issued leases and updated proof blueprint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "leases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "goalID": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "ordinal": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "open",
+                              "consumed",
+                              "expired"
+                            ]
+                          },
+                          "issuedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "expiresAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "consumedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "goalID",
+                          "revision",
+                          "ordinal",
+                          "status",
+                          "issuedAt",
+                          "expiresAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "state": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "proof-blueprint-view-v1"
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "rootGoalID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "summary": {
+                          "type": "object",
+                          "properties": {
+                            "blueprintID": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "open",
+                                "proved",
+                                "refuted",
+                                "exhausted"
+                              ]
+                            },
+                            "goals": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "proved": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "refuted": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "exhausted": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "decompositions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "rejected": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "refinements": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "openLeases": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "revision": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "blueprintID",
+                            "status",
+                            "goals",
+                            "proved",
+                            "refuted",
+                            "exhausted",
+                            "decompositions",
+                            "attempts",
+                            "rejected",
+                            "refinements",
+                            "openLeases",
+                            "revision"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "goals": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "statementSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "declaration": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              },
+                              "module": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "createdAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "proved",
+                                  "refuted",
+                                  "exhausted"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "statementSHA256",
+                              "declaration",
+                              "module",
+                              "id",
+                              "createdAt",
+                              "status",
+                              "ready"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "decompositions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "parentID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "childIDs": {
+                                "minItems": 1,
+                                "maxItems": 16,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "informalPlanSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "sketchArtifactSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "sketchTranscriptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "reviewerTranscriptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "attemptID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "createdAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "closed",
+                                  "blocked"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "parentID",
+                              "childIDs",
+                              "informalPlanSHA256",
+                              "sketchArtifactSHA256",
+                              "sketchTranscriptSHA256",
+                              "reviewerTranscriptSHA256",
+                              "attemptID",
+                              "createdAt",
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "attempts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "ordinal": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "goalID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "leaseID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "direct",
+                                  "decomposition"
+                                ]
+                              },
+                              "artifactSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "result": {
+                                "type": "string",
+                                "enum": [
+                                  "proved",
+                                  "refuted",
+                                  "failed",
+                                  "accepted",
+                                  "rejected"
+                                ]
+                              },
+                              "claim": {
+                                "type": "string",
+                                "enum": [
+                                  "proof",
+                                  "refutation",
+                                  "failure"
+                                ]
+                              },
+                              "decompositionID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "transcriptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "feedbackSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "failures": {
+                                "maxItems": 16,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500
+                                }
+                              },
+                              "startedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "endedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "recordedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "ordinal",
+                              "goalID",
+                              "leaseID",
+                              "kind",
+                              "artifactSHA256",
+                              "result",
+                              "transcriptSHA256",
+                              "feedbackSHA256",
+                              "failures",
+                              "startedAt",
+                              "endedAt",
+                              "recordedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "leases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "goalID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "ordinal": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "consumed",
+                                  "expired"
+                                ]
+                              },
+                              "issuedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "expiresAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "consumedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "goalID",
+                              "revision",
+                              "ordinal",
+                              "status",
+                              "issuedAt",
+                              "expiresAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "protocolVersion",
+                        "runID",
+                        "sessionID",
+                        "rootGoalID",
+                        "summary",
+                        "goals",
+                        "decompositions",
+                        "attempts",
+                        "leases"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "leases",
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "evaluatorToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 32
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "evaluatorToken",
+                  "count"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.blueprint.lease({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/proofs/blueprints/attempts": {
+      "post": {
+        "operationId": "harness.blueprint.record",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Record an evaluator-authenticated proof or decomposition attempt",
+        "description": "Consumes one active goal lease, retains failed verifier or reviewer outcomes, and admits only exact compiler-checked sketches into the monotone acyclic graph.",
+        "responses": {
+          "200": {
+            "description": "Recorded attempt and updated proof blueprint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "attemptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "decompositionID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "state": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "proof-blueprint-view-v1"
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "sessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "rootGoalID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "summary": {
+                          "type": "object",
+                          "properties": {
+                            "blueprintID": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "open",
+                                "proved",
+                                "refuted",
+                                "exhausted"
+                              ]
+                            },
+                            "goals": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "proved": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "refuted": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "exhausted": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "decompositions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "rejected": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "refinements": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "openLeases": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "revision": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "blueprintID",
+                            "status",
+                            "goals",
+                            "proved",
+                            "refuted",
+                            "exhausted",
+                            "decompositions",
+                            "attempts",
+                            "rejected",
+                            "refinements",
+                            "openLeases",
+                            "revision"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "goals": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "statementSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "declaration": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              },
+                              "module": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "createdAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "proved",
+                                  "refuted",
+                                  "exhausted"
+                                ]
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "statementSHA256",
+                              "declaration",
+                              "module",
+                              "id",
+                              "createdAt",
+                              "status",
+                              "ready"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "decompositions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "parentID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "childIDs": {
+                                "minItems": 1,
+                                "maxItems": 16,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "informalPlanSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "sketchArtifactSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "sketchTranscriptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "reviewerTranscriptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "attemptID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "createdAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "closed",
+                                  "blocked"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "parentID",
+                              "childIDs",
+                              "informalPlanSHA256",
+                              "sketchArtifactSHA256",
+                              "sketchTranscriptSHA256",
+                              "reviewerTranscriptSHA256",
+                              "attemptID",
+                              "createdAt",
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "attempts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "ordinal": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "goalID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "leaseID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "direct",
+                                  "decomposition"
+                                ]
+                              },
+                              "artifactSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "result": {
+                                "type": "string",
+                                "enum": [
+                                  "proved",
+                                  "refuted",
+                                  "failed",
+                                  "accepted",
+                                  "rejected"
+                                ]
+                              },
+                              "claim": {
+                                "type": "string",
+                                "enum": [
+                                  "proof",
+                                  "refutation",
+                                  "failure"
+                                ]
+                              },
+                              "decompositionID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "transcriptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "feedbackSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "failures": {
+                                "maxItems": 16,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500
+                                }
+                              },
+                              "startedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "endedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "recordedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "ordinal",
+                              "goalID",
+                              "leaseID",
+                              "kind",
+                              "artifactSHA256",
+                              "result",
+                              "transcriptSHA256",
+                              "feedbackSHA256",
+                              "failures",
+                              "startedAt",
+                              "endedAt",
+                              "recordedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "leases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "goalID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "ordinal": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "open",
+                                  "consumed",
+                                  "expired"
+                                ]
+                              },
+                              "issuedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "expiresAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "consumedAt": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "goalID",
+                              "revision",
+                              "ordinal",
+                              "status",
+                              "issuedAt",
+                              "expiresAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "protocolVersion",
+                        "runID",
+                        "sessionID",
+                        "rootGoalID",
+                        "summary",
+                        "goals",
+                        "decompositions",
+                        "attempts",
+                        "leases"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240
+                      },
+                      "evaluatorToken": {
+                        "type": "string",
+                        "minLength": 32,
+                        "maxLength": 1024
+                      },
+                      "kind": {
+                        "type": "string",
+                        "const": "direct"
+                      },
+                      "leaseID": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "artifactSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "claim": {
+                        "type": "string",
+                        "enum": [
+                          "proof",
+                          "refutation",
+                          "failure"
+                        ]
+                      },
+                      "verification": {
+                        "type": "object",
+                        "properties": {
+                          "compilerArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "statementMatched": {
+                            "type": "boolean"
+                          },
+                          "exitCode": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "warnings": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "transcriptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "feedbackSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "startedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "endedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "compilerArtifactSHA256",
+                          "statementMatched",
+                          "exitCode",
+                          "warnings",
+                          "transcriptSHA256",
+                          "feedbackSHA256",
+                          "startedAt",
+                          "endedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "sessionID",
+                      "evaluatorToken",
+                      "kind",
+                      "leaseID",
+                      "artifactSHA256",
+                      "claim",
+                      "verification"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240
+                      },
+                      "evaluatorToken": {
+                        "type": "string",
+                        "minLength": 32,
+                        "maxLength": 1024
+                      },
+                      "kind": {
+                        "type": "string",
+                        "const": "decomposition"
+                      },
+                      "leaseID": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "informalPlanSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "artifactSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "children": {
+                        "minItems": 1,
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "statementSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "declaration": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "module": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "required": [
+                            "statementSHA256",
+                            "declaration",
+                            "module"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "verification": {
+                        "type": "object",
+                        "properties": {
+                          "compilerArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "statementMatched": {
+                            "type": "boolean"
+                          },
+                          "exitCode": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "warnings": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "transcriptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "feedbackSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "startedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "endedAt": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "validatorArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "placeholderDeclarations": {
+                            "minItems": 1,
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "validatorTranscriptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "compilerArtifactSHA256",
+                          "statementMatched",
+                          "exitCode",
+                          "warnings",
+                          "transcriptSHA256",
+                          "feedbackSHA256",
+                          "startedAt",
+                          "endedAt",
+                          "validatorArtifactSHA256",
+                          "placeholderDeclarations",
+                          "validatorTranscriptSHA256"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "review": {
+                        "type": "object",
+                        "properties": {
+                          "reviewerArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "promptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "relevant": {
+                            "type": "boolean"
+                          },
+                          "easier": {
+                            "type": "boolean"
+                          },
+                          "plausible": {
+                            "type": "boolean"
+                          },
+                          "transcriptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "reviewerArtifactSHA256",
+                          "promptSHA256",
+                          "relevant",
+                          "easier",
+                          "plausible",
+                          "transcriptSHA256"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "sessionID",
+                      "evaluatorToken",
+                      "kind",
+                      "leaseID",
+                      "informalPlanSHA256",
+                      "artifactSHA256",
+                      "children",
+                      "verification",
+                      "review"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.blueprint.record({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/proofs/receipts": {
       "post": {
         "operationId": "harness.formal.record",
@@ -46568,6 +48843,115 @@
                         "semanticPolicy": {
                           "type": "string",
                           "const": "formal_statement_only"
+                        },
+                        "blueprint": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "proof-blueprint-v1"
+                            },
+                            "graphSchemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "compilerArtifactSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sketchValidatorArtifactSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "reviewerArtifactSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "reviewerPromptSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "nodePolicy": {
+                              "type": "string",
+                              "const": "and-or-monotone-v1"
+                            },
+                            "failurePolicy": {
+                              "type": "string",
+                              "const": "preserve-and-refine"
+                            },
+                            "memoization": {
+                              "type": "string",
+                              "const": "goal-sha256"
+                            },
+                            "finalAuthority": {
+                              "type": "string",
+                              "const": "formal-proof-v1"
+                            },
+                            "directAttemptFirst": {
+                              "type": "boolean",
+                              "const": true
+                            },
+                            "verifiedSketchRequired": {
+                              "type": "boolean",
+                              "const": true
+                            },
+                            "completeFailureHistoryRequired": {
+                              "type": "boolean",
+                              "const": true
+                            },
+                            "maxNodes": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 512
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 32
+                            },
+                            "maxParallel": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 32
+                            },
+                            "maxAttemptsPerGoal": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 16
+                            },
+                            "maxRefinementsPerGoal": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 16
+                            },
+                            "leaseDurationMs": {
+                              "type": "integer",
+                              "minimum": 1000,
+                              "maximum": 3600000
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "graphSchemaSHA256",
+                            "compilerArtifactSHA256",
+                            "sketchValidatorArtifactSHA256",
+                            "reviewerArtifactSHA256",
+                            "reviewerPromptSHA256",
+                            "nodePolicy",
+                            "failurePolicy",
+                            "memoization",
+                            "finalAuthority",
+                            "directAttemptFirst",
+                            "verifiedSketchRequired",
+                            "completeFailureHistoryRequired",
+                            "maxNodes",
+                            "maxDepth",
+                            "maxParallel",
+                            "maxAttemptsPerGoal",
+                            "maxRefinementsPerGoal",
+                            "leaseDurationMs"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -49302,6 +51686,115 @@
                       "semanticPolicy": {
                         "type": "string",
                         "const": "formal_statement_only"
+                      },
+                      "blueprint": {
+                        "type": "object",
+                        "properties": {
+                          "protocolVersion": {
+                            "type": "string",
+                            "const": "proof-blueprint-v1"
+                          },
+                          "graphSchemaSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "compilerArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "sketchValidatorArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "reviewerArtifactSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "reviewerPromptSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "nodePolicy": {
+                            "type": "string",
+                            "const": "and-or-monotone-v1"
+                          },
+                          "failurePolicy": {
+                            "type": "string",
+                            "const": "preserve-and-refine"
+                          },
+                          "memoization": {
+                            "type": "string",
+                            "const": "goal-sha256"
+                          },
+                          "finalAuthority": {
+                            "type": "string",
+                            "const": "formal-proof-v1"
+                          },
+                          "directAttemptFirst": {
+                            "type": "boolean",
+                            "const": true
+                          },
+                          "verifiedSketchRequired": {
+                            "type": "boolean",
+                            "const": true
+                          },
+                          "completeFailureHistoryRequired": {
+                            "type": "boolean",
+                            "const": true
+                          },
+                          "maxNodes": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "maximum": 512
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 32
+                          },
+                          "maxParallel": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 32
+                          },
+                          "maxAttemptsPerGoal": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 16
+                          },
+                          "maxRefinementsPerGoal": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 16
+                          },
+                          "leaseDurationMs": {
+                            "type": "integer",
+                            "minimum": 1000,
+                            "maximum": 3600000
+                          }
+                        },
+                        "required": [
+                          "protocolVersion",
+                          "graphSchemaSHA256",
+                          "compilerArtifactSHA256",
+                          "sketchValidatorArtifactSHA256",
+                          "reviewerArtifactSHA256",
+                          "reviewerPromptSHA256",
+                          "nodePolicy",
+                          "failurePolicy",
+                          "memoization",
+                          "finalAuthority",
+                          "directAttemptFirst",
+                          "verifiedSketchRequired",
+                          "completeFailureHistoryRequired",
+                          "maxNodes",
+                          "maxDepth",
+                          "maxParallel",
+                          "maxAttemptsPerGoal",
+                          "maxRefinementsPerGoal",
+                          "leaseDurationMs"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -54287,6 +56780,115 @@
                             "semanticPolicy": {
                               "type": "string",
                               "const": "formal_statement_only"
+                            },
+                            "blueprint": {
+                              "type": "object",
+                              "properties": {
+                                "protocolVersion": {
+                                  "type": "string",
+                                  "const": "proof-blueprint-v1"
+                                },
+                                "graphSchemaSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "compilerArtifactSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "sketchValidatorArtifactSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "reviewerArtifactSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "reviewerPromptSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "nodePolicy": {
+                                  "type": "string",
+                                  "const": "and-or-monotone-v1"
+                                },
+                                "failurePolicy": {
+                                  "type": "string",
+                                  "const": "preserve-and-refine"
+                                },
+                                "memoization": {
+                                  "type": "string",
+                                  "const": "goal-sha256"
+                                },
+                                "finalAuthority": {
+                                  "type": "string",
+                                  "const": "formal-proof-v1"
+                                },
+                                "directAttemptFirst": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
+                                "verifiedSketchRequired": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
+                                "completeFailureHistoryRequired": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
+                                "maxNodes": {
+                                  "type": "integer",
+                                  "minimum": 2,
+                                  "maximum": 512
+                                },
+                                "maxDepth": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 32
+                                },
+                                "maxParallel": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 32
+                                },
+                                "maxAttemptsPerGoal": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 16
+                                },
+                                "maxRefinementsPerGoal": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 16
+                                },
+                                "leaseDurationMs": {
+                                  "type": "integer",
+                                  "minimum": 1000,
+                                  "maximum": 3600000
+                                }
+                              },
+                              "required": [
+                                "protocolVersion",
+                                "graphSchemaSHA256",
+                                "compilerArtifactSHA256",
+                                "sketchValidatorArtifactSHA256",
+                                "reviewerArtifactSHA256",
+                                "reviewerPromptSHA256",
+                                "nodePolicy",
+                                "failurePolicy",
+                                "memoization",
+                                "finalAuthority",
+                                "directAttemptFirst",
+                                "verifiedSketchRequired",
+                                "completeFailureHistoryRequired",
+                                "maxNodes",
+                                "maxDepth",
+                                "maxParallel",
+                                "maxAttemptsPerGoal",
+                                "maxRefinementsPerGoal",
+                                "leaseDurationMs"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
@@ -55423,6 +58025,89 @@
                                 "passed",
                                 "failed"
                               ]
+                            },
+                            "blueprint": {
+                              "type": "object",
+                              "properties": {
+                                "blueprintID": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "open",
+                                    "proved",
+                                    "refuted",
+                                    "exhausted"
+                                  ]
+                                },
+                                "goals": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "proved": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "refuted": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "exhausted": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "decompositions": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "attempts": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "rejected": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "refinements": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "openLeases": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "revision": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "blueprintID",
+                                "status",
+                                "goals",
+                                "proved",
+                                "refuted",
+                                "exhausted",
+                                "decompositions",
+                                "attempts",
+                                "rejected",
+                                "refinements",
+                                "openLeases",
+                                "revision"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [

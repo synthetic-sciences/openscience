@@ -4,6 +4,7 @@ import os from "os"
 import path from "path"
 import { HarnessContract } from "../../src/session/harness/contract"
 import { HarnessAutonomy } from "../../src/session/harness/autonomy"
+import { HarnessBlueprint } from "../../src/session/harness/blueprint"
 import { HarnessEvolution } from "../../src/session/harness/evolution"
 import { HarnessFormal } from "../../src/session/harness/formal"
 import { HarnessLaunch } from "../../src/session/harness/launch"
@@ -2330,7 +2331,6 @@ test("record-human-ai-autonomy hashes private interactions and emits a token-fre
     const secret = await bun(script, ["protocol", manifestFile])
     expect(secret.code).toBe(1)
     expect(secret.stderr).toContain("unknown fields: evaluatorToken")
-
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
   }
@@ -2474,6 +2474,127 @@ test("verify-formal-proof freezes a full external checker stack and emits token-
     expect(secret.stderr).toContain("unknown fields: evaluatorToken")
 
     await Bun.write(manifestFile, JSON.stringify({ ...manifest, challengePath: "../private-challenge.lean" }))
+    const escaped = await bun(script, ["protocol", manifestFile])
+    expect(escaped.code).toBe(1)
+    expect(escaped.stderr).toContain("escapes its evidence directory")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("operate-proof-blueprint freezes architecture and emits token-free exact-placeholder attempts", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-proof-blueprint-"))
+  const script = "research/operate-proof-blueprint/scripts/preflight.ts"
+  const manifestFile = path.join(dir, "manifest.json")
+  const protocolFile = path.join(dir, "preflight.json")
+  const leaseFile = path.join(dir, "lease.json")
+  const evidenceFile = path.join(dir, "evidence.json")
+  const now = Date.now()
+  const token = "private-blueprint-evaluator-token"
+  const files = {
+    "schema.json": "proof-blueprint-schema-v1",
+    "lean.bin": "frozen-lean-kernel",
+    "validator.bin": "frozen-sketch-validator",
+    "reviewer.bin": "frozen-decomposition-reviewer",
+    "rubric.txt": "relevant easier plausible",
+    "child.lean": "theorem Native.child : True := by trivial",
+    "sketch.lean": "theorem Native.root (h : Native.child) : True := by trivial",
+    "plan.txt": "reduce root to Native.child",
+    "compiler.log": `compiler accepted ${token}`,
+    "validator.log": `placeholders exactly Native.child ${token}`,
+    "reviewer.log": `all rubric checks passed ${token}`,
+    "feedback.txt": `no failure ${token}`,
+  }
+  const manifest = {
+    graphSchemaPath: "schema.json",
+    compilerPath: "lean.bin",
+    sketchValidatorPath: "validator.bin",
+    reviewerPath: "reviewer.bin",
+    reviewerPromptPath: "rubric.txt",
+    maxNodes: 32,
+    maxDepth: 6,
+    maxParallel: 4,
+    maxAttemptsPerGoal: 3,
+    maxRefinementsPerGoal: 2,
+    leaseDurationMs: 60_000,
+  }
+  const lease = {
+    id: hash("lease"),
+    goalID: hash("goal"),
+    revision: 1,
+    ordinal: 0,
+    status: "open",
+    issuedAt: now,
+    expiresAt: now + 60_000,
+  }
+  const evidence = {
+    sessionID: "native-proof-blueprint",
+    kind: "decomposition",
+    artifactPath: "sketch.lean",
+    informalPlanPath: "plan.txt",
+    children: [{ statementPath: "child.lean", declaration: "Native.child", module: "Native.Blueprint" }],
+    compiler: {
+      artifactPath: "lean.bin",
+      statementMatched: true,
+      exitCode: 0,
+      warnings: 0,
+      transcriptPath: "compiler.log",
+      feedbackPath: "feedback.txt",
+      startedAt: now,
+      endedAt: now + 1,
+    },
+    validator: { artifactPath: "validator.bin", transcriptPath: "validator.log" },
+    review: {
+      artifactPath: "reviewer.bin",
+      promptPath: "rubric.txt",
+      relevant: true,
+      easier: true,
+      plausible: true,
+      transcriptPath: "reviewer.log",
+    },
+  }
+  try {
+    await Promise.all([
+      ...Object.entries(files).map(([name, value]) => Bun.write(path.join(dir, name), value)),
+      Bun.write(manifestFile, JSON.stringify(manifest)),
+      Bun.write(leaseFile, JSON.stringify(lease)),
+      Bun.write(evidenceFile, JSON.stringify(evidence)),
+    ])
+    const frozen = await bun(script, ["protocol", manifestFile])
+    expect(frozen.code).toBe(0)
+    const preflight = JSON.parse(frozen.stdout)
+    expect(HarnessContract.ProofBlueprint.parse(preflight.blueprint)).toEqual(preflight.blueprint)
+    await Bun.write(protocolFile, frozen.stdout)
+
+    const prepared = await bun(script, ["attempt", protocolFile, leaseFile, evidenceFile])
+    expect(prepared.code).toBe(0)
+    const payload = JSON.parse(prepared.stdout)
+    const submission = HarnessBlueprint.DecompositionSubmit.parse({
+      ...payload.submission,
+      evaluatorToken: "x".repeat(32),
+    })
+    expect(submission).toMatchObject({
+      sessionID: "native-proof-blueprint",
+      kind: "decomposition",
+      leaseID: lease.id,
+      children: [{ declaration: "Native.child", module: "Native.Blueprint" }],
+      verification: { placeholderDeclarations: ["Native.child"], statementMatched: true, exitCode: 0 },
+      review: { relevant: true, easier: true, plausible: true },
+    })
+    for (const secret of [files["child.lean"], files["sketch.lean"], token]) {
+      expect(prepared.stdout).not.toContain(secret)
+    }
+
+    await Bun.write(path.join(dir, "other-validator.bin"), "substituted-validator")
+    await Bun.write(
+      evidenceFile,
+      JSON.stringify({ ...evidence, validator: { ...evidence.validator, artifactPath: "other-validator.bin" } }),
+    )
+    const changed = await bun(script, ["attempt", protocolFile, leaseFile, evidenceFile])
+    expect(changed.code).toBe(1)
+    expect(changed.stderr).toContain("does not match the frozen blueprint")
+
+    await Bun.write(manifestFile, JSON.stringify({ ...manifest, compilerPath: "../private-lean.bin" }))
     const escaped = await bun(script, ["protocol", manifestFile])
     expect(escaped.code).toBe(1)
     expect(escaped.stderr).toContain("escapes its evidence directory")

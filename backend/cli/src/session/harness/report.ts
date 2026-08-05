@@ -4,6 +4,7 @@ import { Global } from "@/global"
 import { HarnessAdaptation } from "./adaptation"
 import { HarnessAutonomy } from "./autonomy"
 import { HarnessBenchmark } from "./benchmark"
+import { HarnessBlueprint } from "./blueprint"
 import { HarnessConfirmation } from "./confirmation"
 import { HarnessContract } from "./contract"
 import { HarnessEvaluation } from "./evaluation"
@@ -61,6 +62,7 @@ export namespace HarnessReport {
               tier: HarnessContract.FormalTier,
               relation: HarnessContract.FormalRelation,
               status: z.enum(["passed", "failed"]).optional(),
+              blueprint: HarnessBlueprint.Summary.optional(),
             })
             .strict()
             .optional(),
@@ -222,6 +224,7 @@ export namespace HarnessReport {
     confirmation?: HarnessConfirmation.Receipt
     autonomy?: HarnessAutonomy.Receipt
     formal?: HarnessFormal.Receipt
+    blueprint?: HarnessBlueprint.Summary
     generatedAt?: number
   }) {
     const contract = HarnessContract.Info.parse(input.contract)
@@ -236,6 +239,7 @@ export namespace HarnessReport {
     if (formal && formal.receiptID !== evaluation?.proofReceiptID) {
       throw new Error(`Formal proof receipt does not match the selected evaluation`)
     }
+    const blueprint = input.blueprint ? HarnessBlueprint.bind(contract, input.blueprint) : undefined
     const confirmation = input.confirmation ? HarnessConfirmation.binds(contract, input.confirmation) : undefined
     if (confirmation && !contract.confirmation) {
       throw new Error(`A legacy harness report cannot cite sealed confirmation evidence`)
@@ -342,6 +346,7 @@ export namespace HarnessReport {
               tier: contract.formalProof.tier,
               relation: contract.formalProof.relation,
               status: formal?.status,
+              blueprint,
             }
           : undefined,
         seed: contract.seed,
@@ -411,11 +416,16 @@ export namespace HarnessReport {
   export async function build(sessionID: string) {
     const contract = await HarnessContract.read(sessionID)
     if (!contract) throw new Error(`No harness contract is bound to session ${sessionID}`)
-    const [evaluations, trace, search, confirmation] = await Promise.all([
+    const [evaluations, trace, search, confirmation, blueprint] = await Promise.all([
       HarnessEvaluation.list(sessionID),
       SessionTrace.build(sessionID),
       HarnessSearch.read(sessionID).catch(() => undefined),
       HarnessConfirmation.current(contract),
+      contract.formalProof?.blueprint
+        ? HarnessBlueprint.read(sessionID)
+            .then((value) => value.summary)
+            .catch(() => undefined)
+        : undefined,
     ])
     const evaluation = selected(evaluations, search ?? undefined)
     const autonomy = evaluation?.autonomyReceiptID
@@ -432,6 +442,7 @@ export namespace HarnessReport {
       confirmation: confirmation ?? undefined,
       autonomy,
       formal,
+      blueprint,
     })
     await Bun.write(file(sessionID), JSON.stringify(report, null, 2) + "\n")
     return report

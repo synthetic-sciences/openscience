@@ -7,6 +7,7 @@ import { HarnessAdapter } from "@/session/harness/adapter"
 import { HarnessAudit } from "@/session/harness/audit"
 import { HarnessAutonomy } from "@/session/harness/autonomy"
 import { HarnessBenchmark } from "@/session/harness/benchmark"
+import { HarnessBlueprint } from "@/session/harness/blueprint"
 import { HarnessConfirmation } from "@/session/harness/confirmation"
 import { HarnessContract } from "@/session/harness/contract"
 import { HarnessEvaluation } from "@/session/harness/evaluation"
@@ -684,6 +685,112 @@ export const HarnessRoutes = lazy(() =>
         const input = c.req.valid("json")
         const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
         return c.json(await HarnessAutonomy.read(c.req.valid("param").receiptID, contract))
+      },
+    )
+    .post(
+      "/proofs/blueprints",
+      describeRoute({
+        summary: "Initialize an evaluator-grounded formal proof blueprint",
+        description:
+          "Creates the content-addressed root of a bounded LEAP-inspired AND/OR proof graph without granting the graph final proof authority.",
+        operationId: "harness.blueprint.initialize",
+        responses: {
+          200: {
+            description: "Canonical proof blueprint view",
+            content: { "application/json": { schema: resolver(HarnessBlueprint.View) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessBlueprint.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessBlueprint.initialize(contract))
+      },
+    )
+    .post(
+      "/proofs/blueprints/status",
+      describeRoute({
+        summary: "Read an evaluator-grounded formal proof blueprint",
+        operationId: "harness.blueprint.status",
+        responses: {
+          200: {
+            description: "Backend-derived goal, decomposition, attempt, and lease state",
+            content: { "application/json": { schema: resolver(HarnessBlueprint.View) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("json", HarnessBlueprint.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessBlueprint.read(input.sessionID))
+      },
+    )
+    .post(
+      "/proofs/blueprints/leases",
+      describeRoute({
+        summary: "Lease bounded ready goals from a formal proof blueprint",
+        description:
+          "Atomically expires stale work and leases distinct deepest-ready goals up to the frozen parallelism limit.",
+        operationId: "harness.blueprint.lease",
+        responses: {
+          200: {
+            description: "Issued leases and updated proof blueprint",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ leases: z.array(HarnessBlueprint.Lease), state: HarnessBlueprint.View })),
+              },
+            },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessBlueprint.LeaseRequest),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessBlueprint.lease(contract, input.count))
+      },
+    )
+    .post(
+      "/proofs/blueprints/attempts",
+      describeRoute({
+        summary: "Record an evaluator-authenticated proof or decomposition attempt",
+        description:
+          "Consumes one active goal lease, retains failed verifier or reviewer outcomes, and admits only exact compiler-checked sketches into the monotone acyclic graph.",
+        operationId: "harness.blueprint.record",
+        responses: {
+          200: {
+            description: "Recorded attempt and updated proof blueprint",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    attemptID: z
+                      .string()
+                      .regex(/^[a-f0-9]{64}$/)
+                      .optional(),
+                    decompositionID: z
+                      .string()
+                      .regex(/^[a-f0-9]{64}$/)
+                      .optional(),
+                    state: HarnessBlueprint.View,
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessBlueprint.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorize(input.sessionID, input.evaluatorToken)
+        return c.json(await HarnessBlueprint.record(input, contract))
       },
     )
     .post(
