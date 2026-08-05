@@ -56,6 +56,10 @@ export namespace HarnessMemory {
           version: z.string().min(1),
           taskID: z.string().min(1),
           evaluator: z.string().min(1),
+          semanticAuditSHA256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
         })
         .strict(),
       entries: z.record(z.string(), Entry),
@@ -68,10 +72,13 @@ export namespace HarnessMemory {
 
   const root = path.join(Global.Path.data, "harness", "retrospectives")
   const digest = (input: string) => new Bun.CryptoHasher("sha256").update(input).digest("hex")
-  const key = (contract: HarnessContract.Info) =>
-    digest(
-      `${contract.benchmark.name}\0${contract.benchmark.version}\0${contract.benchmark.taskID}\0${contract.benchmark.evaluator}`,
-    )
+  const semantic = (contract: HarnessContract.Info) =>
+    contract.semanticAudit ? digest(JSON.stringify(contract.semanticAudit)) : undefined
+  const key = (contract: HarnessContract.Info) => {
+    const base = `${contract.benchmark.name}\0${contract.benchmark.version}\0${contract.benchmark.taskID}\0${contract.benchmark.evaluator}`
+    const scope = semantic(contract)
+    return digest(scope ? `${base}\0${scope}` : base)
+  }
   const file = (contract: HarnessContract.Info) => path.join(root, `${key(contract)}.json`)
   const clip = (value: string, max = 1_000) =>
     value
@@ -90,6 +97,7 @@ export namespace HarnessMemory {
   const safe = (value: string, max = 800) => escape(value).slice(0, max)
 
   function empty(contract: HarnessContract.Info): State {
+    const scope = semantic(contract)
     return {
       schemaVersion: 1,
       scope: {
@@ -97,6 +105,7 @@ export namespace HarnessMemory {
         version: contract.benchmark.version,
         taskID: contract.benchmark.taskID,
         evaluator: contract.benchmark.evaluator,
+        ...(scope ? { semanticAuditSHA256: scope } : {}),
       },
       entries: {},
       revision: 0,

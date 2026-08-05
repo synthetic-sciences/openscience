@@ -5,6 +5,7 @@ import { JsonStore } from "@/util/jsonstore"
 import { HarnessBenchmark } from "./benchmark"
 import { HarnessContract } from "./contract"
 import { HarnessLaunch } from "./launch"
+import { HarnessSemantic } from "./semantic"
 
 export namespace HarnessOrchestrator {
   const digest = (input: unknown) => new Bun.CryptoHasher("sha256").update(JSON.stringify(input)).digest("hex")
@@ -245,7 +246,7 @@ export namespace HarnessOrchestrator {
         .array(z.string().regex(/^[a-f0-9]{64}$/))
         .max(16)
         .refine((items) => new Set(items).size === items.length, "Work dependencies must be unique"),
-      prompt: z.string().min(1).max(8_000),
+      prompt: z.string().min(1).max(40_000),
       allocation: Allocation,
       lane: Lane.optional(),
       status: Status,
@@ -1033,6 +1034,7 @@ export namespace HarnessOrchestrator {
       prompt: [
         `<scientific-coalition role="${role}" topology="${selection.topology}" round="${round}"${lane ? ` lane="${lane}"` : ""}>`,
         `Objective: ${contract.objective}`,
+        ...(contract.semanticAudit ? [HarnessSemantic.prompt(contract)] : []),
         instruction(role),
         ...(lane
           ? [

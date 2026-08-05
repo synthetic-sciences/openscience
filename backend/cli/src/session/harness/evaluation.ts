@@ -10,6 +10,7 @@ import { HarnessIntegrity } from "./integrity"
 import { HarnessEvolution } from "./evolution"
 import { HarnessIntervention } from "./intervention"
 import { HarnessSimulation } from "./simulation"
+import { HarnessSemantic } from "./semantic"
 
 export namespace HarnessEvaluation {
   export const Status = z.enum(["passed", "failed", "inconclusive"])
@@ -79,6 +80,10 @@ export namespace HarnessEvaluation {
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
       evaluatorAuditReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+      semanticReceiptID: z
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
@@ -316,6 +321,30 @@ export namespace HarnessEvaluation {
       await HarnessJudge.assert({
         contract,
         receiptID: evaluation.evaluatorAuditReceiptID,
+        recordedAt: evaluation.recordedAt!,
+        requirePassed: evaluation.status === "passed" && final(evaluation),
+      })
+    }
+    if (evaluation.semanticReceiptID && !contract.semanticAudit) {
+      throw new Error(`Evaluation references a semantic receipt without a bound semantic audit protocol`)
+    }
+    if (
+      contract.semanticAudit &&
+      evaluation.status === "passed" &&
+      final(evaluation) &&
+      !evaluation.semanticReceiptID
+    ) {
+      throw new Error(`A passing final evaluation must reference a semantic audit receipt`)
+    }
+    if (evaluation.semanticReceiptID) {
+      await HarnessSemantic.assert({
+        contract,
+        receiptID: evaluation.semanticReceiptID,
+        subject:
+          evaluation.subject?.type === "candidate"
+            ? { type: "candidate", id: evaluation.subject.id }
+            : { type: "run", id: contract.runID },
+        evaluatedAt: evaluation.evaluatedAt,
         recordedAt: evaluation.recordedAt!,
         requirePassed: evaluation.status === "passed" && final(evaluation),
       })

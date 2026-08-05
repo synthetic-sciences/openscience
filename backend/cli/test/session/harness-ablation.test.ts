@@ -14,6 +14,7 @@ const sessions = new Set<string>()
 const plans = new Set<string>()
 const token = "ablation-evaluator-capability-token-0000000000000000"
 const auditor = "ablation-auditor-capability-token-00000000000000000"
+const reviewer = "ablation-semantic-capability-token-0000000000000000"
 const hash = (value: string) => new Bun.CryptoHasher("sha256").update(value).digest("hex")
 
 afterEach(async () => {
@@ -40,7 +41,7 @@ async function run(input: {
   createdAt: number
   model?: string
   direction?: "maximize" | "minimize"
-  factor?: "orchestration" | "search" | "evaluator_audit"
+  factor?: "orchestration" | "search" | "evaluator_audit" | "semantic_audit"
 }) {
   const sessionID = `${input.prefix}-${input.seed}-${input.role}`
   sessions.add(sessionID)
@@ -80,6 +81,25 @@ async function run(input: {
             },
           }
         : undefined,
+    semanticAudit:
+      input.role === "arm" && input.factor === "semantic_audit"
+        ? {
+            token: reviewer,
+            protocol: {
+              protocolVersion: "semantic-audit-v1",
+              reviewer: { name: "ablation-meaning-review", version: "1", source: "external" },
+              scope: {
+                objectiveSHA256: hash("Measure the isolated effect of conditional orchestration"),
+                criteria: [{ id: "intent", requirement: "Answer the intended scientific problem" }],
+                forbiddenShortcuts: [{ id: "vacuity", description: "Do not satisfy only a vacuous interpretation" }],
+                literature: { cutoff: "2026-08-01", corpusSHA256: hash("ablation-literature") },
+                noveltyFloor: "not_required",
+              },
+              minReviewers: 2,
+              minConfidence: 0.8,
+            },
+          }
+        : undefined,
     metric: { name: "score", direction: input.direction ?? "maximize" },
     model: { provider: "test", name: input.model ?? "model" },
     tools: ["read", "bash"],
@@ -103,7 +123,7 @@ async function study(
   prefix: string,
   drift = false,
   direction: "maximize" | "minimize" = "maximize",
-  factor: "orchestration" | "search" | "evaluator_audit" = "orchestration",
+  factor: "orchestration" | "search" | "evaluator_audit" | "semantic_audit" = "orchestration",
 ) {
   const createdAt = Date.now()
   const pairs = await Promise.all(
@@ -233,6 +253,15 @@ describe("matched scientific ablations", () => {
     if (!initialized) throw new Error("Expected an initialized ablation")
     plans.add(initialized.plan.planID)
     expect(initialized.plan.factor.kind).toBe("evaluator_audit")
+    expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
+  })
+
+  test("isolates semantic meaning review as its own ablatable protocol factor", async () => {
+    const input = await study("ablation-semantic-audit", false, "maximize", "semantic_audit")
+    const initialized = await HarnessAblation.initialize(input.plan)
+    if (!initialized) throw new Error("Expected an initialized ablation")
+    plans.add(initialized.plan.planID)
+    expect(initialized.plan.factor.kind).toBe("semantic_audit")
     expect(initialized.plan.baselineValueSHA256).not.toBe(initialized.plan.armValueSHA256)
   })
 

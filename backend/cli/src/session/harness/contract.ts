@@ -623,6 +623,67 @@ export namespace HarnessContract {
     .strict()
   export type EvaluatorAudit = z.infer<typeof EvaluatorAudit>
 
+  export const Novelty = z.enum(["not_required", "known", "rediscovery", "minor", "publication", "major"])
+  export type Novelty = z.infer<typeof Novelty>
+
+  export const SemanticAudit = z
+    .object({
+      protocolVersion: z.literal("semantic-audit-v1"),
+      reviewer: z
+        .object({
+          name: z.string().min(1).max(200),
+          version: z.string().min(1).max(200),
+          source: z.enum(["gate", "human", "external"]),
+        })
+        .strict(),
+      scope: z
+        .object({
+          objectiveSHA256: Hash,
+          criteria: z
+            .array(
+              z
+                .object({
+                  id: z.string().min(1).max(100),
+                  requirement: z.string().min(1).max(500),
+                })
+                .strict(),
+            )
+            .min(1)
+            .max(24)
+            .refine(
+              (items) => new Set(items.map((item) => item.id)).size === items.length,
+              "Semantic criterion IDs must be unique",
+            ),
+          forbiddenShortcuts: z
+            .array(
+              z
+                .object({
+                  id: z.string().min(1).max(100),
+                  description: z.string().min(1).max(500),
+                })
+                .strict(),
+            )
+            .min(1)
+            .max(24)
+            .refine(
+              (items) => new Set(items.map((item) => item.id)).size === items.length,
+              "Forbidden semantic shortcut IDs must be unique",
+            ),
+          literature: z
+            .object({
+              cutoff: z.iso.date(),
+              corpusSHA256: Hash,
+            })
+            .strict(),
+          noveltyFloor: Novelty,
+        })
+        .strict(),
+      minReviewers: z.number().int().min(2).max(5),
+      minConfidence: z.number().finite().min(0.5).max(1),
+    })
+    .strict()
+  export type SemanticAudit = z.infer<typeof SemanticAudit>
+
   export const Split = z.enum(["development", "validation", "held_out", "release"])
   export type Split = z.infer<typeof Split>
 
@@ -676,6 +737,7 @@ export namespace HarnessContract {
       interventions: Interventions.optional(),
       simulation: Simulation.optional(),
       evaluatorAudit: EvaluatorAudit.optional(),
+      semanticAudit: SemanticAudit.optional(),
       packs: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -781,7 +843,8 @@ export namespace HarnessContract {
           value.evolution ||
           value.interventions ||
           value.simulation ||
-          value.evaluatorAudit) &&
+          value.evaluatorAudit ||
+          value.semanticAudit) &&
         !value.benchmark.evaluatorVersion
       ) {
         ctx.addIssue({
@@ -796,7 +859,8 @@ export namespace HarnessContract {
           value.evolution ||
           value.interventions ||
           value.simulation ||
-          value.evaluatorAudit) &&
+          value.evaluatorAudit ||
+          value.semanticAudit) &&
         !value.benchmark.evaluatorSource
       ) {
         ctx.addIssue({
@@ -934,6 +998,40 @@ export namespace HarnessContract {
           code: "custom",
           path: ["evaluatorAudit", "auditor"],
           message: "Evaluator qualification requires an independent auditor identity",
+        })
+      }
+      if (
+        value.semanticAudit &&
+        value.semanticAudit.scope.objectiveSHA256 !==
+          new Bun.CryptoHasher("sha256").update(value.objective).digest("hex")
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["semanticAudit", "scope", "objectiveSHA256"],
+          message: "Semantic audit objective commitment does not match the bound objective",
+        })
+      }
+      if (
+        value.semanticAudit &&
+        value.semanticAudit.reviewer.name === value.benchmark.evaluator &&
+        value.semanticAudit.reviewer.version === value.benchmark.evaluatorVersion
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["semanticAudit", "reviewer"],
+          message: "Semantic review requires an identity distinct from the score evaluator",
+        })
+      }
+      if (
+        value.semanticAudit &&
+        value.evaluatorAudit &&
+        value.semanticAudit.reviewer.name === value.evaluatorAudit.auditor.name &&
+        value.semanticAudit.reviewer.version === value.evaluatorAudit.auditor.version
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["semanticAudit", "reviewer"],
+          message: "Semantic review and evaluator qualification require distinct identities",
         })
       }
     })

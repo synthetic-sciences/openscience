@@ -979,6 +979,74 @@ test("run-verifier-routed-research enforces clean restart context isolation", as
   }
 })
 
+test("audit-scientific-meaning derives status without persisting review capabilities", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-semantic-audit-"))
+  const script = "research/audit-scientific-meaning/scripts/validate_submission.py"
+  const contractFile = path.join(dir, "contract.json")
+  const submissionFile = path.join(dir, "submission.json")
+  const objective = "Resolve the intended open problem without a vacuous interpretation"
+  const scope = {
+    objectiveSHA256: hash(objective),
+    criteria: [{ id: "target", requirement: "Address the intended target." }],
+    forbiddenShortcuts: [{ id: "vacuity", description: "Do not use a trivial interpretation." }],
+    literature: { cutoff: "2026-08-01", corpusSHA256: hash("semantic-corpus") },
+    noveltyFloor: "minor",
+  }
+  const contract = {
+    sessionID: "semantic-session",
+    runID: "semantic-run",
+    objective,
+    semanticAudit: {
+      protocolVersion: "semantic-audit-v1",
+      reviewer: { name: "expert-panel", version: "1", source: "external" },
+      scope,
+      minReviewers: 2,
+      minConfidence: 0.8,
+    },
+  }
+  const review = (actor: string, sessionID: string) => ({
+    actor,
+    sessionID,
+    correctness: "passed",
+    alignment: "intended",
+    novelty: "minor",
+    vacuous: false,
+    confidence: 0.9,
+    criteria: [{ id: "target", status: "passed", evidence: [`artifact:${actor}-target`] }],
+    shortcuts: [{ id: "vacuity", observed: false, evidence: [`artifact:${actor}-vacuity`] }],
+    literatureRefs: [`literature:${actor}`],
+    evidence: [`artifact:${actor}-review`],
+    summary: "Independent substantive review",
+    reviewedAt: Date.now(),
+  })
+  const submission = {
+    sessionID: contract.sessionID,
+    subject: { type: "run", id: contract.runID },
+    reviews: [review("reviewer-a", "review-session-a"), review("reviewer-b", "review-session-b")],
+  }
+  try {
+    await Promise.all([
+      Bun.write(contractFile, JSON.stringify(contract)),
+      Bun.write(submissionFile, JSON.stringify(submission)),
+    ])
+    const valid = await run(script, [contractFile, submissionFile])
+    expect(valid.code).toBe(0)
+    expect(JSON.parse(valid.stdout)).toMatchObject({
+      valid: true,
+      derivedStatus: "meaningful",
+      reviewers: 2,
+      subject: submission.subject,
+    })
+
+    await Bun.write(submissionFile, JSON.stringify({ ...submission, reviewerToken: "must-not-touch-disk" }))
+    const rejected = await run(script, [contractFile, submissionFile])
+    expect(rejected.code).toBe(1)
+    expect(rejected.stderr).toContain("token-free on disk")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
 test("design-replay-interventions freezes exact one-difference evaluator pairs", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-interventions-"))
   const script = "research/design-replay-interventions/scripts/design_interventions.py"

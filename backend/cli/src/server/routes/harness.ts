@@ -17,6 +17,7 @@ import { HarnessOrchestrator } from "@/session/harness/orchestrator"
 import { HarnessReport } from "@/session/harness/report"
 import { HarnessRecipe } from "@/session/harness/recipe"
 import { HarnessSimulation } from "@/session/harness/simulation"
+import { HarnessSemantic } from "@/session/harness/semantic"
 import { HarnessSkill } from "@/session/harness/skill"
 import { errors } from "../error"
 
@@ -302,6 +303,60 @@ export const HarnessRoutes = lazy(() =>
           await HarnessJudge.assert({
             contract,
             receiptID: c.req.valid("param").receiptID,
+            recordedAt: Date.now(),
+            requirePassed: false,
+          }),
+        )
+      },
+    )
+    .post(
+      "/semantics/receipts",
+      describeRoute({
+        summary: "Record an independent semantic audit",
+        description:
+          "Derives whether one bound result is meaningful, merely technically valid, ambiguous, or incorrect from independent evidence-backed reviews of frozen intent, shortcuts, and literature-relative novelty.",
+        operationId: "harness.semantic.record",
+        responses: {
+          200: {
+            description: "Immutable semantic audit receipt",
+            content: { "application/json": { schema: resolver(HarnessSemantic.Receipt) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessSemantic.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorizeSemantic(input.sessionID, input.reviewerToken)
+        return c.json(await HarnessSemantic.record(input, contract))
+      },
+    )
+    .post(
+      "/semantics/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected semantic audit receipt",
+        operationId: "harness.semantic.receipt",
+        responses: {
+          200: {
+            description: "Semantic audit receipt",
+            content: { "application/json": { schema: resolver(HarnessSemantic.Receipt) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessSemantic.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorizeSemantic(input.sessionID, input.reviewerToken)
+        const receipt = await HarnessSemantic.read(c.req.valid("param").receiptID)
+        if (!receipt) throw new Error(`Unknown or corrupt semantic audit receipt`)
+        return c.json(
+          await HarnessSemantic.assert({
+            contract,
+            receiptID: receipt.receiptID,
+            subject: receipt.subject,
+            evaluatedAt: Date.now(),
             recordedAt: Date.now(),
             requirePassed: false,
           }),

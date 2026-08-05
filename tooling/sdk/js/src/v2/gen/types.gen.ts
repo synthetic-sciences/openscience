@@ -8125,6 +8125,7 @@ export type HarnessAblationInitializeData = {
         | "audit"
         | "simulation"
         | "evaluator_audit"
+        | "semantic_audit"
         | "fidelities"
         | "skill"
         | "tool"
@@ -8177,6 +8178,7 @@ export type HarnessAblationInitializeResponses = {
           | "audit"
           | "simulation"
           | "evaluator_audit"
+          | "semantic_audit"
           | "fidelities"
           | "skill"
           | "tool"
@@ -8225,6 +8227,7 @@ export type HarnessAblationInitializeResponses = {
           | "audit"
           | "simulation"
           | "evaluator_audit"
+          | "semantic_audit"
           | "fidelities"
           | "skill"
           | "tool"
@@ -8319,6 +8322,7 @@ export type HarnessAblationAssessResponses = {
           | "audit"
           | "simulation"
           | "evaluator_audit"
+          | "semantic_audit"
           | "fidelities"
           | "skill"
           | "tool"
@@ -8367,6 +8371,7 @@ export type HarnessAblationAssessResponses = {
           | "audit"
           | "simulation"
           | "evaluator_audit"
+          | "semantic_audit"
           | "fidelities"
           | "skill"
           | "tool"
@@ -9371,6 +9376,217 @@ export type HarnessJudgeReceiptResponses = {
 }
 
 export type HarnessJudgeReceiptResponse = HarnessJudgeReceiptResponses[keyof HarnessJudgeReceiptResponses]
+
+export type HarnessSemanticRecordData = {
+  body?: {
+    sessionID: string
+    reviewerToken: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    reviews: Array<{
+      actor: string
+      sessionID: string
+      correctness: "passed" | "failed" | "inconclusive"
+      alignment: "intended" | "reasonable_alternative" | "misinterpreted" | "ambiguous"
+      novelty: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
+      vacuous: boolean
+      confidence: number
+      criteria: Array<{
+        id: string
+        status: "passed" | "failed" | "inconclusive"
+        evidence: Array<string>
+      }>
+      shortcuts: Array<{
+        id: string
+        observed: boolean
+        evidence: Array<string>
+      }>
+      literatureRefs?: Array<string>
+      evidence: Array<string>
+      summary: string
+      reviewedAt: number
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/semantics/receipts"
+}
+
+export type HarnessSemanticRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessSemanticRecordError = HarnessSemanticRecordErrors[keyof HarnessSemanticRecordErrors]
+
+export type HarnessSemanticRecordResponses = {
+  /**
+   * Immutable semantic audit receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "semantic-audit-receipt-v1"
+    receiptID: string
+    protocolSHA256: string
+    sourceSessionID: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    reviewer: {
+      name: string
+      version: string
+      source: "gate" | "human" | "external"
+    }
+    scope: {
+      objectiveSHA256: string
+      criteria: Array<{
+        id: string
+        requirement: string
+      }>
+      forbiddenShortcuts: Array<{
+        id: string
+        description: string
+      }>
+      literature: {
+        cutoff: string
+        corpusSHA256: string
+      }
+      noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
+    }
+    reviews: Array<{
+      actor: string
+      sessionID: string
+      correctness: "passed" | "failed" | "inconclusive"
+      alignment: "intended" | "reasonable_alternative" | "misinterpreted" | "ambiguous"
+      novelty: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
+      vacuous: boolean
+      confidence: number
+      criteria: Array<{
+        id: string
+        status: "passed" | "failed" | "inconclusive"
+        evidence: Array<string>
+      }>
+      shortcuts: Array<{
+        id: string
+        observed: boolean
+        evidence: Array<string>
+      }>
+      literatureRefs?: Array<string>
+      evidence: Array<string>
+      summary: string
+      reviewedAt: number
+    }>
+    status: "meaningful" | "technical_only" | "ambiguous" | "failed"
+    failures: Array<string>
+    evidence: Array<string>
+    reviewedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessSemanticRecordResponse = HarnessSemanticRecordResponses[keyof HarnessSemanticRecordResponses]
+
+export type HarnessSemanticReceiptData = {
+  body?: {
+    sessionID: string
+    reviewerToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/semantics/receipts/{receiptID}"
+}
+
+export type HarnessSemanticReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessSemanticReceiptError = HarnessSemanticReceiptErrors[keyof HarnessSemanticReceiptErrors]
+
+export type HarnessSemanticReceiptResponses = {
+  /**
+   * Semantic audit receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "semantic-audit-receipt-v1"
+    receiptID: string
+    protocolSHA256: string
+    sourceSessionID: string
+    subject: {
+      type: "run" | "candidate"
+      id: string
+    }
+    reviewer: {
+      name: string
+      version: string
+      source: "gate" | "human" | "external"
+    }
+    scope: {
+      objectiveSHA256: string
+      criteria: Array<{
+        id: string
+        requirement: string
+      }>
+      forbiddenShortcuts: Array<{
+        id: string
+        description: string
+      }>
+      literature: {
+        cutoff: string
+        corpusSHA256: string
+      }
+      noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
+    }
+    reviews: Array<{
+      actor: string
+      sessionID: string
+      correctness: "passed" | "failed" | "inconclusive"
+      alignment: "intended" | "reasonable_alternative" | "misinterpreted" | "ambiguous"
+      novelty: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
+      vacuous: boolean
+      confidence: number
+      criteria: Array<{
+        id: string
+        status: "passed" | "failed" | "inconclusive"
+        evidence: Array<string>
+      }>
+      shortcuts: Array<{
+        id: string
+        observed: boolean
+        evidence: Array<string>
+      }>
+      literatureRefs?: Array<string>
+      evidence: Array<string>
+      summary: string
+      reviewedAt: number
+    }>
+    status: "meaningful" | "technical_only" | "ambiguous" | "failed"
+    failures: Array<string>
+    evidence: Array<string>
+    reviewedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessSemanticReceiptResponse = HarnessSemanticReceiptResponses[keyof HarnessSemanticReceiptResponses]
 
 export type HarnessLaunchRecordData = {
   body?: {
@@ -11780,6 +11996,35 @@ export type HarnessBindData = {
       }
       token: string
     }
+    semanticAudit?: {
+      protocol: {
+        protocolVersion: "semantic-audit-v1"
+        reviewer: {
+          name: string
+          version: string
+          source: "gate" | "human" | "external"
+        }
+        scope: {
+          objectiveSHA256: string
+          criteria: Array<{
+            id: string
+            requirement: string
+          }>
+          forbiddenShortcuts: Array<{
+            id: string
+            description: string
+          }>
+          literature: {
+            cutoff: string
+            corpusSHA256: string
+          }
+          noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
+        }
+        minReviewers: number
+        minConfidence: number
+      }
+      token: string
+    }
     extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     metric?: {
       name?: string
@@ -12272,6 +12517,32 @@ export type HarnessBindResponses = {
       minFaultRecall: number
       maxBrierScore: number
     }
+    semanticAudit?: {
+      protocolVersion: "semantic-audit-v1"
+      reviewer: {
+        name: string
+        version: string
+        source: "gate" | "human" | "external"
+      }
+      scope: {
+        objectiveSHA256: string
+        criteria: Array<{
+          id: string
+          requirement: string
+        }>
+        forbiddenShortcuts: Array<{
+          id: string
+          description: string
+        }>
+        literature: {
+          cutoff: string
+          corpusSHA256: string
+        }
+        noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
+      }
+      minReviewers: number
+      minConfidence: number
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string
@@ -12320,6 +12591,7 @@ export type HarnessEvaluateData = {
     evolutionReceiptID?: string
     interventionReceiptID?: string
     evaluatorAuditReceiptID?: string
+    semanticReceiptID?: string
     status: "passed" | "failed" | "inconclusive"
     score?: number
     metrics?: {
@@ -13089,6 +13361,32 @@ export type HarnessContractResponses = {
       minFaultRecall: number
       maxBrierScore: number
     }
+    semanticAudit?: {
+      protocolVersion: "semantic-audit-v1"
+      reviewer: {
+        name: string
+        version: string
+        source: "gate" | "human" | "external"
+      }
+      scope: {
+        objectiveSHA256: string
+        criteria: Array<{
+          id: string
+          requirement: string
+        }>
+        forbiddenShortcuts: Array<{
+          id: string
+          description: string
+        }>
+        literature: {
+          cutoff: string
+          corpusSHA256: string
+        }
+        noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
+      }
+      minReviewers: number
+      minConfidence: number
+    }
     packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
     model: {
       provider: string
@@ -13165,6 +13463,7 @@ export type HarnessEvaluationsResponses = {
     evolutionReceiptID?: string
     interventionReceiptID?: string
     evaluatorAuditReceiptID?: string
+    semanticReceiptID?: string
     evaluator: {
       name: string
       version: string
@@ -13286,6 +13585,7 @@ export type HarnessReportResponses = {
       evolutionReceiptID?: string
       interventionReceiptID?: string
       evaluatorAuditReceiptID?: string
+      semanticReceiptID?: string
       evaluations: number
     }
     efficiency: {

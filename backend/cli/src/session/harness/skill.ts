@@ -260,6 +260,7 @@ export namespace HarnessSkill {
       interventions: contract.interventions,
       simulation: contract.simulation,
       evaluatorAudit: contract.evaluatorAudit,
+      semanticAudit: contract.semanticAudit,
       packs: contract.packs ?? [],
       model: contract.model,
       tools: contract.tools.toSorted(),

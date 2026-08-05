@@ -49,6 +49,13 @@ export namespace HarnessAdapter {
         })
         .strict()
         .optional(),
+      semanticAudit: z
+        .object({
+          protocol: HarnessContract.SemanticAudit,
+          token: Token,
+        })
+        .strict()
+        .optional(),
       extraPacks: z
         .array(HarnessPack.Id)
         .max(HarnessPack.Id.options.length)
@@ -129,6 +136,20 @@ export namespace HarnessAdapter {
           message: "Evaluator and independent auditor capabilities must differ",
         })
       }
+      if (value.semanticAudit && value.semanticAudit.token === value.evaluator.token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["semanticAudit", "token"],
+          message: "Evaluator and semantic reviewer capabilities must differ",
+        })
+      }
+      if (value.semanticAudit && value.evaluatorAudit && value.semanticAudit.token === value.evaluatorAudit.token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["semanticAudit", "token"],
+          message: "Evaluator auditor and semantic reviewer capabilities must differ",
+        })
+      }
       if (Boolean(value.objectives?.length) !== Boolean(value.objectiveAudit)) {
         ctx.addIssue({
           code: "custom",
@@ -175,6 +196,10 @@ export namespace HarnessAdapter {
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .optional(),
+      semanticReceiptID: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
       status: HarnessEvaluation.Status,
       score: z.number().finite().optional(),
       metrics: z
@@ -209,6 +234,15 @@ export namespace HarnessAdapter {
           name: z.string().min(1),
           version: z.string().min(1),
           source: z.enum(["benchmark", "gate", "human", "external"]),
+          tokenSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+        })
+        .strict()
+        .optional(),
+      semantic: z
+        .object({
+          name: z.string().min(1),
+          version: z.string().min(1),
+          source: z.enum(["gate", "human", "external"]),
           tokenSHA256: z.string().regex(/^[a-f0-9]{64}$/),
         })
         .strict()
@@ -264,6 +298,29 @@ export namespace HarnessAdapter {
       binding.auditor.source !== auditor.source
     ) {
       throw new Error(`Evaluator auditor identity does not match the bound harness contract`)
+    }
+    return contract
+  }
+
+  export async function authorizeSemantic(sessionID: string, token: string) {
+    const [contract, binding] = await Promise.all([HarnessContract.read(sessionID), credential(sessionID)])
+    if (!contract || !contract.semanticAudit || !binding.semantic) {
+      throw new Error(`No independent semantic reviewer is bound to session ${sessionID}`)
+    }
+    if (binding.contractFingerprint !== HarnessContract.fingerprint(contract)) {
+      throw new Error(`Semantic reviewer capability does not match the bound harness contract`)
+    }
+    if (!timingSafeEqual(binding.semantic.tokenSHA256, digest(Token.parse(token)))) {
+      throw new Error(`Semantic reviewer capability was rejected`)
+    }
+    if (
+      JSON.stringify(binding.semantic) !==
+      JSON.stringify({
+        ...contract.semanticAudit.reviewer,
+        tokenSHA256: binding.semantic.tokenSHA256,
+      })
+    ) {
+      throw new Error(`Semantic reviewer identity does not match the bound harness contract`)
     }
     return contract
   }
@@ -360,6 +417,7 @@ export namespace HarnessAdapter {
       interventions: task.interventions,
       simulation: task.simulation,
       evaluatorAudit: task.evaluatorAudit?.protocol,
+      semanticAudit: task.semanticAudit?.protocol,
       packs,
       model: task.model,
       tools: task.tools,
@@ -386,6 +444,12 @@ export namespace HarnessAdapter {
         ? {
             ...task.evaluatorAudit.protocol.auditor,
             tokenSHA256: digest(task.evaluatorAudit.token),
+          }
+        : undefined,
+      semantic: task.semanticAudit
+        ? {
+            ...task.semanticAudit.protocol.reviewer,
+            tokenSHA256: digest(task.semanticAudit.token),
           }
         : undefined,
       createdAt: task.createdAt,
@@ -467,6 +531,7 @@ export namespace HarnessAdapter {
       evolutionReceiptID: value.evolutionReceiptID,
       interventionReceiptID: value.interventionReceiptID,
       evaluatorAuditReceiptID: value.evaluatorAuditReceiptID,
+      semanticReceiptID: value.semanticReceiptID,
       evaluator: binding.evaluator,
       status: value.status,
       score: value.score,

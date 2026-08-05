@@ -22,7 +22,7 @@ afterEach(async () => {
   sessions.clear()
 })
 
-async function bind(sessionID: string, scope: string, objective = "Improve spectral PDE accuracy") {
+async function bind(sessionID: string, scope: string, objective = "Improve spectral PDE accuracy", semantic = false) {
   sessions.add(sessionID)
   return HarnessContract.bind({
     schemaVersion: 1,
@@ -35,10 +35,27 @@ async function bind(sessionID: string, scope: string, objective = "Improve spect
       taskID: "task-1",
       split: "held_out",
       evaluator: "official-evaluator",
+      evaluatorVersion: "1",
+      evaluatorSource: "benchmark",
       metric: "score",
       direction: "maximize",
     },
     profile: "optimize",
+    semanticAudit: semantic
+      ? {
+          protocolVersion: "semantic-audit-v1",
+          reviewer: { name: "memory-meaning-panel", version: "1", source: "external" },
+          scope: {
+            objectiveSHA256: hash(objective),
+            criteria: [{ id: "intent", requirement: "Solve the intended PDE problem" }],
+            forbiddenShortcuts: [{ id: "surrogate", description: "Do not substitute an easier surrogate" }],
+            literature: { cutoff: "2026-08-01", corpusSHA256: hash("memory-literature") },
+            noveltyFloor: "not_required",
+          },
+          minReviewers: 2,
+          minConfidence: 0.8,
+        }
+      : undefined,
     model: { provider: "test", name: "model" },
     tools: [],
     skills: [],
@@ -172,6 +189,17 @@ describe("verified retrospective memory", () => {
     await candidate({ sessionID: "memory-scope-b", scope: "scope-b", proposal: "scope b method", score: 0.7 })
     const hits = await HarnessMemory.retrieve({ sessionID: "memory-scope-b", query: "method", limit: 6 })
     expect(hits.map((hit) => hit.entry.proposal)).toEqual(["scope b method"])
+  })
+
+  test("does not reuse score-only hindsight inside a stricter semantic scope", async () => {
+    await candidate({
+      sessionID: "memory-semantic-source",
+      scope: "semantic",
+      proposal: "score-only method",
+      score: 0.9,
+    })
+    await bind("memory-semantic-query", "semantic", "Improve spectral PDE accuracy", true)
+    expect(await HarnessMemory.retrieve({ sessionID: "memory-semantic-query", query: "score-only method" })).toEqual([])
   })
 
   test("ranks lexical and stage-relevant precedents ahead of generic ones", async () => {

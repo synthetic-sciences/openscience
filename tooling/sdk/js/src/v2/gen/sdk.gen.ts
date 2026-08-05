@@ -149,6 +149,10 @@ import type {
   HarnessOrchestrationStatusResponses,
   HarnessReportErrors,
   HarnessReportResponses,
+  HarnessSemanticReceiptErrors,
+  HarnessSemanticReceiptResponses,
+  HarnessSemanticRecordErrors,
+  HarnessSemanticRecordResponses,
   HarnessSimulationReceiptErrors,
   HarnessSimulationReceiptResponses,
   HarnessSimulationRecordErrors,
@@ -3926,6 +3930,7 @@ export class Ablation extends HeyApiClient {
           | "audit"
           | "simulation"
           | "evaluator_audit"
+          | "semantic_audit"
           | "fidelities"
           | "skill"
           | "tool"
@@ -4418,6 +4423,119 @@ export class Judge extends HeyApiClient {
         },
       },
     )
+  }
+}
+
+export class Semantic extends HeyApiClient {
+  /**
+   * Record an independent semantic audit
+   *
+   * Derives whether one bound result is meaningful, merely technically valid, ambiguous, or incorrect from independent evidence-backed reviews of frozen intent, shortcuts, and literature-relative novelty.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      reviewerToken?: string
+      subject?: {
+        type: "run" | "candidate"
+        id: string
+      }
+      reviews?: Array<{
+        actor: string
+        sessionID: string
+        correctness: "passed" | "failed" | "inconclusive"
+        alignment: "intended" | "reasonable_alternative" | "misinterpreted" | "ambiguous"
+        novelty: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
+        vacuous: boolean
+        confidence: number
+        criteria: Array<{
+          id: string
+          status: "passed" | "failed" | "inconclusive"
+          evidence: Array<string>
+        }>
+        shortcuts: Array<{
+          id: string
+          observed: boolean
+          evidence: Array<string>
+        }>
+        literatureRefs?: Array<string>
+        evidence: Array<string>
+        summary: string
+        reviewedAt: number
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "reviewerToken" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "reviews" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessSemanticRecordResponses,
+      HarnessSemanticRecordErrors,
+      ThrowOnError
+    >({
+      url: "/harness/semantics/receipts",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected semantic audit receipt
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      reviewerToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "reviewerToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessSemanticReceiptResponses,
+      HarnessSemanticReceiptErrors,
+      ThrowOnError
+    >({
+      url: "/harness/semantics/receipts/{receiptID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
   }
 }
 
@@ -5700,6 +5818,35 @@ export class Harness extends HeyApiClient {
         }
         token: string
       }
+      semanticAudit?: {
+        protocol: {
+          protocolVersion: "semantic-audit-v1"
+          reviewer: {
+            name: string
+            version: string
+            source: "gate" | "human" | "external"
+          }
+          scope: {
+            objectiveSHA256: string
+            criteria: Array<{
+              id: string
+              requirement: string
+            }>
+            forbiddenShortcuts: Array<{
+              id: string
+              description: string
+            }>
+            literature: {
+              cutoff: string
+              corpusSHA256: string
+            }
+            noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
+          }
+          minReviewers: number
+          minConfidence: number
+        }
+        token: string
+      }
       extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast">
       metric?: {
         name?: string
@@ -5780,6 +5927,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "interventions" },
             { in: "body", key: "simulation" },
             { in: "body", key: "evaluatorAudit" },
+            { in: "body", key: "semanticAudit" },
             { in: "body", key: "extraPacks" },
             { in: "body", key: "metric" },
             { in: "body", key: "objectives" },
@@ -5829,6 +5977,7 @@ export class Harness extends HeyApiClient {
       evolutionReceiptID?: string
       interventionReceiptID?: string
       evaluatorAuditReceiptID?: string
+      semanticReceiptID?: string
       status?: "passed" | "failed" | "inconclusive"
       score?: number
       metrics?: {
@@ -5870,6 +6019,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "evolutionReceiptID" },
             { in: "body", key: "interventionReceiptID" },
             { in: "body", key: "evaluatorAuditReceiptID" },
+            { in: "body", key: "semanticReceiptID" },
             { in: "body", key: "status" },
             { in: "body", key: "score" },
             { in: "body", key: "metrics" },
@@ -6055,6 +6205,11 @@ export class Harness extends HeyApiClient {
   private _judge?: Judge
   get judge(): Judge {
     return (this._judge ??= new Judge({ client: this.client }))
+  }
+
+  private _semantic?: Semantic
+  get semantic(): Semantic {
+    return (this._semantic ??= new Semantic({ client: this.client }))
   }
 
   private _launch?: Launch
