@@ -72,7 +72,6 @@ const props = (over: Record<string, unknown> = {}) => ({
   ],
   titles: new Map([["ses_one", "First session"]]),
   currentSession: undefined,
-  storePath: "/home/x/.openscience/artifact-store",
   url: () => "",
   read: async () => "x",
   highlight: async (code: string) => code,

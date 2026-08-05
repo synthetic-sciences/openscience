@@ -9,7 +9,6 @@ export interface GridProps extends Omit<ThumbProps, "artifact"> {
   artifacts: StoredArtifact[]
   titles: Map<string, string>
   currentSession: string | undefined
-  storePath: string
   onOpen: (artifact: StoredArtifact) => void
   onRename: (artifact: StoredArtifact) => void
   onTrash: (artifact: StoredArtifact) => void
@@ -109,26 +108,16 @@ export function ArtifactGrid(props: GridProps): JSX.Element {
             aria-label="Dismiss view options"
             onClick={() => setPrefs(false)}
           />
+          {/* "Copy store path" was specified here and cut: the store lives under
+              Global.Path.data, and the server's /path payload reports home,
+              state, config, worktree and directory but never data, so any path
+              this menu offered would be a guess. It needs a backend field first. */}
           <div class="artifact-menu artifact-menu--prefs" role="menu">
             <button type="button" role="menuitem" data-pref="sizes" onClick={() => apply({ sizes: !view().sizes })}>
               <span aria-hidden="true" class="artifact-menu__check">
                 {view().sizes ? "✓" : ""}
               </span>
               Show file sizes
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              data-pref="path"
-              onClick={() => {
-                setPrefs(false)
-                // A clipboard the browser denies is a refused convenience, not
-                // a render failure.
-                void navigator.clipboard?.writeText(props.storePath).catch(() => {})
-              }}
-            >
-              <span aria-hidden="true" class="artifact-menu__check" />
-              Copy store path
             </button>
           </div>
         </Show>

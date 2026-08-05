@@ -5,12 +5,14 @@ import { useDialog } from "@synsci/ui/context/dialog"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { SourceMenu } from "@/atlas/files/SourceMenu"
+import { ArtifactGrid } from "@/atlas/files/ArtifactGrid"
 import { FileTable, type FileRow } from "@/atlas/files/FileTable"
 import { FileTabs } from "@/atlas/files/FileTabs"
 import { TrashList } from "@/atlas/files/TrashList"
 import { buildSources, type PaneSource } from "@/atlas/files/sources"
 import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/resource"
 import type { StoredArtifact } from "@/artifacts/store"
+import { uiStore } from "@/atlas/store/ui"
 import { FileView } from "@/atlas/FilePreview"
 import { FolderPicker } from "@/atlas/FolderPicker"
 import {
@@ -102,12 +104,61 @@ async function revokeAccess(transport: Transport, identity: FilesystemIdentity, 
   return transport(url, { method: "DELETE" }).then(json)
 }
 
+/** Rename lives in a dialog because a 150px card is not a text field. */
+function RenameArtifact(props: {
+  artifact: StoredArtifact
+  onSubmit: (title: string) => Promise<unknown>
+  onClose: () => void
+}): JSX.Element {
+  const [title, setTitle] = createSignal(props.artifact.title)
+
+  return (
+    <form
+      class="files-connect"
+      data-artifact-rename
+      onSubmit={(event) => {
+        event.preventDefault()
+        void props.onSubmit(title()).then(() => props.onClose())
+      }}
+    >
+      <label class="files-connect__field">
+        <span>Artifact name</span>
+        <input
+          data-rename-input
+          value={title()}
+          autofocus
+          maxlength={200}
+          aria-label="Artifact name"
+          onInput={(event) => setTitle(event.currentTarget.value)}
+        />
+      </label>
+      <div class="files-connect__row files-connect__row--end">
+        <button type="button" class="files-connect__cancel" onClick={() => props.onClose()}>
+          Cancel
+        </button>
+        <button type="submit" class="files-connect__submit" disabled={!title().trim()}>
+          Rename
+        </button>
+      </div>
+    </form>
+  )
+}
+
 export function FilesPane(
   props: {
     request?: Transport
     session?: string
     directory?: string
     view?: (file: PaneFile) => JSX.Element
+    /**
+     * Builds an absolute URL for an artifact's bytes. `sdk.request.url` supplies
+     * it in production; a standalone mount has no SDK, and `transport` returns a
+     * Response rather than a URL, so the thumbnail's <img> and the Download link
+     * need this seam.
+     */
+    url?: (path: string, query: Record<string, string>) => string
+    onOpenArtifact?: (artifact: StoredArtifact) => void
+    onRenameArtifact?: (artifact: StoredArtifact, submit: (title: string) => Promise<unknown>) => void
   } = {},
 ): JSX.Element {
   // The `request` prop is a standalone test seam (see FilesPane.test.ts) that
@@ -251,24 +302,83 @@ export function FilesPane(
     return query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
   })
 
-  // The artifact store is not a directory, so no listing is fetched for it —
-  // but the snapshot that feeds Trash already carries the active half. Folding
-  // it into the same row shape is what makes "All artifacts" tell the truth;
-  // the thumbnail grid this eventually becomes is Plan 2's job.
-  const stored = createMemo((): FileRow[] => {
+  // The grid takes artifacts whole. Projecting them into FileRow threw away the
+  // MIME type, the session and the version count — everything that makes an
+  // artifact different from a file in a folder.
+  const stored = createMemo(() => {
     const query = filter().trim().toLowerCase()
     const list = artifacts.latest?.active ?? []
-    const found = query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
-    // An artifact's bytes live wherever the store put them, routinely outside
-    // the project root, so the row carries its own path rather than letting
-    // `open` derive one from the folder being browsed.
-    return found.map((item) => ({
-      name: item.title,
-      type: "file",
-      size: item.current.size,
-      path: item.current.sourcePath,
-    }))
+    return query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
   })
+
+  // Session titles label the grid's groups. They live in the sync store, which
+  // a standalone mount has no access to, so the map is simply empty there and
+  // groupBySession falls back to abbreviated ids.
+  const titles = createMemo(() => {
+    const sessions = sync?.data.session ?? []
+    return new Map(sessions.filter((item) => item.title).map((item) => [item.id, item.title]))
+  })
+
+  // An artifact's bytes are addressed by id and version, never by the source
+  // path they were captured from — that file keeps changing after capture.
+  // Called during render, for an <img src> and the Download href. A standalone
+  // mount has no SDK, and throwing here would take the whole card down with it,
+  // so an absent builder yields no URL rather than an exception.
+  const artifactUrl = (artifact: StoredArtifact, download?: boolean) => {
+    const path = `/file/artifact-store/${encodeURIComponent(artifact.id)}/raw`
+    const query = { versionID: artifact.current.id, ...(download ? { download: "true" } : {}) }
+    const build = props.url ?? sdk?.request.url
+    return build ? build(path, query) : ""
+  }
+
+  const readArtifact = (artifact: StoredArtifact) =>
+    transport(`/file/artifact-store/${encodeURIComponent(artifact.id)}/raw`, undefined, {
+      versionID: artifact.current.id,
+    }).then((response) => {
+      if (!response.ok) throw new Error(`Artifact unavailable (${response.status})`)
+      return response.text()
+    })
+
+  const openArtifact = (artifact: StoredArtifact) => {
+    if (props.onOpenArtifact) return props.onOpenArtifact(artifact)
+    uiStore.openSaved(artifact)
+  }
+
+  const trashArtifact = async (artifact: StoredArtifact) => {
+    setBusy(true)
+    return transport(`/file/artifact-store/${encodeURIComponent(artifact.id)}`, { method: "DELETE" })
+      .then(json)
+      .then(() => {
+        // The store's own listeners refresh every other artifact surface too,
+        // so the grid does not have to know who else is showing this artifact.
+        window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
+        return refetchArtifacts()
+      })
+      .catch((value) => setError(errorMessage(value)))
+      .finally(() => setBusy(false))
+  }
+
+  const renameArtifact = (artifact: StoredArtifact) => {
+    const submit = async (title: string) => {
+      const next = title.trim()
+      if (!next || next === artifact.title) return
+      setBusy(true)
+      return transport(`/file/artifact-store/${encodeURIComponent(artifact.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: next }),
+      })
+        .then(json)
+        .then(() => {
+          window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
+          return refetchArtifacts()
+        })
+        .catch((value) => setError(errorMessage(value)))
+        .finally(() => setBusy(false))
+    }
+    if (props.onRenameArtifact) return props.onRenameArtifact(artifact, submit)
+    dialog?.show(() => <RenameArtifact artifact={artifact} onSubmit={submit} onClose={() => dialog.close()} />)
+  }
 
   // Tabs are keyed by name because that is what the strip shows. Re-opening a
   // name from a different folder re-points the existing tab rather than
@@ -486,29 +596,43 @@ export function FilesPane(
         </div>
       </Show>
 
+      <Show when={current().kind === "artifacts"}>
+        <ArtifactGrid
+          artifacts={stored()}
+          titles={titles()}
+          currentSession={sessionID()}
+          url={artifactUrl}
+          read={readArtifact}
+          onOpen={openArtifact}
+          onRename={renameArtifact}
+          onTrash={(artifact) => void trashArtifact(artifact)}
+        />
+      </Show>
+
       <Show
         when={current().kind === "trash"}
         fallback={
-          <FileTable
-            rows={current().kind === "artifacts" ? stored() : rows()}
-            empty={current().kind === "artifacts" ? "No artifacts saved yet." : undefined}
-            depth={path().length}
-            onUp={() => {
-              setPath(path().slice(0, -1))
-              // Symmetric with descending: a query typed for the folder being
-              // left does not describe the one being returned to, and leaving
-              // it applied reports the parent as empty.
-              setFilter("")
-            }}
-            onOpen={(row) => {
-              if (row.type === "directory") {
-                setPath([...path(), row.name])
+          <Show when={current().kind !== "artifacts"}>
+            <FileTable
+              rows={rows()}
+              depth={path().length}
+              onUp={() => {
+                setPath(path().slice(0, -1))
+                // Symmetric with descending: a query typed for the folder being
+                // left does not describe the one being returned to, and leaving
+                // it applied reports the parent as empty.
                 setFilter("")
-                return
-              }
-              open(row)
-            }}
-          />
+              }}
+              onOpen={(row) => {
+                if (row.type === "directory") {
+                  setPath([...path(), row.name])
+                  setFilter("")
+                  return
+                }
+                open(row)
+              }}
+            />
+          </Show>
         }
       >
         <TrashList rows={trash()} busy={busy()} onRestore={restore} />

@@ -541,3 +541,350 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* ---------------------------------------------------------------- artifacts */
+
+.artifact-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.artifact-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.artifact-toolbar__count {
+  margin-right: auto;
+  color: var(--color-text-faint);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.artifact-toolbar__sort,
+.artifact-toolbar__layout button,
+.artifact-toolbar__prefs {
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 7px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.artifact-toolbar__sort {
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.artifact-toolbar__layout {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 7px;
+}
+.artifact-toolbar__layout button {
+  border: 0;
+  border-radius: 0;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--color-text-faint);
+  line-height: 1.35;
+}
+.artifact-toolbar__layout button[aria-pressed="true"] {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.artifact-toolbar__prefs {
+  padding: 4px 7px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-faint);
+  line-height: 1.3;
+}
+.artifact-toolbar__sort:hover,
+.artifact-toolbar__prefs:hover {
+  background: var(--color-surface);
+}
+.artifact-toolbar__sort:focus-visible,
+.artifact-toolbar__layout button:focus-visible,
+.artifact-toolbar__prefs:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 1px;
+}
+
+.artifact-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+.artifact-group__name {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artifact-group__meta {
+  margin-left: auto;
+  color: var(--color-text-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* auto-fill, so a wider pane gains columns instead of stretching cards. */
+.artifact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+}
+.artifact-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.artifact-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.artifact-card[data-layout="grid"] {
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 10px;
+  background: var(--color-bg-subtle);
+}
+.artifact-card[data-layout="grid"]:hover {
+  border-color: var(--color-border-base);
+}
+.artifact-card__open {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.artifact-card[data-layout="grid"] .artifact-card__open {
+  flex-direction: column;
+}
+.artifact-card[data-layout="list"] {
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+.artifact-card[data-layout="list"]:hover {
+  background: var(--color-bg-subtle);
+}
+.artifact-card[data-layout="list"] .artifact-card__open {
+  align-items: center;
+  gap: 10px;
+}
+.artifact-card__open:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: -1px;
+}
+
+.artifact-card__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.artifact-card[data-layout="grid"] .artifact-card__label {
+  padding: 8px 10px 10px;
+}
+.artifact-card[data-layout="list"] .artifact-card__label {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.artifact-card__name {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artifact-card[data-layout="list"] .artifact-card__name {
+  flex: 1;
+}
+.artifact-card__sub {
+  color: var(--color-text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.artifact-thumb {
+  display: flex;
+  overflow: hidden;
+  background: var(--color-bg-base);
+}
+.artifact-card[data-layout="grid"] .artifact-thumb {
+  height: 94px;
+  border-bottom: 1px solid var(--color-border-weak-base);
+}
+.artifact-card[data-layout="list"] .artifact-thumb {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 6px;
+}
+.artifact-thumb--image {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  object-fit: contain;
+}
+.artifact-card[data-layout="list"] .artifact-thumb--image {
+  object-fit: cover;
+}
+/* Ten lines of real source, faded out rather than clipped mid-glyph. */
+.artifact-thumb--text {
+  width: 100%;
+  margin: 0;
+  padding: 8px 9px;
+  overflow: hidden;
+  color: var(--color-text-weak);
+  font-family: var(--font-family-mono);
+  font-size: 7.4px;
+  line-height: 1.55;
+  white-space: pre;
+  mask-image: linear-gradient(180deg, #000 56%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 56%, transparent 100%);
+}
+.artifact-card[data-layout="list"] .artifact-thumb--text {
+  padding: 3px;
+  font-size: 3.6px;
+  line-height: 1.5;
+}
+.artifact-thumb--binary {
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+.artifact-thumb--binary span {
+  padding: 4px 9px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 6px;
+  color: var(--color-text-faint);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.artifact-card[data-layout="list"] .artifact-thumb--binary span {
+  padding: 0;
+  border: 0;
+  font-size: 6px;
+  letter-spacing: 0;
+}
+
+/* Revealed on hover AND on focus: a control reachable only by pointer is not
+   reachable at all for a keyboard. */
+.artifact-card__actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 6px;
+  opacity: 0;
+  background: var(--color-bg-base);
+  color: var(--color-text-weak);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: opacity 90ms ease;
+}
+.artifact-card[data-layout="list"] .artifact-card__actions {
+  position: static;
+  flex: none;
+  border-color: transparent;
+  background: transparent;
+}
+.artifact-card:hover .artifact-card__actions,
+.artifact-card__actions:focus-visible,
+.artifact-card__actions[aria-expanded="true"] {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .artifact-card__actions {
+    transition: none;
+  }
+}
+
+/* Fixed, not absolute: an absolute scrim covers only its own trigger, which is
+   how the source menu once stayed open over the content it obscured. */
+.artifact-menu__scrim {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+.artifact-menu {
+  position: absolute;
+  top: 30px;
+  right: 6px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--color-border-base);
+  border-radius: 9px;
+  background: var(--color-bg-base);
+  box-shadow: 0 10px 26px -10px rgb(0 0 0 / 0.4);
+}
+.artifact-menu--prefs {
+  top: 30px;
+  right: 0;
+}
+.artifact-menu button,
+.artifact-menu a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.artifact-menu button:hover,
+.artifact-menu a:hover {
+  background: var(--color-bg-subtle);
+}
+.artifact-menu button:focus-visible,
+.artifact-menu a:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: -1px;
+}
+.artifact-menu__danger {
+  color: var(--color-text-critical, #e08a76);
+}
+.artifact-menu__check {
+  flex: none;
+  width: 12px;
+  font-size: 11px;
+}

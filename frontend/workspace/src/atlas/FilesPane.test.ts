@@ -242,10 +242,31 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
     await settle()
 
-    const names = [...host.querySelectorAll("[data-file-name]")].map((node) => node.textContent)
-    expect(names).toEqual(["peak_fit.ipynb"])
+    const names = [...host.querySelectorAll("[data-card-open]")].map((node) => node.getAttribute("aria-label"))
+    expect(names).toEqual(["Open peak_fit.ipynb"])
+    expect(host.querySelector("[data-artifact-grid]")).not.toBeNull()
     expect(host.textContent).not.toContain("This folder is empty.")
-    expect(host.querySelector("[data-file-size]")?.textContent).toBe("2.0 KB")
+    expect(host.textContent).not.toContain("SHOULD_NOT_APPEAR.py")
+  })
+
+  test("renders artifacts as a grid, never as file-table rows", async () => {
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
+          if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "peak_fit.ipynb")])
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    await settle()
+
+    expect(host.querySelector(".files-table")).toBeNull()
+    expect(host.querySelector("[data-artifact-count]")?.textContent).toBe("1 artifact")
   })
 
   test("says no artifacts are saved rather than calling the artifact store an empty folder", async () => {
@@ -267,10 +288,13 @@ describe("files pane", () => {
     expect(host.textContent).not.toContain("This folder is empty.")
   })
 
-  test("opens a saved artifact by its stored path, not by the browsed folder", async () => {
-    // An artifact's bytes live wherever the store put them — often outside the
-    // project root — so the tab must carry current.sourcePath verbatim.
-    const seen: Array<{ name: string; path: string }> = []
+  // The pane used to open current.sourcePath -- the working file the bytes were
+  // captured from, which keeps changing after capture and can be deleted
+  // outright. A card now hands the artifact to the viewer, which reads the
+  // immutable stored version instead.
+  test("opens the stored artifact, not the path it was captured from", async () => {
+    const opened: string[] = []
+    const viewed: string[] = []
     const host = mount(() =>
       subject.FilesPane({
         request: async (path) => {
@@ -278,10 +302,9 @@ describe("files pane", () => {
           if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "peak_fit.ipynb")])
           return listing([])
         },
-        // A real node, not null: `props.view?.(file) ?? <FileView/>` treats a
-        // null return as "no seam" and mounts the provider-hungry viewer.
+        onOpenArtifact: (artifact) => opened.push(artifact.id),
         view: (file) => {
-          seen.push({ name: file.name, path: file.path })
+          viewed.push(file.path)
           const node = document.createElement("p")
           node.dataset.stubView = file.path
           return node
@@ -294,10 +317,75 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
     await settle()
 
-    host.querySelector<HTMLButtonElement>('[data-file-row="peak_fit.ipynb"]')?.click()
+    host.querySelector<HTMLButtonElement>("[data-card-open]")?.click()
     await settle()
 
-    expect(seen).toContainEqual({ name: "peak_fit.ipynb", path: "/store/peak_fit.ipynb" })
+    expect(opened).toEqual(["art_9"])
+    expect(viewed).toEqual([])
+  })
+
+  test("addresses artifact bytes by version, never by the captured source path", async () => {
+    const asked: string[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path) => {
+          asked.push(path)
+          if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
+          if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "notes.md")])
+          return listing([])
+        },
+        url: (path, query) => `http://local${path}?versionID=${query.versionID}`,
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-card-menu]")?.click()
+    const download = host.querySelector("[data-action='download']")?.getAttribute("href")
+
+    expect(download).toContain("/file/artifact-store/art_9/raw")
+    expect(download).not.toContain("/store/notes.md")
+    expect(asked.some((path) => path.includes("/store/notes.md"))).toBe(false)
+  })
+
+  test("moves an artifact to trash and tells every other surface", async () => {
+    const calls: Array<{ path: string; method?: string }> = []
+    let changed = 0
+    const listener = () => (changed += 1)
+    window.addEventListener("openscience:artifacts-changed", listener)
+    cleanups.push(() => window.removeEventListener("openscience:artifacts-changed", listener))
+
+    const host = mount(() =>
+      subject.FilesPane({
+        request: async (path, init) => {
+          calls.push({ path, method: init?.method })
+          if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
+          if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "peak_fit.ipynb")])
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>('[data-source-item="artifacts"]')?.click()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-card-menu]")?.click()
+    host.querySelector<HTMLButtonElement>("[data-action='trash']")?.click()
+
+    // Wait for the announcement, not for the request: the call is recorded the
+    // moment transport is invoked, while the event fires only once the response
+    // has resolved.
+    for (let attempt = 0; attempt < 50 && changed === 0; attempt += 1) {
+      await settle()
+    }
+
+    expect(calls).toContainEqual({ path: "/file/artifact-store/art_9", method: "DELETE" })
+    expect(changed).toBeGreaterThan(0)
   })
 
   test("revokes a connected grant from the source menu and drops it from the snapshot", async () => {
