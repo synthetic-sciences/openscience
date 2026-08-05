@@ -165,7 +165,10 @@ export namespace HarnessBenchmark {
     ale: "alebench-official-v2",
     researchclaw: "researchclawbench-official-v2",
     paperbench: "paperbench-official-v2",
+    scienceagentbench: "scienceagentbench-official-v2",
+    discoverybench: "discoverybench-official-v2",
     scicode: "scicode-official-v2",
+    labbench: "labbench2-official-v2",
   } as const
   const blockers = {
     posttrain: {
@@ -177,6 +180,16 @@ export namespace HarnessBenchmark {
       reason:
         "The current official evaluation script declares output_dir but marks the nonexistent output_path flag as required, so its published entrypoint cannot launch unchanged.",
       anchor: "scripts/evaluate.py",
+    },
+    corebench: {
+      reason:
+        "The official repository declares this harness unmaintained and redirects evaluation to HAL, whose current repository is itself archived and no longer accepts active leaderboard updates.",
+      anchor: "README.md",
+    },
+    critpt: {
+      reason:
+        "The public grader requires an API key, but the official CLI accepts it only through --api-key; a sealed launch cannot put credentials in argv or a committed recipe.",
+      anchor: "evaluate_all_results.py",
     },
   } as const
   const item = (input: Omit<Manifest, "execution" | "recipe">) => {
@@ -502,7 +515,7 @@ export namespace HarnessBenchmark {
         "https://github.com/siegelz/core-bench",
         "e32a2980e72fe6eb04ee04eb749458f570625663",
         "https://crab.cs.princeton.edu/core-website/",
-        ["benchmark/benchmark.py", "benchmark/evaluations.py"],
+        ["README.md", "requirements.txt", "main.py", "benchmark/benchmark.py", "benchmark/evaluations.py"],
       ),
       task: "Reproduce published results from supplied code and data under the benchmark's exact difficulty and modality.",
     }),
@@ -518,7 +531,14 @@ export namespace HarnessBenchmark {
         "https://github.com/OSU-NLP-Group/ScienceAgentBench",
         "c26e151ed601ba109dc4d35e057ff8e73fec469d",
         "https://arxiv.org/abs/2410.05080",
-        ["evaluation/harness/grading.py", "run_eval.py"],
+        [
+          "README.md",
+          "requirements.txt",
+          "compute_scores.py",
+          "evaluation/harness/grading.py",
+          "evaluation/harness/run_evaluation.py",
+          "run_eval.py",
+        ],
       ),
       task: "Generate and execute self-contained programs for data-driven scientific tasks with result and cost evaluation.",
     }),
@@ -534,7 +554,7 @@ export namespace HarnessBenchmark {
         "https://github.com/allenai/discoverybench",
         "c31fcf011e070f021a5f5b906896d0821f6880e8",
         "https://github.com/allenai/discoverybench",
-        ["eval/eval.py"],
+        ["README.md", "requirements.txt", "discovery_eval.py", "eval/eval.py", "eval/new_eval.py"],
         "https://huggingface.co/datasets/allenai/discoverybench",
       ),
       task: "Perform multi-step data-driven discovery with explicit hypotheses, workflows, verification, and facet scores.",
@@ -574,8 +594,17 @@ export namespace HarnessBenchmark {
         "https://github.com/EdisonScientific/labbench2",
         "c028ecdcf144b55ffcd92b68be45081df5628c20",
         "https://arxiv.org/abs/2604.09554",
-        ["evals/evaluators.py", "evals/run_evals.py"],
-        "https://huggingface.co/datasets/futurehouse/labbench2",
+        [
+          "README.md",
+          "pyproject.toml",
+          "uv.lock",
+          "evals/evaluators.py",
+          "evals/loader.py",
+          "evals/report.py",
+          "evals/run_evals.py",
+          "evals/runners/base.py",
+        ],
+        "https://huggingface.co/datasets/EdisonScientific/labbench2",
       ),
       task: "Answer practical biology research tasks under the official subtask, retrieval, and scoring protocol.",
     }),
@@ -624,7 +653,13 @@ export namespace HarnessBenchmark {
         "https://github.com/CritPt-Benchmark/CritPt",
         "17c2545c302762d2f2d644d923ea4c301605cb08",
         "https://critpt.com/",
-        ["src/critpt/evaluation/eval_client.py", "evaluate_all_results.py"],
+        [
+          "README.md",
+          "requirements.txt",
+          "evaluate_all_results.py",
+          "src/critpt/evaluation/eval_client.py",
+          "src/critpt/submission.py",
+        ],
         "https://huggingface.co/datasets/introvoyz041/CritPt",
       ),
       task: "Solve difficult physics problems with decomposed derivations, independent checks, critique, and exact-answer grading.",

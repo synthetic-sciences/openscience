@@ -177,7 +177,7 @@ async function launchFixture() {
   return { dir, manifest, recipe, results }
 }
 
-async function pilotFixture() {
+async function pilotFixture(malformed = false) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-pilot-"))
   const workspace = path.join(dir, "checkout")
   const results = path.join(dir, "results")
@@ -191,12 +191,16 @@ async function pilotFixture() {
         "import argparse, json",
         "parser = argparse.ArgumentParser()",
         "parser.add_argument('--output', required=True)",
+        "parser.add_argument('--rows', required=True)",
         "args = parser.parse_args()",
         "open(args.output, 'w', encoding='utf-8').write(json.dumps({'scores': [1, 0, 1]}))",
+        malformed
+          ? "open(args.rows, 'w', encoding='utf-8').write('{\"success_rate\": 1}\\n\\n{\"success_rate\": 0}')"
+          : "open(args.rows, 'w', encoding='utf-8').write('\\n'.join(json.dumps({'success_rate': value}) for value in [1, 0, 1]))",
       ].join("\n"),
     ),
     Bun.write(path.join(workspace, "pyproject.toml"), "[project]\nname='pilot-fixture'\nversion='1.0.0'\n"),
-    Bun.write(path.join(workspace, ".gitignore"), "pilot-score.json\n"),
+    Bun.write(path.join(workspace, ".gitignore"), "pilot-score.json\npilot-rows.jsonl\n"),
   ])
   await exec(["git", "init", "--initial-branch=main", "-q"], workspace)
   await exec(["git", "config", "user.name", "Benchmark Test"], workspace)
@@ -209,7 +213,7 @@ async function pilotFixture() {
     kind: "argv",
     entrypoint: "runner.py",
     cwd: ".",
-    argv: ["python", "runner.py", "--output", "pilot-score.json"],
+    argv: ["python", "runner.py", "--output", "pilot-score.json", "--rows", "pilot-rows.jsonl"],
   }
   await Bun.write(
     recipe,
@@ -231,7 +235,7 @@ async function pilotFixture() {
           role: "evaluate",
           driver,
           inputs: [],
-          outputs: ["pilot-score.json"],
+          outputs: ["pilot-score.json", "pilot-rows.jsonl"],
           environment: [],
         },
       ],
@@ -246,12 +250,28 @@ async function pilotFixture() {
           producedBy: "evaluate",
           owner: "evaluator",
         },
+        {
+          id: "rows",
+          kind: "file",
+          path: "pilot-rows.jsonl",
+          format: "jsonl",
+          cardinality: { minimum: 1, maximum: 1 },
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
       ],
       metrics: [
         {
           name: "accuracy",
           artifact: "scores",
           selector: { kind: "jsonpath", path: "$.scores" },
+          direction: "maximize",
+          aggregation: "mean",
+        },
+        {
+          name: "jsonl-accuracy",
+          artifact: "rows",
+          selector: { kind: "jsonlpath", path: "$.success_rate" },
           direction: "maximize",
           aggregation: "mean",
         },
@@ -281,6 +301,7 @@ async function pythonPilotFixture() {
   const recipe = path.join(dir, "recipe.json")
   const manifest = path.join(dir, "pilot.json")
   const runtime = path.join(dir, "evaluations.json")
+  const adapter = path.join(dir, "adapter.py")
   await fs.mkdir(workspace, { recursive: true })
   await Promise.all([
     Bun.write(
@@ -295,6 +316,7 @@ async function pythonPilotFixture() {
     ),
     Bun.write(path.join(workspace, "pyproject.toml"), "[project]\nname='python-pilot'\nversion='1.0.0'\n"),
     Bun.write(runtime, JSON.stringify([1, 2, 3, 100])),
+    Bun.write(adapter, "from bench import Evaluator\n\ndef build():\n    return Evaluator(1)\n"),
   ])
   await exec(["git", "init", "--initial-branch=main", "-q"], workspace)
   await exec(["git", "config", "user.name", "Benchmark Test"], workspace)
@@ -333,7 +355,10 @@ async function pythonPilotFixture() {
       bindings: {},
       environment: { manager: "setuptools", python: ">=3.11", files: ["pyproject.toml"] },
       anchors: ["bench.py"],
-      runtime: [{ name: "evaluations", kind: "json", owner: "runner", description: "fixture values" }],
+      runtime: [
+        { name: "evaluations", kind: "json", owner: "runner", description: "fixture values" },
+        { name: "helper", kind: "python_object", owner: "runner", description: "workspace-importing adapter" },
+      ],
       stages: [
         {
           id: "load",
@@ -386,7 +411,16 @@ async function pythonPilotFixture() {
       source: { repository: "https://github.com/example/python-pilot", revision },
       recipe,
       timeoutSeconds: 30,
-      runtime: { evaluations: { kind: "json", artifact: runtime, sha256: await fileHash(runtime) } },
+      runtime: {
+        evaluations: { kind: "json", artifact: runtime, sha256: await fileHash(runtime) },
+        helper: {
+          kind: "python_object",
+          source: adapter,
+          sha256: await fileHash(adapter),
+          symbol: "build",
+          kwargs: {},
+        },
+      },
     }),
   )
   return { dir, results, manifest }
@@ -837,7 +871,10 @@ test("run-benchmark-pilot executes a clean native argv recipe and extracts typed
     ])
     expect(result.code).toBe(0)
     const value = JSON.parse(await Bun.file(receipt).text())
-    expect(value).toMatchObject({ status: "passed", metrics: { accuracy: 2 / 3 } })
+    expect(value).toMatchObject({
+      status: "passed",
+      metrics: { accuracy: 2 / 3, "jsonl-accuracy": 2 / 3 },
+    })
     expect(value.receiptSHA256).toMatch(/^[0-9a-f]{64}$/)
     expect(value.stages).toHaveLength(1)
     expect(value.artifacts[0].paths).toHaveLength(1)
@@ -863,6 +900,22 @@ test("run-benchmark-pilot rejects stale outputs before execution", async () => {
   }
 })
 
+test("run-benchmark-pilot rejects blank JSONL metric records", async () => {
+  const fixture = await pilotFixture(true)
+  try {
+    const result = await run("research/run-benchmark-pilot/scripts/run_pilot.py", [
+      "run",
+      fixture.manifest,
+      "--output",
+      path.join(fixture.dir, "receipt.json"),
+    ])
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain("JSONL metric artifact must contain only non-empty records")
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
 test("run-benchmark-pilot preserves Python receivers, named arguments, typed kwargs, and return artifacts", async () => {
   const fixture = await pythonPilotFixture()
   const receipt = path.join(fixture.dir, "receipt.json")
@@ -876,6 +929,7 @@ test("run-benchmark-pilot preserves Python receivers, named arguments, typed kwa
     expect(result.code).toBe(0)
     const value = JSON.parse(await Bun.file(receipt).text())
     expect(value.metrics).toEqual({ "mean-reward": 4 })
+    expect(value.runtime.helper).toMatchObject({ kind: "python_object", symbol: "build" })
     expect(value.stages.map((stage: { returnType: string }) => stage.returnType)).toEqual(["Evaluator", "list"])
     expect(JSON.parse(await Bun.file(path.join(fixture.results, "returns", "rewards.json")).text())).toEqual([2, 4, 6])
   } finally {

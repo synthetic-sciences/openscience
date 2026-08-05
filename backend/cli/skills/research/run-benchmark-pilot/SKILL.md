@@ -20,7 +20,7 @@ Recipe v2 makes execution semantics machine-readable:
 - Integer bindings become numeric Python kwargs.
 - Returned artifacts name the exact produced value.
 - File artifacts declare allowed match cardinality.
-- JSON, CSV, pickle-tuple, and text-ratio metrics use typed selectors.
+- JSON, JSONL-record, CSV, pickle-tuple, and text-ratio metrics use typed selectors.
 
 ## Build the pilot manifest
 
@@ -67,6 +67,8 @@ Preflight fails unless:
 - no declared artifact already exists, preventing stale-output selection.
 
 Execution never invokes a shell. It runs argv stages directly, preserves Python values across named API stages, requires every stage input/output, enforces artifact cardinality, hashes logs and artifacts, applies typed selectors, aggregates metrics, and writes a content-addressed receipt without secret values.
+
+For a `python_object` runtime input, the content-addressed adapter source may import the clean benchmark checkout. This supports official extension protocols such as LABBench2 external runners without copying candidate code into, or dirtying, the pinned checkout.
 
 ## Promote evidence
 

@@ -15,7 +15,10 @@ describe("source-verified benchmark recipes", () => {
       "ale",
       "researchclaw",
       "paperbench",
+      "scienceagentbench",
+      "discoverybench",
       "scicode",
+      "labbench",
     ]
     const families = new Set<string>()
     for (const id of ids) {
@@ -39,7 +42,7 @@ describe("source-verified benchmark recipes", () => {
         true,
       )
     }
-    expect([...families].toSorted()).toEqual(["biology", "chemistry", "generalist", "ml", "physics"])
+    expect([...families].toSorted()).toEqual(["biology", "chemistry", "data", "generalist", "ml", "physics"])
     expect(HarnessRecipe.materialize("biomni", recipeSelection("biomni")).artifacts).toEqual([
       {
         id: "rewards",
@@ -53,6 +56,18 @@ describe("source-verified benchmark recipes", () => {
     const chem = HarnessRecipe.materialize("chembench", recipeSelection("chembench"))
     const evaluate = chem.stages.find((stage) => stage.id === "evaluate")!
     expect(evaluate.driver).toMatchObject({ kind: "python_api", receiver: "benchmark", kwargs: { batch_size: 8 } })
+    expect(HarnessRecipe.materialize("scienceagentbench", recipeSelection("scienceagentbench")).metrics).toContainEqual(
+      {
+        name: "success-rate",
+        artifact: "evaluations",
+        selector: { kind: "jsonlpath", path: "$.success_rate" },
+        direction: "maximize",
+        aggregation: "mean",
+      },
+    )
+    expect(HarnessRecipe.materialize("labbench", recipeSelection("labbench")).runtime).toContainEqual(
+      expect.objectContaining({ name: "agent", kind: "python_object", owner: "runner" }),
+    )
   })
 
   test("rejects undeclared, missing, unsafe, out-of-range, and substituted bindings", () => {
@@ -78,6 +93,13 @@ describe("source-verified benchmark recipes", () => {
     expect(() =>
       HarnessRecipe.materialize("mle", { ...mle, bindings: { ...mle.bindings, dataDir: "fixtures\\data" } }),
     ).toThrow("POSIX")
+    const science = recipeSelection("scienceagentbench")
+    expect(() =>
+      HarnessRecipe.materialize("scienceagentbench", {
+        ...science,
+        bindings: { ...science.bindings, logFile: "fixtures/scienceagentbench/evaluation.json" },
+      }),
+    ).toThrow("must end with .jsonl")
     const chem = recipeSelection("chembench")
     expect(() =>
       HarnessRecipe.materialize("chembench", { ...chem, bindings: { ...chem.bindings, runID: "bad id" } }),
@@ -204,7 +226,10 @@ describe("source-verified benchmark recipes", () => {
   })
 
   test("distinguishes pending and upstream-blocked adapters instead of inventing a generic recipe", () => {
-    expect(HarnessBenchmark.catalog.corebench.recipe.status).toBe("pending_source_verification")
+    expect(HarnessBenchmark.catalog.corebench.recipe).toMatchObject({
+      status: "blocked_upstream",
+      anchor: "README.md",
+    })
     expect(HarnessBenchmark.catalog.statistics.recipe.status).toBe("not_applicable")
     expect(HarnessBenchmark.catalog.posttrain.recipe).toMatchObject({
       status: "blocked_upstream",
@@ -214,6 +239,12 @@ describe("source-verified benchmark recipes", () => {
       status: "blocked_upstream",
       anchor: "scripts/evaluate.py",
     })
+    expect(HarnessBenchmark.catalog.critpt.recipe).toMatchObject({
+      status: "blocked_upstream",
+      anchor: "evaluate_all_results.py",
+    })
+    expect(() => HarnessRecipe.resolve("corebench")).toThrow("No source-verified execution recipe")
+    expect(() => HarnessRecipe.resolve("critpt")).toThrow("No source-verified execution recipe")
     expect(() => HarnessRecipe.resolve("posttrain")).toThrow("No source-verified execution recipe")
     expect(() => HarnessRecipe.resolve("weather")).toThrow("No source-verified execution recipe")
   })

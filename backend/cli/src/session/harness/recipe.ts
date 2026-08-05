@@ -45,6 +45,10 @@ export namespace HarnessRecipe {
       choices: z.array(z.string().min(1).max(200)).min(1).max(100).optional(),
       minimum: z.number().int().optional(),
       maximum: z.number().int().optional(),
+      suffix: z
+        .string()
+        .regex(/^\.[a-zA-Z0-9][a-zA-Z0-9._-]*$/)
+        .optional(),
     })
     .strict()
     .superRefine((value, ctx) => {
@@ -56,6 +60,9 @@ export namespace HarnessRecipe {
       }
       if (value.kind !== "integer" && (value.minimum !== undefined || value.maximum !== undefined)) {
         ctx.addIssue({ code: "custom", message: "Only integer bindings may declare numeric bounds" })
+      }
+      if (value.kind !== "path" && value.suffix) {
+        ctx.addIssue({ code: "custom", path: ["suffix"], message: "Only path bindings may declare a suffix" })
       }
       if (value.minimum !== undefined && value.maximum !== undefined && value.minimum > value.maximum) {
         ctx.addIssue({ code: "custom", path: ["minimum"], message: "Binding minimum exceeds its maximum" })
@@ -142,6 +149,7 @@ export namespace HarnessRecipe {
 
   export const Selector = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("jsonpath"), path: z.string().min(1).max(500) }).strict(),
+    z.object({ kind: z.literal("jsonlpath"), path: z.string().min(1).max(500) }).strict(),
     z.object({ kind: z.literal("column"), name: z.string().min(1).max(200) }).strict(),
     z.object({ kind: z.literal("tuple"), index: z.number().int().min(0).max(1_000) }).strict(),
     z.object({ kind: z.literal("ratio_line"), prefix: z.string().min(1).max(200) }).strict(),
@@ -276,6 +284,7 @@ export namespace HarnessRecipe {
         }
         const compatible =
           (item.selector.kind === "jsonpath" && artifact.format === "json") ||
+          (item.selector.kind === "jsonlpath" && artifact.format === "jsonl") ||
           (item.selector.kind === "column" && artifact.format === "csv") ||
           (item.selector.kind === "tuple" && artifact.format === "pickle") ||
           (item.selector.kind === "ratio_line" && artifact.format === "text")
@@ -1255,6 +1264,345 @@ export namespace HarnessRecipe {
         "SimpleJudge requires an evaluator-owned completion model and key, and its validity must be established with the official JudgeEval suite.",
       ],
     }),
+    scienceagentbench: recipe({
+      schemaVersion: 2,
+      id: "scienceagentbench-official-v2",
+      benchmark: "scienceagentbench",
+      maturity: "source_verified",
+      environment: { manager: "pip", python: ">=3.10", files: ["requirements.txt"] },
+      anchors: [
+        "README.md",
+        "compute_scores.py",
+        "evaluation/harness/grading.py",
+        "evaluation/harness/run_evaluation.py",
+      ],
+      bindings: [
+        { name: "benchmarkDir", kind: "path", description: "Password-protected verified benchmark artifact directory" },
+        { name: "predProgramDir", kind: "path", description: "Runner-produced self-contained program directory" },
+        {
+          name: "logFile",
+          kind: "path",
+          suffix: ".jsonl",
+          description: "Fresh evaluator-owned JSONL result artifact",
+        },
+        { name: "runID", kind: "identifier", description: "Evaluator-owned Docker run identifier" },
+        {
+          name: "split",
+          kind: "choice",
+          description: "Official ScienceAgentBench dataset split",
+          required: false,
+          default: "verified",
+          choices: ["verified", "validation"],
+        },
+        {
+          name: "maxWorkers",
+          kind: "integer",
+          description: "Maximum parallel evaluator workers",
+          required: false,
+          default: "4",
+          minimum: 1,
+          maximum: 256,
+        },
+        {
+          name: "timeout",
+          kind: "integer",
+          description: "Per-instance evaluator timeout in seconds",
+          required: false,
+          default: "1800",
+          minimum: 1,
+          maximum: 86400,
+        },
+      ],
+      runtime: [],
+      stages: [
+        {
+          id: "evaluate",
+          role: "evaluate",
+          driver: {
+            kind: "argv",
+            entrypoint: "evaluation/harness/run_evaluation.py",
+            cwd: ".",
+            argv: [
+              "python",
+              "-m",
+              "evaluation.harness.run_evaluation",
+              "--benchmark_path",
+              "{benchmarkDir}",
+              "--pred_program_path",
+              "{predProgramDir}",
+              "--log_fname",
+              "{logFile}",
+              "--dataset_name",
+              "osunlp/ScienceAgentBench",
+              "--split",
+              "{split}",
+              "--max_workers",
+              "{maxWorkers}",
+              "--timeout",
+              "{timeout}",
+              "--run_id",
+              "{runID}",
+            ],
+          },
+          inputs: ["{benchmarkDir}", "{predProgramDir}"],
+          outputs: ["{logFile}"],
+          environment: ["OPENAI_API_KEY"],
+        },
+      ],
+      launchStage: "evaluate",
+      artifacts: [
+        {
+          id: "evaluations",
+          kind: "file",
+          path: "{logFile}",
+          format: "jsonl",
+          cardinality: { minimum: 1, maximum: 1 },
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
+      ],
+      metrics: [
+        {
+          name: "success-rate",
+          artifact: "evaluations",
+          selector: { kind: "jsonlpath", path: "$.success_rate" },
+          direction: "maximize",
+          aggregation: "mean",
+        },
+        {
+          name: "valid-program-rate",
+          artifact: "evaluations",
+          selector: { kind: "jsonlpath", path: "$.valid_program" },
+          direction: "maximize",
+          aggregation: "mean",
+        },
+        {
+          name: "codebert-score",
+          artifact: "evaluations",
+          selector: { kind: "jsonlpath", path: "$.codebert_score" },
+          direction: "maximize",
+          aggregation: "mean",
+        },
+      ],
+      limitations: [
+        "The verified benchmark files are password-protected and must be staged under benchmarkDir without entering the recipe or source checkout history.",
+        "The official Docker evaluator requires an OpenAI key for visualization judging; the key remains an environment secret and never enters argv or the receipt.",
+        "The recipe evaluates already generated self-contained programs; agent inference and best-of-run selection remain separately contract-bound.",
+      ],
+    }),
+    discoverybench: recipe({
+      schemaVersion: 2,
+      id: "discoverybench-official-v2",
+      benchmark: "discoverybench",
+      maturity: "source_verified",
+      environment: { manager: "pip", python: ">=3.10", files: ["requirements.txt"] },
+      anchors: ["README.md", "discovery_eval.py", "eval/new_eval.py"],
+      bindings: [
+        {
+          name: "datasetType",
+          kind: "choice",
+          description: "Official metadata schema",
+          choices: ["real", "synth"],
+        },
+      ],
+      runtime: [
+        { name: "query", kind: "json", owner: "evaluator", description: "Natural-language discovery query" },
+        { name: "goldHypothesis", kind: "json", owner: "evaluator", description: "Held-out reference hypothesis" },
+        { name: "goldWorkflow", kind: "json", owner: "evaluator", description: "Held-out reference workflow" },
+        {
+          name: "predictedHypothesis",
+          kind: "json",
+          owner: "runner",
+          description: "Runner-produced hypothesis",
+        },
+        {
+          name: "predictedWorkflow",
+          kind: "json",
+          owner: "runner",
+          description: "Runner-produced analysis workflow",
+        },
+        { name: "metadata", kind: "json", owner: "evaluator", description: "Official task dataset metadata" },
+      ],
+      stages: [
+        {
+          id: "evaluate",
+          role: "evaluate",
+          driver: {
+            kind: "python_api",
+            entrypoint: "eval/new_eval.py",
+            module: "eval.new_eval",
+            symbol: "run_eval_gold_vs_gen_NL_hypo_workflow",
+            kwargs: {
+              llm_used: "gpt-4-1106-preview",
+              dataset_type: "{datasetType}",
+              use_column_metadata: true,
+            },
+            arguments: {
+              query: "query",
+              gold_hypo: "goldHypothesis",
+              gold_workflow: "goldWorkflow",
+              gen_hypo: "predictedHypothesis",
+              gen_workflow: "predictedWorkflow",
+              dataset_meta: "metadata",
+            },
+          },
+          inputs: [],
+          outputs: [],
+          environment: ["OPENAI_API_KEY"],
+          produces: "evaluation",
+        },
+      ],
+      launchStage: "evaluate",
+      artifacts: [
+        {
+          id: "evaluation",
+          kind: "return",
+          format: "json",
+          value: "evaluation",
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
+      ],
+      metrics: [
+        {
+          name: "final-score",
+          artifact: "evaluation",
+          selector: { kind: "jsonpath", path: "$.final_score" },
+          direction: "maximize",
+          aggregation: "identity",
+        },
+        {
+          name: "context-recall",
+          artifact: "evaluation",
+          selector: { kind: "jsonpath", path: "$.recall_context" },
+          direction: "maximize",
+          aggregation: "identity",
+        },
+        {
+          name: "matched-accuracy",
+          artifact: "evaluation",
+          selector: { kind: "jsonpath", path: "$.mean_accuracy_score" },
+          direction: "maximize",
+          aggregation: "identity",
+        },
+      ],
+      limitations: [
+        "The pinned official evaluator fixes its semantic judge to gpt-4-1106-preview; changing that model is an evaluator change, not a recipe binding.",
+        "Gold hypotheses, workflows, and metadata are evaluator-owned runtime artifacts and must never be exposed to the candidate before settlement.",
+      ],
+    }),
+    labbench: recipe({
+      schemaVersion: 2,
+      id: "labbench2-official-v2",
+      benchmark: "labbench",
+      maturity: "source_verified",
+      environment: { manager: "uv", python: ">=3.11", files: ["pyproject.toml", "uv.lock"] },
+      anchors: [
+        "README.md",
+        "evals/evaluators.py",
+        "evals/loader.py",
+        "evals/report.py",
+        "evals/run_evals.py",
+        "evals/runners/base.py",
+      ],
+      bindings: [
+        {
+          name: "tag",
+          kind: "choice",
+          description: "Official LABBench2 dataset configuration",
+          choices: [
+            "cloning",
+            "dbqa2",
+            "figqa2",
+            "figqa2-img",
+            "figqa2-pdf",
+            "litqa3",
+            "patentqa",
+            "protocolqa2",
+            "seqqa2",
+            "sourcequality",
+            "suppqa2",
+            "tableqa2",
+            "tableqa2-img",
+            "tableqa2-pdf",
+            "trialqa",
+          ],
+        },
+        {
+          name: "mode",
+          kind: "choice",
+          description: "Official file-processing mode",
+          choices: ["file", "inject", "retrieve"],
+        },
+        {
+          name: "parallel",
+          kind: "integer",
+          description: "Maximum concurrent evaluation tasks",
+          required: false,
+          default: "30",
+          minimum: 1,
+          maximum: 512,
+        },
+      ],
+      runtime: [
+        {
+          name: "agent",
+          kind: "python_object",
+          owner: "runner",
+          description: "Content-addressed adapter build function returning external:absolute-path:OpenScienceRunner",
+        },
+      ],
+      stages: [
+        {
+          id: "evaluate",
+          role: "evaluate",
+          driver: {
+            kind: "python_api",
+            entrypoint: "evals/run_evals.py",
+            module: "evals.run_evals",
+            symbol: "run_evaluation",
+            kwargs: { tag: "{tag}", mode: "{mode}", parallel: "{parallel}" },
+            arguments: { agent: "agent" },
+          },
+          inputs: [],
+          outputs: ["assets/reports/{tag}/{mode}/OpenScienceRunner.json"],
+          environment: ["HF_TOKEN"],
+        },
+      ],
+      launchStage: "evaluate",
+      artifacts: [
+        {
+          id: "report",
+          kind: "file",
+          path: "assets/reports/{tag}/{mode}/OpenScienceRunner.json",
+          format: "json",
+          cardinality: { minimum: 1, maximum: 1 },
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
+      ],
+      metrics: [
+        {
+          name: "accuracy",
+          artifact: "report",
+          selector: { kind: "jsonpath", path: "$.summary.average_scores.HybridEvaluator" },
+          direction: "maximize",
+          aggregation: "identity",
+        },
+        {
+          name: "failures",
+          artifact: "report",
+          selector: { kind: "jsonpath", path: "$.summary.total_failures" },
+          direction: "minimize",
+          aggregation: "identity",
+        },
+      ],
+      limitations: [
+        "The runtime adapter source is hashed before import and its build function must return an external runner spec whose class is exactly OpenScienceRunner so the official report path remains deterministic.",
+        "A complete release score requires the official tag and file-mode matrix rather than selecting the most favorable single configuration after evaluation.",
+        "The Hugging Face token and any adapter-specific provider credentials remain environment secrets and never enter the materialized recipe or receipt.",
+      ],
+    }),
     scicode: recipe({
       schemaVersion: 2,
       id: "scicode-official-v2",
@@ -1374,6 +1722,9 @@ export namespace HarnessRecipe {
     if (binding.kind === "path") {
       if (path.posix.isAbsolute(value) || value.split("/").includes("..") || value.includes("\\")) {
         throw new Error(`Recipe binding ${binding.name} must be a checkout-relative POSIX path`)
+      }
+      if (binding.suffix && !value.endsWith(binding.suffix)) {
+        throw new Error(`Recipe binding ${binding.name} must end with ${binding.suffix}`)
       }
       return value
     }

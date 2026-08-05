@@ -25,6 +25,14 @@ export function recipeSelection(key: HarnessRecipe.Verified): HarnessRecipe.Sele
       paperID: "adaptive-pruning",
       outputDir: "fixtures/paperbench/judge",
     },
+    scienceagentbench: {
+      benchmarkDir: "fixtures/scienceagentbench/benchmark",
+      predProgramDir: "fixtures/scienceagentbench/predictions",
+      logFile: "fixtures/scienceagentbench/evaluation.jsonl",
+      runID: "fixture-run",
+    },
+    discoverybench: { datasetType: "real" },
+    labbench: { tag: "seqqa2", mode: "file" },
     scicode: {
       codeDir: "fixtures/scicode/code",
       logDir: "fixtures/scicode/logs",

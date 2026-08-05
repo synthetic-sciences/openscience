@@ -15481,6 +15481,25 @@
                                 "properties": {
                                   "kind": {
                                     "type": "string",
+                                    "const": "jsonlpath"
+                                  },
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 500
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "path"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
                                     "const": "column"
                                   },
                                   "name": {
@@ -26546,6 +26565,25 @@
                                     "properties": {
                                       "kind": {
                                         "type": "string",
+                                        "const": "jsonlpath"
+                                      },
+                                      "path": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 500
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "path"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
                                         "const": "column"
                                       },
                                       "name": {
@@ -30751,6 +30789,25 @@
                                           "kind": {
                                             "type": "string",
                                             "const": "jsonpath"
+                                          },
+                                          "path": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 500
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "path"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "const": "jsonlpath"
                                           },
                                           "path": {
                                             "type": "string",

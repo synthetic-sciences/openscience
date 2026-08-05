@@ -91,11 +91,11 @@ describe("benchmark adapters", () => {
     const paths = Object.values(HarnessBenchmark.catalog).flatMap((manifest) =>
       manifest.source.status === "methodology_only" ? [] : manifest.source.requiredPaths,
     )
-    expect(paths).toHaveLength(77)
+    expect(paths).toHaveLength(97)
     const recipes = Object.values(HarnessBenchmark.catalog).map((manifest) => manifest.recipe.status)
-    expect(recipes.filter((status) => status === "source_verified")).toHaveLength(10)
-    expect(recipes.filter((status) => status === "pending_source_verification")).toHaveLength(8)
-    expect(recipes.filter((status) => status === "blocked_upstream")).toHaveLength(2)
+    expect(recipes.filter((status) => status === "source_verified")).toHaveLength(13)
+    expect(recipes.filter((status) => status === "pending_source_verification")).toHaveLength(3)
+    expect(recipes.filter((status) => status === "blocked_upstream")).toHaveLength(4)
     expect(recipes.filter((status) => status === "not_applicable")).toHaveLength(3)
   })
 

@@ -7705,6 +7705,10 @@ export type HarnessBenchmarkRecipeResponses = {
             path: string
           }
         | {
+            kind: "jsonlpath"
+            path: string
+          }
+        | {
             kind: "column"
             name: string
           }
@@ -10749,6 +10753,10 @@ export type HarnessBindResponses = {
               path: string
             }
           | {
+              kind: "jsonlpath"
+              path: string
+            }
+          | {
               kind: "column"
               name: string
             }
@@ -11470,6 +11478,10 @@ export type HarnessContractResponses = {
         selector:
           | {
               kind: "jsonpath"
+              path: string
+            }
+          | {
+              kind: "jsonlpath"
               path: string
             }
           | {

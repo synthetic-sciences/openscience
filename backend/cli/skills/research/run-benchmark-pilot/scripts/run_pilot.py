@@ -246,6 +246,7 @@ def preflight(manifest_path: Path) -> dict:
         fail("pilot runtime inputs do not exactly match the materialized recipe")
     runtime = {}
     runtime_evidence = {}
+    sys.path.insert(0, str(workspace))
     for item in expected_runtime:
         row = mapping(item, "runtime declaration")
         name = text(row.get("name"), "runtime name")
@@ -352,6 +353,17 @@ def select(path: Path, format_: str, selector: dict) -> list[float]:
         else:
             value = json.loads(path.read_text(encoding="utf-8"))
         return numbers(json_values(value, text(selector.get("path"), "JSON selector")))
+    if kind == "jsonlpath":
+        rows = path.read_text(encoding="utf-8").splitlines()
+        if not rows or any(not row.strip() for row in rows):
+            fail("JSONL metric artifact must contain only non-empty records")
+        values = [json.loads(row) for row in rows]
+        selected = [
+            item
+            for value in values
+            for item in json_values(value, text(selector.get("path"), "JSONL selector"))
+        ]
+        return numbers(selected)
     if kind == "column":
         with path.open("r", encoding="utf-8", newline="") as handle:
             rows = list(csv.DictReader(handle))
