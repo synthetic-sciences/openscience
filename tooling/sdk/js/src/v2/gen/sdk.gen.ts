@@ -115,6 +115,7 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
+  NotebookComputeResponses,
   NotebookExecuteResponses,
   NotebookInterruptResponses,
   NotebookKernelCreateResponses,
@@ -5205,6 +5206,23 @@ export class Kernel extends HeyApiClient {
 }
 
 export class Notebook extends HeyApiClient {
+  /**
+   * Report host compute capacity
+   */
+  public compute<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<NotebookComputeResponses, unknown, ThrowOnError>({
+      url: "/notebook/compute",
+      ...options,
+      ...params,
+    })
+  }
+
   /**
    * List session kernel records
    */

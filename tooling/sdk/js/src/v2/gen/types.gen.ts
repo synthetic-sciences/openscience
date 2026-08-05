@@ -9447,6 +9447,22 @@ export type FileStatusResponses = {
 
 export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses]
 
+export type NotebookComputeData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/notebook/compute"
+}
+
+export type NotebookComputeResponses = {
+  /**
+   * Machine capacity and the share kernels hold
+   */
+  200: unknown
+}
+
 export type NotebookKernelsData = {
   body?: never
   path?: never

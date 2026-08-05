@@ -58,6 +58,7 @@ describe("/notebook routes", () => {
     expect(paths["/notebook/kernels/{kernelID}/interrupt"]?.post).toBeDefined()
     expect(paths["/notebook/kernels/{kernelID}"]?.delete).toBeDefined()
     expect(paths["/notebook/execute"]?.post).toBeDefined()
+    expect(paths["/notebook/compute"]?.get).toBeDefined()
     expect(paths["/notebook/status"]?.get).toBeDefined()
     expect(paths["/notebook/restart"]?.post).toBeDefined()
     expect(paths["/notebook/stop"]?.post).toBeDefined()

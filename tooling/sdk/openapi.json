@@ -21244,6 +21244,32 @@
         ]
       }
     },
+    "/notebook/compute": {
+      "get": {
+        "operationId": "notebook.compute",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Report host compute capacity",
+        "responses": {
+          "200": {
+            "description": "Machine capacity and the share kernels hold"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.notebook.compute({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/notebook/kernels": {
       "get": {
         "operationId": "notebook.kernels",
