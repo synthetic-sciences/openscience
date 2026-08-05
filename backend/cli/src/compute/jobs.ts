@@ -336,7 +336,9 @@ export namespace ComputeJobs {
       const retry = Date.parse(job.recovery_retry_at ?? "")
       return { attempt: job.recovery_attempts, retry: Number.isFinite(retry) ? retry : 0 }
     }
-    const text = await fs.readFile(eventsOf(root, job.id), "utf8").catch(() => "")
+    const text = await Bun.file(eventsOf(root, job.id))
+      .text()
+      .catch(() => "")
     const records = text.split("\n").flatMap((line) => {
       const match = line.match(/^\[([^\]]+)\] Modal recovery attempt (\d+)\/\d+ deferred/)
       if (!match) return []
@@ -455,7 +457,7 @@ export namespace ComputeJobs {
                     const attempt = prior.attempt + 1
                     if (attempt >= recoveryLimit) {
                       await event(root, job.id, `Modal recovery failed after ${attempt} attempts: ${message}`)
-                      await failModal(current, scope, credentials, error, provider)
+                      await failModal(current, scope, credentials, error, provider, true)
                       return
                     }
                     await change(root, (jobs) => {
@@ -1391,6 +1393,7 @@ export namespace ComputeJobs {
     context: ModalAdapter.Context,
     error: unknown,
     provider: ModalProvider,
+    retain = false,
   ): Promise<void> {
     const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
     await fs.mkdir(logsOf(scope.root), { recursive: true })
@@ -1423,8 +1426,17 @@ export namespace ComputeJobs {
         { type: "finish", outcome: "failed", message },
         { completed_at: new Date().toISOString(), exit_code: null, error: message },
       )
-      const ended = move(draft, { type: "lose" })
-      jobs[index] = Job.parse({ ...ended, provenance: provenance(ended) })
+      const ended = (() => {
+        if (!retain) return move(draft, { type: "lose" })
+        const collecting = move(draft, { type: "collect" })
+        const failed = move(collecting, { type: "delivery_fail", message })
+        return move(failed, { type: "lose" })
+      })()
+      jobs[index] = Job.parse({
+        ...ended,
+        ...(retain ? { capture_error: message } : {}),
+        provenance: provenance(ended),
+      })
     })
   }
 

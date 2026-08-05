@@ -1,15 +1,5 @@
-import {
-  createEffect,
-  createSignal,
-  createUniqueId,
-  For,
-  Match,
-  onCleanup,
-  Show,
-  Switch,
-  type Component,
-  type JSX,
-} from "solid-js"
+import { createEffect, createUniqueId, For, Match, onCleanup, Show, Switch, type Component, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { ComputeJobs } from "@/atlas/ComputeJobs"
 import { createComputeJobsAPI, type Status } from "@/atlas/ComputeJobsAPI"
@@ -39,8 +29,7 @@ const tabs = [
 ] as const
 
 export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
-  const [tab, setTab] = createSignal<Tab>("kernels")
-  const [active, setActive] = createSignal(0)
+  const [state, setState] = createStore({ tab: "kernels" as Tab, active: 0 })
   const id = createUniqueId()
   const refs: Partial<Record<Tab, HTMLButtonElement>> = {}
   const kernels = props.kernels ?? KernelPanel
@@ -49,26 +38,26 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
 
   const refresh = async () => {
     const list = await api.list().catch(() => undefined)
-    if (list) setActive(list.filter((job) => !terminal.has(job.status)).length)
+    if (list) setState("active", list.filter((job) => !terminal.has(job.status)).length)
   }
 
   createEffect(() => {
-    if (tab() === "kernels") void refresh()
+    if (state.tab === "kernels") void refresh()
   })
 
   const timer = setInterval(() => {
-    if (tab() === "kernels") void refresh()
+    if (state.tab === "kernels") void refresh()
   }, inactiveRefresh)
   onCleanup(() => clearInterval(timer))
 
   const select = (next: Tab, focus = false) => {
-    setTab(next)
+    setState("tab", next)
     if (focus) queueMicrotask(() => refs[next]?.focus())
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
-    const current = tabs.findIndex((item) => item.id === tab())
+    const current = tabs.findIndex((item) => item.id === state.tab)
     const index =
       event.key === "Home"
         ? 0
@@ -101,16 +90,19 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
               role="tab"
               class="compute-surface__tab"
               data-compute-tab={item.id}
-              data-active={tab() === item.id}
-              aria-selected={tab() === item.id}
+              data-active={state.tab === item.id}
+              aria-selected={state.tab === item.id}
               aria-controls={`${id}-${item.id}-panel`}
-              tabindex={tab() === item.id ? 0 : -1}
+              tabindex={state.tab === item.id ? 0 : -1}
               onClick={() => select(item.id)}
             >
               <span>{item.label}</span>
-              <Show when={item.id === "jobs" && active() > 0}>
-                <span class="compute-surface__badge" aria-label={`${active()} active job${active() === 1 ? "" : "s"}`}>
-                  {active()}
+              <Show when={item.id === "jobs" && state.active > 0}>
+                <span
+                  class="compute-surface__badge"
+                  aria-label={`${state.active} active job${state.active === 1 ? "" : "s"}`}
+                >
+                  {state.active}
                 </span>
               </Show>
             </button>
@@ -119,7 +111,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
       </div>
 
       <Switch>
-        <Match when={tab() === "kernels"}>
+        <Match when={state.tab === "kernels"}>
           <div
             id={`${id}-kernels-panel`}
             class="compute-surface__panel"
@@ -130,7 +122,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
             <Dynamic component={kernels} onEnsureSession={props.onEnsureSession} />
           </div>
         </Match>
-        <Match when={tab() === "jobs"}>
+        <Match when={state.tab === "jobs"}>
           <div
             id={`${id}-jobs-panel`}
             class="compute-surface__panel"
@@ -138,7 +130,11 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
             aria-labelledby={`${id}-jobs-tab`}
             tabindex={0}
           >
-            <Dynamic component={jobs} onEnsureSession={props.onEnsureSession} onActiveChange={setActive} />
+            <Dynamic
+              component={jobs}
+              onEnsureSession={props.onEnsureSession}
+              onActiveChange={(count) => setState("active", count)}
+            />
           </div>
         </Match>
       </Switch>

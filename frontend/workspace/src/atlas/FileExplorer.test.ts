@@ -62,7 +62,9 @@ describe("file explorer surface", () => {
     expect(value).toContain('request("/settings/compute/modal/volumes")')
     expect(value).toContain("view.modal ? sdk.directory : undefined")
     expect(value).toContain("modalAvailable={modalAvailable()}")
-    expect(value).toContain('onLoadVolumes={() => (view.modal ? void refetchVolumes() : setView("modal", true))}')
+    expect(value).toContain(
+      'onLoadVolumes={() => (view.modal ? void volumeControls.refetch() : setView("modal", true))}',
+    )
     expect(value).toContain("Browse cloud files")
     expect(value).toContain("/settings/compute/modal/volumes/${volume}/files")
     expect(value).toContain("/settings/compute/modal/volumes/${volume}/file")

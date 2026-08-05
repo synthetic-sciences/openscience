@@ -627,7 +627,7 @@ export function FileExplorer(): JSX.Element {
     const modal = compute.latest?.providers.find((provider) => provider.id === "modal")
     return Boolean(modal?.connected && modal.enabled)
   })
-  const [volumes, { refetch: refetchVolumes }] = createResource(
+  const [volumes, volumeControls] = createResource(
     () => (view.modal ? sdk.directory : undefined),
     () =>
       sdk
@@ -969,7 +969,7 @@ export function FileExplorer(): JSX.Element {
           onRestoreArtifact={restore}
           onOpenGrant={openGrant}
           onOpenVolume={(volume) => open({ root: "/", name: volume.name, kind: "modal" })}
-          onLoadVolumes={() => (view.modal ? void refetchVolumes() : setView("modal", true))}
+          onLoadVolumes={() => (view.modal ? void volumeControls.refetch() : setView("modal", true))}
           onRevoke={revoke}
           onConnect={connect}
           onChoose={choose}

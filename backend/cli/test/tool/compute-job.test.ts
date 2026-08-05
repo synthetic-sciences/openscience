@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import path from "node:path"
 import { ComputeJobs } from "../../src/compute/jobs"
 import { Instance } from "../../src/project/instance"
@@ -66,6 +67,43 @@ test("inspects project jobs, logs, and delivered artifacts without approval", as
       expect(logs.output).toContain("visible output")
       expect(artifacts.output).toContain("results/value.txt")
       expect(asked).toEqual([])
+    },
+  })
+})
+
+test("surfaces delivery, cleanup, and recovery warnings during read-only inspection", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const root = path.join(tmp.path, "compute")
+  const job = ComputeJobs.Job.parse({
+    id: "warning-status",
+    name: "warning status",
+    command: "true",
+    cwd: tmp.path,
+    target: { kind: "local" },
+    target_label: "This computer",
+    scheduler: "none",
+    status: "failed",
+    created_at: new Date().toISOString(),
+    completed_at: new Date().toISOString(),
+    cleanup_error: "Remote resources may still be billing",
+    capture_error: "Output delivery needs attention",
+    recovery_attempts: 2,
+    recovery_retry_at: "2026-08-05T12:00:00.000Z",
+  })
+  await fs.mkdir(root, { recursive: true })
+  await Bun.write(path.join(root, "jobs.json"), JSON.stringify([job]))
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({})
+      const tool = await createComputeJobTool({ root, workspace: tmp.path }).init()
+      const status = await tool.execute({ action: "status", job_id: job.id }, context(session.id, []))
+
+      expect(status.output).toContain('"cleanup_error": "Remote resources may still be billing"')
+      expect(status.output).toContain('"capture_error": "Output delivery needs attention"')
+      expect(status.output).toContain('"recovery_attempts": 2')
+      expect(status.output).toContain('"recovery_retry_at": "2026-08-05T12:00:00.000Z"')
     },
   })
 })

@@ -1283,7 +1283,7 @@ describe("ComputeJobs Modal governance", () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
     const id = "exhausted-recovery"
-    const calls = { recover: 0, close: 0 }
+    const calls = { recover: 0, close: 0, release: 0 }
     const provider = modalProvider({
       recover: async () => {
         calls.recover++
@@ -1291,6 +1291,9 @@ describe("ComputeJobs Modal governance", () => {
       },
       close: async () => {
         calls.close++
+      },
+      release: async () => {
+        calls.release++
       },
     })
     const authority = await Instance.provide({
@@ -1359,7 +1362,11 @@ describe("ComputeJobs Modal governance", () => {
 
     expect(failed.status).toBe("failed")
     expect(failed.error).toContain("sandbox and volume unavailable")
-    expect(calls).toEqual({ recover: 1, close: 1 })
+    expect(failed.lifecycle).toMatchObject({ delivery: "failed", resource: "unknown", recoverable: true })
+    await Bun.sleep(20)
+    await ComputeJobs.list({ root, workspace: tmp.path, credentials, provider })
+    await Bun.sleep(20)
+    expect(calls).toEqual({ recover: 1, close: 1, release: 0 })
   })
 
   test("turns a rejected terminal recovery into one recoverable delivery failure", async () => {

@@ -43,6 +43,10 @@ const summary = (job: ComputeJobs.Job) => ({
   started_at: job.started_at,
   completed_at: job.completed_at,
   error: job.error,
+  capture_error: job.capture_error,
+  cleanup_error: job.cleanup_error,
+  recovery_attempts: job.recovery_attempts,
+  recovery_retry_at: job.recovery_retry_at,
   remote_id: job.remote_id,
   volume: job.modal?.volume,
 })
