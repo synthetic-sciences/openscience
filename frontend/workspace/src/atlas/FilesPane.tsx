@@ -127,6 +127,17 @@ export function FilesPane(
     return { sessionID: session, projectID: sdk?.projectID, directory: projectRoot() }
   }
 
+  // A grant is minted against a session, and the landing route (/:dir/session)
+  // reaches this pane before one exists. The connect form is still worth
+  // opening there — it says what it needs — but the button that cannot work
+  // must say so rather than swallow the click.
+  const blocked = () => {
+    if (!sessionID())
+      return "Send a message first: a folder is connected to a session, and this one has not started yet."
+    if (!projectRoot()) return "Open a project first: a folder is connected to the project you are working in."
+    return ""
+  }
+
   // The artifact store is project-scoped through the request headers, so it
   // needs no session identity — only the project root as a refetch key.
   const ask = (path: string, init?: RequestInit) => transport(path, init)
@@ -248,7 +259,13 @@ export function FilesPane(
     event.preventDefault()
     const current = identity()
     const path = connect.path.trim()
-    if (!current || !path || busy()) return
+    if (!path || busy()) return
+    // The submit button is disabled for this case, but a form still submits on
+    // Enter in the path field, so the reason is surfaced rather than dropped.
+    if (!current) {
+      setError(blocked() || "This folder could not be connected.")
+      return
+    }
     setBusy(true)
     grantAccess(transport, current, { path, access: connect.access, scope: connect.scope })
       .then(() => refetchSnapshot())
@@ -366,11 +383,23 @@ export function FilesPane(
             {accessNote(connect.access)}
           </p>
 
+          <Show when={blocked()}>
+            <p class="files-connect__note files-connect__note--blocked" data-connect-blocked>
+              {blocked()}
+            </p>
+          </Show>
+
           <div class="files-connect__row files-connect__row--end">
             <button type="button" class="files-connect__cancel" onClick={() => setConnect("open", false)}>
               Cancel
             </button>
-            <button type="submit" class="files-connect__submit" disabled={!connect.path.trim() || busy()}>
+            <button
+              type="submit"
+              class="files-connect__submit"
+              data-connect-submit
+              title={blocked() || undefined}
+              disabled={!connect.path.trim() || busy() || Boolean(blocked())}
+            >
               {busy() ? "Connecting…" : "Connect"}
             </button>
           </div>

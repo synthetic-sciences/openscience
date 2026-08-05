@@ -266,6 +266,43 @@ describe("files pane", () => {
     expect(host.querySelector('[data-source-item="fsg_9"]')?.textContent).toContain("pdebench")
   })
 
+  test("says why a folder cannot be connected before a session exists, instead of doing nothing", async () => {
+    // The landing route (/:dir/session) reaches this pane with a project but no
+    // session id, and a grant is minted against a session.
+    const posted: string[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        directory: DIRECTORY,
+        request: async (path, init) => {
+          if (init?.method === "POST") posted.push(path)
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>("[data-source-add]")?.click()
+
+    const input = host.querySelector<HTMLInputElement>('[aria-label="Folder path"]')!
+    input.value = "/home/keertan/data/pdebench"
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+
+    const submit = host.querySelector<HTMLButtonElement>("[data-connect-submit]")!
+    expect(submit.disabled).toBe(true)
+    expect(host.querySelector("[data-connect-blocked]")?.textContent).toContain("has not started yet")
+
+    // Enter in the path field submits past the disabled button — the reason
+    // must reach the user there too.
+    host
+      .querySelector<HTMLFormElement>(".files-connect")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    await settle()
+
+    expect(posted).toEqual([])
+    expect(host.querySelector(".files-notice")?.textContent).toContain("has not started yet")
+  })
+
   test("opening a file swaps the browser for the file itself and closing swaps it back", async () => {
     const host = mount(() =>
       subject.FilesPane({

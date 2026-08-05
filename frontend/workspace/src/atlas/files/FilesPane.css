@@ -432,6 +432,11 @@
   font-size: 11px;
   line-height: 1.5;
 }
+.files-connect__note--blocked {
+  padding-left: 8px;
+  border-left: 2px solid var(--color-border-weak-base);
+  color: var(--color-text-muted);
+}
 .files-connect__browse,
 .files-connect__cancel,
 .files-connect__submit {
