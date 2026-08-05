@@ -87,8 +87,8 @@ export namespace HarnessBenchmark {
     z
       .object({
         status: z.literal("source_verified"),
-        id: z.string().regex(/^[a-z][a-z0-9-]*-official-v1$/),
-        schemaVersion: z.literal(1),
+        id: z.string().regex(/^[a-z][a-z0-9-]*-official-v2$/),
+        schemaVersion: z.literal(2),
         checkedAt: Date,
       })
       .strict(),
@@ -156,16 +156,16 @@ export namespace HarnessBenchmark {
 
   const checkedAt = "2026-08-05"
   const recipes = {
-    bixbench: "bixbench-official-v1",
-    biomni: "biomni-official-v1",
-    pde: "pdebench-official-v1",
-    chembench: "chembench-official-v1",
-    matscibench: "matscibench-official-v1",
-    mle: "mlebench-official-v1",
-    ale: "alebench-official-v1",
-    researchclaw: "researchclawbench-official-v1",
-    paperbench: "paperbench-official-v1",
-    scicode: "scicode-official-v1",
+    bixbench: "bixbench-official-v2",
+    biomni: "biomni-official-v2",
+    pde: "pdebench-official-v2",
+    chembench: "chembench-official-v2",
+    matscibench: "matscibench-official-v2",
+    mle: "mlebench-official-v2",
+    ale: "alebench-official-v2",
+    researchclaw: "researchclawbench-official-v2",
+    paperbench: "paperbench-official-v2",
+    scicode: "scicode-official-v2",
   } as const
   const blockers = {
     posttrain: {
@@ -183,7 +183,7 @@ export namespace HarnessBenchmark {
     const id = input.id as keyof typeof recipes
     const blocked = blockers[input.id as keyof typeof blockers]
     const recipe = recipes[id]
-      ? { status: "source_verified" as const, id: recipes[id], schemaVersion: 1 as const, checkedAt }
+      ? { status: "source_verified" as const, id: recipes[id], schemaVersion: 2 as const, checkedAt }
       : blocked
         ? { status: "blocked_upstream" as const, ...blocked, checkedAt }
         : input.source.status === "methodology_only"

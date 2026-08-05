@@ -47,13 +47,17 @@ describe("source-verified benchmark recipes", () => {
         format: "json",
         producedBy: "evaluate",
         owner: "evaluator",
+        value: "rewards",
       },
     ])
+    const chem = HarnessRecipe.materialize("chembench", recipeSelection("chembench"))
+    const evaluate = chem.stages.find((stage) => stage.id === "evaluate")!
+    expect(evaluate.driver).toMatchObject({ kind: "python_api", receiver: "benchmark", kwargs: { batch_size: 8 } })
   })
 
   test("rejects undeclared, missing, unsafe, out-of-range, and substituted bindings", () => {
     const mle = recipeSelection("mle")
-    expect(() => HarnessRecipe.materialize("mle", { ...mle, recipeID: "bixbench-official-v1" })).toThrow(
+    expect(() => HarnessRecipe.materialize("mle", { ...mle, recipeID: "bixbench-official-v2" })).toThrow(
       "does not match",
     )
     expect(() => HarnessRecipe.materialize("mle", { ...mle, bindings: { ...mle.bindings, surprise: "x" } })).toThrow(
@@ -120,10 +124,83 @@ describe("source-verified benchmark recipes", () => {
             format: "json",
             producedBy: "postprocess",
             owner: "evaluator",
+            value: "evaluations",
           },
         ],
       }),
     ).toThrow("must come from a Python API stage")
+    const biomni = HarnessRecipe.resolve("biomni")
+    expect(() =>
+      HarnessRecipe.Recipe.parse({
+        ...biomni,
+        stages: biomni.stages.map((stage) =>
+          stage.id === "evaluate" && stage.driver.kind === "python_api"
+            ? { ...stage, driver: { ...stage.driver, receiver: "missing" } }
+            : stage,
+        ),
+      }),
+    ).toThrow("references unavailable values")
+    expect(() =>
+      HarnessRecipe.Recipe.parse({
+        ...biomni,
+        stages: biomni.stages.map((stage) =>
+          stage.id === "load" && stage.driver.kind === "python_api"
+            ? { ...stage, driver: { ...stage.driver, receiver: "rewards" } }
+            : stage,
+        ),
+      }),
+    ).toThrow("references unavailable values")
+    expect(() =>
+      HarnessRecipe.Recipe.parse({
+        ...biomni,
+        artifacts: biomni.artifacts.map((artifact) =>
+          artifact.kind === "return" ? { ...artifact, value: "missing" } : artifact,
+        ),
+      }),
+    ).toThrow("must name its producer value")
+    expect(() =>
+      HarnessRecipe.Recipe.parse({
+        ...bix,
+        artifacts: bix.artifacts.map((artifact) =>
+          artifact.kind === "file" ? { ...artifact, cardinality: { minimum: 2, maximum: 1 } } : artifact,
+        ),
+      }),
+    ).toThrow("minimum exceeds its maximum")
+    expect(() =>
+      HarnessRecipe.Recipe.parse({
+        ...bix,
+        stages: bix.stages.map((stage, index) => (index === 0 ? { ...stage, produces: "result" } : stage)),
+      }),
+    ).toThrow("cannot produce a Python value")
+    expect(() =>
+      HarnessRecipe.Recipe.parse({
+        ...biomni,
+        stages: biomni.stages.map((stage) => (stage.id === "evaluate" ? { ...stage, produces: "evaluator" } : stage)),
+      }),
+    ).toThrow("Recipe values must be unique")
+    const chemRecipe = HarnessRecipe.resolve("chembench")
+    expect(() =>
+      HarnessRecipe.Recipe.parse({
+        ...chemRecipe,
+        stages: chemRecipe.stages.map((stage) =>
+          stage.id === "evaluate" && stage.driver.kind === "python_api"
+            ? {
+                ...stage,
+                driver: {
+                  ...stage.driver,
+                  arguments: { ...stage.driver.arguments, batch_size: "modelKwargs" },
+                },
+              }
+            : stage,
+        ),
+      }),
+    ).toThrow("binds parameters twice")
+    expect(() =>
+      HarnessRecipe.Recipe.parse({
+        ...bix,
+        metrics: bix.metrics.map((metric) => ({ ...metric, selector: { kind: "tuple" as const, index: 0 } })),
+      }),
+    ).toThrow("selector is incompatible")
   })
 
   test("distinguishes pending and upstream-blocked adapters instead of inventing a generic recipe", () => {

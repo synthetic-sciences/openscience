@@ -14833,11 +14833,11 @@
                               },
                               "id": {
                                 "type": "string",
-                                "pattern": "^[a-z][a-z0-9-]*-official-v1$"
+                                "pattern": "^[a-z][a-z0-9-]*-official-v2$"
                               },
                               "schemaVersion": {
                                 "type": "number",
-                                "const": 1
+                                "const": 2
                               },
                               "checkedAt": {
                                 "type": "string",
@@ -14989,11 +14989,11 @@
                   "properties": {
                     "schemaVersion": {
                       "type": "number",
-                      "const": 1
+                      "const": 2
                     },
                     "recipeID": {
                       "type": "string",
-                      "pattern": "^[a-z][a-z0-9-]*-official-v1$"
+                      "pattern": "^[a-z][a-z0-9-]*-official-v2$"
                     },
                     "benchmark": {
                       "type": "string",
@@ -15098,6 +15098,46 @@
                         "maxLength": 1000
                       }
                     },
+                    "runtime": {
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-zA-Z0-9]*$"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "json",
+                              "python_object",
+                              "callable"
+                            ]
+                          },
+                          "owner": {
+                            "type": "string",
+                            "enum": [
+                              "runner",
+                              "evaluator"
+                            ]
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "kind",
+                          "owner",
+                          "description"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "stages": {
                       "minItems": 1,
                       "maxItems": 16,
@@ -15184,6 +15224,10 @@
                                     "type": "string",
                                     "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*$"
                                   },
+                                  "receiver": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-zA-Z0-9]*$"
+                                  },
                                   "kwargs": {
                                     "type": "object",
                                     "propertyNames": {
@@ -15191,15 +15235,28 @@
                                       "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
                                     },
                                     "additionalProperties": {
-                                      "type": "string",
-                                      "minLength": 1,
-                                      "maxLength": 2048
+                                      "anyOf": [
+                                        {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 2048
+                                        },
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "boolean"
+                                        }
+                                      ]
                                     }
                                   },
-                                  "runtimeInputs": {
-                                    "maxItems": 32,
-                                    "type": "array",
-                                    "items": {
+                                  "arguments": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string",
+                                      "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                                    },
+                                    "additionalProperties": {
                                       "type": "string",
                                       "pattern": "^[a-z][a-zA-Z0-9]*$"
                                     }
@@ -15211,7 +15268,7 @@
                                   "module",
                                   "symbol",
                                   "kwargs",
-                                  "runtimeInputs"
+                                  "arguments"
                                 ],
                                 "additionalProperties": false
                               }
@@ -15242,6 +15299,10 @@
                               "type": "string",
                               "pattern": "^[A-Z][A-Z0-9_]*$"
                             }
+                          },
+                          "produces": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-zA-Z0-9]*$"
                           }
                         },
                         "required": [
@@ -15302,6 +15363,26 @@
                                   "pickle",
                                   "directory"
                                 ]
+                              },
+                              "cardinality": {
+                                "type": "object",
+                                "properties": {
+                                  "minimum": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10000
+                                  },
+                                  "maximum": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10000
+                                  }
+                                },
+                                "required": [
+                                  "minimum",
+                                  "maximum"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "required": [
@@ -15310,7 +15391,8 @@
                               "owner",
                               "kind",
                               "path",
-                              "format"
+                              "format",
+                              "cardinality"
                             ],
                             "additionalProperties": false
                           },
@@ -15339,6 +15421,10 @@
                               "format": {
                                 "type": "string",
                                 "const": "json"
+                              },
+                              "value": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-zA-Z0-9]*$"
                               }
                             },
                             "required": [
@@ -15346,7 +15432,8 @@
                               "producedBy",
                               "owner",
                               "kind",
-                              "format"
+                              "format",
+                              "value"
                             ],
                             "additionalProperties": false
                           }
@@ -15369,9 +15456,84 @@
                             "pattern": "^[a-z][a-z0-9-]*$"
                           },
                           "selector": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 500
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "jsonpath"
+                                  },
+                                  "path": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 500
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "path"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "column"
+                                  },
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "name"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "tuple"
+                                  },
+                                  "index": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "index"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "ratio_line"
+                                  },
+                                  "prefix": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "prefix"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
                           },
                           "direction": {
                             "type": "string",
@@ -15423,6 +15585,7 @@
                     "bindings",
                     "environment",
                     "anchors",
+                    "runtime",
                     "stages",
                     "launchStage",
                     "artifacts",
@@ -15463,7 +15626,7 @@
                 "properties": {
                   "recipeID": {
                     "type": "string",
-                    "pattern": "^[a-z][a-z0-9-]*-official-v1$"
+                    "pattern": "^[a-z][a-z0-9-]*-official-v2$"
                   },
                   "bindings": {
                     "type": "object",
@@ -25891,11 +26054,11 @@
                       "properties": {
                         "schemaVersion": {
                           "type": "number",
-                          "const": 1
+                          "const": 2
                         },
                         "recipeID": {
                           "type": "string",
-                          "pattern": "^[a-z][a-z0-9-]*-official-v1$"
+                          "pattern": "^[a-z][a-z0-9-]*-official-v2$"
                         },
                         "benchmark": {
                           "type": "string",
@@ -26000,6 +26163,46 @@
                             "maxLength": 1000
                           }
                         },
+                        "runtime": {
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-zA-Z0-9]*$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "json",
+                                  "python_object",
+                                  "callable"
+                                ]
+                              },
+                              "owner": {
+                                "type": "string",
+                                "enum": [
+                                  "runner",
+                                  "evaluator"
+                                ]
+                              },
+                              "description": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "kind",
+                              "owner",
+                              "description"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "stages": {
                           "minItems": 1,
                           "maxItems": 16,
@@ -26086,6 +26289,10 @@
                                         "type": "string",
                                         "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*$"
                                       },
+                                      "receiver": {
+                                        "type": "string",
+                                        "pattern": "^[a-z][a-zA-Z0-9]*$"
+                                      },
                                       "kwargs": {
                                         "type": "object",
                                         "propertyNames": {
@@ -26093,15 +26300,28 @@
                                           "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
                                         },
                                         "additionalProperties": {
-                                          "type": "string",
-                                          "minLength": 1,
-                                          "maxLength": 2048
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 2048
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            }
+                                          ]
                                         }
                                       },
-                                      "runtimeInputs": {
-                                        "maxItems": 32,
-                                        "type": "array",
-                                        "items": {
+                                      "arguments": {
+                                        "type": "object",
+                                        "propertyNames": {
+                                          "type": "string",
+                                          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                                        },
+                                        "additionalProperties": {
                                           "type": "string",
                                           "pattern": "^[a-z][a-zA-Z0-9]*$"
                                         }
@@ -26113,7 +26333,7 @@
                                       "module",
                                       "symbol",
                                       "kwargs",
-                                      "runtimeInputs"
+                                      "arguments"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -26144,6 +26364,10 @@
                                   "type": "string",
                                   "pattern": "^[A-Z][A-Z0-9_]*$"
                                 }
+                              },
+                              "produces": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-zA-Z0-9]*$"
                               }
                             },
                             "required": [
@@ -26204,6 +26428,26 @@
                                       "pickle",
                                       "directory"
                                     ]
+                                  },
+                                  "cardinality": {
+                                    "type": "object",
+                                    "properties": {
+                                      "minimum": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 10000
+                                      },
+                                      "maximum": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 10000
+                                      }
+                                    },
+                                    "required": [
+                                      "minimum",
+                                      "maximum"
+                                    ],
+                                    "additionalProperties": false
                                   }
                                 },
                                 "required": [
@@ -26212,7 +26456,8 @@
                                   "owner",
                                   "kind",
                                   "path",
-                                  "format"
+                                  "format",
+                                  "cardinality"
                                 ],
                                 "additionalProperties": false
                               },
@@ -26241,6 +26486,10 @@
                                   "format": {
                                     "type": "string",
                                     "const": "json"
+                                  },
+                                  "value": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-zA-Z0-9]*$"
                                   }
                                 },
                                 "required": [
@@ -26248,7 +26497,8 @@
                                   "producedBy",
                                   "owner",
                                   "kind",
-                                  "format"
+                                  "format",
+                                  "value"
                                 ],
                                 "additionalProperties": false
                               }
@@ -26271,9 +26521,84 @@
                                 "pattern": "^[a-z][a-z0-9-]*$"
                               },
                               "selector": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 500
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "jsonpath"
+                                      },
+                                      "path": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 500
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "path"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "column"
+                                      },
+                                      "name": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "tuple"
+                                      },
+                                      "index": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 1000
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "index"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "ratio_line"
+                                      },
+                                      "prefix": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "prefix"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
                               },
                               "direction": {
                                 "type": "string",
@@ -26325,6 +26650,7 @@
                         "bindings",
                         "environment",
                         "anchors",
+                        "runtime",
                         "stages",
                         "launchStage",
                         "artifacts",
@@ -27420,7 +27746,7 @@
                     "properties": {
                       "recipeID": {
                         "type": "string",
-                        "pattern": "^[a-z][a-z0-9-]*-official-v1$"
+                        "pattern": "^[a-z][a-z0-9-]*-official-v2$"
                       },
                       "bindings": {
                         "type": "object",
@@ -29951,11 +30277,11 @@
                           "properties": {
                             "schemaVersion": {
                               "type": "number",
-                              "const": 1
+                              "const": 2
                             },
                             "recipeID": {
                               "type": "string",
-                              "pattern": "^[a-z][a-z0-9-]*-official-v1$"
+                              "pattern": "^[a-z][a-z0-9-]*-official-v2$"
                             },
                             "benchmark": {
                               "type": "string",
@@ -30060,6 +30386,46 @@
                                 "maxLength": 1000
                               }
                             },
+                            "runtime": {
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-zA-Z0-9]*$"
+                                  },
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "json",
+                                      "python_object",
+                                      "callable"
+                                    ]
+                                  },
+                                  "owner": {
+                                    "type": "string",
+                                    "enum": [
+                                      "runner",
+                                      "evaluator"
+                                    ]
+                                  },
+                                  "description": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 500
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "kind",
+                                  "owner",
+                                  "description"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
                             "stages": {
                               "minItems": 1,
                               "maxItems": 16,
@@ -30146,6 +30512,10 @@
                                             "type": "string",
                                             "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*$"
                                           },
+                                          "receiver": {
+                                            "type": "string",
+                                            "pattern": "^[a-z][a-zA-Z0-9]*$"
+                                          },
                                           "kwargs": {
                                             "type": "object",
                                             "propertyNames": {
@@ -30153,15 +30523,28 @@
                                               "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
                                             },
                                             "additionalProperties": {
-                                              "type": "string",
-                                              "minLength": 1,
-                                              "maxLength": 2048
+                                              "anyOf": [
+                                                {
+                                                  "type": "string",
+                                                  "minLength": 1,
+                                                  "maxLength": 2048
+                                                },
+                                                {
+                                                  "type": "number"
+                                                },
+                                                {
+                                                  "type": "boolean"
+                                                }
+                                              ]
                                             }
                                           },
-                                          "runtimeInputs": {
-                                            "maxItems": 32,
-                                            "type": "array",
-                                            "items": {
+                                          "arguments": {
+                                            "type": "object",
+                                            "propertyNames": {
+                                              "type": "string",
+                                              "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                                            },
+                                            "additionalProperties": {
                                               "type": "string",
                                               "pattern": "^[a-z][a-zA-Z0-9]*$"
                                             }
@@ -30173,7 +30556,7 @@
                                           "module",
                                           "symbol",
                                           "kwargs",
-                                          "runtimeInputs"
+                                          "arguments"
                                         ],
                                         "additionalProperties": false
                                       }
@@ -30204,6 +30587,10 @@
                                       "type": "string",
                                       "pattern": "^[A-Z][A-Z0-9_]*$"
                                     }
+                                  },
+                                  "produces": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-zA-Z0-9]*$"
                                   }
                                 },
                                 "required": [
@@ -30264,6 +30651,26 @@
                                           "pickle",
                                           "directory"
                                         ]
+                                      },
+                                      "cardinality": {
+                                        "type": "object",
+                                        "properties": {
+                                          "minimum": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 10000
+                                          },
+                                          "maximum": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 10000
+                                          }
+                                        },
+                                        "required": [
+                                          "minimum",
+                                          "maximum"
+                                        ],
+                                        "additionalProperties": false
                                       }
                                     },
                                     "required": [
@@ -30272,7 +30679,8 @@
                                       "owner",
                                       "kind",
                                       "path",
-                                      "format"
+                                      "format",
+                                      "cardinality"
                                     ],
                                     "additionalProperties": false
                                   },
@@ -30301,6 +30709,10 @@
                                       "format": {
                                         "type": "string",
                                         "const": "json"
+                                      },
+                                      "value": {
+                                        "type": "string",
+                                        "pattern": "^[a-z][a-zA-Z0-9]*$"
                                       }
                                     },
                                     "required": [
@@ -30308,7 +30720,8 @@
                                       "producedBy",
                                       "owner",
                                       "kind",
-                                      "format"
+                                      "format",
+                                      "value"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -30331,9 +30744,84 @@
                                     "pattern": "^[a-z][a-z0-9-]*$"
                                   },
                                   "selector": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": 500
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "const": "jsonpath"
+                                          },
+                                          "path": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 500
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "path"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "const": "column"
+                                          },
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "const": "tuple"
+                                          },
+                                          "index": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 1000
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "index"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "const": "ratio_line"
+                                          },
+                                          "prefix": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "prefix"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   },
                                   "direction": {
                                     "type": "string",
@@ -30385,6 +30873,7 @@
                             "bindings",
                             "environment",
                             "anchors",
+                            "runtime",
                             "stages",
                             "launchStage",
                             "artifacts",

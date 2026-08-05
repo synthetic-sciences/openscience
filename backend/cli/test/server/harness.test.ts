@@ -43,8 +43,8 @@ describe("/harness routes", () => {
     })
     expect(catalog.find((item) => item.id === "mle")?.recipe).toEqual({
       status: "source_verified",
-      id: "mlebench-official-v1",
-      schemaVersion: 1,
+      id: "mlebench-official-v2",
+      schemaVersion: 2,
       checkedAt: "2026-08-05",
     })
     expect(catalog.find((item) => item.id === "genebench")?.source).toMatchObject({
@@ -61,7 +61,7 @@ describe("/harness routes", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        recipeID: "mlebench-official-v1",
+        recipeID: "mlebench-official-v2",
         bindings: {
           competitionList: "fixtures/competitions.txt",
           dataDir: "fixtures/data",
@@ -73,7 +73,7 @@ describe("/harness routes", () => {
     expect(recipe.status).toBe(200)
     expect(await recipe.json()).toMatchObject({
       benchmark: "mle",
-      recipeID: "mlebench-official-v1",
+      recipeID: "mlebench-official-v2",
       entrypoint: "mlebench/cli.py",
       stages: [{ id: "prepare" }, { id: "grade" }],
     })
@@ -81,12 +81,12 @@ describe("/harness routes", () => {
     const biomni = await app.request("/benchmarks/biomni/recipe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recipeID: "biomni-official-v1", bindings: {} }),
+      body: JSON.stringify({ recipeID: "biomni-official-v2", bindings: {} }),
     })
     expect(biomni.status).toBe(200)
     expect(await biomni.json()).toMatchObject({
       benchmark: "biomni",
-      recipeID: "biomni-official-v1",
+      recipeID: "biomni-official-v2",
       entrypoint: "biomni/eval/biomni_eval1.py",
       artifacts: [{ id: "rewards", kind: "return", producedBy: "evaluate" }],
     })

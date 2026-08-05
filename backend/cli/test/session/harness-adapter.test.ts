@@ -188,7 +188,7 @@ describe("benchmark adapters", () => {
       recipe,
     })
     expect(bound.recipe).toMatchObject({
-      recipeID: "mlebench-official-v1",
+      recipeID: "mlebench-official-v2",
       entrypoint: "mlebench/cli.py",
       recipeSHA256: launch.runner.recipeSHA256,
       driverSHA256: launch.runner.driverSHA256,

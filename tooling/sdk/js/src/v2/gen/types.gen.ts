@@ -7543,7 +7543,7 @@ export type HarnessBenchmarksResponses = {
       | {
           status: "source_verified"
           id: string
-          schemaVersion: 1
+          schemaVersion: 2
           checkedAt: string
         }
       | {
@@ -7600,7 +7600,7 @@ export type HarnessBenchmarkRecipeResponses = {
    * Immutable source-verified benchmark recipe
    */
   200: {
-    schemaVersion: 1
+    schemaVersion: 2
     recipeID: string
     benchmark:
       | "statistics"
@@ -7639,6 +7639,12 @@ export type HarnessBenchmarkRecipeResponses = {
       files: Array<string>
     }
     anchors: Array<string>
+    runtime: Array<{
+      name: string
+      kind: "json" | "python_object" | "callable"
+      owner: "runner" | "evaluator"
+      description: string
+    }>
     stages: Array<{
       id: string
       role: "prepare" | "execute" | "evaluate" | "aggregate"
@@ -7654,14 +7660,18 @@ export type HarnessBenchmarkRecipeResponses = {
             entrypoint: string
             module: string
             symbol: string
+            receiver?: string
             kwargs: {
+              [key: string]: string | number | boolean
+            }
+            arguments: {
               [key: string]: string
             }
-            runtimeInputs: Array<string>
           }
       inputs: Array<string>
       outputs: Array<string>
       environment: Array<string>
+      produces?: string
     }>
     launchStage: string
     artifacts: Array<
@@ -7672,6 +7682,10 @@ export type HarnessBenchmarkRecipeResponses = {
           kind: "file"
           path: string
           format: "json" | "jsonl" | "csv" | "text" | "pickle" | "directory"
+          cardinality: {
+            minimum: number
+            maximum: number
+          }
         }
       | {
           id: string
@@ -7679,12 +7693,29 @@ export type HarnessBenchmarkRecipeResponses = {
           owner: "runner" | "evaluator"
           kind: "return"
           format: "json"
+          value: string
         }
     >
     metrics: Array<{
       name: string
       artifact: string
-      selector: string
+      selector:
+        | {
+            kind: "jsonpath"
+            path: string
+          }
+        | {
+            kind: "column"
+            name: string
+          }
+        | {
+            kind: "tuple"
+            index: number
+          }
+        | {
+            kind: "ratio_line"
+            prefix: string
+          }
       direction: "maximize" | "minimize" | "pass"
       aggregation: "identity" | "mean" | "sum" | "count"
     }>
@@ -10613,7 +10644,7 @@ export type HarnessBindResponses = {
       }
     }
     recipe?: {
-      schemaVersion: 1
+      schemaVersion: 2
       recipeID: string
       benchmark:
         | "statistics"
@@ -10652,6 +10683,12 @@ export type HarnessBindResponses = {
         files: Array<string>
       }
       anchors: Array<string>
+      runtime: Array<{
+        name: string
+        kind: "json" | "python_object" | "callable"
+        owner: "runner" | "evaluator"
+        description: string
+      }>
       stages: Array<{
         id: string
         role: "prepare" | "execute" | "evaluate" | "aggregate"
@@ -10667,14 +10704,18 @@ export type HarnessBindResponses = {
               entrypoint: string
               module: string
               symbol: string
+              receiver?: string
               kwargs: {
+                [key: string]: string | number | boolean
+              }
+              arguments: {
                 [key: string]: string
               }
-              runtimeInputs: Array<string>
             }
         inputs: Array<string>
         outputs: Array<string>
         environment: Array<string>
+        produces?: string
       }>
       launchStage: string
       artifacts: Array<
@@ -10685,6 +10726,10 @@ export type HarnessBindResponses = {
             kind: "file"
             path: string
             format: "json" | "jsonl" | "csv" | "text" | "pickle" | "directory"
+            cardinality: {
+              minimum: number
+              maximum: number
+            }
           }
         | {
             id: string
@@ -10692,12 +10737,29 @@ export type HarnessBindResponses = {
             owner: "runner" | "evaluator"
             kind: "return"
             format: "json"
+            value: string
           }
       >
       metrics: Array<{
         name: string
         artifact: string
-        selector: string
+        selector:
+          | {
+              kind: "jsonpath"
+              path: string
+            }
+          | {
+              kind: "column"
+              name: string
+            }
+          | {
+              kind: "tuple"
+              index: number
+            }
+          | {
+              kind: "ratio_line"
+              prefix: string
+            }
         direction: "maximize" | "minimize" | "pass"
         aggregation: "identity" | "mean" | "sum" | "count"
       }>
@@ -11306,7 +11368,7 @@ export type HarnessContractResponses = {
       }
     }
     recipe?: {
-      schemaVersion: 1
+      schemaVersion: 2
       recipeID: string
       benchmark:
         | "statistics"
@@ -11345,6 +11407,12 @@ export type HarnessContractResponses = {
         files: Array<string>
       }
       anchors: Array<string>
+      runtime: Array<{
+        name: string
+        kind: "json" | "python_object" | "callable"
+        owner: "runner" | "evaluator"
+        description: string
+      }>
       stages: Array<{
         id: string
         role: "prepare" | "execute" | "evaluate" | "aggregate"
@@ -11360,14 +11428,18 @@ export type HarnessContractResponses = {
               entrypoint: string
               module: string
               symbol: string
+              receiver?: string
               kwargs: {
+                [key: string]: string | number | boolean
+              }
+              arguments: {
                 [key: string]: string
               }
-              runtimeInputs: Array<string>
             }
         inputs: Array<string>
         outputs: Array<string>
         environment: Array<string>
+        produces?: string
       }>
       launchStage: string
       artifacts: Array<
@@ -11378,6 +11450,10 @@ export type HarnessContractResponses = {
             kind: "file"
             path: string
             format: "json" | "jsonl" | "csv" | "text" | "pickle" | "directory"
+            cardinality: {
+              minimum: number
+              maximum: number
+            }
           }
         | {
             id: string
@@ -11385,12 +11461,29 @@ export type HarnessContractResponses = {
             owner: "runner" | "evaluator"
             kind: "return"
             format: "json"
+            value: string
           }
       >
       metrics: Array<{
         name: string
         artifact: string
-        selector: string
+        selector:
+          | {
+              kind: "jsonpath"
+              path: string
+            }
+          | {
+              kind: "column"
+              name: string
+            }
+          | {
+              kind: "tuple"
+              index: number
+            }
+          | {
+              kind: "ratio_line"
+              prefix: string
+            }
         direction: "maximize" | "minimize" | "pass"
         aggregation: "identity" | "mean" | "sum" | "count"
       }>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run Benchmark Pilot"
+  short_description: "Execute sealed evaluator-owned benchmark pilots"
+  default_prompt: "Use $run-benchmark-pilot to prepare and execute a source-pinned official benchmark pilot."

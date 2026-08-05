@@ -6,6 +6,7 @@ export namespace HarnessRecipe {
   const Hash = z.string().regex(/^[a-f0-9]{64}$/)
   const Name = z.string().regex(/^[a-z][a-zA-Z0-9]*$/)
   const Key = z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/)
+  const Scalar = z.union([z.string().min(1).max(2_048), z.number().finite(), z.boolean()])
   const Rel = z
     .string()
     .min(1)
@@ -80,11 +81,9 @@ export namespace HarnessRecipe {
         entrypoint: Rel,
         module: z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_.]*$/),
         symbol: z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_.]*$/),
-        kwargs: z.record(Key, z.string().min(1).max(2_048)),
-        runtimeInputs: z
-          .array(Name)
-          .max(32)
-          .refine((items) => new Set(items).size === items.length, "Runtime inputs must be unique"),
+        receiver: Name.optional(),
+        kwargs: z.record(Key, Scalar),
+        arguments: z.record(Key, Name),
       })
       .strict(),
   ])
@@ -97,6 +96,16 @@ export namespace HarnessRecipe {
       inputs: z.array(Template).max(64),
       outputs: z.array(Template).max(64),
       environment: z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/)).max(64),
+      produces: Name.optional(),
+    })
+    .strict()
+
+  export const Runtime = z
+    .object({
+      name: Name,
+      kind: z.enum(["json", "python_object", "callable"]),
+      owner: z.enum(["runner", "evaluator"]),
+      description: z.string().min(1).max(500),
     })
     .strict()
 
@@ -112,6 +121,13 @@ export namespace HarnessRecipe {
         kind: z.literal("file"),
         path: Template,
         format: z.enum(["json", "jsonl", "csv", "text", "pickle", "directory"]),
+        cardinality: z
+          .object({
+            minimum: z.number().int().min(1).max(10_000),
+            maximum: z.number().int().min(1).max(10_000),
+          })
+          .strict()
+          .refine((value) => value.minimum <= value.maximum, "Artifact cardinality minimum exceeds its maximum"),
       })
       .strict(),
     z
@@ -119,15 +135,23 @@ export namespace HarnessRecipe {
         ...ArtifactBase,
         kind: z.literal("return"),
         format: z.literal("json"),
+        value: Name,
       })
       .strict(),
+  ])
+
+  export const Selector = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("jsonpath"), path: z.string().min(1).max(500) }).strict(),
+    z.object({ kind: z.literal("column"), name: z.string().min(1).max(200) }).strict(),
+    z.object({ kind: z.literal("tuple"), index: z.number().int().min(0).max(1_000) }).strict(),
+    z.object({ kind: z.literal("ratio_line"), prefix: z.string().min(1).max(200) }).strict(),
   ])
 
   export const Metric = z
     .object({
       name: z.string().regex(/^[a-z][a-z0-9_.-]*$/),
       artifact: z.string().regex(/^[a-z][a-z0-9-]*$/),
-      selector: z.string().min(1).max(500),
+      selector: Selector,
       direction: z.enum(["maximize", "minimize", "pass"]),
       aggregation: z.enum(["identity", "mean", "sum", "count"]),
     })
@@ -135,8 +159,8 @@ export namespace HarnessRecipe {
 
   export const Recipe = z
     .object({
-      schemaVersion: z.literal(1),
-      id: z.string().regex(/^[a-z][a-z0-9-]*-official-v1$/),
+      schemaVersion: z.literal(2),
+      id: z.string().regex(/^[a-z][a-z0-9-]*-official-v2$/),
       benchmark: HarnessBenchmark.Id,
       maturity: z.literal("source_verified"),
       environment: z
@@ -148,6 +172,7 @@ export namespace HarnessRecipe {
         .strict(),
       anchors: z.array(Rel).min(1).max(32),
       bindings: z.array(Binding).max(32),
+      runtime: z.array(Runtime).max(32),
       stages: z.array(Stage).min(1).max(16),
       launchStage: z.string().regex(/^[a-z][a-z0-9-]*$/),
       artifacts: z.array(Artifact).min(1).max(32),
@@ -159,10 +184,14 @@ export namespace HarnessRecipe {
       const names = value.bindings.map((item) => item.name)
       const stages = value.stages.map((item) => item.id)
       const artifacts = value.artifacts.map((item) => item.id)
+      const runtime = value.runtime.map((item) => item.name)
+      const produced = value.stages.flatMap((item) => (item.produces ? [item.produces] : []))
       const fields = value.stages
         .flatMap((stage) => [
           ...(stage.driver.kind === "argv" ? [stage.driver.entrypoint, stage.driver.cwd, ...stage.driver.argv] : []),
-          ...(stage.driver.kind === "python_api" ? Object.values(stage.driver.kwargs) : []),
+          ...(stage.driver.kind === "python_api"
+            ? Object.values(stage.driver.kwargs).filter((item): item is string => typeof item === "string")
+            : []),
           ...stage.inputs,
           ...stage.outputs,
         ])
@@ -180,6 +209,44 @@ export namespace HarnessRecipe {
       if (new Set(artifacts).size !== artifacts.length) {
         ctx.addIssue({ code: "custom", path: ["artifacts"], message: "Recipe artifacts must be unique" })
       }
+      if (new Set(runtime).size !== runtime.length) {
+        ctx.addIssue({ code: "custom", path: ["runtime"], message: "Recipe runtime inputs must be unique" })
+      }
+      if (new Set(produced).size !== produced.length || produced.some((name) => runtime.includes(name))) {
+        ctx.addIssue({ code: "custom", path: ["stages"], message: "Recipe values must be unique" })
+      }
+      const available = new Set(runtime)
+      for (const stage of value.stages) {
+        if (stage.driver.kind === "argv" && stage.produces) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["stages"],
+            message: `Argv stage ${stage.id} cannot produce a Python value`,
+          })
+        }
+        if (stage.driver.kind === "python_api") {
+          const driver = stage.driver
+          const overlap = Object.keys(driver.kwargs).filter((name) => name in driver.arguments)
+          if (overlap.length) {
+            ctx.addIssue({
+              code: "custom",
+              path: ["stages"],
+              message: `Python stage ${stage.id} binds parameters twice: ${overlap.toSorted().join(", ")}`,
+            })
+          }
+          const arguments_ = Object.values(driver.arguments)
+          const needs = [...arguments_, ...(driver.receiver ? [driver.receiver] : [])]
+          const missing = needs.filter((name) => !available.has(name))
+          if (missing.length) {
+            ctx.addIssue({
+              code: "custom",
+              path: ["stages"],
+              message: `Python stage ${stage.id} references unavailable values: ${missing.toSorted().join(", ")}`,
+            })
+          }
+        }
+        if (stage.produces) available.add(stage.produces)
+      }
       for (const item of value.artifacts) {
         const index = stages.indexOf(item.producedBy)
         if (index < 0) {
@@ -193,10 +260,31 @@ export namespace HarnessRecipe {
             message: `Return artifact ${item.id} must come from a Python API stage`,
           })
         }
+        if (item.kind === "return" && value.stages[index]?.produces !== item.value) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["artifacts"],
+            message: `Return artifact ${item.id} must name its producer value`,
+          })
+        }
       }
       for (const item of value.metrics) {
-        if (artifacts.includes(item.artifact)) continue
-        ctx.addIssue({ code: "custom", path: ["metrics"], message: `Metric ${item.name} has no source artifact` })
+        const artifact = value.artifacts.find((candidate) => candidate.id === item.artifact)
+        if (!artifact) {
+          ctx.addIssue({ code: "custom", path: ["metrics"], message: `Metric ${item.name} has no source artifact` })
+          continue
+        }
+        const compatible =
+          (item.selector.kind === "jsonpath" && artifact.format === "json") ||
+          (item.selector.kind === "column" && artifact.format === "csv") ||
+          (item.selector.kind === "tuple" && artifact.format === "pickle") ||
+          (item.selector.kind === "ratio_line" && artifact.format === "text")
+        if (compatible) continue
+        ctx.addIssue({
+          code: "custom",
+          path: ["metrics"],
+          message: `Metric ${item.name} selector is incompatible with ${artifact.format}`,
+        })
       }
       for (const name of used) {
         if (names.includes(name)) continue
@@ -207,7 +295,7 @@ export namespace HarnessRecipe {
 
   export const Selection = z
     .object({
-      recipeID: z.string().regex(/^[a-z][a-z0-9-]*-official-v1$/),
+      recipeID: z.string().regex(/^[a-z][a-z0-9-]*-official-v2$/),
       bindings: z.record(Name, z.string().min(1).max(2_048)),
     })
     .strict()
@@ -215,8 +303,8 @@ export namespace HarnessRecipe {
 
   export const Materialized = z
     .object({
-      schemaVersion: z.literal(1),
-      recipeID: z.string().regex(/^[a-z][a-z0-9-]*-official-v1$/),
+      schemaVersion: z.literal(2),
+      recipeID: z.string().regex(/^[a-z][a-z0-9-]*-official-v2$/),
       benchmark: HarnessBenchmark.Id,
       recipeSHA256: Hash,
       bindingsSHA256: Hash,
@@ -225,6 +313,7 @@ export namespace HarnessRecipe {
       bindings: z.record(Name, z.string().min(1).max(2_048)),
       environment: Recipe.shape.environment,
       anchors: Recipe.shape.anchors,
+      runtime: Recipe.shape.runtime,
       stages: z.array(Stage).min(1).max(16),
       launchStage: z.string().regex(/^[a-z][a-z0-9-]*$/),
       artifacts: z.array(Artifact).min(1).max(32),
@@ -238,8 +327,8 @@ export namespace HarnessRecipe {
 
   export const catalog = {
     bixbench: recipe({
-      schemaVersion: 1,
-      id: "bixbench-official-v1",
+      schemaVersion: 2,
+      id: "bixbench-official-v2",
       benchmark: "bixbench",
       maturity: "source_verified",
       environment: { manager: "uv", python: ">=3.12", files: ["pyproject.toml", "uv.lock"] },
@@ -281,6 +370,7 @@ export namespace HarnessRecipe {
           default: "bixbench-v1.5_results/eval_df.csv",
         },
       ],
+      runtime: [],
       stages: [
         {
           id: "generate",
@@ -323,6 +413,7 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "{evalArtifact}",
           format: "csv",
+          cardinality: { minimum: 1, maximum: 1 },
           producedBy: "postprocess",
           owner: "evaluator",
         },
@@ -331,7 +422,7 @@ export namespace HarnessRecipe {
         {
           name: "accuracy",
           artifact: "evaluations",
-          selector: "column:correct",
+          selector: { kind: "column", name: "correct" },
           direction: "maximize",
           aggregation: "mean",
         },
@@ -342,13 +433,21 @@ export namespace HarnessRecipe {
       ],
     }),
     biomni: recipe({
-      schemaVersion: 1,
-      id: "biomni-official-v1",
+      schemaVersion: 2,
+      id: "biomni-official-v2",
       benchmark: "biomni",
       maturity: "source_verified",
       environment: { manager: "setuptools", python: ">=3.11", files: ["pyproject.toml"] },
       anchors: ["README.md", "pyproject.toml", "biomni/eval/biomni_eval1.py"],
       bindings: [],
+      runtime: [
+        {
+          name: "evaluations",
+          kind: "json",
+          owner: "runner",
+          description: "Candidate evaluation records aligned to the immutable Biomni-Eval1 task order",
+        },
+      ],
       stages: [
         {
           id: "load",
@@ -359,11 +458,12 @@ export namespace HarnessRecipe {
             module: "biomni.eval",
             symbol: "BiomniEval1",
             kwargs: {},
-            runtimeInputs: [],
+            arguments: {},
           },
           inputs: [],
           outputs: [],
           environment: [],
+          produces: "evaluator",
         },
         {
           id: "evaluate",
@@ -373,12 +473,14 @@ export namespace HarnessRecipe {
             entrypoint: "biomni/eval/biomni_eval1.py",
             module: "biomni.eval",
             symbol: "BiomniEval1.batch_evaluate",
+            receiver: "evaluator",
             kwargs: {},
-            runtimeInputs: ["evaluator", "evaluations"],
+            arguments: { evaluations: "evaluations" },
           },
           inputs: [],
           outputs: [],
           environment: [],
+          produces: "rewards",
         },
       ],
       launchStage: "evaluate",
@@ -389,13 +491,14 @@ export namespace HarnessRecipe {
           format: "json",
           producedBy: "evaluate",
           owner: "evaluator",
+          value: "rewards",
         },
       ],
       metrics: [
         {
           name: "mean-reward",
           artifact: "rewards",
-          selector: "$[*]",
+          selector: { kind: "jsonpath", path: "$[*]" },
           direction: "maximize",
           aggregation: "mean",
         },
@@ -407,8 +510,8 @@ export namespace HarnessRecipe {
       ],
     }),
     pde: recipe({
-      schemaVersion: 1,
-      id: "pdebench-official-v1",
+      schemaVersion: 2,
+      id: "pdebench-official-v2",
       benchmark: "pde",
       maturity: "source_verified",
       environment: { manager: "hatch", python: ">=3.9,<3.11", files: ["pyproject.toml"] },
@@ -436,6 +539,7 @@ export namespace HarnessRecipe {
           ],
         },
       ],
+      runtime: [],
       stages: [
         {
           id: "evaluate",
@@ -466,38 +570,51 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "pdebench/models/{datasetStem}_FNO.pickle",
           format: "pickle",
+          cardinality: { minimum: 1, maximum: 1 },
           producedBy: "evaluate",
           owner: "evaluator",
         },
       ],
       metrics: [
-        { name: "rmse", artifact: "errors", selector: "tuple[0]", direction: "minimize", aggregation: "mean" },
+        {
+          name: "rmse",
+          artifact: "errors",
+          selector: { kind: "tuple", index: 0 },
+          direction: "minimize",
+          aggregation: "mean",
+        },
         {
           name: "normalized-rmse",
           artifact: "errors",
-          selector: "tuple[1]",
+          selector: { kind: "tuple", index: 1 },
           direction: "minimize",
           aggregation: "mean",
         },
         {
           name: "conserved-variable-error",
           artifact: "errors",
-          selector: "tuple[2]",
+          selector: { kind: "tuple", index: 2 },
           direction: "minimize",
           aggregation: "mean",
         },
-        { name: "maximum-error", artifact: "errors", selector: "tuple[3]", direction: "minimize", aggregation: "mean" },
+        {
+          name: "maximum-error",
+          artifact: "errors",
+          selector: { kind: "tuple", index: 3 },
+          direction: "minimize",
+          aggregation: "mean",
+        },
         {
           name: "boundary-error",
           artifact: "errors",
-          selector: "tuple[4]",
+          selector: { kind: "tuple", index: 4 },
           direction: "minimize",
           aggregation: "mean",
         },
         {
           name: "fourier-band-error",
           artifact: "errors",
-          selector: "tuple[5]",
+          selector: { kind: "tuple", index: 5 },
           direction: "minimize",
           aggregation: "mean",
         },
@@ -509,8 +626,8 @@ export namespace HarnessRecipe {
       ],
     }),
     chembench: recipe({
-      schemaVersion: 1,
-      id: "chembench-official-v1",
+      schemaVersion: 2,
+      id: "chembench-official-v2",
       benchmark: "chembench",
       maturity: "source_verified",
       environment: { manager: "setuptools", python: ">=3.10", files: ["pyproject.toml"] },
@@ -541,6 +658,20 @@ export namespace HarnessRecipe {
           maximum: 1024,
         },
       ],
+      runtime: [
+        {
+          name: "prompter",
+          kind: "python_object",
+          owner: "runner",
+          description: "Candidate model prompter implementing the pinned ChemBench BasePrompter contract",
+        },
+        {
+          name: "modelKwargs",
+          kind: "json",
+          owner: "runner",
+          description: "Candidate model keyword arguments passed unchanged to the ChemBench prompter",
+        },
+      ],
       stages: [
         {
           id: "load",
@@ -551,11 +682,12 @@ export namespace HarnessRecipe {
             module: "chembench.evaluate",
             symbol: "ChemBenchmark.from_huggingface",
             kwargs: { dataset_name: "{dataset}", report_dir: "{reportDir}", run_id: "{runID}" },
-            runtimeInputs: [],
+            arguments: {},
           },
           inputs: [],
           outputs: ["{reportDir}"],
           environment: [],
+          produces: "benchmark",
         },
         {
           id: "evaluate",
@@ -565,12 +697,14 @@ export namespace HarnessRecipe {
             entrypoint: "src/chembench/evaluate.py",
             module: "chembench.evaluate",
             symbol: "ChemBenchmark.bench",
+            receiver: "benchmark",
             kwargs: { batch_size: "{batchSize}" },
-            runtimeInputs: ["prompter", "modelKwargs"],
+            arguments: { prompter: "prompter", model_kwargs: "modelKwargs" },
           },
           inputs: ["{reportDir}"],
           outputs: ["{reportDir}/submission_results.json"],
           environment: [],
+          produces: "results",
         },
         {
           id: "submit",
@@ -580,8 +714,9 @@ export namespace HarnessRecipe {
             entrypoint: "src/chembench/evaluate.py",
             module: "chembench.evaluate",
             symbol: "ChemBenchmark.submit",
+            receiver: "benchmark",
             kwargs: { submission_path: "{reportDir}/submission_results.json" },
-            runtimeInputs: ["results"],
+            arguments: { results: "results" },
           },
           inputs: ["{reportDir}"],
           outputs: ["{reportDir}/submission_results.json"],
@@ -595,6 +730,7 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "{reportDir}/submission_results.json",
           format: "json",
+          cardinality: { minimum: 1, maximum: 1 },
           producedBy: "submit",
           owner: "evaluator",
         },
@@ -603,7 +739,7 @@ export namespace HarnessRecipe {
         {
           name: "all-correct",
           artifact: "submission",
-          selector: "$[*].results[0].metrics.all_correct",
+          selector: { kind: "jsonpath", path: "$[*].results[0].metrics.all_correct" },
           direction: "maximize",
           aggregation: "mean",
         },
@@ -614,8 +750,8 @@ export namespace HarnessRecipe {
       ],
     }),
     matscibench: recipe({
-      schemaVersion: 1,
-      id: "matscibench-official-v1",
+      schemaVersion: 2,
+      id: "matscibench-official-v2",
       benchmark: "matscibench",
       maturity: "source_verified",
       environment: { manager: "conda", python: "3.12.9", files: ["environment.yml"] },
@@ -656,6 +792,7 @@ export namespace HarnessRecipe {
           maximum: 131072,
         },
       ],
+      runtime: [],
       stages: [
         {
           id: "evaluate",
@@ -691,6 +828,7 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "{outputDir}/gemini-2.5-flash_{method}_*.csv",
           format: "csv",
+          cardinality: { minimum: 1, maximum: 1 },
           producedBy: "evaluate",
           owner: "evaluator",
         },
@@ -699,14 +837,14 @@ export namespace HarnessRecipe {
         {
           name: "accuracy",
           artifact: "decisions",
-          selector: "column:is_correct",
+          selector: { kind: "column", name: "is_correct" },
           direction: "maximize",
           aggregation: "mean",
         },
         {
           name: "rule-accuracy",
           artifact: "decisions",
-          selector: "column:rule_is_correct",
+          selector: { kind: "column", name: "rule_is_correct" },
           direction: "maximize",
           aggregation: "mean",
         },
@@ -717,8 +855,8 @@ export namespace HarnessRecipe {
       ],
     }),
     mle: recipe({
-      schemaVersion: 1,
-      id: "mlebench-official-v1",
+      schemaVersion: 2,
+      id: "mlebench-official-v2",
       benchmark: "mle",
       maturity: "source_verified",
       environment: { manager: "setuptools", python: ">=3.11", files: ["pyproject.toml"] },
@@ -734,6 +872,7 @@ export namespace HarnessRecipe {
         { name: "submissionManifest", kind: "path", description: "JSONL mapping competition IDs to submission CSVs" },
         { name: "outputDir", kind: "path", description: "Evaluator-owned grading report directory" },
       ],
+      runtime: [],
       stages: [
         {
           id: "prepare",
@@ -778,6 +917,7 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "{outputDir}/*_grading_report.json",
           format: "json",
+          cardinality: { minimum: 1, maximum: 1 },
           producedBy: "grade",
           owner: "evaluator",
         },
@@ -786,21 +926,21 @@ export namespace HarnessRecipe {
         {
           name: "total-medals",
           artifact: "grading-report",
-          selector: "$.total_medals",
+          selector: { kind: "jsonpath", path: "$.total_medals" },
           direction: "maximize",
           aggregation: "identity",
         },
         {
           name: "above-median",
           artifact: "grading-report",
-          selector: "$.total_above_median",
+          selector: { kind: "jsonpath", path: "$.total_above_median" },
           direction: "maximize",
           aggregation: "identity",
         },
         {
           name: "valid-submissions",
           artifact: "grading-report",
-          selector: "$.total_valid_submissions",
+          selector: { kind: "jsonpath", path: "$.total_valid_submissions" },
           direction: "maximize",
           aggregation: "identity",
         },
@@ -811,8 +951,8 @@ export namespace HarnessRecipe {
       ],
     }),
     ale: recipe({
-      schemaVersion: 1,
-      id: "alebench-official-v1",
+      schemaVersion: 2,
+      id: "alebench-official-v2",
       benchmark: "ale",
       maturity: "source_verified",
       environment: { manager: "uv", python: ">=3.10,<3.15", files: ["pyproject.toml", "uv.lock"] },
@@ -836,6 +976,7 @@ export namespace HarnessRecipe {
           choices: ["201907", "202301", "202510"],
         },
       ],
+      runtime: [],
       stages: [
         {
           id: "evaluate",
@@ -866,6 +1007,7 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "{rootPath}/*/results/final_results.json",
           format: "json",
+          cardinality: { minimum: 1, maximum: 100 },
           producedBy: "evaluate",
           owner: "evaluator",
         },
@@ -874,6 +1016,7 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "{rootPath}/*/results/total_cost.json",
           format: "json",
+          cardinality: { minimum: 1, maximum: 100 },
           producedBy: "evaluate",
           owner: "evaluator",
         },
@@ -882,21 +1025,21 @@ export namespace HarnessRecipe {
         {
           name: "performance",
           artifact: "results",
-          selector: "$.self_refine_16.performance",
+          selector: { kind: "jsonpath", path: "$.self_refine_16.performance" },
           direction: "maximize",
           aggregation: "mean",
         },
         {
           name: "rank",
           artifact: "results",
-          selector: "$.self_refine_16.rank",
+          selector: { kind: "jsonpath", path: "$.self_refine_16.rank" },
           direction: "minimize",
           aggregation: "mean",
         },
         {
           name: "total-cost",
           artifact: "costs",
-          selector: "$.self_refine_16.total_cost",
+          selector: { kind: "jsonpath", path: "$.self_refine_16.total_cost" },
           direction: "minimize",
           aggregation: "sum",
         },
@@ -907,13 +1050,14 @@ export namespace HarnessRecipe {
       ],
     }),
     researchclaw: recipe({
-      schemaVersion: 1,
-      id: "researchclawbench-official-v1",
+      schemaVersion: 2,
+      id: "researchclawbench-official-v2",
       benchmark: "researchclaw",
       maturity: "source_verified",
       environment: { manager: "pip", python: ">=3.10", files: ["evaluation/requirements.txt"] },
       anchors: ["evaluation/cli_eval.py", "evaluation/run_task.py", "evaluation/score.py", "evaluation/config.py"],
       bindings: [{ name: "config", kind: "path", description: "Frozen ResearchClawBench batch-evaluation YAML" }],
+      runtime: [],
       stages: [
         {
           id: "preflight",
@@ -956,21 +1100,6 @@ export namespace HarnessRecipe {
             "JUDGE_API_KEY",
           ],
         },
-        {
-          id: "score",
-          role: "evaluate",
-          driver: {
-            kind: "python_api",
-            entrypoint: "evaluation/score.py",
-            module: "evaluation.score",
-            symbol: "score_workspace",
-            kwargs: {},
-            runtimeInputs: ["workspace"],
-          },
-          inputs: ["workspaces/cli_runs/cli_*"],
-          outputs: ["workspaces/cli_runs/cli_*/*/_score.json"],
-          environment: ["JUDGE_MODEL_NAME", "JUDGE_API_BASE", "JUDGE_API_KEY"],
-        },
       ],
       launchStage: "run",
       artifacts: [
@@ -979,7 +1108,8 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "workspaces/cli_runs/cli_*/*/_score.json",
           format: "json",
-          producedBy: "score",
+          cardinality: { minimum: 1, maximum: 10_000 },
+          producedBy: "run",
           owner: "evaluator",
         },
       ],
@@ -987,7 +1117,7 @@ export namespace HarnessRecipe {
         {
           name: "total-score",
           artifact: "score",
-          selector: "$.total_score",
+          selector: { kind: "jsonpath", path: "$.total_score" },
           direction: "maximize",
           aggregation: "mean",
         },
@@ -998,8 +1128,8 @@ export namespace HarnessRecipe {
       ],
     }),
     paperbench: recipe({
-      schemaVersion: 1,
-      id: "paperbench-official-v1",
+      schemaVersion: 2,
+      id: "paperbench-official-v2",
       benchmark: "paperbench",
       maturity: "source_verified",
       environment: {
@@ -1063,6 +1193,7 @@ export namespace HarnessRecipe {
           maximum: 999,
         },
       ],
+      runtime: [],
       stages: [
         {
           id: "grade",
@@ -1098,16 +1229,23 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "project/paperbench/{outputDir}/grader_output.json",
           format: "json",
+          cardinality: { minimum: 1, maximum: 1 },
           producedBy: "grade",
           owner: "evaluator",
         },
       ],
       metrics: [
-        { name: "score", artifact: "grade", selector: "$.score", direction: "maximize", aggregation: "identity" },
+        {
+          name: "score",
+          artifact: "grade",
+          selector: { kind: "jsonpath", path: "$.score" },
+          direction: "maximize",
+          aggregation: "identity",
+        },
         {
           name: "invalid-leaves",
           artifact: "grade",
-          selector: "$.num_invalid_leaf_nodes",
+          selector: { kind: "jsonpath", path: "$.num_invalid_leaf_nodes" },
           direction: "minimize",
           aggregation: "identity",
         },
@@ -1118,8 +1256,8 @@ export namespace HarnessRecipe {
       ],
     }),
     scicode: recipe({
-      schemaVersion: 1,
-      id: "scicode-official-v1",
+      schemaVersion: 2,
+      id: "scicode-official-v2",
       benchmark: "scicode",
       maturity: "source_verified",
       environment: { manager: "setuptools", python: ">=3.10", files: ["pyproject.toml"] },
@@ -1142,6 +1280,7 @@ export namespace HarnessRecipe {
           choices: ["validation", "test"],
         },
       ],
+      runtime: [],
       stages: [
         {
           id: "evaluate",
@@ -1180,6 +1319,7 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "{outputDir}/openscience_without_background.txt",
           format: "text",
+          cardinality: { minimum: 1, maximum: 1 },
           producedBy: "evaluate",
           owner: "evaluator",
         },
@@ -1188,6 +1328,7 @@ export namespace HarnessRecipe {
           kind: "file",
           path: "{outputDir}/openscience_without_background.json",
           format: "json",
+          cardinality: { minimum: 1, maximum: 1 },
           producedBy: "evaluate",
           owner: "evaluator",
         },
@@ -1196,14 +1337,14 @@ export namespace HarnessRecipe {
         {
           name: "problem-pass-rate",
           artifact: "summary",
-          selector: "line:correct problems",
+          selector: { kind: "ratio_line", prefix: "correct problems:" },
           direction: "maximize",
           aggregation: "identity",
         },
         {
           name: "step-pass-rate",
           artifact: "summary",
-          selector: "line:correct steps",
+          selector: { kind: "ratio_line", prefix: "correct steps:" },
           direction: "maximize",
           aggregation: "identity",
         },
@@ -1219,6 +1360,14 @@ export namespace HarnessRecipe {
 
   const replace = (value: string, bindings: Record<string, string>) =>
     value.replace(/\{([a-z][a-zA-Z0-9]*)\}/g, (_, name: string) => bindings[name]!)
+
+  const parameter = (value: string | number | boolean, bindings: Record<string, string>, definitions: Binding[]) => {
+    if (typeof value !== "string") return value
+    const match = value.match(/^\{([a-z][a-zA-Z0-9]*)\}$/)
+    const binding = match ? definitions.find((item) => item.name === match[1]) : undefined
+    if (binding?.kind === "integer") return Number(bindings[binding.name])
+    return replace(value, bindings)
+  }
 
   const validate = (binding: Binding, value: string) => {
     if (value.includes("\0")) throw new Error(`Recipe binding ${binding.name} contains a null byte`)
@@ -1285,7 +1434,10 @@ export namespace HarnessRecipe {
             : {
                 ...stage.driver,
                 kwargs: Object.fromEntries(
-                  Object.entries(stage.driver.kwargs).map(([key, value]) => [key, replace(value, bindings)]),
+                  Object.entries(stage.driver.kwargs).map(([key, value]) => [
+                    key,
+                    parameter(value, bindings, source.bindings),
+                  ]),
                 ),
               },
         inputs: stage.inputs.map((item) => replace(item, bindings)),
@@ -1294,7 +1446,7 @@ export namespace HarnessRecipe {
     )
     const launch = stages.find((stage) => stage.id === source.launchStage)!
     return Materialized.parse({
-      schemaVersion: 1,
+      schemaVersion: 2,
       recipeID: source.id,
       benchmark: source.benchmark,
       recipeSHA256: digest(source),
@@ -1304,6 +1456,7 @@ export namespace HarnessRecipe {
       bindings,
       environment: source.environment,
       anchors: source.anchors,
+      runtime: source.runtime,
       stages,
       launchStage: source.launchStage,
       artifacts: source.artifacts.map((item) =>

@@ -104,12 +104,12 @@ async function launchFixture() {
   const command = ["python", "benchmark/run.py", "--task", "task-17"]
   const driver = { kind: "argv", entrypoint: "benchmark/run.py", cwd: ".", argv: command }
   const recipe = path.join(dir, "recipe.json")
-  const recipeSHA256 = digest({ id: "fixture-official-v1" })
+  const recipeSHA256 = digest({ id: "fixture-official-v2" })
   const driverSHA256 = digest(driver)
   await Bun.write(
     recipe,
     JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       recipeSHA256,
       driverSHA256,
       entrypoint: "benchmark/run.py",
@@ -175,6 +175,221 @@ async function launchFixture() {
     }),
   )
   return { dir, manifest, recipe, results }
+}
+
+async function pilotFixture() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-pilot-"))
+  const workspace = path.join(dir, "checkout")
+  const results = path.join(dir, "results")
+  const recipe = path.join(dir, "recipe.json")
+  const manifest = path.join(dir, "pilot.json")
+  await fs.mkdir(workspace, { recursive: true })
+  await Promise.all([
+    Bun.write(
+      path.join(workspace, "runner.py"),
+      [
+        "import argparse, json",
+        "parser = argparse.ArgumentParser()",
+        "parser.add_argument('--output', required=True)",
+        "args = parser.parse_args()",
+        "open(args.output, 'w', encoding='utf-8').write(json.dumps({'scores': [1, 0, 1]}))",
+      ].join("\n"),
+    ),
+    Bun.write(path.join(workspace, "pyproject.toml"), "[project]\nname='pilot-fixture'\nversion='1.0.0'\n"),
+    Bun.write(path.join(workspace, ".gitignore"), "pilot-score.json\n"),
+  ])
+  await exec(["git", "init", "--initial-branch=main", "-q"], workspace)
+  await exec(["git", "config", "user.name", "Benchmark Test"], workspace)
+  await exec(["git", "config", "user.email", "benchmark@example.test"], workspace)
+  await exec(["git", "remote", "add", "origin", "https://github.com/example/pilot-benchmark.git"], workspace)
+  await exec(["git", "add", "."], workspace)
+  await exec(["git", "commit", "-qm", "fixture"], workspace)
+  const revision = await exec(["git", "rev-parse", "HEAD"], workspace)
+  const driver = {
+    kind: "argv",
+    entrypoint: "runner.py",
+    cwd: ".",
+    argv: ["python", "runner.py", "--output", "pilot-score.json"],
+  }
+  await Bun.write(
+    recipe,
+    JSON.stringify({
+      schemaVersion: 2,
+      recipeID: "fixture-official-v2",
+      benchmark: "mle",
+      recipeSHA256: digest({ id: "fixture-official-v2" }),
+      bindingsSHA256: digest({}),
+      driverSHA256: digest(driver),
+      entrypoint: "runner.py",
+      bindings: {},
+      environment: { manager: "setuptools", python: ">=3.11", files: ["pyproject.toml"] },
+      anchors: ["runner.py"],
+      runtime: [],
+      stages: [
+        {
+          id: "evaluate",
+          role: "evaluate",
+          driver,
+          inputs: [],
+          outputs: ["pilot-score.json"],
+          environment: [],
+        },
+      ],
+      launchStage: "evaluate",
+      artifacts: [
+        {
+          id: "scores",
+          kind: "file",
+          path: "pilot-score.json",
+          format: "json",
+          cardinality: { minimum: 1, maximum: 1 },
+          producedBy: "evaluate",
+          owner: "evaluator",
+        },
+      ],
+      metrics: [
+        {
+          name: "accuracy",
+          artifact: "scores",
+          selector: { kind: "jsonpath", path: "$.scores" },
+          direction: "maximize",
+          aggregation: "mean",
+        },
+      ],
+      limitations: ["fixture"],
+    }),
+  )
+  await Bun.write(
+    manifest,
+    JSON.stringify({
+      schemaVersion: 1,
+      workspace,
+      resultsRoot: results,
+      source: { repository: "https://github.com/example/pilot-benchmark", revision },
+      recipe,
+      timeoutSeconds: 30,
+      runtime: {},
+    }),
+  )
+  return { dir, workspace, results, recipe, manifest }
+}
+
+async function pythonPilotFixture() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-python-pilot-"))
+  const workspace = path.join(dir, "checkout")
+  const results = path.join(dir, "results")
+  const recipe = path.join(dir, "recipe.json")
+  const manifest = path.join(dir, "pilot.json")
+  const runtime = path.join(dir, "evaluations.json")
+  await fs.mkdir(workspace, { recursive: true })
+  await Promise.all([
+    Bun.write(
+      path.join(workspace, "bench.py"),
+      [
+        "class Evaluator:",
+        "    def __init__(self, scale):",
+        "        self.scale = scale",
+        "    def evaluate(self, evaluations, batch_size):",
+        "        return [value * self.scale for value in evaluations[:batch_size]]",
+      ].join("\n"),
+    ),
+    Bun.write(path.join(workspace, "pyproject.toml"), "[project]\nname='python-pilot'\nversion='1.0.0'\n"),
+    Bun.write(runtime, JSON.stringify([1, 2, 3, 100])),
+  ])
+  await exec(["git", "init", "--initial-branch=main", "-q"], workspace)
+  await exec(["git", "config", "user.name", "Benchmark Test"], workspace)
+  await exec(["git", "config", "user.email", "benchmark@example.test"], workspace)
+  await exec(["git", "remote", "add", "origin", "https://github.com/example/python-pilot.git"], workspace)
+  await exec(["git", "add", "."], workspace)
+  await exec(["git", "commit", "-qm", "fixture"], workspace)
+  const revision = await exec(["git", "rev-parse", "HEAD"], workspace)
+  const load = {
+    kind: "python_api",
+    entrypoint: "bench.py",
+    module: "bench",
+    symbol: "Evaluator",
+    kwargs: { scale: 2 },
+    arguments: {},
+  }
+  const evaluate = {
+    kind: "python_api",
+    entrypoint: "bench.py",
+    module: "bench",
+    symbol: "Evaluator.evaluate",
+    receiver: "evaluator",
+    kwargs: { batch_size: 3 },
+    arguments: { evaluations: "evaluations" },
+  }
+  await Bun.write(
+    recipe,
+    JSON.stringify({
+      schemaVersion: 2,
+      recipeID: "python-fixture-official-v2",
+      benchmark: "biomni",
+      recipeSHA256: digest({ id: "python-fixture-official-v2" }),
+      bindingsSHA256: digest({}),
+      driverSHA256: digest(evaluate),
+      entrypoint: "bench.py",
+      bindings: {},
+      environment: { manager: "setuptools", python: ">=3.11", files: ["pyproject.toml"] },
+      anchors: ["bench.py"],
+      runtime: [{ name: "evaluations", kind: "json", owner: "runner", description: "fixture values" }],
+      stages: [
+        {
+          id: "load",
+          role: "prepare",
+          driver: load,
+          inputs: [],
+          outputs: [],
+          environment: [],
+          produces: "evaluator",
+        },
+        {
+          id: "evaluate",
+          role: "evaluate",
+          driver: evaluate,
+          inputs: [],
+          outputs: [],
+          environment: [],
+          produces: "rewards",
+        },
+      ],
+      launchStage: "evaluate",
+      artifacts: [
+        {
+          id: "rewards",
+          kind: "return",
+          format: "json",
+          producedBy: "evaluate",
+          owner: "evaluator",
+          value: "rewards",
+        },
+      ],
+      metrics: [
+        {
+          name: "mean-reward",
+          artifact: "rewards",
+          selector: { kind: "jsonpath", path: "$[*]" },
+          direction: "maximize",
+          aggregation: "mean",
+        },
+      ],
+      limitations: ["fixture"],
+    }),
+  )
+  await Bun.write(
+    manifest,
+    JSON.stringify({
+      schemaVersion: 1,
+      workspace,
+      resultsRoot: results,
+      source: { repository: "https://github.com/example/python-pilot", revision },
+      recipe,
+      timeoutSeconds: 30,
+      runtime: { evaluations: { kind: "json", artifact: runtime, sha256: await fileHash(runtime) } },
+    }),
+  )
+  return { dir, results, manifest }
 }
 
 test("active-failure-audit builds an opaque committed probe manifest", async () => {
@@ -596,6 +811,73 @@ test("verify-benchmark-launch rejects a substituted native recipe driver", async
     const report = JSON.parse(result.stdout)
     expect(report.checks.find((item: { id: string }) => item.id === "locked_environment").status).toBe("failed")
     expect(report.failures).toContain("locked_environment:command-environment-or-recipe-mismatch")
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
+test("run-benchmark-pilot executes a clean native argv recipe and extracts typed metrics", async () => {
+  const fixture = await pilotFixture()
+  const preflight = path.join(fixture.dir, "preflight.json")
+  const receipt = path.join(fixture.dir, "receipt.json")
+  try {
+    const checked = await run("research/run-benchmark-pilot/scripts/run_pilot.py", [
+      "preflight",
+      fixture.manifest,
+      "--output",
+      preflight,
+    ])
+    expect(checked.code).toBe(0)
+    expect(JSON.parse(await Bun.file(preflight).text())).toMatchObject({ status: "passed", schemaVersion: 1 })
+    const result = await run("research/run-benchmark-pilot/scripts/run_pilot.py", [
+      "run",
+      fixture.manifest,
+      "--output",
+      receipt,
+    ])
+    expect(result.code).toBe(0)
+    const value = JSON.parse(await Bun.file(receipt).text())
+    expect(value).toMatchObject({ status: "passed", metrics: { accuracy: 2 / 3 } })
+    expect(value.receiptSHA256).toMatch(/^[0-9a-f]{64}$/)
+    expect(value.stages).toHaveLength(1)
+    expect(value.artifacts[0].paths).toHaveLength(1)
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
+test("run-benchmark-pilot rejects stale outputs before execution", async () => {
+  const fixture = await pilotFixture()
+  try {
+    await Bun.write(path.join(fixture.workspace, "pilot-score.json"), JSON.stringify({ scores: [1] }))
+    const result = await run("research/run-benchmark-pilot/scripts/run_pilot.py", [
+      "preflight",
+      fixture.manifest,
+      "--output",
+      path.join(fixture.dir, "preflight.json"),
+    ])
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain("artifact path is not clean before launch")
+  } finally {
+    await fs.rm(fixture.dir, { recursive: true, force: true })
+  }
+})
+
+test("run-benchmark-pilot preserves Python receivers, named arguments, typed kwargs, and return artifacts", async () => {
+  const fixture = await pythonPilotFixture()
+  const receipt = path.join(fixture.dir, "receipt.json")
+  try {
+    const result = await run("research/run-benchmark-pilot/scripts/run_pilot.py", [
+      "run",
+      fixture.manifest,
+      "--output",
+      receipt,
+    ])
+    expect(result.code).toBe(0)
+    const value = JSON.parse(await Bun.file(receipt).text())
+    expect(value.metrics).toEqual({ "mean-reward": 4 })
+    expect(value.stages.map((stage: { returnType: string }) => stage.returnType)).toEqual(["Evaluator", "list"])
+    expect(JSON.parse(await Bun.file(path.join(fixture.results, "returns", "rewards.json")).text())).toEqual([2, 4, 6])
   } finally {
     await fs.rm(fixture.dir, { recursive: true, force: true })
   }

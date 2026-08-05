@@ -235,7 +235,7 @@ def validate(args: argparse.Namespace) -> int:
         actual_driver_hash = digest(launch_driver) if isinstance(launch_driver, dict) else ""
         native_ok = (
             actual_native_artifact_hash == native_artifact_hash
-            and native_data.get("schemaVersion") == 1
+            and native_data.get("schemaVersion") == 2
             and native_data.get("recipeSHA256") == recipe_hash
             and native_data.get("driverSHA256") == driver_hash
             and native_data.get("entrypoint") == runner.get("entrypoint")
