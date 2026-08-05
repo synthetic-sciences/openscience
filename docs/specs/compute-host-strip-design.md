@@ -80,9 +80,14 @@ strip and the list answer different questions and poll independently.
 ```
 
 `memory.kernels` and `cpu.kernels` aggregate every live kernel this server owns — `KernelRuntime.list()` with
-no session filter, each entry sampled through `KernelMetrics`. Both are **optional**: when the platform cannot
-sample a process they are omitted, never sent as `0`. This preserves the existing contract in
-`notebook/runtime.ts`: _absent fields mean the platform could not report them — render "Unavailable", never 0._
+no session filter, each entry sampled through `KernelMetrics`. A true zero and an unmeasurable figure are
+different things and must not be conflated: when there are **no live kernels at all**, the kernel-attributed
+share is knowably zero — that is a measurement, and both fields are sent as `0`. Both are **optional** only in
+the other case — **live kernels exist but this poll could not sample them** (platform limitation, no baseline
+yet, a sub-second window) — where the figure is genuinely unknown and the field is omitted, never fabricated
+as `0`. This refines the existing contract in `notebook/runtime.ts`: _absent fields mean the platform could
+not report them — render "Unavailable"; a field that is present and `0` means the platform measured exactly
+that._
 
 No registry change is needed. `KernelRuntime.list(sessionID?)` already exists (`registry.ts:550`), and
 `GET /notebook/kernels` with no `sessionID` already enumerates every session and samples each kernel — the
@@ -183,13 +188,16 @@ the body states what the list actually shows.
 
 ## Failure handling
 
-- `/notebook/compute` fails or returns a partial body → each affected tile reads `Unavailable`. Never `0`,
-  never a blank tile, never a thrown boundary.
+- `/notebook/compute` fails or returns a partial body → each affected tile reads `Unavailable`. Never a
+  fabricated `0` for a figure that could not be measured, never a blank tile, never a thrown boundary. This
+  does not apply to a healthy response reporting zero live kernels — see the true-zero rule above, `0` there
+  is the correct, measured value and must render as such, not as `Unavailable`.
 - Meter fill clamps to `[0, 1]`; `available > total` or `busy > cores` from a racing sample cannot overflow
   the bar.
 - `/proc/meminfo` unreadable → silent fall back to `os.freemem()`. Not an error state.
-- A kernel process that exits between `list()` and `sample()` → that entry contributes nothing to the
-  aggregate rather than failing the request.
+- A kernel process that exits between `list()` and `sample()` while other kernels remain live → that entry
+  contributes nothing to the aggregate rather than failing the request; the field still reports the surviving
+  kernels' true sum, or is omitted only if none of them sampled either.
 
 ## Testing
 

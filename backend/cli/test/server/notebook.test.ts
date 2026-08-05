@@ -1375,7 +1375,7 @@ describe("/notebook routes", () => {
     })
   })
 
-  test("reports machine capacity without a session and never zeroes an unsampled figure", async () => {
+  test("reports machine capacity without a session and reports a true zero for kernel share", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
@@ -1394,9 +1394,58 @@ describe("/notebook routes", () => {
         expect(body.memory.available).toBeLessThanOrEqual(body.memory.total)
         expect(body.cpu.cores).toBeGreaterThanOrEqual(1)
         expect(body.kernels).toEqual({ live: 0, running: 0 })
-        expect("kernels" in body.memory).toBe(false)
-        expect("kernels" in body.cpu).toBe(false)
+        // No live kernels exist, so the kernel-attributed share is knowably
+        // zero — a real measurement, not an unsampled figure to omit.
+        expect(body.memory.kernels).toBe(0)
+        expect(body.cpu.kernels).toBe(0)
       },
     })
   })
+
+  test("omits a live kernel's figure on its first compute poll instead of fabricating zero", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const app = NotebookRoutes()
+        const session = await Session.create({})
+        const body = {
+          sessionID: session.id,
+          id: "analysis.ipynb",
+          language: "python",
+        } as const
+
+        expect(
+          (
+            await app.request("/execute", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...body, code: "warm = 1" }),
+            })
+          ).status,
+        ).toBe(200)
+
+        // The kernel is live, but this is the very first sample the "compute"
+        // scope has ever taken for its pid: cpu_percent needs a delta against a
+        // prior baseline, so it has none yet. That is case 2 from the fix — a
+        // live kernel whose figure is genuinely unmeasurable right now — and it
+        // must stay omitted, never reported as a fabricated 0.
+        const compute = await app.request("/compute")
+        const result = (await compute.json()) as {
+          cpu: { kernels?: number }
+          kernels: { live: number; running: number }
+        }
+
+        expect(result.kernels.live).toBeGreaterThan(0)
+        expect("kernels" in result.cpu).toBe(false)
+
+        await app.request("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      },
+    })
+  }, 30_000)
 })

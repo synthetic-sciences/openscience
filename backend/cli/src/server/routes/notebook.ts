@@ -132,12 +132,23 @@ export const NotebookRoutes = lazy(() =>
           memory: {
             total: host.memory.total,
             available: host.memory.available,
-            ...(memory.length ? { kernels: memory.reduce((sum, item) => sum + (item.memory_bytes ?? 0), 0) } : {}),
+            // No live kernels at all is a real measurement: they hold exactly
+            // zero bytes. Kernels that exist but went unsampled this poll stay
+            // omitted — that figure is genuinely unknown, not zero.
+            ...(live.length === 0
+              ? { kernels: 0 }
+              : memory.length
+                ? { kernels: memory.reduce((sum, item) => sum + (item.memory_bytes ?? 0), 0) }
+                : {}),
           },
           cpu: {
             cores: host.cpu.cores,
             ...(host.cpu.busy === undefined ? {} : { busy: host.cpu.busy }),
-            ...(cpu.length ? { kernels: cpu.reduce((sum, item) => sum + (item.cpu_percent ?? 0), 0) / 100 } : {}),
+            ...(live.length === 0
+              ? { kernels: 0 }
+              : cpu.length
+                ? { kernels: cpu.reduce((sum, item) => sum + (item.cpu_percent ?? 0), 0) / 100 }
+                : {}),
           },
           kernels: {
             live: live.length,
