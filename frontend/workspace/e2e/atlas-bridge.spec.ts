@@ -49,6 +49,22 @@ test("Atlas canvas distinguishes a connected graph from an unavailable bridge", 
   await page.route("**/account/session", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ session: true }) }),
   )
+  await page.route("**/settings/preferences", (route) => {
+    if (route.request().method() !== "GET") return route.continue()
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        reasoning_effort: "medium",
+        intent: "non-commercial",
+        extra_budget_usd: 0,
+        show_trace: false,
+        atlas_enabled: true,
+        delegation_enabled: true,
+        delegation_specialist: null,
+      }),
+    })
+  })
 
   const response = await page.request.get(`${serverUrl}/api/atlas/graphs`)
   const graphBody = response.ok() ? ((await response.json()) as { nodes?: AtlasGraphNode[] }) : undefined
