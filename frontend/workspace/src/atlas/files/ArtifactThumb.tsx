@@ -17,6 +17,34 @@ const PREVIEW_LINES = 10
 const shared = (code: string, lang: string) =>
   import("@synsci/ui/context/marked").then((module) => module.highlightSnippet(code, lang))
 
+interface Preview {
+  text: string
+  html?: string
+}
+
+/**
+ * Rendered previews, keyed by artifact VERSION id.
+ *
+ * A version's bytes are immutable — that is the whole point of the store — so a
+ * preview only ever has to be produced once. Without this, anything that
+ * rebuilds the card list re-reads every artifact and re-runs the highlighter:
+ * changing the sort regroups, which makes <For> recreate every card, and so does
+ * leaving the artifacts source and coming back.
+ *
+ * Failures are deliberately not cached, so a read that failed while the server
+ * was down succeeds on the next look.
+ */
+const previews = new Map<string, Preview>()
+const PREVIEW_CACHE_LIMIT = 200
+
+const remember = (version: string, preview: Preview) => {
+  if (previews.size >= PREVIEW_CACHE_LIMIT) {
+    const oldest = previews.keys().next()
+    if (!oldest.done) previews.delete(oldest.value)
+  }
+  previews.set(version, preview)
+}
+
 export function ArtifactThumb(props: ThumbProps): JSX.Element {
   const kind = () => thumbKind(props.artifact.current)
   const [preview, setPreview] = createSignal<{ text: string; html?: string }>()
@@ -33,6 +61,12 @@ export function ArtifactThumb(props: ThumbProps): JSX.Element {
     setFailed(false)
     if (kind() !== "text") return
 
+    const cached = previews.get(artifact.current.id)
+    if (cached) {
+      setPreview(cached)
+      return
+    }
+
     let live = true
     onCleanup(() => (live = false))
 
@@ -45,7 +79,9 @@ export function ArtifactThumb(props: ThumbProps): JSX.Element {
         const html = await (props.highlight ?? shared)(lines, thumbLanguage(artifact.current.filename)).catch(
           () => undefined,
         )
-        if (live) setPreview({ text: lines, html })
+        const preview = { text: lines, html }
+        remember(artifact.current.id, preview)
+        if (live) setPreview(preview)
       } catch {
         if (live) setFailed(true)
       }

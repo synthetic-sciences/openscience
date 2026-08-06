@@ -48,6 +48,7 @@ const waitFor = async <T>(read: () => T | null | undefined, timeout = 15_000) =>
   }
 }
 
+let versions = 0
 const artifact = (over: { filename: string; mimeType?: string; size?: number }) =>
   ({
     schemaVersion: 1,
@@ -61,7 +62,7 @@ const artifact = (over: { filename: string; mimeType?: string; size?: number }) 
     state: "active",
     versionCount: 1,
     current: {
-      id: "ver_1",
+      id: `ver_${(versions += 1)}`,
       artifactID: "art_1",
       version: 1,
       filename: over.filename,

@@ -51,6 +51,7 @@ const mountGuarded = (view: () => JSX.Element) => {
   return host
 }
 
+let versions = 0
 const artifact = (over: { id?: string; filename: string; session?: string; createdAt?: number }) =>
   ({
     schemaVersion: 1,
@@ -64,7 +65,7 @@ const artifact = (over: { id?: string; filename: string; session?: string; creat
     state: "active",
     versionCount: 1,
     current: {
-      id: "ver_1",
+      id: `ver_${(versions += 1)}`,
       artifactID: over.id ?? `art_${over.filename}`,
       version: 1,
       filename: over.filename,
@@ -165,6 +166,11 @@ describe("artifact grid inside the app's boundaries", () => {
     await settle(120)
     host.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
     host.querySelector<HTMLButtonElement>("[data-pref='sizes']")!.click()
+    await settle(120)
+
+    // Sorting regroups, which makes <For> recreate every card -- the previews
+    // are cached by version id so that costs no reads either.
+    host.querySelector<HTMLButtonElement>("[data-artifact-sort]")!.click()
     await settle(120)
 
     expect(afterMount).toBe(2)
