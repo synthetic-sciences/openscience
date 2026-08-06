@@ -7,6 +7,7 @@ import { Session } from "../../src/session"
 import { Identifier } from "../../src/id/id"
 import { Server } from "../../src/server/server"
 import { KernelRuntime } from "../../src/science/kernel/registry"
+import { KernelMetrics } from "../../src/science/kernel/metrics"
 import { Sandbox } from "../../src/sandbox/sandbox"
 
 const alive = (pid: number) => {
@@ -58,6 +59,7 @@ describe("/notebook routes", () => {
     expect(paths["/notebook/kernels/{kernelID}/interrupt"]?.post).toBeDefined()
     expect(paths["/notebook/kernels/{kernelID}"]?.delete).toBeDefined()
     expect(paths["/notebook/execute"]?.post).toBeDefined()
+    expect(paths["/notebook/compute"]?.get).toBeDefined()
     expect(paths["/notebook/status"]?.get).toBeDefined()
     expect(paths["/notebook/restart"]?.post).toBeDefined()
     expect(paths["/notebook/stop"]?.post).toBeDefined()
@@ -1373,4 +1375,155 @@ describe("/notebook routes", () => {
       },
     })
   })
+
+  test("reports machine capacity without a session and reports a true zero for kernel share", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const response = await NotebookRoutes().request("/compute")
+
+        expect(response.status).toBe(200)
+        const body = (await response.json()) as {
+          memory: { total: number; available: number; kernels?: number }
+          cpu: { cores: number; busy?: number; kernels?: number }
+          kernels: { live: number; running: number }
+        }
+
+        expect(body.memory.total).toBeGreaterThan(0)
+        expect(body.memory.available).toBeGreaterThan(0)
+        expect(body.memory.available).toBeLessThanOrEqual(body.memory.total)
+        expect(body.cpu.cores).toBeGreaterThanOrEqual(1)
+        expect(body.kernels).toEqual({ live: 0, running: 0 })
+        // No live kernels exist, so the kernel-attributed share is knowably
+        // zero — a real measurement, not an unsampled figure to omit.
+        expect(body.memory.kernels).toBe(0)
+        expect(body.cpu.kernels).toBe(0)
+      },
+    })
+  })
+
+  test("measures each named client's own window rather than letting the first starve the rest", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const app = NotebookRoutes()
+        const busy = (body: unknown) => (body as { cpu: { busy?: number } }).cpu.busy
+        // Two browser tabs with the Compute pane open, each polling every 2.5s
+        // and offset by 150ms. Sharing one window on the server, whichever tab
+        // lands first each cycle advances it and the other measures only that
+        // 150ms gap — refused by the one-second floor, every cycle, forever.
+        const poll = async (client: string, offset: number) => {
+          await Bun.sleep(offset)
+          const seen: Array<number | undefined> = []
+          for (let round = 0; round < 3; round += 1) {
+            seen.push(busy(await (await app.request(`/compute?client=${client}`)).json()))
+            await Bun.sleep(2_500)
+          }
+          return seen
+        }
+        const [first, second] = await Promise.all([poll("tab-a", 0), poll("tab-b", 150)])
+
+        for (const seen of [first, second]) {
+          expect(seen.length).toBe(3)
+          for (const value of seen) expect(typeof value).toBe("number")
+        }
+      },
+    })
+  }, 30_000)
+
+  test("omits a live kernel's figure on its first compute poll instead of fabricating zero", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const app = NotebookRoutes()
+        const session = await Session.create({})
+        const body = {
+          sessionID: session.id,
+          id: "analysis.ipynb",
+          language: "python",
+        } as const
+
+        expect(
+          (
+            await app.request("/execute", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...body, code: "warm = 1" }),
+            })
+          ).status,
+        ).toBe(200)
+
+        // The kernel is live, but this is the very first sample the "compute"
+        // scope has ever taken for its pid: cpu_percent needs a delta against a
+        // prior baseline, so it has none yet. That is case 2 from the fix — a
+        // live kernel whose figure is genuinely unmeasurable right now — and it
+        // must stay omitted, never reported as a fabricated 0.
+        const compute = await app.request("/compute")
+        const result = (await compute.json()) as {
+          cpu: { kernels?: number }
+          kernels: { live: number; running: number }
+        }
+
+        expect(result.kernels.live).toBeGreaterThan(0)
+        expect("kernels" in result.cpu).toBe(false)
+
+        await app.request("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      },
+    })
+  }, 30_000)
+
+  test("gives each kernels-panel client its own sampling window instead of one shared scope", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const app = NotebookRoutes()
+        const session = await Session.create({})
+        const body = { sessionID: session.id, id: "analysis.ipynb", language: "python" } as const
+
+        expect(
+          (
+            await app.request("/execute", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...body, code: "warm = 1" }),
+            })
+          ).status,
+        ).toBe(200)
+
+        KernelMetrics.reset()
+        // Two panels — two tabs on the same session — poll this route. Each
+        // measures across the window since ITS OWN previous poll, so each must
+        // get its own baseline. Sharing one scope means whichever polls first
+        // advances it and the other's window collapses to the stagger between
+        // them, falls under the one-second floor, and reads Unavailable forever.
+        await app.request(`/kernels?sessionID=${session.id}&client=tab-a`)
+        await app.request(`/kernels?sessionID=${session.id}&client=tab-b`)
+
+        const keys = KernelMetrics.tracked()
+        const a = keys.filter((key) => key.startsWith("kernels:tab-a:"))
+        const b = keys.filter((key) => key.startsWith("kernels:tab-b:"))
+
+        // The same live pid, tracked once per client: two independent windows.
+        expect(a.length).toBeGreaterThan(0)
+        expect(b.length).toBeGreaterThan(0)
+        expect(a[0]?.split(":").at(-1)).toBe(b[0]?.split(":").at(-1))
+
+        await app.request("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      },
+    })
+  }, 30_000)
 })

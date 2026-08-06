@@ -39,6 +39,8 @@ import { RKernelTool } from "./rkernel"
 import { AtlasTool } from "./atlas"
 import { AtlasRecordTool } from "./atlas-record"
 import { ArtifactSnapshotTool } from "./artifact-snapshot"
+import { ModalTool } from "./modal"
+import { ComputeJobTool } from "./compute-job"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -141,6 +143,8 @@ export namespace ToolRegistry {
       ArtifactTool,
       LearnTool,
       MemoryTool,
+      ModalTool,
+      ComputeJobTool,
       ...custom,
     ]
   }
@@ -153,6 +157,7 @@ export namespace ToolRegistry {
   // excluded because PlanMode.enforce blocks all mutating tools there anyway.
   const MEMORY_TOOL_ID = "memory"
   const MEMORY_AGENTS = ["research", "biology", "physics", "ml"]
+  const MODAL_AGENTS = ["research", "biology", "physics", "ml"]
 
   export async function ids() {
     return all().then((x) => x.map((t) => t.id))
@@ -181,6 +186,10 @@ export namespace ToolRegistry {
 
           if (t.id === MEMORY_TOOL_ID) {
             return !!agent?.name && MEMORY_AGENTS.includes(agent.name)
+          }
+
+          if (t.id === "modal" || t.id === "compute_job") {
+            return !!agent?.name && MODAL_AGENTS.includes(agent.name)
           }
 
           // Enable websearch/codesearch for zen users OR via enable flag

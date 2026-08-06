@@ -141,15 +141,18 @@ test("BrowserOpenFailed event is published when open() throws", async () => {
       openShouldFail = true
 
       const events: Array<{ mcpName: string; url: string }> = []
+      const opened = Promise.withResolvers<void>()
       const unsubscribe = Bus.subscribe(MCP.BrowserOpenFailed, (evt) => {
         events.push(evt.properties)
+        opened.resolve()
       })
 
-      // Run authenticate with a timeout to avoid waiting forever for the callback
       const authPromise = MCP.authenticate("test-oauth-server")
 
-      // Wait for the browser open attempt (error fires at 10ms, but we wait for event to be published)
-      await new Promise((resolve) => setTimeout(resolve, 200))
+      // The callback waiter is registered before this event is published. Waiting
+      // for the event avoids stopping the server while a cold auth flow is still
+      // loading its config and has not installed that waiter yet.
+      await opened.promise
 
       // Stop the callback server and cancel any pending auth
       await McpOAuthCallback.stop()

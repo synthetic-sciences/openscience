@@ -123,14 +123,6 @@ const SAFE_SYNCED_KEYS = new Set([
   "HF_TOKEN",
   "HUGGING_FACE_HUB_TOKEN",
   "WANDB_API_KEY",
-  "MODAL_TOKEN_ID",
-  "MODAL_TOKEN_SECRET",
-  "LAMBDA_API_KEY",
-  "LAMBDA_LABS_API_KEY",
-  "RUNPOD_API_KEY",
-  "PRIME_INTELLECT_API_KEY",
-  "TENSORPOOL_API_KEY",
-  "VAST_API_KEY",
   "LANGSMITH_API_KEY",
   "LANGCHAIN_API_KEY",
   "LANGSMITH_TRACING",
@@ -138,6 +130,10 @@ const SAFE_SYNCED_KEYS = new Set([
   // Misc CLI runtime markers
   "OPENSCIENCE_RUNTIME",
 ])
+
+// Modal credentials belong to its trusted adapter and never enter
+// agent-controlled shells, including when supplied by an explicit export.
+const CONTROL_PLANE_ENV_KEYS = new Set(["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"])
 
 /**
  * Persistent CLI auth session.
@@ -1058,6 +1054,7 @@ export namespace OpenScience {
     const result: Record<string, string> = {}
     for (const [key, value] of Object.entries(env)) {
       if (!value) continue
+      if (CONTROL_PLANE_ENV_KEYS.has(key)) continue
       if (isManagedAtlasKey(value)) continue
       // Entries ending in `_` (LC_, XDG_) are true prefixes; the rest are exact
       // names. Treating all as prefixes let HOME match HOMEBREW_GITHUB_API_TOKEN,

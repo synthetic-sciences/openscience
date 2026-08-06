@@ -1,13 +1,15 @@
-import { For, Show, createEffect, createMemo, createResource, onCleanup, type JSX } from "solid-js"
+import { For, Show, createMemo, createResource, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
 import { IconCpu, IconPlus, IconRefresh } from "@/atlas/shared/Icon"
 import { summarizeKernels, type KernelStatus } from "@/notebook/runtime"
 import { useExecutionAuthority } from "./use-execution-authority"
+import { useKernelList } from "./use-kernel-list"
+import { identify } from "@/atlas/poll-identity"
 import { KernelCard, type KernelAction } from "./KernelCard"
 
-type Response = { kernels: KernelStatus[] }
+type KernelsPayload = { kernels: KernelStatus[] }
 type ControlResponse = KernelStatus & { state_preserved?: boolean }
 
 const time = (value: number | null) => {
@@ -19,8 +21,45 @@ const time = (value: number | null) => {
   return `${Math.round(minutes / 60)}h ago`
 }
 
-export function KernelPanel(props: { onEnsureSession?: () => Promise<string | undefined> } = {}): JSX.Element {
-  const sdk = useSDK()
+type KernelPanelProps = {
+  onEnsureSession?: () => Promise<string | undefined>
+  // The transport is a prop so a poll-behavior test can mount the real
+  // component against a controlled response instead of a live SDK; the
+  // session SDK supplies it in the product. See HostStrip.tsx for the same
+  // seam.
+  request?: (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
+}
+
+// A poll that fails resolves to no inventory instead of rejecting. An errored
+// resource re-throws wherever it is read — `data.latest` below — and the
+// nearest ErrorBoundary wraps the entire workspace (app.tsx), so a server
+// restart, a sleep/wake, or one 503 would swap the whole app for the error
+// page every 2.5s in every session. HostStrip's fetcher already degrades this
+// way; this is the same rule for the panel that sits beneath it.
+//
+// Exported rather than inlined because the panel itself cannot be mounted in a
+// test: useExecutionAuthority calls useSDK() unconditionally and useParams()
+// needs a Router, so this is the seam where the degraded path is reachable.
+export function inventory<T>(request: Promise<T>, settled: (error: string) => void) {
+  return request.then(
+    (value) => {
+      settled("")
+      return value
+    },
+    (error) => {
+      settled(error instanceof Error ? error.message : String(error))
+      return undefined
+    },
+  )
+}
+
+export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
+  const transport = props.request ?? useSDK().request
+  // Per-kernel CPU is measured across the window since this caller's previous
+  // poll, so a panel that does not name itself shares one window with every
+  // other panel on the route — two tabs then truncate each other's window to
+  // the stagger between them and both read Unavailable forever.
+  const client = identify()
   const params = useParams()
   const authority = useExecutionAuthority("kernel")
   const [view, setView] = createStore<{
@@ -43,27 +82,32 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
     language: "python",
   })
   const request = async <T,>(path: string, init?: RequestInit, query?: Record<string, string>) => {
-    const response = await sdk.request(path, init, query)
+    const response = await transport(path, init, query)
     if (response.ok) return response.json() as Promise<T>
     const detail = await response.text().catch(() => "")
     throw new Error(detail || `${response.status} ${response.statusText}`)
   }
   const load = () => {
     if (!params.id || params.id === "new") return Promise.resolve({ kernels: [] })
-    return request<Response>("/notebook/kernels", undefined, { sessionID: params.id }).then(
-      (value) => {
-        setView({ error: "", updated: Date.now() })
-        return value
-      },
-      (error) => {
-        setView("error", error instanceof Error ? error.message : String(error))
-        throw error
-      },
+    return inventory(
+      request<KernelsPayload>("/notebook/kernels", undefined, { sessionID: params.id, client }),
+      (error) => setView(error ? { error } : { error: "", updated: Date.now() }),
     )
   }
   const [data, api] = createResource(load)
-  const kernels = () => data()?.kernels ?? []
-  const summary = createMemo(() => summarizeKernels(kernels()))
+  // The rendered list is the resource's kernels reconciled into a store keyed
+  // by id (see use-kernel-list.ts), not the resource read directly — that
+  // keeps unchanged kernel cards mounted across a poll instead of being torn
+  // down and recreated every 2.5s.
+  //
+  // Read `data.latest` rather than `data()`: `data()` re-registers with the
+  // nearest Suspense boundary on every in-flight fetch, which suspends the
+  // entire RightPane on every 2.5s poll. `.latest` only suspends on the first
+  // load and returns the previous value while a refetch is in flight (see
+  // HostStrip.tsx for the full mechanism). `data.loading`, used below to
+  // disable the refresh button, is unaffected and left alone.
+  const kernels = useKernelList(() => data.latest?.kernels)
+  const summary = createMemo(() => summarizeKernels(kernels))
   const ensureSession = async () => {
     if (params.id && params.id !== "new") return params.id
     return props.onEnsureSession?.()
@@ -149,10 +193,22 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
       .catch((error) => setView("problem", error instanceof Error ? error.message : String(error)))
       .finally(() => setView("action", ""))
   }
-  createEffect(() => {
-    if (summary().running === 0 && summary().queued === 0) return
-    const timer = setInterval(() => void api.refetch(), 2_500)
-    onCleanup(() => clearInterval(timer))
+  // Polls unconditionally while the panel is mounted — not just while a
+  // kernel is already running or queued. Gating on summary() created a
+  // chicken-and-egg: a fresh session starts at {live: 0, running: 0, queued:
+  // 0}, so the poll that would ever discover a kernel starting never began.
+  // See HostStrip.tsx for the identical shape: a hidden tab skips its polls,
+  // and returning to it refreshes immediately rather than waiting out the
+  // interval.
+  const refresh = () => {
+    if (document.hidden) return
+    void api.refetch()
+  }
+  const timer = setInterval(refresh, 2_500)
+  document.addEventListener("visibilitychange", refresh)
+  onCleanup(() => {
+    clearInterval(timer)
+    document.removeEventListener("visibilitychange", refresh)
   })
 
   return (
@@ -265,19 +321,27 @@ export function KernelPanel(props: { onEnsureSession?: () => Promise<string | un
         </Show>
 
         <Show
-          when={kernels().length > 0}
+          when={kernels.length > 0}
           fallback={
             <div class="kernel-panel__empty">
               <span aria-hidden="true">
                 <IconCpu size={15} strokeWidth={1.4} />
               </span>
-              <strong>No active kernels</strong>
-              <p>A real session exposes its default Python record here before starting a process.</p>
+              {/* A failed poll leaves nothing to list, and "No live kernels"
+                  would then state as fact something this panel does not know.
+                  The alert above carries the detail; this says what the empty
+                  list means. */}
+              <strong>{view.error ? "Kernel inventory unavailable" : "No live kernels"}</strong>
+              <p>
+                {view.error
+                  ? "The last poll could not read this session's kernels, so this is not a count of what is running."
+                  : "Kernels appear here the moment this session starts computing."}
+              </p>
             </div>
           }
         >
           <div class="kernel-panel__list">
-            <For each={kernels()}>
+            <For each={kernels}>
               {(kernel) => (
                 <KernelCard
                   kernel={kernel}

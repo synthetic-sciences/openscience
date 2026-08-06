@@ -17,8 +17,10 @@
  * canonical var names the real consumers already read — Bedrock/S3 (provider.ts
  * reads AWS_ACCESS_KEY_ID), the in-process literature connectors (Semantic
  * Scholar `x-api-key`, OpenAlex mailto/key), and — via OpenScience.subprocessEnv,
- * which forwards non-managed env vars — every skill/bash subprocess (aws, gh,
- * gcloud, modal, …). It runs at CLI/server boot (index.ts middleware) and again
+ * which forwards non-managed env vars — approved skill/bash subprocesses (aws,
+ * gh, gcloud, …). Modal is a control-plane exception: existing values remain
+ * redacted but are not injected; governed Modal runs use settings ▸ Compute.
+ * It runs at CLI/server boot (index.ts middleware) and again
  * after each save/delete so changes apply live without a restart. Decrypted
  * secret values are registered for output redaction.
  */
@@ -288,7 +290,12 @@ async function readDecryptedEnv(): Promise<CredentialEnv> {
         // couldn't write — skip ADC; other GCP vars still apply
       }
     }
-    for (const [key, value] of Object.entries(mapServiceEnv(id, fields))) {
+    const mapped = mapServiceEnv(id, fields)
+    if (id === "modal") {
+      for (const value of Object.values(mapped)) secrets.push(value)
+      continue
+    }
+    for (const [key, value] of Object.entries(mapped)) {
       env[key] = value
       if (!NON_SECRET_ENV.test(key)) secrets.push(value)
     }

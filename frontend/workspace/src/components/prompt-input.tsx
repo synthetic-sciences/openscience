@@ -88,6 +88,10 @@ type MemoryPreference = {
   budget?: number
 }
 
+type ComputePreference = {
+  providers: Array<{ id: string; connected: boolean; enabled: boolean }>
+}
+
 const EXAMPLES = [
   "prompt.example.1",
   "prompt.example.2",
@@ -146,15 +150,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
   let modeRef: HTMLDetailsElement | undefined
-  const [modeOpen, setModeOpen] = createSignal(false)
-  const [reviewAuto, setReviewAuto] = createSignal(false)
-  const [reviewModel, setReviewModel] = createSignal<ReviewPreferences["model"]>(null)
-  const [memory, setMemory] = createSignal<MemoryPreference>({ enabled: true, categories: [] })
-  const [delegation, setDelegation] = createSignal(true)
-  const [specialist, setSpecialist] = createSignal<string | null>(null)
-  const [specialists, setSpecialists] = createSignal<SpecialistOption[]>([])
-  const [capabilityView, setCapabilityView] = createSignal<"main" | "specialists" | "reviewer">("main")
-  const [capabilityBusy, setCapabilityBusy] = createSignal(false)
+  const [cap, setCap] = createStore({
+    modeOpen: false,
+    reviewAuto: false,
+    reviewModel: null as ReviewPreferences["model"],
+    memory: { enabled: true, categories: [] } as MemoryPreference,
+    delegation: true,
+    specialist: null as string | null,
+    specialists: [] as SpecialistOption[],
+    view: "main" as "main" | "specialists" | "reviewer",
+    busy: false,
+    computeOpen: false,
+    modal: { connected: false, enabled: false },
+  })
+  const modeOpen = () => cap.modeOpen
+  const setModeOpen = (value: boolean) => setCap("modeOpen", value)
+  const reviewAuto = () => cap.reviewAuto
+  const setReviewAuto = (value: boolean) => setCap("reviewAuto", value)
+  const reviewModel = () => cap.reviewModel
+  const setReviewModel = (value: ReviewPreferences["model"]) => setCap("reviewModel", value)
+  const memory = () => cap.memory
+  const setMemory = (value: MemoryPreference) => setCap("memory", value)
+  const delegation = () => cap.delegation
+  const setDelegation = (value: boolean) => setCap("delegation", value)
+  const specialist = () => cap.specialist
+  const setSpecialist = (value: string | null) => setCap("specialist", value)
+  const specialists = () => cap.specialists
+  const setSpecialists = (value: SpecialistOption[]) => setCap("specialists", value)
+  const capabilityView = () => cap.view
+  const setCapabilityView = (value: "main" | "specialists" | "reviewer") => setCap("view", value)
+  const capabilityBusy = () => cap.busy
+  const setCapabilityBusy = (value: boolean) => setCap("busy", value)
+  const computeOpen = () => cap.computeOpen
+  const setComputeOpen = (value: boolean) => setCap("computeOpen", value)
+  const modal = () => cap.modal
+  const setModal = (value: { connected: boolean; enabled: boolean }) => setCap("modal", value)
 
   const reviewModels = createMemo(() => {
     const options = [
@@ -226,11 +256,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const openCompute = () => {
     setModeOpen(false)
-    document.dispatchEvent(new CustomEvent("openscience:open-context", { detail: { context: "kernels" } }))
+    queueMicrotask(() => dialog.show(() => <DialogSettings initial="compute" />))
+  }
+
+  const loadCompute = () => {
+    void settingsApi<ComputePreference>(sdk.url, platform.fetch ?? fetch, "/settings/compute")
+      .then((state) => {
+        const provider = state.providers.find((item) => item.id === "modal")
+        setModal({ connected: provider?.connected ?? false, enabled: provider?.enabled ?? false })
+      })
+      .catch(() => undefined)
   }
 
   const loadCapabilities = () => {
     setCapabilityBusy(true)
+    loadCompute()
     void Promise.all([
       settingsApi<ReviewPreferences>(sdk.url, platform.fetch ?? fetch, "/settings/review"),
       settingsApi<MemoryPreference>(sdk.url, platform.fetch ?? fetch, "/settings/memory?scope=global"),
@@ -359,6 +399,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .catch((error) => {
         setMemory(previous)
         showToast({ variant: "error", title: "Could not update memory", description: String(error) })
+      })
+      .finally(() => setCapabilityBusy(false))
+  }
+
+  const toggleModal = () => {
+    const previous = modal()
+    if (!previous.connected) {
+      openCompute()
+      return
+    }
+    const enabled = !previous.enabled
+    setModal({ ...previous, enabled })
+    setCapabilityBusy(true)
+    void settingsApi<ComputePreference>(sdk.url, platform.fetch ?? fetch, "/settings/compute/provider/modal/enabled", {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    })
+      .then((state) => {
+        const provider = state.providers.find((item) => item.id === "modal")
+        setModal({ connected: provider?.connected ?? false, enabled: provider?.enabled ?? false })
+      })
+      .catch((error) => {
+        setModal(previous)
+        showToast({ variant: "error", title: "Could not update Modal", description: String(error) })
       })
       .finally(() => setCapabilityBusy(false))
   }
@@ -2242,13 +2306,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   ref={modeRef}
                   class="workspace-composer__overflow"
                   open={modeOpen()}
+                  onMouseLeave={() => setComputeOpen(false)}
                   onToggle={(event) => {
                     const open = event.currentTarget.open
                     setModeOpen(open)
                     if (open) {
                       setCapabilityView("main")
                       loadCapabilities()
+                      return
                     }
+                    setComputeOpen(false)
                   }}
                 >
                   <summary
@@ -2326,10 +2393,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               <span class="workspace-composer__capability-chevron">›</span>
                             </span>
                           </button>
-                          <button type="button" role="menuitem" onClick={openCompute}>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            aria-haspopup="menu"
+                            aria-expanded={computeOpen()}
+                            onMouseEnter={() => setComputeOpen(true)}
+                            onFocus={() => setComputeOpen(true)}
+                            onClick={() => setComputeOpen(true)}
+                          >
                             <span>Compute</span>
                             <span class="workspace-composer__capability-value">
-                              Local <span class="workspace-composer__capability-chevron">›</span>
+                              {modal().enabled ? "Modal" : "Local"}
+                              <span class="workspace-composer__capability-chevron">›</span>
                             </span>
                           </button>
                         </div>
@@ -2463,6 +2539,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </Match>
                     </Switch>
                   </div>
+                  <Show when={computeOpen() && capabilityView() === "main"}>
+                    <div class="workspace-composer__compute-menu" role="menu" aria-label="Compute providers">
+                      <span class="workspace-composer__compute-label">Cloud</span>
+                      <button
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={modal().enabled}
+                        disabled={capabilityBusy() || !modal().connected}
+                        onClick={toggleModal}
+                      >
+                        <span>Modal</span>
+                        <span
+                          aria-hidden="true"
+                          class="workspace-composer__capability-switch"
+                          data-checked={modal().enabled ? "true" : "false"}
+                        >
+                          <span />
+                        </span>
+                      </button>
+                      <Show when={!modal().connected}>
+                        <span class="workspace-composer__compute-hint">Configure Modal before enabling it.</span>
+                      </Show>
+                      <div role="separator" class="workspace-composer__capability-divider" />
+                      <button type="button" role="menuitem" onClick={openCompute}>
+                        <Icon name="settings-gear" size="small" />
+                        <span>Manage compute…</span>
+                      </button>
+                    </div>
+                  </Show>
                 </details>
               </Match>
             </Switch>

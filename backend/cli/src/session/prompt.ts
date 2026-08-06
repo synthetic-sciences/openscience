@@ -861,6 +861,7 @@ export namespace SessionPrompt {
 
       const system = [
         ...(await SystemPrompt.environment(model)),
+        ...(await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
         ...(await Memory.recall()),
         ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),

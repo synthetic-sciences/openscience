@@ -115,6 +115,7 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
+  NotebookComputeResponses,
   NotebookExecuteResponses,
   NotebookInterruptResponses,
   NotebookKernelCreateResponses,
@@ -246,14 +247,34 @@ import type {
   SettingsComputeJobsCancelErrors,
   SettingsComputeJobsCancelResponses,
   SettingsComputeJobsClearResponses,
+  SettingsComputeJobsEventsErrors,
+  SettingsComputeJobsEventsResponses,
   SettingsComputeJobsListResponses,
   SettingsComputeJobsLogErrors,
   SettingsComputeJobsLogResponses,
+  SettingsComputeJobsPlanErrors,
+  SettingsComputeJobsPlanResponses,
+  SettingsComputeJobsRetryErrors,
+  SettingsComputeJobsRetryResponses,
   SettingsComputeJobsStartErrors,
   SettingsComputeJobsStartResponses,
+  SettingsComputeModalCheckErrors,
+  SettingsComputeModalCheckResponses,
+  SettingsComputeModalConfigureErrors,
+  SettingsComputeModalConfigureResponses,
+  SettingsComputeModalUpdateErrors,
+  SettingsComputeModalUpdateResponses,
+  SettingsComputeModalVolumeFileErrors,
+  SettingsComputeModalVolumeFileResponses,
+  SettingsComputeModalVolumeFilesErrors,
+  SettingsComputeModalVolumeFilesResponses,
+  SettingsComputeModalVolumesErrors,
+  SettingsComputeModalVolumesResponses,
   SettingsComputeProviderConnectErrors,
   SettingsComputeProviderConnectResponses,
   SettingsComputeProviderDisconnectResponses,
+  SettingsComputeProviderEnabledErrors,
+  SettingsComputeProviderEnabledResponses,
   SettingsComputeSshAddErrors,
   SettingsComputeSshAddResponses,
   SettingsComputeSshRemoveResponses,
@@ -858,6 +879,192 @@ export class Provider extends HeyApiClient {
       },
     })
   }
+
+  /**
+   * Enable or disable a connected compute provider
+   */
+  public enabled<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      enabled?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "enabled" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SettingsComputeProviderEnabledResponses,
+      SettingsComputeProviderEnabledErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/provider/{id}/enabled",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Volume extends HeyApiClient {
+  /**
+   * List files in a Modal Volume
+   */
+  public files<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SettingsComputeModalVolumeFilesResponses,
+      SettingsComputeModalVolumeFilesErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/modal/volumes/{name}/files",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Download a file from a Modal Volume
+   */
+  public file<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SettingsComputeModalVolumeFileResponses,
+      SettingsComputeModalVolumeFileErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/modal/volumes/{name}/file",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Modal extends HeyApiClient {
+  /**
+   * Update Modal compute defaults
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "app" },
+            { in: "body", key: "image" },
+            { in: "body", key: "network" },
+            { in: "body", key: "timeout_minutes" },
+            { in: "body", key: "concurrency" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      SettingsComputeModalUpdateResponses,
+      SettingsComputeModalUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/modal",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List Modal Volumes
+   */
+  public volumes<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      SettingsComputeModalVolumesResponses,
+      SettingsComputeModalVolumesErrors,
+      ThrowOnError
+    >({ url: "/settings/compute/modal/volumes", ...options })
+  }
+
+  /**
+   * Configure Modal from the active ~/.modal.toml profile
+   */
+  public configure<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<
+      SettingsComputeModalConfigureResponses,
+      SettingsComputeModalConfigureErrors,
+      ThrowOnError
+    >({ url: "/settings/compute/modal/configure", ...options })
+  }
+
+  /**
+   * Check the enabled Modal connection
+   */
+  public check<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<
+      SettingsComputeModalCheckResponses,
+      SettingsComputeModalCheckErrors,
+      ThrowOnError
+    >({ url: "/settings/compute/modal/check", ...options })
+  }
+
+  private _volume?: Volume
+  get volume(): Volume {
+    return (this._volume ??= new Volume({ client: this.client }))
+  }
 }
 
 export class Ssh extends HeyApiClient {
@@ -980,6 +1187,9 @@ export class Jobs extends HeyApiClient {
             kind: "ssh"
             host_id: string
           }
+        | {
+            kind: "modal"
+          }
       resources?: {
         cpus?: number
         gpus?: number
@@ -991,6 +1201,11 @@ export class Jobs extends HeyApiClient {
       container?: string
       artifacts?: Array<string>
       checkpoint?: string
+      uploads?: Array<string>
+      packages?: Array<string>
+      image?: string
+      gpu?: string
+      approval?: string
       sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -1010,6 +1225,11 @@ export class Jobs extends HeyApiClient {
             { in: "body", key: "container" },
             { in: "body", key: "artifacts" },
             { in: "body", key: "checkpoint" },
+            { in: "body", key: "uploads" },
+            { in: "body", key: "packages" },
+            { in: "body", key: "image" },
+            { in: "body", key: "gpu" },
+            { in: "body", key: "approval" },
             { in: "body", key: "sessionID" },
           ],
         },
@@ -1021,6 +1241,87 @@ export class Jobs extends HeyApiClient {
       ThrowOnError
     >({
       url: "/settings/compute/jobs",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Prepare an exact Modal run plan for approval
+   */
+  public plan<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      name?: string
+      command?: string
+      cwd?: string
+      target?:
+        | {
+            kind: "local"
+          }
+        | {
+            kind: "ssh"
+            host_id: string
+          }
+        | {
+            kind: "modal"
+          }
+      resources?: {
+        cpus?: number
+        gpus?: number
+        memory_gb?: number
+        time_minutes?: number
+        partition?: string
+      }
+      modules?: Array<string>
+      container?: string
+      artifacts?: Array<string>
+      checkpoint?: string
+      uploads?: Array<string>
+      packages?: Array<string>
+      image?: string
+      gpu?: string
+      approval?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "name" },
+            { in: "body", key: "command" },
+            { in: "body", key: "cwd" },
+            { in: "body", key: "target" },
+            { in: "body", key: "resources" },
+            { in: "body", key: "modules" },
+            { in: "body", key: "container" },
+            { in: "body", key: "artifacts" },
+            { in: "body", key: "checkpoint" },
+            { in: "body", key: "uploads" },
+            { in: "body", key: "packages" },
+            { in: "body", key: "image" },
+            { in: "body", key: "gpu" },
+            { in: "body", key: "approval" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SettingsComputeJobsPlanResponses,
+      SettingsComputeJobsPlanErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/jobs/plan",
       ...options,
       ...params,
       headers: {
@@ -1081,6 +1382,70 @@ export class Jobs extends HeyApiClient {
   }
 
   /**
+   * Read compute provider lifecycle logs
+   */
+  public events<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SettingsComputeJobsEventsResponses,
+      SettingsComputeJobsEventsErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/jobs/{id}/events",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Retry delivery from a retained Modal resource
+   */
+  public retry<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SettingsComputeJobsRetryResponses,
+      SettingsComputeJobsRetryErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/jobs/{id}/retry",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Cancel a compute job
    */
   public cancel<ThrowOnError extends boolean = false>(
@@ -1127,6 +1492,11 @@ export class Compute extends HeyApiClient {
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _modal?: Modal
+  get modal(): Modal {
+    return (this._modal ??= new Modal({ client: this.client }))
   }
 
   private _ssh?: Ssh
@@ -5205,6 +5575,23 @@ export class Kernel extends HeyApiClient {
 }
 
 export class Notebook extends HeyApiClient {
+  /**
+   * Report host compute capacity
+   */
+  public compute<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<NotebookComputeResponses, unknown, ThrowOnError>({
+      url: "/notebook/compute",
+      ...options,
+      ...params,
+    })
+  }
+
   /**
    * List session kernel records
    */

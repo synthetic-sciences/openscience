@@ -1,0 +1,105 @@
+import { afterEach, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { ModalPlan } from "../../src/compute/modal/plan"
+
+const roots: string[] = []
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })))
+})
+
+async function project() {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-modal-plan-"))
+  roots.push(root)
+  await fs.mkdir(path.join(root, "src"), { recursive: true })
+  await fs.writeFile(path.join(root, "src", "train.py"), "print('ready')\n")
+  return root
+}
+
+function input(root: string) {
+  return {
+    command: "python src/train.py",
+    cwd: root,
+    image: "python:3.12-slim",
+    packages: ["scikit-learn==1.7.1", "numpy==2.3.2"],
+    gpu: "T4",
+    timeoutMinutes: 10,
+    uploads: ["src/**/*.py"],
+    outputs: ["outputs/**/*.csv"],
+    context: { app: "openscience", network: "none" as const },
+  }
+}
+
+describe("ModalPlan", () => {
+  test("binds the exact files and governed run settings into one approval digest", async () => {
+    const root = await project()
+    const first = await ModalPlan.prepare(input(root))
+    const second = await ModalPlan.prepare(input(root))
+
+    expect(first.plan.digest).toBe(second.plan.digest)
+    expect(first.plan.uploads).toEqual([
+      {
+        path: "src/train.py",
+        size: 15,
+        sha256: new Bun.CryptoHasher("sha256").update("print('ready')\n").digest("hex"),
+      },
+    ])
+    expect(first.plan.network).toBe("none")
+    expect(first.plan.packages).toEqual(["numpy==2.3.2", "scikit-learn==1.7.1"])
+    expect(first.plan.warning).toContain("may incur charges")
+
+    await fs.writeFile(path.join(root, "src", "train.py"), "print('changed')\n")
+    expect((await ModalPlan.prepare(input(root))).plan.digest).not.toBe(first.plan.digest)
+    expect((await ModalPlan.prepare({ ...input(root), packages: ["numpy==2.3.3"] })).plan.digest).not.toBe(
+      first.plan.digest,
+    )
+  })
+
+  test("denies secrets, control directories, and paths outside the project", async () => {
+    const root = await project()
+    await fs.writeFile(path.join(root, ".env"), "MODAL_TOKEN_SECRET=secret\n")
+    await fs.writeFile(path.join(root, ".modal.toml"), "token_secret = 'secret'\n")
+
+    await expect(ModalPlan.prepare({ ...input(root), uploads: [".env"] })).rejects.toThrow("Modal upload policy denied")
+    await expect(ModalPlan.prepare({ ...input(root), uploads: [".modal.toml"] })).rejects.toThrow(
+      "Modal upload policy denied",
+    )
+    await expect(ModalPlan.prepare({ ...input(root), uploads: ["../*"] })).rejects.toThrow(
+      "must stay inside the project",
+    )
+  })
+
+  test("a symlink alias cannot disguise a denied credential file", async () => {
+    const root = await project()
+    await fs.writeFile(path.join(root, ".env"), "PRIVATE_TOKEN=secret\n")
+    await fs.symlink(path.join(root, ".env"), path.join(root, "src", "settings.py"))
+
+    await expect(ModalPlan.prepare({ ...input(root), uploads: ["src/**/*.py"] })).rejects.toThrow(
+      "Modal upload policy denied",
+    )
+  })
+
+  test("does not upload files excluded by the project's gitignore", async () => {
+    const root = await project()
+    await fs.writeFile(path.join(root, ".gitignore"), "src/private.py\n")
+    await fs.writeFile(path.join(root, "src", "private.py"), "TOKEN = 'private'\n")
+
+    const prepared = await ModalPlan.prepare({ ...input(root), uploads: ["src/**/*.py"] })
+
+    expect(prepared.plan.uploads.map((file) => file.path)).toEqual(["src/train.py"])
+  })
+
+  test("honors nested gitignore files", async () => {
+    const root = await project()
+    const git = Bun.spawn(["git", "init", "-q"], { cwd: root, stdout: "ignore", stderr: "pipe" })
+    if ((await git.exited) !== 0) throw new Error(await new Response(git.stderr).text())
+    await fs.writeFile(path.join(root, "src", ".gitignore"), "private.py\n")
+    await fs.writeFile(path.join(root, "src", "private.py"), "TOKEN = 'private'\n")
+
+    const prepared = await ModalPlan.prepare({ ...input(root), uploads: ["src/**/*.py"] })
+
+    expect(prepared.plan.uploads.map((file) => file.path)).toEqual(["src/train.py"])
+  })
+})

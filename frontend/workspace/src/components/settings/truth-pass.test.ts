@@ -55,6 +55,30 @@ describe("launch settings truth pass", () => {
     expect(compute).toContain("<Badge>coming later</Badge>")
   })
 
+  test("prefers an active Modal CLI profile without exposing its credentials", () => {
+    const compute = source("Compute.tsx")
+
+    expect(compute).toContain("Modal CLI configuration found at ~/.modal.toml.")
+    expect(compute).toContain('call<Info>("/modal/configure"')
+    expect(compute).toContain('source: "stored" | "modal_toml" | null')
+    expect(compute).toContain('label="Modal token ID"')
+    expect(compute).toContain('label="Modal token secret"')
+    expect(compute).toContain('type="password"')
+    expect(compute).toContain('label="Default timeout (minutes)"')
+    expect(compute).toContain("Agents use this as their starting limit")
+  })
+
+  test("keeps Modal action results visible inside the compute panel", () => {
+    const compute = source("Compute.tsx")
+
+    expect(compute).toContain("Configured — connection not tested")
+    expect(compute).toContain("Connection verified")
+    expect(compute).toContain("Connection check failed")
+    expect(compute).toContain("Defaults saved")
+    expect(compute).toContain("Unsaved default changes")
+    expect(compute).toContain('aria-live="polite"')
+  })
+
   test("keeps deferred cloud storage out of Storage", () => {
     expect(source("Storage.tsx")).not.toContain("Cloud storage")
     expect(source("Storage.tsx")).not.toContain("manage cloud credentials")

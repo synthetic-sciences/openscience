@@ -7,6 +7,7 @@ import type { Provider } from "@/provider/provider"
 import { Config } from "../config/config"
 import { Skill } from "../skill"
 import { PermissionNext } from "../permission/next"
+import { ComputePrompt } from "../compute/prompt"
 
 export namespace SystemPrompt {
   export function instructions() {
@@ -15,6 +16,10 @@ export namespace SystemPrompt {
 
   export function provider(_model: Provider.Model) {
     return [PROMPT_CORE]
+  }
+
+  export async function compute(value?: unknown) {
+    return [await ComputePrompt.system(value)]
   }
 
   /** When the user message begins with `/<name>` matching an installed

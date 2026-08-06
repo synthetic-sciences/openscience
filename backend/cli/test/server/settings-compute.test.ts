@@ -7,9 +7,10 @@ import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { ProjectTrust } from "../../src/project/trust"
 import { Session } from "../../src/session"
 import { Server } from "../../src/server/server"
-import { ComputeSettingsRoutes } from "../../src/server/routes/settings/compute"
+import { ComputeSettings, ComputeSettingsRoutes } from "../../src/server/routes/settings/compute"
 import { Sandbox } from "../../src/sandbox/sandbox"
 import { Log } from "../../src/util/log"
+import { Global } from "../../src/global"
 import { executionSession, tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
@@ -66,36 +67,152 @@ async function session(directory: string, trusted = true) {
   })
 }
 
-test("connecting a provider applies its key to the process env under every canonical name", async () => {
+test("connecting a provider stores its key without exposing it to the process env", async () => {
   const res = await connect("tensorpool", "tp-test-secret-123")
   expect(res.status).toBe(200)
 
-  // The saved key is live immediately — no restart needed.
-  expect(process.env["TENSORPOOL_KEY"]).toBe("tp-test-secret-123")
-  expect(process.env["TENSORPOOL_API_KEY"]).toBe("tp-test-secret-123")
+  expect(process.env["TENSORPOOL_KEY"]).toBeUndefined()
+  expect(process.env["TENSORPOOL_API_KEY"]).toBeUndefined()
 
   // The key itself never travels back to the client.
   const body = await res.text()
   expect(body).not.toContain("tp-test-secret-123")
   const info = JSON.parse(body)
   expect(info.providers.find((p: { id: string }) => p.id === "tensorpool").connected).toBe(true)
+  expect(info.providers.find((p: { id: string }) => p.id === "tensorpool").enabled).toBe(false)
 })
 
-test("modal's combined key splits into token id + secret", async () => {
+test("modal credentials resolve only for the trusted control plane while enabled", async () => {
   const res = await connect("modal", "ak-test-id : as-test-secret")
   expect(res.status).toBe(200)
-  expect(process.env["MODAL_TOKEN_ID"]).toBe("ak-test-id")
-  expect(process.env["MODAL_TOKEN_SECRET"]).toBe("as-test-secret")
+  expect(process.env["MODAL_TOKEN_ID"]).toBeUndefined()
+  expect(process.env["MODAL_TOKEN_SECRET"]).toBeUndefined()
+  await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("disabled")
+
+  const enabled = await ComputeSettingsRoutes().request("/provider/modal/enabled", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true }),
+  })
+  expect(enabled.status).toBe(200)
+  expect(await ComputeSettings.providerEnv("modal")).toEqual({
+    MODAL_TOKEN_ID: "ak-test-id",
+    MODAL_TOKEN_SECRET: "as-test-secret",
+  })
+  expect(process.env["MODAL_TOKEN_ID"]).toBeUndefined()
+  expect(process.env["MODAL_TOKEN_SECRET"]).toBeUndefined()
+
+  await ComputeSettingsRoutes().request("/provider/modal/enabled", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: false }),
+  })
+  await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("disabled")
 })
 
-test("an explicit shell export always wins over a stored key", async () => {
+test("Modal can use an active ~/.modal.toml profile without copying its tokens", async () => {
+  await using tmp = await tmpdir()
+  const file = path.join(tmp.path, ".modal.toml")
+  await Bun.write(
+    file,
+    [
+      "[inactive]",
+      'token_id = "ak-unused"',
+      'token_secret = "as-unused"',
+      "",
+      "[openscience]",
+      "active = true",
+      'token_id = "ak-from-toml"',
+      'token_secret = "as-from-toml"',
+    ].join("\n"),
+  )
+
+  expect(await ComputeSettings.modalFile(file)).toEqual({ found: true, ready: true })
+  const info = await ComputeSettings.configureModal(file)
+  const modal = info.providers.find((item) => item.id === "modal")
+  expect(modal).toMatchObject({ connected: true, enabled: true, source: "modal_toml" })
+  expect(JSON.stringify(info)).not.toContain("ak-from-toml")
+  expect(JSON.stringify(info)).not.toContain("as-from-toml")
+  expect(JSON.stringify(info)).not.toContain(tmp.path)
+  expect(await ComputeSettings.providerEnv("modal")).toEqual({
+    MODAL_TOKEN_ID: "ak-from-toml",
+    MODAL_TOKEN_SECRET: "as-from-toml",
+  })
+
+  await ComputeSettings.setProviderEnabled("modal", false)
+  await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("disabled")
+  await ComputeSettings.disconnectProvider("modal")
+})
+
+test("configuring Modal migrates legacy compute defaults", async () => {
+  await using tmp = await tmpdir()
+  const file = path.join(tmp.path, ".modal.toml")
+  const settings = path.join(Global.Path.data, "settings-compute.json")
+  const previous = (await Bun.file(settings).exists()) ? await Bun.file(settings).text() : undefined
+  await using restore = {
+    async [Symbol.asyncDispose]() {
+      if (previous !== undefined) {
+        await Bun.write(settings, previous)
+        return
+      }
+      await fs.rm(settings, { force: true })
+    },
+  }
+  await Bun.write(file, '[default]\nactive = true\ntoken_id = "ak-id"\ntoken_secret = "as-secret"\n')
+  await Bun.write(
+    settings,
+    JSON.stringify({
+      providers: {},
+      ssh_hosts: [],
+      modal: {
+        app: "legacy-app",
+        network: "unset",
+        timeout_hours: 12,
+        upload_mode: "policy",
+      },
+    }),
+  )
+
+  const info = await ComputeSettings.configureModal(file)
+  expect(info.modal).toEqual({
+    app: "legacy-app",
+    image: "python:3.12-slim",
+    network: "none",
+    timeout_minutes: 720,
+    concurrency: 10,
+  })
+  expect(info.providers.find((item) => item.id === "modal")).toMatchObject({
+    connected: true,
+    enabled: true,
+    source: "modal_toml",
+  })
+})
+
+test("Modal config discovery defers inactive profile resolution until an enabled operation", async () => {
+  await using tmp = await tmpdir()
+  const missing = path.join(tmp.path, ".modal.toml")
+  expect(await ComputeSettings.modalFile(missing)).toEqual({ found: false, ready: false })
+
+  await Bun.write(missing, '[default]\ntoken_id = "ak-id"\ntoken_secret = "as-secret"\n')
+  expect(await ComputeSettings.modalFile(missing)).toEqual({ found: true, ready: true })
+  const configured = await ComputeSettings.configureModal(missing)
+  expect(configured.providers.find((item) => item.id === "modal")).toMatchObject({
+    connected: true,
+    enabled: true,
+    source: "modal_toml",
+  })
+  await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("invalid credentials")
+  await ComputeSettings.disconnectProvider("modal")
+})
+
+test("connecting a provider does not overwrite an explicit shell export", async () => {
   process.env["VAST_API_KEY"] = "from-shell"
   const res = await connect("vast", "vast-stored-key")
   expect(res.status).toBe(200)
   expect(process.env["VAST_API_KEY"]).toBe("from-shell")
 })
 
-test("disconnecting a provider removes the injected vars but never a shell export", async () => {
+test("disconnecting a provider removes its stored control-plane credential", async () => {
   for (const provider of ["tensorpool", "modal", "vast"]) {
     const res = await ComputeSettingsRoutes().request(`/provider/${provider}`, { method: "DELETE" })
     expect(res.status).toBe(200)
@@ -108,13 +225,53 @@ test("disconnecting a provider removes the injected vars but never a shell expor
   expect(process.env["VAST_API_KEY"]).toBe("from-shell")
 })
 
-test("re-saving a key updates the injected value in place", async () => {
+test("re-saving a key updates the value resolved by the control plane", async () => {
   await connect("runpod", "rpa_first")
+  await ComputeSettings.setProviderEnabled("runpod", true)
+  expect(await ComputeSettings.providerEnv("runpod")).toEqual({ RUNPOD_API_KEY: "rpa_first" })
   expect(process.env["RUNPOD_API_KEY"]).toBe("rpa_first")
   await connect("runpod", "rpa_second")
+  expect(await ComputeSettings.providerEnv("runpod")).toEqual({ RUNPOD_API_KEY: "rpa_second" })
   expect(process.env["RUNPOD_API_KEY"]).toBe("rpa_second")
   await ComputeSettingsRoutes().request("/provider/runpod", { method: "DELETE" })
   expect(process.env["RUNPOD_API_KEY"]).toBeUndefined()
+  await expect(ComputeSettings.providerEnv("runpod")).rejects.toThrow("disabled")
+})
+
+test("does not reclaim a provider variable replaced by the shell", async () => {
+  await connect("prime", "prime_stored_first")
+  await ComputeSettings.setProviderEnabled("prime", true)
+  expect(process.env["PRIME_API_KEY"]).toBe("prime_stored_first")
+  process.env["PRIME_API_KEY"] = "prime_from_shell"
+
+  await connect("prime", "prime_stored_second")
+  expect(process.env["PRIME_API_KEY"]).toBe("prime_from_shell")
+  await ComputeSettings.disconnectProvider("prime")
+  expect(process.env["PRIME_API_KEY"]).toBe("prime_from_shell")
+  delete process.env["PRIME_API_KEY"]
+})
+
+test("preserves a provider variable replaced while a project instance is active", async () => {
+  await using tmp = await tmpdir()
+  delete process.env["VAST_API_KEY"]
+  await ComputeSettings.disconnectProvider("vast")
+  await Instance.provide({
+    directory: tmp.path,
+    init: InstanceBootstrap,
+    fn: async () => {
+      await connect("vast", "vast_owned_first")
+      await ComputeSettings.setProviderEnabled("vast", true)
+      expect(process.env["VAST_API_KEY"]).toBe("vast_owned_first")
+      process.env["VAST_API_KEY"] = "vast_from_shell"
+
+      await connect("vast", "vast_owned_second")
+      expect(process.env["VAST_API_KEY"]).toBe("vast_from_shell")
+      await ComputeSettings.disconnectProvider("vast")
+      expect(process.env["VAST_API_KEY"]).toBe("vast_from_shell")
+      await Instance.dispose()
+    },
+  })
+  delete process.env["VAST_API_KEY"]
 })
 
 test("compute job routes execute a real local command and expose its log", async () => {
@@ -148,6 +305,10 @@ test("compute job routes execute a real local command and expose its log", async
   const output = await ComputeSettingsRoutes().request(`/jobs/${first.id}/log${query}`)
   expect(output.status).toBe(200)
   expect(await output.json()).toEqual({ log: "compute-route-ok\n" })
+
+  const events = await ComputeSettingsRoutes().request(`/jobs/${first.id}/events${query}`)
+  expect(events.status).toBe(200)
+  expect(await events.json()).toEqual({ events: "" })
 
   const cleared = await ComputeSettingsRoutes().request(`/jobs/completed${query}`, { method: "DELETE" })
   expect(cleared.status).toBe(200)

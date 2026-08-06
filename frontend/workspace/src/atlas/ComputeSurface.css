@@ -13,10 +13,30 @@
 }
 
 .compute-surface__tab {
+  position: relative;
   min-height: 32px;
   padding: 0 12px;
   border-radius: 8px;
   font-size: 13px;
+}
+
+.compute-surface__badge {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  box-sizing: border-box;
+  min-width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border-radius: 999px;
+  color: var(--color-bg);
+  background: var(--color-accent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .compute-surface__tab[data-active="true"] {

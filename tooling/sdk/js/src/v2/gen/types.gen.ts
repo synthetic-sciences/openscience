@@ -2994,6 +2994,8 @@ export type SettingsComputeGetResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3006,6 +3008,17 @@ export type SettingsComputeGetResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3032,6 +3045,8 @@ export type SettingsComputeProviderDisconnectResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3044,6 +3059,17 @@ export type SettingsComputeProviderDisconnectResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3083,6 +3109,8 @@ export type SettingsComputeProviderConnectResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3095,11 +3123,337 @@ export type SettingsComputeProviderConnectResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
 export type SettingsComputeProviderConnectResponse =
   SettingsComputeProviderConnectResponses[keyof SettingsComputeProviderConnectResponses]
+
+export type SettingsComputeProviderEnabledData = {
+  body?: {
+    enabled: boolean
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/settings/compute/provider/{id}/enabled"
+}
+
+export type SettingsComputeProviderEnabledErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeProviderEnabledError =
+  SettingsComputeProviderEnabledErrors[keyof SettingsComputeProviderEnabledErrors]
+
+export type SettingsComputeProviderEnabledResponses = {
+  /**
+   * Updated
+   */
+  200: {
+    providers?: Array<{
+      id: string
+      name: string
+      verified: boolean
+      placeholder: string
+      hint: string
+      connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
+      connected_at: string | null
+      last_used: string | null
+    }>
+    ssh_hosts?: Array<{
+      id: string
+      label: string
+      host: string
+      user?: string
+      port?: number
+      scheduler?: "none" | "slurm" | "pbs"
+      workdir?: string
+    }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
+  }
+}
+
+export type SettingsComputeProviderEnabledResponse =
+  SettingsComputeProviderEnabledResponses[keyof SettingsComputeProviderEnabledResponses]
+
+export type SettingsComputeModalUpdateData = {
+  body?: {
+    app?: string
+    image?: string
+    network?: "unrestricted" | "none"
+    timeout_minutes?: number
+    concurrency?: number
+  }
+  path?: never
+  query?: never
+  url: "/settings/compute/modal"
+}
+
+export type SettingsComputeModalUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalUpdateError = SettingsComputeModalUpdateErrors[keyof SettingsComputeModalUpdateErrors]
+
+export type SettingsComputeModalUpdateResponses = {
+  /**
+   * Updated
+   */
+  200: {
+    providers?: Array<{
+      id: string
+      name: string
+      verified: boolean
+      placeholder: string
+      hint: string
+      connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
+      connected_at: string | null
+      last_used: string | null
+    }>
+    ssh_hosts?: Array<{
+      id: string
+      label: string
+      host: string
+      user?: string
+      port?: number
+      scheduler?: "none" | "slurm" | "pbs"
+      workdir?: string
+    }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
+  }
+}
+
+export type SettingsComputeModalUpdateResponse =
+  SettingsComputeModalUpdateResponses[keyof SettingsComputeModalUpdateResponses]
+
+export type SettingsComputeModalVolumesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/compute/modal/volumes"
+}
+
+export type SettingsComputeModalVolumesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalVolumesError =
+  SettingsComputeModalVolumesErrors[keyof SettingsComputeModalVolumesErrors]
+
+export type SettingsComputeModalVolumesResponses = {
+  /**
+   * Modal Volumes
+   */
+  200: Array<{
+    name: string
+  }>
+}
+
+export type SettingsComputeModalVolumesResponse =
+  SettingsComputeModalVolumesResponses[keyof SettingsComputeModalVolumesResponses]
+
+export type SettingsComputeModalVolumeFilesData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    path?: string
+  }
+  url: "/settings/compute/modal/volumes/{name}/files"
+}
+
+export type SettingsComputeModalVolumeFilesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalVolumeFilesError =
+  SettingsComputeModalVolumeFilesErrors[keyof SettingsComputeModalVolumeFilesErrors]
+
+export type SettingsComputeModalVolumeFilesResponses = {
+  /**
+   * Modal Volume files
+   */
+  200: Array<{
+    path: string
+    type: string
+    size: number
+    mtime?: number
+  }>
+}
+
+export type SettingsComputeModalVolumeFilesResponse =
+  SettingsComputeModalVolumeFilesResponses[keyof SettingsComputeModalVolumeFilesResponses]
+
+export type SettingsComputeModalVolumeFileData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query: {
+    path: string
+  }
+  url: "/settings/compute/modal/volumes/{name}/file"
+}
+
+export type SettingsComputeModalVolumeFileErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SettingsComputeModalVolumeFileError =
+  SettingsComputeModalVolumeFileErrors[keyof SettingsComputeModalVolumeFileErrors]
+
+export type SettingsComputeModalVolumeFileResponses = {
+  /**
+   * Modal Volume file
+   */
+  200: unknown
+}
+
+export type SettingsComputeModalConfigureData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/compute/modal/configure"
+}
+
+export type SettingsComputeModalConfigureErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalConfigureError =
+  SettingsComputeModalConfigureErrors[keyof SettingsComputeModalConfigureErrors]
+
+export type SettingsComputeModalConfigureResponses = {
+  /**
+   * Configured
+   */
+  200: {
+    providers?: Array<{
+      id: string
+      name: string
+      verified: boolean
+      placeholder: string
+      hint: string
+      connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
+      connected_at: string | null
+      last_used: string | null
+    }>
+    ssh_hosts?: Array<{
+      id: string
+      label: string
+      host: string
+      user?: string
+      port?: number
+      scheduler?: "none" | "slurm" | "pbs"
+      workdir?: string
+    }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
+  }
+}
+
+export type SettingsComputeModalConfigureResponse =
+  SettingsComputeModalConfigureResponses[keyof SettingsComputeModalConfigureResponses]
+
+export type SettingsComputeModalCheckData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/compute/modal/check"
+}
+
+export type SettingsComputeModalCheckErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalCheckError = SettingsComputeModalCheckErrors[keyof SettingsComputeModalCheckErrors]
+
+export type SettingsComputeModalCheckResponses = {
+  /**
+   * Connection result
+   */
+  200: {
+    ok: true
+    sdk: string
+  }
+}
+
+export type SettingsComputeModalCheckResponse =
+  SettingsComputeModalCheckResponses[keyof SettingsComputeModalCheckResponses]
 
 export type SettingsComputeSshAddData = {
   body?: {
@@ -3136,6 +3490,8 @@ export type SettingsComputeSshAddResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3148,6 +3504,17 @@ export type SettingsComputeSshAddResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3211,6 +3578,8 @@ export type SettingsComputeSshRemoveResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3223,6 +3592,17 @@ export type SettingsComputeSshRemoveResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3254,6 +3634,9 @@ export type SettingsComputeJobsListResponses = {
       | {
           kind: "ssh"
           host_id: string
+        }
+      | {
+          kind: "modal"
         }
     target_label: string
     scheduler: "none" | "slurm" | "pbs"
@@ -3725,6 +4108,9 @@ export type SettingsComputeJobsListResponses = {
       }
     }
     capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
     session_id?: string
     authority?: {
       allowed: boolean
@@ -3780,6 +4166,56 @@ export type SettingsComputeJobsListResponses = {
       network: "allow" | "deny"
       warning?: string
     }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+      volume?: string
+    }
   }>
 }
 
@@ -3798,6 +4234,9 @@ export type SettingsComputeJobsStartData = {
           kind: "ssh"
           host_id: string
         }
+      | {
+          kind: "modal"
+        }
     resources?: {
       cpus?: number
       gpus?: number
@@ -3809,6 +4248,11 @@ export type SettingsComputeJobsStartData = {
     container?: string
     artifacts?: Array<string>
     checkpoint?: string
+    uploads?: Array<string>
+    packages?: Array<string>
+    image?: string
+    gpu?: string
+    approval?: string
     sessionID: string
   }
   path?: never
@@ -3844,6 +4288,9 @@ export type SettingsComputeJobsStartResponses = {
           kind: "ssh"
           host_id: string
         }
+      | {
+          kind: "modal"
+        }
     target_label: string
     scheduler: "none" | "slurm" | "pbs"
     status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
@@ -4314,6 +4761,9 @@ export type SettingsComputeJobsStartResponses = {
       }
     }
     capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
     session_id?: string
     authority?: {
       allowed: boolean
@@ -4369,11 +4819,145 @@ export type SettingsComputeJobsStartResponses = {
       network: "allow" | "deny"
       warning?: string
     }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+      volume?: string
+    }
   }
 }
 
 export type SettingsComputeJobsStartResponse =
   SettingsComputeJobsStartResponses[keyof SettingsComputeJobsStartResponses]
+
+export type SettingsComputeJobsPlanData = {
+  body?: {
+    name: string
+    command: string
+    cwd?: string
+    target:
+      | {
+          kind: "local"
+        }
+      | {
+          kind: "ssh"
+          host_id: string
+        }
+      | {
+          kind: "modal"
+        }
+    resources?: {
+      cpus?: number
+      gpus?: number
+      memory_gb?: number
+      time_minutes?: number
+      partition?: string
+    }
+    modules?: Array<string>
+    container?: string
+    artifacts?: Array<string>
+    checkpoint?: string
+    uploads?: Array<string>
+    packages?: Array<string>
+    image?: string
+    gpu?: string
+    approval?: string
+    sessionID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/settings/compute/jobs/plan"
+}
+
+export type SettingsComputeJobsPlanErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeJobsPlanError = SettingsComputeJobsPlanErrors[keyof SettingsComputeJobsPlanErrors]
+
+export type SettingsComputeJobsPlanResponses = {
+  /**
+   * Modal run plan
+   */
+  200: {
+    digest: string
+    provider: "modal"
+    app: string
+    environment?: string
+    image: string
+    packages: Array<string>
+    gpu: string
+    resources?: {
+      cpus?: number
+      gpus?: number
+      memory_gb?: number
+    }
+    timeout_minutes: number
+    network: "unrestricted" | "none"
+    command: string
+    cwd: string
+    uploads: Array<{
+      path: string
+      size: number
+      sha256: string
+    }>
+    upload_bytes: number
+    outputs: Array<string>
+    warning: string
+  }
+}
+
+export type SettingsComputeJobsPlanResponse = SettingsComputeJobsPlanResponses[keyof SettingsComputeJobsPlanResponses]
 
 export type SettingsComputeJobsClearData = {
   body?: never
@@ -4427,7 +5011,7 @@ export type SettingsComputeJobsLogResponses = {
 
 export type SettingsComputeJobsLogResponse = SettingsComputeJobsLogResponses[keyof SettingsComputeJobsLogResponses]
 
-export type SettingsComputeJobsCancelData = {
+export type SettingsComputeJobsEventsData = {
   body?: never
   path: {
     id: string
@@ -4435,21 +5019,57 @@ export type SettingsComputeJobsCancelData = {
   query?: {
     directory?: string
   }
-  url: "/settings/compute/jobs/{id}/cancel"
+  url: "/settings/compute/jobs/{id}/events"
 }
 
-export type SettingsComputeJobsCancelErrors = {
+export type SettingsComputeJobsEventsErrors = {
   /**
    * Not found
    */
   404: NotFoundError
 }
 
-export type SettingsComputeJobsCancelError = SettingsComputeJobsCancelErrors[keyof SettingsComputeJobsCancelErrors]
+export type SettingsComputeJobsEventsError = SettingsComputeJobsEventsErrors[keyof SettingsComputeJobsEventsErrors]
 
-export type SettingsComputeJobsCancelResponses = {
+export type SettingsComputeJobsEventsResponses = {
   /**
-   * Cancelled job
+   * Provider lifecycle logs
+   */
+  200: {
+    events: string
+  }
+}
+
+export type SettingsComputeJobsEventsResponse =
+  SettingsComputeJobsEventsResponses[keyof SettingsComputeJobsEventsResponses]
+
+export type SettingsComputeJobsRetryData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/settings/compute/jobs/{id}/retry"
+}
+
+export type SettingsComputeJobsRetryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SettingsComputeJobsRetryError = SettingsComputeJobsRetryErrors[keyof SettingsComputeJobsRetryErrors]
+
+export type SettingsComputeJobsRetryResponses = {
+  /**
+   * Recovery started
    */
   200: {
     id: string
@@ -4463,6 +5083,9 @@ export type SettingsComputeJobsCancelResponses = {
       | {
           kind: "ssh"
           host_id: string
+        }
+      | {
+          kind: "modal"
         }
     target_label: string
     scheduler: "none" | "slurm" | "pbs"
@@ -4934,6 +5557,9 @@ export type SettingsComputeJobsCancelResponses = {
       }
     }
     capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
     session_id?: string
     authority?: {
       allowed: boolean
@@ -4988,6 +5614,680 @@ export type SettingsComputeJobsCancelResponses = {
       backend: "seatbelt" | "bubblewrap" | "none"
       network: "allow" | "deny"
       warning?: string
+    }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+      volume?: string
+    }
+  }
+}
+
+export type SettingsComputeJobsRetryResponse =
+  SettingsComputeJobsRetryResponses[keyof SettingsComputeJobsRetryResponses]
+
+export type SettingsComputeJobsCancelData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/settings/compute/jobs/{id}/cancel"
+}
+
+export type SettingsComputeJobsCancelErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SettingsComputeJobsCancelError = SettingsComputeJobsCancelErrors[keyof SettingsComputeJobsCancelErrors]
+
+export type SettingsComputeJobsCancelResponses = {
+  /**
+   * Cancelled job
+   */
+  200: {
+    id: string
+    name: string
+    command: string
+    cwd?: string
+    target:
+      | {
+          kind: "local"
+        }
+      | {
+          kind: "ssh"
+          host_id: string
+        }
+      | {
+          kind: "modal"
+        }
+    target_label: string
+    scheduler: "none" | "slurm" | "pbs"
+    status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
+    created_at: string
+    started_at?: string
+    completed_at?: string
+    exit_code?: number | null
+    pid?: number
+    error?: string
+    resources?: {
+      cpus?: number
+      gpus?: number
+      memory_gb?: number
+      time_minutes?: number
+      partition?: string
+    }
+    modules?: Array<string>
+    container?: string
+    artifact_patterns?: Array<string>
+    artifacts?: Array<{
+      path: string
+      size: number
+      sha256: string
+      modified_at: string
+    }>
+    checkpoint_path?: string
+    checkpoint?: {
+      path: string
+      size: number
+      sha256: string
+      modified_at: string
+    }
+    reproducibility?: {
+      captured_at: string
+      command: string
+      cwd: string
+      platform: string
+      arch: string
+      bun: string
+      node: string
+      python?: string
+      git?: {
+        repository?: string
+        branch?: string
+        commit?: string
+        dirty: boolean
+      }
+      lockfiles: Array<{
+        path: string
+        size: number
+        sha256: string
+        modified_at: string
+      }>
+      resources?: {
+        cpus?: number
+        gpus?: number
+        memory_gb?: number
+        time_minutes?: number
+        partition?: string
+      }
+    }
+    provenance?: {
+      format: "openscience.provenance.v1"
+      kind: "kernel" | "local_compute" | "remote_compute" | "artifact_version"
+      identity: {
+        project_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        session_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        run_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      input: {
+        code:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        cwd:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        code_state:
+          | {
+              status: "available"
+              value: {
+                repository:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                branch:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                commit:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                dirty:
+                  | {
+                      status: "available"
+                      value: boolean
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+              }
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      environment: {
+        host:
+          | {
+              status: "available"
+              value: {
+                platform: string
+                arch: string
+                runtimes: {
+                  [key: string]: string
+                }
+              }
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        kernel:
+          | {
+              status: "available"
+              value: {
+                id: string
+                language: string
+                incarnation:
+                  | {
+                      status: "available"
+                      value: number
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                process_id:
+                  | {
+                      status: "available"
+                      value: number
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                process_started_at:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+              }
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      outputs: {
+        status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted" | "inconclusive"
+        items: Array<{
+          kind: "stream" | "display" | "result" | "error" | "artifact" | "checkpoint"
+          label: string
+          artifact_id:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          path:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          sha256: string
+          size: number
+          version_id:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          version:
+            | {
+                status: "available"
+                value: number
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          created_at:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+        }>
+      }
+      timestamps: {
+        created_at:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        started_at:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        completed_at:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      handoff: {
+        atlas_compute_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        atlas_run_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+    }
+    capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
+    session_id?: string
+    authority?: {
+      allowed: boolean
+      reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      capability:
+        | "terminal"
+        | "kernel"
+        | "shell"
+        | "local_job"
+        | "remote_job"
+        | "package_install"
+        | "project_plugin"
+        | "project_mcp"
+        | "project_formatter"
+        | "project_lsp"
+        | "provider_token_command"
+      mode: "read_only" | "sandboxed" | "host"
+      projectID: string
+      sessionID: string
+      trustRevision: number
+      grantRevision: number
+      generation: string
+      workspace: string
+      writable: Array<string>
+      sandbox: {
+        enabled: boolean
+        network: "allow" | "deny"
+        allowWrite: Array<string>
+        onUnavailable: "warn" | "error" | "allow"
+        backend: "seatbelt" | "bubblewrap" | "none"
+        available: boolean
+        enforced: boolean
+      }
+      remediation?: {
+        code: "trust_project_required"
+        message: string
+        method: "PUT"
+        path: string
+        body: {
+          trusted: true
+          root: string
+        }
+      }
+    }
+    scope?: {
+      directory: string
+      key: string
+    }
+    sandbox?: {
+      requested: boolean
+      enforced: boolean
+      backend: "seatbelt" | "bubblewrap" | "none"
+      network: "allow" | "deny"
+      warning?: string
+    }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+      volume?: string
     }
   }
 }
@@ -9446,6 +10746,22 @@ export type FileStatusResponses = {
 }
 
 export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses]
+
+export type NotebookComputeData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/notebook/compute"
+}
+
+export type NotebookComputeResponses = {
+  /**
+   * Machine capacity and the share kernels hold
+   */
+  200: unknown
+}
 
 export type NotebookKernelsData = {
   body?: never
