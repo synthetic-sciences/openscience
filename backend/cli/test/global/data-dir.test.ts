@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
 import fs from "fs/promises"
+import fsSync from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { resolveDataDirectory } from "@/global/data-dir"
@@ -174,5 +175,99 @@ describe("OpenScience data directory", () => {
     const source = new Database(path.join(legacy, "artifact-store", "artifacts.db"), { readonly: true })
     expect((source.query("SELECT count(*) AS value FROM artifacts").get() as { value: number }).value).toBe(1)
     source.close()
+  })
+
+  test("leaves logs and per-process sidecars behind", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await artifact(legacy, "legacy")
+    await fs.mkdir(path.join(legacy, "log"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "log", "2026-08-06.log"), "noise")
+    await fs.writeFile(path.join(legacy, "artifact-store", "artifacts.db-wal"), "journal")
+    await fs.writeFile(path.join(legacy, "artifact-store", "artifacts.db-shm"), "shared")
+    await fs.writeFile(path.join(legacy, "auth.json.lock"), "{}")
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.error).toBeUndefined()
+    expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
+    expect(fsSync.existsSync(path.join(target, "artifact-store", "artifacts.db"))).toBe(true)
+    for (const orphan of [
+      "log",
+      "artifact-store/artifacts.db-wal",
+      "artifact-store/artifacts.db-shm",
+      "auth.json.lock",
+    ])
+      expect(fsSync.existsSync(path.join(target, orphan))).toBe(false)
+  })
+
+  test("imports credentials and history even when the legacy artifact store is corrupt", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await artifact(target, "current")
+    await fs.mkdir(path.join(legacy, "artifact-store"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "artifact-store", "artifacts.db"), "not a database")
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+    await fs.writeFile(path.join(legacy, "auth.json"), JSON.stringify({ "openai-codex": { access: "kept" } }))
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.path).toBe(target)
+    expect(result.error).toBeUndefined()
+    expect(result.warning).toContain("artifact store")
+    expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
+    expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("kept")
+    expect(fsSync.existsSync(path.join(target, ".xdg-data-migration-v2.json"))).toBe(true)
+  })
+
+  test("imports every other file when one changes under the copy", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(path.join(legacy, "storage", "session"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+    await fs.writeFile(path.join(legacy, "auth.json"), JSON.stringify({ "openai-codex": { access: "kept" } }))
+    for (const id of ["a", "b", "c"])
+      await fs.writeFile(path.join(legacy, "storage", "session", `ses_${id}.json`), `{"id":"${id}"}`)
+
+    // A still-running instance rewrites one session between the copy and its
+    // verification. Only that file may be dropped.
+    const torn = path.join(legacy, "storage", "session", "ses_b.json")
+    const original = fsSync.readFileSync(torn)
+    const watcher = setInterval(() => fsSync.writeFileSync(torn, `{"id":"b","n":${Math.random()}}`), 1)
+    const result = await resolveDataDirectory({ home, legacy }).finally(() => clearInterval(watcher))
+
+    expect(result.path).toBe(target)
+    expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
+    expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("kept")
+    for (const id of ["a", "c"])
+      expect(fsSync.existsSync(path.join(target, "storage", "session", `ses_${id}.json`))).toBe(true)
+    fsSync.writeFileSync(torn, original)
+  })
+
+  test("keeps concurrent boots on a single data root", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(path.join(legacy, "storage", "session"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+    await fs.writeFile(path.join(legacy, "auth.json"), JSON.stringify({ "openai-codex": { access: "kept" } }))
+    for (const id of ["a", "b", "c"])
+      await fs.writeFile(path.join(legacy, "storage", "session", `ses_${id}.json`), `{"id":"${id}"}`)
+
+    const results = await Promise.all([
+      resolveDataDirectory({ home, legacy }),
+      resolveDataDirectory({ home, legacy }),
+      resolveDataDirectory({ home, legacy }),
+    ])
+
+    expect(results.map((result) => result.path)).toEqual([target, target, target])
+    expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("kept")
+    expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
+    for (const id of ["a", "b", "c"])
+      expect(fsSync.existsSync(path.join(target, "storage", "session", `ses_${id}.json`))).toBe(true)
   })
 })

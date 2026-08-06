@@ -6,8 +6,16 @@ import path from "node:path"
 import { JsonStore } from "../util/jsonstore"
 
 const marker = ".xdg-data-migration-v2.json"
-const reserved = new Set(["bin", ".xdg-data-migration-v1.json", marker])
+// Top-level names the import never reads or writes. `log` is disposable and is
+// the one tree a still-running older instance appends to throughout the import,
+// so copying it buys nothing and costs a full SHA-256 pass over tens of MB on
+// the boot path.
+const reserved = new Set(["bin", "log", ".xdg-data-migration-v1.json", marker])
 const stores = new Set(["auth.json", "credentials.json", "mcp-auth.json"])
+// Per-process scratch that must not be transplanted. A SQLite -wal/-shm belongs
+// to the legacy database specifically; landing one beside the target's own
+// artifacts.db pairs a journal with a database it never described.
+const transient = /(?:-wal|-shm|\.tmp|\.lock)$/
 
 export interface DataResolution {
   path: string
@@ -21,6 +29,7 @@ export interface DataResolution {
     skipped: number
   }
   conflict?: { legacy: string; current: string }
+  warning?: string
   error?: string
 }
 
@@ -53,17 +62,6 @@ async function inventory(root: string) {
     }
   }
   return files.sort((a, b) => a.path.localeCompare(b.path))
-}
-
-async function manifest(root: string, files?: Awaited<ReturnType<typeof inventory>>) {
-  const selected = files ?? (await inventory(root))
-  return Promise.all(
-    selected.map(async (file) => ({
-      path: file.path,
-      bytes: file.bytes,
-      sha256: await hash(path.join(root, file.path)),
-    })),
-  )
 }
 
 async function object(file: string) {
@@ -168,11 +166,19 @@ export async function resolveDataDirectory(input: {
   if (migrated) return { path: target }
   if (legacy === target) return { path: target }
 
-  const source = (await inventory(legacy)).filter((file) => !reserved.has(file.path.split(path.sep)[0]))
+  const source = (await inventory(legacy)).filter(
+    (file) => !reserved.has(file.path.split(path.sep)[0]) && !transient.test(file.path),
+  )
   if (source.length === 0) return { path: target }
 
   const occupied = (await entries(target)).some((entry) => !reserved.has(entry.name))
 
+  // Once a single file has landed in the target this process must keep using
+  // the target, whatever fails afterwards. Falling back to the legacy root at
+  // that point splits a single launch across two data roots — the CLI reading
+  // one while its server writes the other, which is the failure this import
+  // exists to end.
+  const landed = { value: false }
   const stage = await fs.mkdtemp(path.join(path.resolve(input.home), ".openscience-migrate-"))
   const result = await (async () => {
     const staged = [] as typeof source
@@ -195,12 +201,26 @@ export async function resolveDataDirectory(input: {
       staged.push(file)
     }
 
-    const before = await manifest(stage)
-    const original = await manifest(legacy, staged)
-    if (JSON.stringify(before) !== JSON.stringify(original)) throw new Error("checksum verification failed")
+    // Verify each copy against a fresh hash of its source and drop only the
+    // files that disagree. Comparing whole-tree manifests instead meant one
+    // file changing mid-copy — a session an already-running instance was
+    // still writing — discarded the entire import, credentials and history
+    // included, and left the user signed out for the sake of one stale byte.
+    const verified = [] as typeof staged
+    for (const file of staged) {
+      const [copy, origin] = await Promise.all([
+        hash(path.join(stage, file.path)).catch(() => undefined),
+        hash(path.join(legacy, file.path)).catch(() => undefined),
+      ])
+      if (!copy || copy !== origin) {
+        skipped.push(file.path)
+        continue
+      }
+      verified.push(file)
+    }
 
     const copied = [] as typeof staged
-    for (const file of staged) {
+    for (const file of verified) {
       const destination = path.join(target, file.path)
       await fs.mkdir(path.dirname(destination), { recursive: true })
       const created = await fs
@@ -215,6 +235,7 @@ export async function resolveDataDirectory(input: {
         continue
       }
       await fs.chmod(destination, file.mode)
+      landed.value = true
       copied.push(file)
     }
 
@@ -230,10 +251,26 @@ export async function resolveDataDirectory(input: {
         count.value = Object.keys(legacyData).filter((key) => !(key in current)).length
         return { ...legacyData, ...current }
       })
-      if (count.value > 0) merged.push(name)
+      if (count.value > 0) {
+        landed.value = true
+        merged.push(name)
+      }
     }
 
-    const artifacts = await mergeArtifacts(legacy, target)
+    // Artifacts are the one part of the import that reads a foreign file
+    // format, so they are the one part that can fail on data this code never
+    // wrote: a truncated or half-written legacy artifacts.db raises "file is
+    // not a database". Recovering a user's credentials and history must not
+    // hinge on that — record the reason and finish the import without it,
+    // rather than throwing away everything already verified.
+    const outcome = await mergeArtifacts(legacy, target).then(
+      (count) => ({ count, warning: undefined as string | undefined }),
+      (error: unknown) => ({
+        count: 0,
+        warning: `legacy artifact store not imported: ${error instanceof Error ? error.message : String(error)}`,
+      }),
+    )
+    const artifacts = outcome.count
     const imported = copied.length + merged.length + (artifacts > 0 ? 1 : 0)
     const bytes = [...copied, ...source.filter((file) => merged.includes(file.path))].reduce(
       (total, file) => total + file.bytes,
@@ -256,10 +293,10 @@ export async function resolveDataDirectory(input: {
         mode: 0o600,
       },
     )
-    return { path: target, migrated: migration } satisfies DataResolution
+    return { path: target, migrated: migration, warning: outcome.warning } satisfies DataResolution
   })().catch((error: unknown) => {
     return {
-      path: occupied ? target : legacy,
+      path: occupied || landed.value ? target : legacy,
       error: error instanceof Error ? error.message : String(error),
     } satisfies DataResolution
   })
