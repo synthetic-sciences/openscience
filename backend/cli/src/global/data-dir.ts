@@ -6,6 +6,9 @@ import path from "node:path"
 import { JsonStore } from "../util/jsonstore"
 
 const marker = ".xdg-data-migration-v2.json"
+/** Suffix for a copy in flight. Never collides with a real name, and marks
+ *  leftovers from a killed process as safe to overwrite. */
+const pending = ".openscience-import"
 // Top-level names the import never reads or writes. `log` is disposable and is
 // the one tree a still-running older instance appends to throughout the import,
 // so copying it buys nothing and costs a full SHA-256 pass over tens of MB on
@@ -32,8 +35,8 @@ export interface DataResolution {
     artifacts: number
     /** Already in the target — settled, never retried. */
     skipped: number
-    /** Unreadable or unverifiable this run — the marker is withheld so the
-     *  next launch tries again. */
+    /** Unreadable or unverifiable this run — named in the marker's `pending`
+     *  list so the next launch retries just these. */
     deferred: number
   }
   warning?: string
@@ -75,6 +78,28 @@ async function inventory(root: string) {
     }
   }
   return files.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/** A marker's `pending` list is on-disk data a user can edit, so treat it as
+ *  untrusted: only plain relative paths that stay inside the root. */
+function isRelative(value: unknown): value is string {
+  if (typeof value !== "string" || !value) return false
+  if (path.isAbsolute(value)) return false
+  return !path.normalize(value).split(/[\\/]/).includes("..")
+}
+
+/** Re-stat named paths so a resumed import works from what is on disk now,
+ *  not from what the previous run recorded. Anything gone is dropped. */
+async function describe(root: string, names: string[]) {
+  const files = await Promise.all(
+    names.map((name) =>
+      fs
+        .stat(path.join(root, name))
+        .then((stat) => (stat.isFile() ? { path: name, bytes: stat.size, mode: stat.mode & 0o777 } : undefined))
+        .catch(() => undefined),
+    ),
+  )
+  return files.filter((file) => file !== undefined).sort((a, b) => a.path.localeCompare(b.path))
 }
 
 /** Whether both roots seal credentials.json with the same machine key — true
@@ -195,17 +220,34 @@ export async function resolveDataDirectory(input: {
 
   const target = path.join(path.resolve(input.home), ".openscience")
   const legacy = path.resolve(input.legacy)
-  const migrated = await fs
-    .stat(path.join(target, marker))
-    .then((stat) => stat.isFile())
-    .catch(() => false)
-  if (migrated) return { path: target }
+  // A sealed marker with nothing outstanding is the steady state for every
+  // user after their first upgrade, so it has to be the cheapest path here:
+  // one stat, no walk.
+  const sealed = await Bun.file(path.join(target, marker))
+    .json()
+    .then((value) => (value && typeof value === "object" ? (value as { pending?: unknown }) : undefined))
+    .catch(() => undefined)
+  const outstanding = Array.isArray(sealed?.pending) ? (sealed.pending as unknown[]).filter(isRelative) : []
+  if (sealed && outstanding.length === 0) return { path: target }
   if (legacy === target) return { path: target }
 
-  const source = (await inventory(legacy)).filter(
-    (file) => !reserved.has(file.path.split(path.sep)[0]) && !transient.test(file.path),
-  )
-  if (source.length === 0) return { path: target }
+  // A resumed import revisits only the paths the previous run named. The rest
+  // of the tree was settled then, and re-walking it to rediscover that is what
+  // made a single unreadable file expensive on every launch.
+  const source = sealed
+    ? await describe(legacy, outstanding)
+    : (await inventory(legacy)).filter(
+        (file) => !reserved.has(file.path.split(path.sep)[0]) && !transient.test(file.path),
+      )
+  if (source.length === 0) {
+    // Nothing left to fetch — the stragglers are gone from the legacy root
+    // too. Clear the list so the next launch takes the one-stat path.
+    if (sealed)
+      await Bun.write(path.join(target, marker), `${JSON.stringify({ ...sealed, pending: [] }, null, 2)}\n`, {
+        mode: 0o600,
+      }).catch(() => undefined)
+    return { path: target }
+  }
 
   const occupied = (await entries(target)).some((entry) => !reserved.has(entry.name))
 
@@ -215,16 +257,16 @@ export async function resolveDataDirectory(input: {
   // one while its server writes the other, which is the failure this import
   // exists to end.
   const landed = { value: false }
-  const stage = await fs.mkdtemp(path.join(path.resolve(input.home), ".openscience-migrate-"))
   const result = await (async () => {
-    const staged = [] as typeof source
+    const copied = [] as typeof source
     // Two different reasons to not carry a file, with opposite consequences.
     // `present` means the target already has its own copy — settled forever,
     // and the whole point of never overwriting. `deferred` means this run
     // could not read or verify the source: a permission error, a file being
-    // rewritten underneath us, a disk hiccup. Sealing the import with a marker
-    // while anything is deferred would strand those files permanently, so the
-    // two must not be counted together.
+    // rewritten underneath us, a disk hiccup. Those go into the marker's
+    // `pending` list to be retried by name, so the two must not be counted
+    // together: folding them would either strand the second permanently or
+    // send the next launch chasing the first.
     const present: string[] = []
     const deferred: string[] = []
     const carried = new Set<string>()
@@ -245,58 +287,58 @@ export async function resolveDataDirectory(input: {
         present.push(file.path)
         continue
       }
+      // Staged beside its destination rather than in a scratch directory that
+      // is later copied across. Going through a staging root meant writing
+      // every byte twice and needing twice the free space before the CLI would
+      // start — and on a nearly full disk the second write is what fails, so
+      // the cost also bought a failure mode. Here the bytes are written once
+      // and the file is linked into place.
+      //
       // One unreadable file must cost that file and nothing else. Letting the
-      // copy throw here abandoned the entire import — credentials, session,
-      // and history included — over a single chmod 000 leftover.
-      const temporary = path.join(stage, file.path)
+      // copy throw abandoned the entire import — credentials, session, and
+      // history included — over a single chmod 000 leftover.
+      const temporary = `${destination}.${process.pid}${pending}`
       const ready = await fs
-        .mkdir(path.dirname(temporary), { recursive: true })
+        .mkdir(path.dirname(destination), { recursive: true })
         .then(() => fs.copyFile(path.join(legacy, file.path), temporary))
         .then(() => fs.chmod(temporary, file.mode))
-        .then(() => true)
+        // Verify the copy against a fresh hash of its source, so a file being
+        // rewritten underneath us is dropped alone rather than silently landing
+        // half old and half new.
+        .then(async () => {
+          const [copy, origin] = await Promise.all([hash(temporary), hash(path.join(legacy, file.path))])
+          return copy === origin
+        })
         .catch(() => false)
       if (!ready) {
+        await fs.rm(temporary, { force: true }).catch(() => undefined)
         deferred.push(file.path)
         continue
       }
-      carried.add(file.path)
-      staged.push(file)
-    }
-
-    // Verify each copy against a fresh hash of its source and drop only the
-    // files that disagree. Comparing whole-tree manifests instead meant one
-    // file changing mid-copy — a session an already-running instance was
-    // still writing — discarded the entire import, credentials and history
-    // included, and left the user signed out for the sake of one stale byte.
-    const verified = [] as typeof staged
-    for (const file of staged) {
-      const [copy, origin] = await Promise.all([
-        hash(path.join(stage, file.path)).catch(() => undefined),
-        hash(path.join(legacy, file.path)).catch(() => undefined),
-      ])
-      if (!copy || copy !== origin) {
-        deferred.push(file.path)
-        continue
-      }
-      verified.push(file)
-    }
-
-    const copied = [] as typeof staged
-    for (const file of verified) {
-      const destination = path.join(target, file.path)
-      await fs.mkdir(path.dirname(destination), { recursive: true })
-      // EXCL is what makes two concurrently booting processes safe: whoever
-      // loses the race is told EEXIST rather than overwriting the winner.
+      // link() is the atomic create-if-absent that makes two concurrently
+      // booting processes safe: the loser is told EEXIST rather than
+      // overwriting the winner. Filesystems without hardlinks fall back to a
+      // copy with the same exclusive semantics.
       const created = await fs
-        .copyFile(path.join(stage, file.path), destination, constants.COPYFILE_EXCL)
+        .link(temporary, destination)
         .then(() => "created" as const)
-        .catch((error: NodeJS.ErrnoException) => (error.code === "EEXIST" ? ("present" as const) : ("failed" as const)))
+        .catch((error: NodeJS.ErrnoException) =>
+          error.code === "EEXIST"
+            ? ("present" as const)
+            : fs
+                .copyFile(temporary, destination, constants.COPYFILE_EXCL)
+                .then(() => "created" as const)
+                .catch((fallback: NodeJS.ErrnoException) =>
+                  fallback.code === "EEXIST" ? ("present" as const) : ("failed" as const),
+                ),
+        )
+      await fs.rm(temporary, { force: true }).catch(() => undefined)
       if (created !== "created") {
         ;(created === "present" ? present : deferred).push(file.path)
         continue
       }
-      await fs.chmod(destination, file.mode).catch(() => undefined)
       landed.value = true
+      carried.add(file.path)
       copied.push(file)
     }
 
@@ -344,10 +386,15 @@ export async function resolveDataDirectory(input: {
     // not a database". Recovering a user's credentials and history must not
     // hinge on that — record the reason and finish the import without it,
     // rather than throwing away everything already verified.
-    const artifacts = await mergeArtifacts(legacy, target).catch((error: unknown) => {
-      notes.push(`legacy artifact store not imported: ${error instanceof Error ? error.message : String(error)}`)
-      return 0
-    })
+    // Only on a first import. A resume is chasing a handful of named files;
+    // replaying every artifact row to re-discover that they are all already
+    // there would cost more than the retry it is part of.
+    const artifacts = sealed
+      ? 0
+      : await mergeArtifacts(legacy, target).catch((error: unknown) => {
+          notes.push(`legacy artifact store not imported: ${error instanceof Error ? error.message : String(error)}`)
+          return 0
+        })
     const bytes = copied.reduce((total, file) => total + file.bytes, 0)
     const migration = {
       source: legacy,
@@ -360,19 +407,21 @@ export async function resolveDataDirectory(input: {
       deferred: deferred.length,
     }
     await fs.mkdir(target, { recursive: true })
-    // The marker short-circuits every later boot, so writing it is a promise
-    // that nothing is left to fetch. Anything deferred — unreadable, or moving
-    // under the copy — would be stranded for good, so leave the import open and
-    // let the next launch finish the job. Retries are cheap: files already in
-    // the target are skipped before they are ever hashed.
-    if (deferred.length === 0)
-      await Bun.write(
-        path.join(target, marker),
-        `${JSON.stringify({ ...migration, migratedAt: Date.now() }, null, 2)}\n`,
-        { mode: 0o600 },
-      )
+    // Always seal, and carry the outstanding paths inside the marker. Leaving
+    // the marker unwritten instead made every later launch re-walk and re-stat
+    // the whole legacy tree — `--version` included — for as long as one file
+    // stayed unreadable, which for a root-owned leftover is forever. Naming
+    // the stragglers means the retry costs one stat each and the common case
+    // still short-circuits on the first line of the function.
+    // A resume keeps the original import's record and only updates what is
+    // still outstanding — overwriting it with a retry's counts would erase the
+    // one account of what actually moved.
+    const record = sealed
+      ? { ...sealed, pending: deferred, resumedAt: Date.now() }
+      : { ...migration, migratedAt: Date.now(), pending: deferred }
+    await Bun.write(path.join(target, marker), `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 })
     if (deferred.length > 0)
-      notes.push(`${deferred.length} file(s) could not be read from ${legacy} and will be retried on the next launch`)
+      notes.push(`${deferred.length} file(s) could not be read from ${legacy}; the next launch will retry them`)
     return {
       path: target,
       migrated: migration,
@@ -384,6 +433,5 @@ export async function resolveDataDirectory(input: {
       error: error instanceof Error ? error.message : String(error),
     } satisfies DataResolution
   })
-  await fs.rm(stage, { recursive: true, force: true })
   return result
 }

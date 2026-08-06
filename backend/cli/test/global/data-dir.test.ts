@@ -309,13 +309,63 @@ describe("OpenScience data directory", () => {
     expect(result.migrated?.deferred).toBe(1)
     expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
     expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("kept")
-    // Nothing was sealed, so the next launch retries the file it could not read.
-    expect(fsSync.existsSync(path.join(target, ".xdg-data-migration-v2.json"))).toBe(false)
+    // Sealed, but the straggler is named, so the retry costs one stat rather
+    // than a fresh walk of the whole legacy tree on every later launch.
+    const record = path.join(target, ".xdg-data-migration-v2.json")
+    expect(JSON.parse(await fs.readFile(record, "utf8")).pending).toEqual(["storage/session/locked.json"])
+
     await fs.chmod(path.join(legacy, "storage", "session", "locked.json"), 0o600)
     const retry = await resolveDataDirectory({ home, legacy })
     expect(retry.migrated?.deferred).toBe(0)
     expect(fsSync.existsSync(path.join(target, "storage", "session", "locked.json"))).toBe(true)
-    expect(fsSync.existsSync(path.join(target, ".xdg-data-migration-v2.json"))).toBe(true)
+    // Resuming keeps the original import's record and clears the list, so the
+    // launch after this one takes the one-stat path.
+    const after = JSON.parse(await fs.readFile(record, "utf8"))
+    expect(after.pending).toEqual([])
+    expect(after.migratedAt).toBeDefined()
+
+    const settled = await resolveDataDirectory({ home, legacy })
+    expect(settled.migrated).toBeUndefined()
+    expect(settled.path).toBe(target)
+  })
+
+  test("a straggler that disappears stops being chased", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+    await fs.writeFile(path.join(legacy, "gone.json"), "{}")
+    await fs.chmod(path.join(legacy, "gone.json"), 0o000)
+
+    expect((await resolveDataDirectory({ home, legacy })).migrated?.deferred).toBe(1)
+    await fs.rm(path.join(legacy, "gone.json"), { force: true })
+
+    const retry = await resolveDataDirectory({ home, legacy })
+
+    expect(retry.path).toBe(target)
+    const record = JSON.parse(await fs.readFile(path.join(target, ".xdg-data-migration-v2.json"), "utf8"))
+    expect(record.pending).toEqual([])
+  })
+
+  test("never writes outside the target for a hand-edited pending list", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.mkdir(target, { recursive: true })
+    await fs.writeFile(path.join(home, "secret"), "original")
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"legacy"}')
+    await fs.writeFile(
+      path.join(target, ".xdg-data-migration-v2.json"),
+      JSON.stringify({ pending: ["../secret", "/etc/passwd", "openscience-session.json"] }),
+    )
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.path).toBe(target)
+    expect(await fs.readFile(path.join(home, "secret"), "utf8")).toBe("original")
+    expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("legacy")
   })
 
   test("a corrupt legacy credential store does not abort the import", async () => {
