@@ -1,6 +1,6 @@
 import fs from "fs/promises"
 import { Database, type SQLQueryBindings } from "bun:sqlite"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { constants, createReadStream, existsSync } from "node:fs"
 import path from "node:path"
 import { JsonStore } from "../util/jsonstore"
@@ -388,7 +388,12 @@ export async function resolveDataDirectory(input: {
       // One unreadable file must cost that file and nothing else. Letting the
       // copy throw abandoned the entire import — credentials, session, and
       // history included — over a single chmod 000 leftover.
-      const temporary = `${destination}.${process.pid}${pending}`
+      // Unique per call, not just per process. Two imports running inside one
+      // process — which is what a Promise.all over resolveDataDirectory is —
+      // share a pid, so a pid-suffixed name has them writing the same staging
+      // file and deleting it out from under each other mid-verify. Same
+      // reasoning as atomicWrite in openscience/index.ts.
+      const temporary = `${destination}.${process.pid}.${randomUUID()}${pending}`
       const ready = await fs
         .mkdir(path.dirname(destination), { recursive: true })
         .then(() => fs.copyFile(path.join(legacy, file.path), temporary))
