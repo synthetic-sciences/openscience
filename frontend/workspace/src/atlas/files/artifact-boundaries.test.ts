@@ -179,6 +179,43 @@ describe("artifact grid inside the app's boundaries", () => {
     expect(host.textContent).not.toContain("BOUNDARY-CAUGHT")
   })
 
+  // Read counts alone cannot guard the memo split any more: the preview cache
+  // would absorb the extra reads and the test would pass with every card being
+  // destroyed and rebuilt. Node identity is what actually says <For> reused them.
+  test("keeps the same card elements when only the view changes", async () => {
+    const host = mountGuarded(() =>
+      grid.ArtifactGrid({
+        artifacts: [
+          artifact({ id: "art_a", filename: "a.py", session: "ses_1", createdAt: 20 }),
+          artifact({ id: "art_b", filename: "b.py", session: "ses_2", createdAt: 10 }),
+        ],
+        titles: new Map(),
+        currentSession: undefined,
+        url: () => "",
+        read: async () => "import numpy",
+        highlight: async (code: string) => code,
+        onOpen: () => {},
+        onRename: () => {},
+        onTrash: () => {},
+      } as never),
+    )
+    await settle(120)
+    const before = [...host.querySelectorAll("[data-card-open]")]
+    expect(before).toHaveLength(2)
+
+    host.querySelector<HTMLButtonElement>("[data-artifact-layout='list']")!.click()
+    await settle(80)
+    host.querySelector<HTMLButtonElement>("[data-artifact-prefs]")!.click()
+    host.querySelector<HTMLButtonElement>("[data-pref='sizes']")!.click()
+    await settle(80)
+
+    const after = [...host.querySelectorAll("[data-card-open]")]
+
+    expect(after).toHaveLength(2)
+    expect(after[0]).toBe(before[0]!)
+    expect(after[1]).toBe(before[1]!)
+  })
+
   // readView runs during render; a storage getter that throws would otherwise
   // take the workspace down with it.
   test("survives a localStorage getter that throws during render", async () => {

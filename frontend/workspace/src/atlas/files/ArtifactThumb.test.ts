@@ -91,6 +91,23 @@ describe("artifact thumbnail", () => {
     expect(image?.getAttribute("loading")).toBe("lazy")
   })
 
+  // artifactUrl yields "" when no builder exists, which resolves to the current
+  // document -- without onError that renders the browser's broken-image glyph.
+  test("falls back to the extension when the image cannot be served", async () => {
+    const host = mount(() =>
+      subject.ArtifactThumb({
+        artifact: artifact({ filename: "fit.png", mimeType: "image/png" }),
+        url: () => "",
+        read: async () => "",
+      }),
+    )
+    host.querySelector("img")!.dispatchEvent(new Event("error"))
+    await settle()
+
+    expect(host.querySelector("img")).toBeNull()
+    expect(host.querySelector("[data-thumb-chip]")?.textContent).toBe("png")
+  })
+
   test("shows the first ten lines, tinted", async () => {
     const body = Array.from({ length: 20 }, (unused, index) => `line ${index}`).join("\n")
     const host = mount(() =>

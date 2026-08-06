@@ -85,12 +85,16 @@ A session with no title in the sync store falls back to its abbreviated id. It n
 
 ### Two menus, two glyphs
 
-- **Toolbar** (`⚙`) — view preferences: show file sizes, copy the store path.
+- **Toolbar** (`⚙`) — view preferences: show file sizes.
 - **Card** (`⋮`, on hover and on focus) — Open in tab, Download, Rename…, Move to trash.
 
-"Reveal the store folder in a file manager" was specified and then cut: no `xdg-open`,
-`showItemInFolder` or equivalent route exists in the backend, so the item would have been dead on
-arrival. Copying the path to the clipboard is client-side and real.
+Two store-location items were specified and both cut. "Reveal the store folder in a file manager"
+has no `xdg-open` or equivalent route in the backend. "Copy store path" then failed on two counts:
+the store lives under `Global.Path.data`, which the server's `/path` payload never sends
+(`server.ts:381` sends home, state, config, worktree, directory), and the blobs are content-addressed
+— `blobs/86/8d/868d02bc…` with no filename or extension — so the path leads to a directory in which
+no artifact can be found by looking. The path a person actually wants, the file an artifact was
+captured from, is already shown by the viewer as **Source file** (`StoredArtifactView.tsx:414`).
 
 A card's meta line reads `2m ago`. With **Show file sizes** on it reads `2m ago · 1.2 KB`.
 
@@ -109,6 +113,13 @@ Rename opens a dialog through the existing `useDialog` host — the same host `F
 `uiStore.openSaved(artifact)` — the existing viewer, as a tab beside Files. This is what fixes the
 `sourcePath` defect: the viewer previews stored bytes and names their version, and its trash action
 already dispatches `openscience:artifacts-changed`, so the grid refreshes itself.
+
+### The pane opens on artifacts, and remembers where it was left
+
+Artifacts are what a session produces, so they lead rather than the project tree. The picked source
+is persisted under `openscience:files-source` and wins on the next mount — but only while it still
+names a source that exists, so a revoked grant or a closed project falls back to artifacts rather
+than rendering nothing.
 
 ### View state persists globally
 

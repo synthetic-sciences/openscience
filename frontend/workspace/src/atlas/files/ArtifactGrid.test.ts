@@ -24,8 +24,8 @@ afterAll(() => server.close())
 afterEach(() => {
   cleanups.splice(0).forEach((fn) => fn())
   document.body.replaceChildren()
-  // The grid persists its view, so a test that changes sort or layout would
-  // otherwise decide what the next test starts from.
+  // Bun shares localStorage across every test file in one process, so this
+  // guards the next FILE as much as the next test.
   globalThis.localStorage?.clear()
 })
 
@@ -36,6 +36,7 @@ const mount = (view: () => JSX.Element) => {
   return host
 }
 
+let versions = 0
 const artifact = (over: { filename: string; session: string; createdAt: number }) =>
   ({
     schemaVersion: 1,
@@ -49,7 +50,7 @@ const artifact = (over: { filename: string; session: string; createdAt: number }
     state: "active",
     versionCount: 1,
     current: {
-      id: "ver_1",
+      id: `ver_${(versions += 1)}`,
       artifactID: `art_${over.filename}`,
       version: 1,
       filename: over.filename,
@@ -143,6 +144,14 @@ describe("artifact grid", () => {
 
     expect(host.querySelector("[data-card-meta]")?.textContent).toContain("100 B")
     expect(host.querySelector("[role='menu']")).not.toBeNull()
+  })
+
+  // "No artifacts saved yet." is a lie when a search simply matched nothing.
+  test("says a search matched nothing rather than claiming none are saved", () => {
+    const host = mount(() => subject.ArtifactGrid(props({ artifacts: [], filtered: true }) as never))
+
+    expect(host.textContent).toContain("No artifacts match this search.")
+    expect(host.textContent).not.toContain("No artifacts saved yet.")
   })
 
   test("names the empty state for artifacts, not folders", () => {

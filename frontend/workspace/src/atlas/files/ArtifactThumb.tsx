@@ -38,7 +38,9 @@ const previews = new Map<string, Preview>()
 const PREVIEW_CACHE_LIMIT = 200
 
 const remember = (version: string, preview: Preview) => {
-  if (previews.size >= PREVIEW_CACHE_LIMIT) {
+  // Only evict when the map is about to grow: overwriting a key it already holds
+  // would otherwise drop an unrelated entry for nothing.
+  if (!previews.has(version) && previews.size >= PREVIEW_CACHE_LIMIT) {
     const oldest = previews.keys().next()
     if (!oldest.done) previews.delete(oldest.value)
   }
