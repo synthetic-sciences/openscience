@@ -1,5 +1,20 @@
 import { For, Show, createSignal, type JSX } from "solid-js"
 import { groupSources, type PaneSource } from "@/atlas/files/sources"
+import { IconArchive, IconFolder, IconFolderAdd, IconLink, IconServer, IconTrash } from "@/atlas/shared/Icon"
+
+/**
+ * One icon per kind of place files come from. A connected folder is drawn as a
+ * link rather than a folder because that is what distinguishes it from the
+ * project's own tree, and a provider is drawn as a server because its files are
+ * not on this machine at all.
+ */
+const glyph = (kind: PaneSource["kind"]) => {
+  if (kind === "artifacts") return IconArchive
+  if (kind === "trash") return IconTrash
+  if (kind === "connected") return IconLink
+  if (kind === "modal") return IconServer
+  return IconFolder
+}
 
 export function SourceMenu(props: {
   sources: PaneSource[]
@@ -77,13 +92,7 @@ export function SourceMenu(props: {
                           onClick={() => pick(source)}
                         >
                           <span class="files-menu__glyph" aria-hidden="true">
-                            {source.kind === "artifacts"
-                              ? "◈"
-                              : source.kind === "trash"
-                                ? "◌"
-                                : source.kind === "connected"
-                                  ? "◇"
-                                  : "▢"}
+                            {glyph(source.kind)({ size: 15, strokeWidth: 1.5 })}
                           </span>
                           <span>
                             <span class="files-menu__label">{source.name}</span>
@@ -135,7 +144,7 @@ export function SourceMenu(props: {
                 }}
               >
                 <span class="files-menu__glyph" aria-hidden="true">
-                  +
+                  <IconFolderAdd size={15} strokeWidth={1.5} />
                 </span>
                 <span>
                   <span class="files-menu__label">Add folder…</span>

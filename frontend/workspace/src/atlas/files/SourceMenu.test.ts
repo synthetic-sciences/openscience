@@ -154,4 +154,23 @@ describe("source menu", () => {
     // A 1fr grid track will not shrink below its content without this.
     expect(css).toMatch(/\.files-menu__item\s*>\s*span:nth-child\(2\)\s*\{[^}]*min-width: 0/s)
   })
+
+  // The kinds were text glyphs (a square for anything with a root), so a
+  // connected folder, the project and a cloud provider all drew identically.
+  test("renders an icon per source kind rather than one square for all of them", () => {
+    const host = mount(() =>
+      subject.SourceMenu({
+        sources: SOURCES,
+        active: SOURCES[0]!,
+        onPick: () => {},
+        onAdd: () => {},
+      }),
+    )
+    host.querySelector<HTMLButtonElement>("[data-source-button]")!.click()
+
+    const glyphs = [...host.querySelectorAll(".files-menu__glyph svg")]
+
+    expect(glyphs.length).toBe(host.querySelectorAll("[data-source-item]").length + 1)
+    expect(host.querySelector(".files-menu__glyph")?.textContent?.trim()).toBe("")
+  })
 })

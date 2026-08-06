@@ -115,6 +115,11 @@
   overflow: hidden;
 }
 .files-menu__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Fixed box so every label starts at the same x, whatever the icon's width. */
+  width: 16px;
   color: var(--color-text-faint);
 }
 .files-menu__label {
