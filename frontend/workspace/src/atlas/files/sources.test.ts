@@ -58,6 +58,34 @@ describe("pane sources", () => {
 
     expect(groups.map((g) => g.group)).toEqual(["Artifacts", "This computer"])
   })
+
+  // Modal Volumes were a browsable source before this pane replaced the screen
+  // that carried them; they belong under Remote, which nothing else emits.
+  test("lists each Modal Volume as its own remote source", () => {
+    const list = buildSources({ projectRoot: "/p", projectName: "p", grants: [], volumes: ["weights", "datasets"] })
+    const remote = list.filter((source) => source.kind === "modal")
+
+    expect(remote.map((source) => source.name)).toEqual(["weights", "datasets"])
+    expect(remote.map((source) => source.id)).toEqual(["modal:weights", "modal:datasets"])
+    expect(remote.every((source) => source.group === "Remote")).toBe(true)
+    // A volume is browsable and downloadable, never writable from here.
+    expect(remote.every((source) => source.readonly)).toBe(true)
+    // Empty root: the pane joins root with the walked path, so "/" would ask
+    // the volume for "//data".
+    expect(remote[0]!.root).toBe("")
+  })
+
+  test("omits the remote group entirely when no volume is reachable", () => {
+    const groups = groupSources(buildSources({ projectRoot: "/p", projectName: "p", grants: [], volumes: [] }))
+
+    expect(groups.map((g) => g.group)).not.toContain("Remote")
+  })
+
+  test("keeps volumes after local sources so the picker order is stable", () => {
+    const groups = groupSources(buildSources({ projectRoot: "/p", projectName: "p", grants: [], volumes: ["weights"] }))
+
+    expect(groups.map((g) => g.group)).toEqual(["Artifacts", "This computer", "Remote"])
+  })
 })
 
 describe("middle truncation", () => {

@@ -8,7 +8,7 @@ export interface PaneSource {
   name: string
   sub?: string
   root: string
-  kind: "artifacts" | "trash" | "project" | "session" | "connected"
+  kind: "artifacts" | "trash" | "project" | "session" | "connected" | "modal"
   readonly?: boolean
   live?: boolean
 }
@@ -20,6 +20,8 @@ export function buildSources(input: {
   projectName: string
   grants: FilesystemGrant[]
   sessionRoot?: string
+  /** Modal Volume names, once they have been fetched. Absent until then. */
+  volumes?: string[]
 }): PaneSource[] {
   const list: PaneSource[] = [
     { id: "artifacts", group: "Artifacts", name: "All artifacts", root: "", kind: "artifacts" },
@@ -55,6 +57,21 @@ export function buildSources(input: {
       root: grant.path,
       kind: "connected",
       readonly: grant.access === "read",
+    })
+  }
+  // A volume browses and downloads but never writes: the pane reaches it over
+  // the Modal API, not a mount, so there is nothing to save back through.
+  for (const volume of input.volumes ?? []) {
+    list.push({
+      id: `modal:${volume}`,
+      group: "Remote",
+      name: volume,
+      sub: "Modal Volume",
+      // Empty, not "/": the pane joins a source's root with the folders walked
+      // into it, and a "/" root would ask the volume for "//data".
+      root: "",
+      kind: "modal",
+      readonly: true,
     })
   }
   return list

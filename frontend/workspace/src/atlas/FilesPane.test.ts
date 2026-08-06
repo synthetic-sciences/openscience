@@ -47,8 +47,8 @@ const mount = (view: () => JSX.Element) => {
 // GET /file returns a bare array body (backend/cli/src/server/routes/file.ts:158-182),
 // never a {data} wrapper — that shape belongs only to the generated client's
 // RequestResult, which this pane's transport never touches.
-const listing = (rows: unknown[]) =>
-  new Response(JSON.stringify(rows), { status: 200, headers: { "Content-Type": "application/json" } })
+const listing = (body: unknown) =>
+  new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } })
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50))
 
@@ -177,6 +177,114 @@ describe("files pane", () => {
 
     expect(host.querySelector("[data-source-button]")?.textContent).toContain("All artifacts")
     expect(host.querySelector("[data-artifact-grid]")).not.toBeNull()
+  })
+
+  // #253 shipped Modal Volumes as a browsable source inside the screen this pane
+  // replaced. The capability moves here rather than being lost with that screen.
+  const modal = (over: { connected?: boolean; enabled?: boolean; files?: unknown[] } = {}) => {
+    const calls: string[] = []
+    const request = async (path: string, _init?: RequestInit, query?: Record<string, string>) => {
+      calls.push(query?.path ? `${path}?path=${query.path}` : path)
+      if (path === "/settings/compute")
+        return listing({
+          providers: [{ id: "modal", connected: over.connected ?? true, enabled: over.enabled ?? true }],
+        })
+      if (path === "/settings/compute/modal/volumes") return listing([{ name: "weights" }, { name: "datasets" }])
+      if (path.includes("/volumes/") && path.endsWith("/files"))
+        return listing(
+          over.files ?? [
+            { path: "ckpt", type: "directory", size: 0 },
+            { path: "notes.md", type: "file", size: 12 },
+          ],
+        )
+      if (path.includes("/volumes/") && path.endsWith("/file")) return new Response("remote bytes", { status: 200 })
+      if (path.startsWith("/file/artifact-store")) return listing([])
+      return listing([])
+    }
+    return { calls, request }
+  }
+
+  test("does not ask Modal for anything until the picker is opened", async () => {
+    const { calls, request } = modal()
+    const host = mount(() => subject.FilesPane({ request }))
+    await settle()
+
+    expect(calls.some((path) => path.includes("modal"))).toBe(false)
+    expect(calls.some((path) => path === "/settings/compute")).toBe(false)
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await settle()
+
+    expect(calls).toContain("/settings/compute/modal/volumes")
+  })
+
+  test("lists each Volume under Remote once the picker is opened", async () => {
+    const { request } = modal()
+    const host = mount(() => subject.FilesPane({ request }))
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await settle()
+
+    expect(host.querySelector('[data-source-item="modal:weights"]')).not.toBeNull()
+    expect(host.querySelector('[data-source-item="modal:datasets"]')).not.toBeNull()
+    expect(host.textContent).toContain("Remote")
+  })
+
+  test("offers no Volume when Modal is connected but disabled", async () => {
+    const { calls, request } = modal({ enabled: false })
+    const host = mount(() => subject.FilesPane({ request }))
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await settle()
+
+    expect(host.querySelector('[data-source-item="modal:weights"]')).toBeNull()
+    expect(calls).not.toContain("/settings/compute/modal/volumes")
+  })
+
+  test("browses a Volume over the Modal API, not the local file route", async () => {
+    const { calls, request } = modal()
+    const host = mount(() => subject.FilesPane({ request }))
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-source-item="modal:weights"]')?.click()
+    await settle()
+
+    expect(calls).toContain("/settings/compute/modal/volumes/weights/files?path=/")
+    expect([...host.querySelectorAll("[data-file-name]")].map((node) => node.textContent)).toEqual(["ckpt", "notes.md"])
+    // A Volume path is not this machine's path; the local listing must not run.
+    expect(calls.filter((path) => path.startsWith("/file?")).length).toBe(0)
+  })
+
+  test("downloads a Volume file rather than opening a tab it cannot read", async () => {
+    const got: Array<{ name: string; text: string }> = []
+    const { calls, request } = modal()
+    const host = mount(() =>
+      subject.FilesPane({
+        request,
+        onDownload: (name, blob) => void blob.text().then((text) => got.push({ name, text })),
+        view: () => {
+          const node = document.createElement("p")
+          node.dataset.stubView = "opened"
+          return node
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-source-item="modal:weights"]')?.click()
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-row="notes.md"]')?.click()
+    await settle()
+
+    expect(calls).toContain("/settings/compute/modal/volumes/weights/file?path=notes.md")
+    expect(host.querySelector("[data-stub-view]")).toBeNull()
+    expect(got).toEqual([{ name: "notes.md", text: "remote bytes" }])
   })
 
   test("renders the tab strip, the picker and a table", async () => {

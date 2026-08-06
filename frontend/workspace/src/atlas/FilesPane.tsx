@@ -159,6 +159,8 @@ export function FilesPane(
      */
     url?: (path: string, query: Record<string, string>) => string
     onOpenArtifact?: (artifact: StoredArtifact) => void
+    /** Receives a downloaded Modal Volume file instead of clicking an anchor. */
+    onDownload?: (name: string, blob: Blob) => void
     onRenameArtifact?: (artifact: StoredArtifact, submit: (title: string) => Promise<unknown>) => void
   } = {},
 ): JSX.Element {
@@ -206,12 +208,37 @@ export function FilesPane(
   const [snapshot, { refetch: refetchSnapshot }] = createResource(identity, (current) =>
     readAccess(transport, current).catch(() => undefined),
   )
+  // Modal Volumes are a browsable source, but listing them calls Modal's API, so
+  // it waits until someone opens the picker looking for a source. `wanted` is
+  // what makes that lazy: the resource has no key until the menu is first
+  // opened. A provider that is not connected and enabled is not asked at all.
+  const [wanted, setWanted] = createSignal(false)
+  const [volumes] = createResource(
+    () => (wanted() ? (sdk?.directory ?? true) : undefined),
+    async () => {
+      const providers = await transport("/settings/compute")
+        .then(json)
+        .then(
+          (value) =>
+            (value as { providers?: Array<{ id: string; connected: boolean; enabled: boolean }> }).providers ?? [],
+        )
+        .catch(() => [])
+      const modal = providers.find((provider) => provider.id === "modal")
+      if (!modal?.connected || !modal.enabled) return [] as string[]
+      return transport("/settings/compute/modal/volumes")
+        .then(json)
+        .then((value) => (Array.isArray(value) ? (value as Array<{ name: string }>).map((item) => item.name) : []))
+        .catch(() => [])
+    },
+  )
+
   const sources = createMemo(() =>
     buildSources({
       projectRoot: projectRoot(),
       projectName: projectName(),
       grants: connectedFilesystemGrants(snapshot.latest),
       sessionRoot: sessionFilesystemRoot(snapshot.latest),
+      volumes: volumes.latest,
     }),
   )
 
@@ -265,10 +292,12 @@ export function FilesPane(
   // its source with ===, so the listing refetched on every unrelated rebuild of
   // `sources()` — a grant snapshot arriving re-listed a folder that had not
   // moved. Compare the parts instead.
-  const key = createMemo(() => [where(), sessionID(), current().kind] as const, undefined, {
-    equals: (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2],
+  // The source id joins the key so that switching between two Modal Volumes,
+  // which share a kind and an empty root, actually re-lists.
+  const key = createMemo(() => [where(), sessionID(), current().kind, current().id] as const, undefined, {
+    equals: (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3],
   })
-  const [entries] = createResource(key, ([target, session, kind]) => {
+  const [entries] = createResource(key, ([target, session, kind, id]) => {
     // The artifacts and trash pseudo-sources always have root "" — they are
     // backed by the artifact store, not the filesystem, and the server
     // falls back an empty path to the project root (File.list(dir || root)),
@@ -282,6 +311,28 @@ export function FilesPane(
       // not be read" over a perfectly good trash list.
       setError("")
       return Promise.resolve([] as FileRow[])
+    }
+    // A Volume is not on this machine: it lists over Modal's API, and its
+    // entries carry a path relative to the volume root rather than to any
+    // directory on disk.
+    if (kind === "modal") {
+      const volume = encodeURIComponent(id.slice("modal:".length))
+      return transport(`/settings/compute/modal/volumes/${volume}/files`, undefined, { path: `/${target}` })
+        .then(json)
+        .then((value) => {
+          setError("")
+          if (!Array.isArray(value)) return [] as FileRow[]
+          return (value as Array<{ path: string; type: string; size: number }>).map((entry) => ({
+            name: entry.path.split("/").filter(Boolean).at(-1) ?? entry.path,
+            type: entry.type === "directory" ? ("directory" as const) : ("file" as const),
+            size: entry.size,
+            path: entry.path,
+          }))
+        })
+        .catch((value) => {
+          setError(`This Volume could not be read. ${errorMessage(value)}`)
+          return [] as FileRow[]
+        })
     }
     const query: Record<string, string> = { path: target }
     if (session) query.sessionID = session
@@ -390,6 +441,34 @@ export function FilesPane(
     }
     if (props.onRenameArtifact) return props.onRenameArtifact(artifact, submit)
     dialog?.show(() => <RenameArtifact artifact={artifact} onSubmit={submit} onClose={() => dialog.close()} />)
+  }
+
+  /**
+   * A Volume file has no path on this machine, so there is nothing for a tab to
+   * read: the pane downloads it instead, which is what the surface this replaced
+   * did. The seam exists because a standalone mount has no document to click
+   * through and no object URLs to revoke.
+   */
+  const downloadRemote = async (row: FileRow) => {
+    const volume = encodeURIComponent(current().id.slice("modal:".length))
+    setBusy(true)
+    return transport(`/settings/compute/modal/volumes/${volume}/file`, undefined, { path: row.path ?? row.name })
+      .then(async (response) => {
+        if (!response.ok) throw new Error((await response.text()) || `Download failed (${response.status})`)
+        const blob = await response.blob()
+        if (props.onDownload) return props.onDownload(row.name, blob)
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement("a")
+        anchor.href = url
+        anchor.download = row.name
+        anchor.hidden = true
+        document.body.append(anchor)
+        anchor.click()
+        anchor.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 0)
+      })
+      .catch((value) => setError(`${row.name} could not be downloaded. ${errorMessage(value)}`))
+      .finally(() => setBusy(false))
   }
 
   // Tabs are keyed by name because that is what the strip shows. Re-opening a
@@ -509,6 +588,7 @@ export function FilesPane(
         <SourceMenu
           sources={sources()}
           active={current()}
+          onOpen={() => setWanted(true)}
           onPick={(next) => {
             choose(next.id)
             setPath([])
@@ -647,6 +727,8 @@ export function FilesPane(
                 setFilter("")
                 return
               }
+              // Nothing local to open: a Volume file comes down over the API.
+              if (current().kind === "modal") return void downloadRemote(row)
               open(row)
             }}
           />

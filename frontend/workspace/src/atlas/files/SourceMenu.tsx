@@ -7,6 +7,12 @@ export function SourceMenu(props: {
   onPick: (source: PaneSource) => void
   onAdd?: () => void
   onRevoke?: (source: PaneSource) => void
+  /**
+   * Called the first time the menu is opened. Listing Modal Volumes is a call
+   * to Modal's API, so it is paid when someone looks for a source rather than
+   * on every mount of the pane.
+   */
+  onOpen?: () => void
 }): JSX.Element {
   const [open, setOpen] = createSignal(false)
   const pick = (source: PaneSource) => {
@@ -26,7 +32,10 @@ export function SourceMenu(props: {
         data-source-button
         aria-haspopup="menu"
         aria-expanded={open()}
-        onClick={() => setOpen(!open())}
+        onClick={() => {
+          if (!open()) props.onOpen?.()
+          setOpen(!open())
+        }}
       >
         <span class="files-source__name">{props.active.name}</span>
         <span class="files-source__caret" aria-hidden="true">
