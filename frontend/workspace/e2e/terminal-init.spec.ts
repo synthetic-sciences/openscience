@@ -28,6 +28,8 @@ test("terminal executes output and can switch and close another tab", async ({ p
     const input = terminals.first().locator("textarea")
     await expect(input).toHaveCount(1)
     await expect.poll(() => output.length, { timeout: 15_000 }).toBeGreaterThan(0)
+    expect(output).not.toContain("Restored session")
+    expect(output).not.toContain("locking failed")
 
     await input.focus()
     // The exact marker does not occur in the command itself, so matching it in

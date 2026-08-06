@@ -1,8 +1,5 @@
 import { For, Show, createMemo, createResource, createSignal, type JSX } from "solid-js"
-import { Select } from "@synsci/ui/select"
-import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { getFilename } from "@synsci/util/path"
 import { uiStore } from "@/atlas/store/ui"
 import { toast } from "@/atlas/Toast"
 import {
@@ -24,14 +21,6 @@ import {
   type ResearchStarter,
   type ResearchWorkflow,
 } from "@/components/session/research-launchpad"
-
-const MAIN_WORKTREE = "main"
-const CREATE_WORKTREE = "create"
-
-interface NewSessionViewProps {
-  worktree: string
-  onWorktreeChange: (value: string) => void
-}
 
 const icons: Record<ResearchWorkflow["icon"], (props: { size?: number; strokeWidth?: number }) => JSX.Element> = {
   table: IconLayoutGrid,
@@ -88,13 +77,8 @@ export function NewSessionCanvas(props: NewSessionCanvasProps) {
   )
 }
 
-export function NewSessionView(props: NewSessionViewProps) {
-  const sync = useSync()
+export function NewSessionView() {
   const sdk = useSDK()
-  const sandboxes = createMemo(() => sync.project?.sandboxes ?? [])
-  const options = createMemo(() => [MAIN_WORKTREE, ...sandboxes(), CREATE_WORKTREE])
-  const current = createMemo(() => (options().includes(props.worktree) ? props.worktree : MAIN_WORKTREE))
-  const branch = createMemo(() => sync.data.vcs?.branch || "working tree")
   const [artifacts] = createResource(
     () => sdk.directory,
     () =>
@@ -111,13 +95,6 @@ export function NewSessionView(props: NewSessionViewProps) {
       ? researchWorkflows
       : researchWorkflows.filter((workflow) => workflow.group === workflowGroup()),
   )
-
-  const worktreeLabel = (value: string) => {
-    if (value === MAIN_WORKTREE) return branch()
-    if (value === CREATE_WORKTREE) return "new isolated worktree"
-    return getFilename(value)
-  }
-  const worktrees = createMemo(() => options().map((value) => ({ value, label: worktreeLabel(value) })))
 
   const start = (workflow: ResearchWorkflow) => {
     uiStore.setPrefill(workflowPrompt(workflow, artifacts.latest?.length ?? 0))
@@ -152,23 +129,6 @@ export function NewSessionView(props: NewSessionViewProps) {
   return (
     <NewSessionCanvas open={catalogOpen()} onOpenChange={setCatalogOpen}>
       <div class="research-launchpad__catalog">
-        <div class="research-launchpad__controls">
-          <div class="research-launchpad__worktree">
-            <span class="research-launchpad__worktree-label">Workspace</span>
-            <Select
-              aria-label="Starter workspace"
-              options={worktrees()}
-              current={worktrees().find((option) => option.value === current())}
-              value={(option) => option.value}
-              label={(option) => option.label}
-              onSelect={(option) => option && props.onWorktreeChange(option.value)}
-              variant="secondary"
-              size="small"
-              triggerVariant="settings"
-            />
-          </div>
-        </div>
-
         <section class="research-launchpad__starters" aria-labelledby="research-starters-title">
           <div class="research-launchpad__section-heading">
             <div>

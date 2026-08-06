@@ -5837,8 +5837,9 @@ button.research-launchpad__status-item:hover {
 }
 
 .session-sidebar {
-  width: 184px;
-  min-width: 184px;
+  position: relative;
+  width: var(--session-sidebar-width, 232px);
+  min-width: var(--session-sidebar-width, 232px);
   margin-right: 6px;
   border: 1px solid color-mix(in srgb, var(--color-border) 76%, transparent);
   border-radius: 9px;
@@ -5962,7 +5963,7 @@ button.research-launchpad__status-item:hover {
   flex: 1;
   overflow: hidden;
   font-family: var(--font-family-sans);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 400;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -6032,6 +6033,42 @@ button.research-launchpad__status-item:hover {
   color: var(--color-text-muted);
   font-size: 12px;
   cursor: pointer;
+}
+
+.session-sidebar__resize {
+  position: absolute;
+  z-index: 3;
+  top: 10px;
+  right: 0;
+  bottom: 10px;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.session-sidebar__resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--color-border-strong);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.session-sidebar__resize:hover::after,
+.session-sidebar__resize:focus-visible::after,
+.session-sidebar__resize:active::after {
+  opacity: 1;
+}
+
+.session-sidebar:has(.session-sidebar__resize:active) {
+  transition: none;
+  user-select: none;
 }
 
 .session-sidebar__session-menu button:hover,
@@ -6162,16 +6199,16 @@ button.research-launchpad__status-item:hover {
 
 .session-sidebar__action,
 .session-sidebar__new {
-  min-height: 30px;
-  grid-template-columns: 22px minmax(0, 1fr);
-  gap: 5px;
-  padding: 3px 6px;
-  border-radius: 7px;
+  min-height: 34px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 6px;
+  padding: 4px 7px;
+  border-radius: 8px;
 }
 
 .session-sidebar__action-icon {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
 }
 
 .session-sidebar__action-copy {
@@ -6179,7 +6216,7 @@ button.research-launchpad__status-item:hover {
 }
 
 .session-sidebar__action-copy strong {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.25;
   font-weight: 500;
 }
@@ -6194,7 +6231,7 @@ button.research-launchpad__status-item:hover {
 
 .session-sidebar__label {
   padding: 7px 8px 3px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .session-scroller [data-component="user-message"] [data-slot="user-message-text"] {
@@ -6210,8 +6247,8 @@ button.research-launchpad__status-item:hover {
 
 @media (min-width: 720px) {
   .session-sidebar {
-    width: 184px;
-    min-width: 184px;
+    width: var(--session-sidebar-width, 232px);
+    min-width: var(--session-sidebar-width, 232px);
     margin-right: 6px;
   }
 }

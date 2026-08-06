@@ -176,6 +176,12 @@ describe("compute surface", () => {
     expect(source).not.toContain("provider")
   })
 
+  test("leaves research job creation to the agent in the product surface", () => {
+    const source = readFileSync(fileURLToPath(new URL("./ComputeSurface.tsx", import.meta.url)), "utf8")
+
+    expect(source).toContain("manual={false}")
+  })
+
   test("uses the compact flat tab geometry", () => {
     const css = readFileSync(fileURLToPath(new URL("./ComputeSurface.css", import.meta.url)), "utf8")
 

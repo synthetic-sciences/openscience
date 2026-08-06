@@ -177,14 +177,15 @@ describe("focused workspace shell", () => {
     expect(styles).toContain("height: 18px")
   })
 
-  test("keeps the desktop research rail narrow and session rows single-line", () => {
+  test("keeps the desktop research rail adjustable and session rows single-line", () => {
     const session = read("./session.tsx")
     const styles = read("../styles/atlas.css")
 
     expect(session).toContain('class="session-sidebar__session"')
     expect(session).toContain('class="session-sidebar__session-title"')
     expect(session).not.toContain("DateTime.fromMillis")
-    expect(styles).toContain("width: 184px")
+    expect(styles).toContain("width: var(--session-sidebar-width, 232px)")
+    expect(styles).toContain(".session-sidebar__resize")
     expect(styles).toContain("min-height: 31px")
     expect(styles).toContain("font-size: 12px")
   })

@@ -39,6 +39,7 @@ export function ComputeJobs(
   props: {
     onEnsureSession?: () => Promise<string | undefined>
     onActiveChange?: (count: number) => void
+    manual?: boolean
   } = {},
 ): JSX.Element {
   const sdk = useSDK()
@@ -489,14 +490,16 @@ export function ComputeJobs(
           <Action title="Refresh jobs" onClick={() => void refresh(true)}>
             <IconRefresh size={15} />
           </Action>
-          <Action
-            title={creating() ? "Close job setup" : "New job"}
-            active={creating()}
-            disabled={busy()}
-            onClick={() => void begin()}
-          >
-            <IconPlus size={16} />
-          </Action>
+          <Show when={props.manual}>
+            <Action
+              title={creating() ? "Close job setup" : "New job"}
+              active={creating()}
+              disabled={busy()}
+              onClick={() => void begin()}
+            >
+              <IconPlus size={16} />
+            </Action>
+          </Show>
         </div>
       </div>
 
@@ -519,7 +522,7 @@ export function ComputeJobs(
         )}
       </Show>
 
-      <Show when={creating()}>
+      <Show when={props.manual && creating()}>
         <form
           style={form}
           onSubmit={(event) => {
@@ -786,7 +789,7 @@ export function ComputeJobs(
         </form>
       </Show>
 
-      <Show when={!creating()}>
+      <Show when={!creating() || !props.manual}>
         <>
           <Show
             when={(jobs()?.length ?? 0) > 0}
@@ -797,17 +800,20 @@ export function ComputeJobs(
                 </span>
                 <strong style={emptyTitle}>No jobs in this project</strong>
                 <span style={emptyCopy}>
-                  Run a command and keep its output, captured files, and reproducibility record together.
+                  Ask an OpenScience agent to run an experiment. Its output, captured files, and reproducibility record
+                  will appear here automatically.
                 </span>
-                <button
-                  type="button"
-                  style={primaryButton}
-                  title="Create a research job"
-                  disabled={busy()}
-                  onClick={() => void begin()}
-                >
-                  Create first job
-                </button>
+                <Show when={props.manual}>
+                  <button
+                    type="button"
+                    style={primaryButton}
+                    title="Create a research job"
+                    disabled={busy()}
+                    onClick={() => void begin()}
+                  >
+                    Create first job
+                  </button>
+                </Show>
               </div>
             }
           >
@@ -928,19 +934,21 @@ export function ComputeJobs(
                                 Retry cleanup
                               </button>
                             </Show>
-                            <button
-                              type="button"
-                              style={secondaryButton}
-                              disabled={job().target.kind === "ssh"}
-                              title={
-                                job().target.kind !== "ssh"
-                                  ? `Rerun this command on ${job().target.kind === "modal" ? "Modal" : "this computer"}`
-                                  : "Remote dispatch is unavailable until its full lifecycle passes real-host validation"
-                              }
-                              onClick={() => rerun(job())}
-                            >
-                              Rerun
-                            </button>
+                            <Show when={props.manual}>
+                              <button
+                                type="button"
+                                style={secondaryButton}
+                                disabled={job().target.kind === "ssh"}
+                                title={
+                                  job().target.kind !== "ssh"
+                                    ? `Rerun this command on ${job().target.kind === "modal" ? "Modal" : "this computer"}`
+                                    : "Remote dispatch is unavailable until its full lifecycle passes real-host validation"
+                                }
+                                onClick={() => rerun(job())}
+                              >
+                                Rerun
+                              </button>
+                            </Show>
                           </div>
                           <div style={commandBox}>
                             <span style={{ color: "var(--color-text-faint)", "user-select": "none" }}>$</span>

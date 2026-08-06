@@ -128,19 +128,24 @@ describe("compute jobs surface", () => {
     expect(source).toContain(">Research jobs</span>")
     expect(source).toContain("Runs stay with this project")
     expect(source).toContain("No jobs in this project")
-    expect(source).toContain("Run a command and keep its output, captured files, and reproducibility record together.")
+    expect(source).toContain("Ask an OpenScience agent to run an experiment.")
     expect(source).not.toContain("local · SSH · schedulers")
     expect(source).not.toContain("Run a script locally or send it to an SSH, Slurm, or PBS machine.")
   })
 
   test("gives the creation form exclusive ownership of the jobs content area", () => {
-    const form = source.indexOf("<Show when={creating()}>")
-    const guard = source.indexOf("<Show when={!creating()}>")
+    const form = source.indexOf("<Show when={props.manual && creating()}>")
+    const guard = source.indexOf("<Show when={!creating() || !props.manual}>")
     const empty = source.indexOf("No jobs in this project")
 
     expect(form).toBeGreaterThan(-1)
     expect(guard).toBeGreaterThan(form)
     expect(empty).toBeGreaterThan(guard)
+  })
+
+  test("keeps manual job authoring behind an explicit opt-in", () => {
+    expect(source).toContain("manual?: boolean")
+    expect(source).toContain("<Show when={props.manual}>")
   })
 
   test("preserves the real job, output, capture, and provenance API paths", () => {

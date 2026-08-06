@@ -40,6 +40,7 @@ describe("file tabs", () => {
     )
 
     expect(host.querySelector('[data-tab="files"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(host.querySelector('[data-tab="files"]')?.textContent).toContain("Browse")
     expect(host.querySelector('[data-tab="train_lr.py"]')?.getAttribute("aria-selected")).toBe("false")
   })
 

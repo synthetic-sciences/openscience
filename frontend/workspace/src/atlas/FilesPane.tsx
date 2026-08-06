@@ -120,13 +120,6 @@ const ACCESS: Array<{ value: FilesystemAccess; label: string }> = [
   { value: "write", label: "Read & write" },
 ]
 
-const SCOPE: Array<{ value: FilesystemScope; label: string }> = [
-  { value: "once", label: "One request" },
-  { value: "session", label: "This session" },
-  { value: "project", label: "This project" },
-  { value: "installation", label: "Every project" },
-]
-
 // Read versus write is a security boundary, not a preference, so the pane
 // says what each one actually authorises at the moment of choosing.
 const accessNote = (access: FilesystemAccess) => {
@@ -327,7 +320,7 @@ export function FilesPane(
     open: false,
     path: "",
     access: "read" as FilesystemAccess,
-    scope: "session" as FilesystemScope,
+    scope: "project" as FilesystemScope,
   })
 
   const where = () => [current().root, ...path()].filter(Boolean).join("/")
@@ -632,7 +625,7 @@ export function FilesPane(
       .then(() => {
         setBusy(false)
         setError("")
-        setConnect({ open: false, path: "", access: "read", scope: "session" })
+        setConnect({ open: false, path: "", access: "read", scope: "project" })
       })
       .catch((cause) => {
         setBusy(false)
@@ -699,7 +692,7 @@ export function FilesPane(
             setError("")
           }}
           onRevoke={revoke}
-          onAdd={() => setConnect({ open: true, path: "", access: "read", scope: "session" })}
+          onAdd={() => setConnect({ open: true, path: "", access: "read", scope: "project" })}
         />
       </div>
 
@@ -731,17 +724,6 @@ export function FilesPane(
                 onChange={(event) => setConnect("access", event.currentTarget.value as FilesystemAccess)}
               >
                 <For each={ACCESS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-              </select>
-            </label>
-            <label class="files-connect__field">
-              <span>Available for</span>
-              <select
-                aria-label="Folder access duration"
-                data-connect-scope
-                value={connect.scope}
-                onChange={(event) => setConnect("scope", event.currentTarget.value as FilesystemScope)}
-              >
-                <For each={SCOPE}>{(option) => <option value={option.value}>{option.label}</option>}</For>
               </select>
             </label>
           </div>

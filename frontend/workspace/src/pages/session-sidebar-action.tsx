@@ -110,7 +110,6 @@ export function SessionSidebarActions(props: {
 }): JSX.Element {
   return (
     <div class="session-sidebar__context-actions" style={{ display: "contents" }}>
-      <span class="session-sidebar__group-label">Workspace</span>
       <div class="session-sidebar__action-list">
         <SidebarAction
           label="Files"
@@ -119,7 +118,7 @@ export function SessionSidebarActions(props: {
           active={props.context === "files" && props.contextOpen}
           onClick={(_event?: Event) => props.onContext("files")}
         >
-          <IconFolderTree size={13} strokeWidth={1.5} />
+          <IconFolderTree size={15} strokeWidth={1.5} />
         </SidebarAction>
         <SidebarAction
           label="Terminal"
@@ -129,7 +128,7 @@ export function SessionSidebarActions(props: {
           active={props.context === "terminal" && props.contextOpen}
           onClick={(_event?: Event) => props.onContext("terminal")}
         >
-          <IconTerminal size={13} strokeWidth={1.5} />
+          <IconTerminal size={15} strokeWidth={1.5} />
         </SidebarAction>
         <Show when={props.atlas}>
           <SidebarAction
@@ -139,7 +138,7 @@ export function SessionSidebarActions(props: {
             active={props.context === "canvas" && props.contextOpen}
             onClick={(_event?: Event) => props.onContext("canvas")}
           >
-            <IconLayoutGrid size={13} strokeWidth={1.5} />
+            <IconLayoutGrid size={15} strokeWidth={1.5} />
           </SidebarAction>
         </Show>
         <SidebarAction
@@ -149,7 +148,7 @@ export function SessionSidebarActions(props: {
           active={props.context === "kernels" && props.contextOpen}
           onClick={(_event?: Event) => props.onContext("kernels")}
         >
-          <IconCpu size={13} strokeWidth={1.5} />
+          <IconCpu size={15} strokeWidth={1.5} />
         </SidebarAction>
         <Show when={props.trace}>
           <SidebarAction
@@ -159,7 +158,7 @@ export function SessionSidebarActions(props: {
             active={props.context === "trace" && props.contextOpen}
             onClick={(_event?: Event) => props.onContext("trace")}
           >
-            <IconActivity size={13} strokeWidth={1.5} />
+            <IconActivity size={15} strokeWidth={1.5} />
           </SidebarAction>
         </Show>
         <Show when={props.artifact}>
@@ -170,7 +169,7 @@ export function SessionSidebarActions(props: {
             active={props.context === "artifact" && props.contextOpen}
             onClick={(_event?: Event) => props.onContext("artifact")}
           >
-            <IconFile size={13} strokeWidth={1.5} />
+            <IconFile size={15} strokeWidth={1.5} />
           </SidebarAction>
         </Show>
       </div>

@@ -777,7 +777,8 @@ describe("files pane", () => {
     form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
     await settle()
 
-    expect(posted).toEqual([{ path: "/home/keertan/data/pdebench", access: "write", scope: "session" }])
+    expect(posted).toEqual([{ path: "/home/keertan/data/pdebench", access: "write", scope: "project" }])
+    expect(host.querySelector("[data-connect-scope]")).toBeNull()
     expect(host.querySelector(".files-connect")).toBeNull()
 
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()

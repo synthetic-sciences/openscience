@@ -7,8 +7,8 @@ const [source, action, css] = await Promise.all([
 ])
 
 test("keeps the compact research rail readable without inline density overrides", () => {
-  expect(source).toContain('<span class="session-sidebar__group-label">Research</span>')
-  expect(action).toContain('<span class="session-sidebar__group-label">Workspace</span>')
+  expect(source).not.toContain('class="session-sidebar__group-label"')
+  expect(action).not.toContain('class="session-sidebar__group-label"')
   expect(action).not.toContain('"font-size":')
   expect(css).toContain(".session-sidebar__action-copy strong,")
   expect(css).toContain("font-size: 14px")

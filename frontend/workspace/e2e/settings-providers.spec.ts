@@ -10,7 +10,7 @@ test("models settings exposes provider connection controls", async ({ page, goto
   await expect(dialog.getByRole("heading", { name: "Provider keys" })).toBeVisible()
   await expect(dialog.getByText("Sign in with ChatGPT", { exact: true }).first()).toBeVisible()
   await expect(dialog.getByLabel("API key", { exact: true })).toBeVisible()
-  await expect(dialog.getByRole("button", { name: "save key" })).toBeDisabled()
+  await expect(dialog.getByRole("button", { name: "Save key" })).toBeDisabled()
 
   await dialog.getByRole("button", { name: "Close" }).click()
   await expect(dialog).toHaveCount(0)
@@ -35,7 +35,7 @@ test("models settings saves and removes a local provider key", async ({ page, go
 
     await dialog.locator("select").selectOption("openai")
     await dialog.getByLabel("API key", { exact: true }).fill("sk-e2e-local-only")
-    await dialog.getByRole("button", { name: "save key", exact: true }).click()
+    await dialog.getByRole("button", { name: "Save key", exact: true }).click()
 
     await expect
       .poll(async () => {
@@ -48,7 +48,7 @@ test("models settings saves and removes a local provider key", async ({ page, go
     page.once("dialog", (prompt) => prompt.accept())
     await dialog
       .getByRole("region", { name: "Provider keys", exact: true })
-      .getByRole("button", { name: "remove", exact: true })
+      .getByRole("button", { name: "Remove", exact: true })
       .click()
     await expect
       .poll(async () => {

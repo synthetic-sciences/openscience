@@ -25,5 +25,5 @@ test("an unconfigured first run stays local and exposes model setup in Customize
   await expect(dialog.getByRole("heading", { name: "Models", exact: true })).toBeVisible()
   await expect(dialog.getByRole("heading", { name: "ChatGPT / Codex" })).toBeVisible()
   await expect(dialog.getByRole("heading", { name: "Provider keys" })).toBeVisible()
-  await expect(dialog.getByRole("button", { name: "save key", exact: true })).toBeDisabled()
+  await expect(dialog.getByRole("button", { name: "Save key", exact: true })).toBeDisabled()
 })

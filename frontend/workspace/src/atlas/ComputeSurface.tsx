@@ -17,6 +17,7 @@ type ComputeSurfaceProps = {
   jobs?: Component<{
     onEnsureSession?: () => Promise<string | undefined>
     onActiveChange?: (count: number) => void
+    manual?: boolean
   }>
   onEnsureSession?: () => Promise<string | undefined>
   request?: ProjectRequest
@@ -138,6 +139,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
               component={jobs}
               onEnsureSession={props.onEnsureSession}
               onActiveChange={(count) => setState("active", count)}
+              manual={false}
             />
           </div>
         </Match>

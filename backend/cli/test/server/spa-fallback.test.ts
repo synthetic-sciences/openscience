@@ -3,6 +3,7 @@ import path from "path"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { Log } from "../../src/util/log"
+import { WEB_INDEX } from "../../src/web/assets"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -27,7 +28,7 @@ describe("spa fallback", () => {
     })
   })
 
-  test("browser navigation to an unmatched route still gets the SPA index.html", async () => {
+  test.skipIf(!WEB_INDEX)("browser navigation to an unmatched route still gets the SPA index.html", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {

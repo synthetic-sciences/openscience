@@ -132,9 +132,7 @@ describe("SessionSidebarActions", () => {
     expect(action.querySelector(".session-sidebar__action-copy strong")?.textContent).toBe("New research")
     expect(action.querySelector(".session-sidebar__action-copy > span")?.textContent).toBe("Start a session")
     expect(action.querySelector("kbd")?.textContent).toBe("⌘N")
-    const label = actions.querySelector<HTMLElement>(".session-sidebar__group-label")
-    expect(label?.textContent).toBe("Workspace")
-    expect(label?.hasAttribute("style")).toBe(false)
+    expect(actions.querySelector(".session-sidebar__group-label")).toBeNull()
   })
 
   test("opens and toggles contextual surfaces from the left rail", async () => {

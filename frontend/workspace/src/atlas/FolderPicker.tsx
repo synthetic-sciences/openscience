@@ -219,7 +219,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
       <div
         style={{
           display: "flex",
-          gap: "12px",
+          gap: "16px",
           "min-height": "480px",
           "max-height": "560px",
         }}
@@ -227,24 +227,24 @@ export function FolderPicker(props: PickerProps): JSX.Element {
         {/* Sidebar */}
         <div
           style={{
-            flex: "0 0 180px",
+            flex: "0 0 196px",
             display: "flex",
             "flex-direction": "column",
             gap: "14px",
             "border-right": "1px solid var(--color-border)",
-            "padding-right": "10px",
+            "padding-right": "16px",
             overflow: "auto",
           }}
         >
           <div style={{ display: "flex", "flex-direction": "column", gap: "1px" }}>
-            <SectionLabel>favorites</SectionLabel>
+            <SectionLabel>Favorites</SectionLabel>
             <For each={sidebarLinks()}>
               {(l) => <SidebarRow label={l.label} active={cwd() === l.path} onClick={() => goTo(l.path)} />}
             </For>
           </div>
           <Show when={recents().length > 0}>
             <div style={{ display: "flex", "flex-direction": "column", gap: "1px" }}>
-              <SectionLabel>recent</SectionLabel>
+              <SectionLabel>Recent</SectionLabel>
               <For each={recents()}>
                 {(p) => (
                   <SidebarRow
@@ -279,20 +279,20 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               padding: "6px 8px",
               background: "var(--color-bg-subtle)",
               border: "1px solid var(--color-border)",
-              "border-radius": "4px",
+              "border-radius": "10px",
               "flex-wrap": "wrap",
             }}
           >
             <button
               onClick={goUp}
-              title="parent folder"
+              title="Parent folder"
               style={navBtn(cwd() === "/" || cwd() === "")}
               disabled={cwd() === "/" || cwd() === ""}
             >
-              <IconChevronLeft size={11} strokeWidth={1.5} />
+              <IconChevronLeft size={14} strokeWidth={1.5} />
             </button>
-            <button onClick={() => goTo(home())} title="home" style={navBtn(false)}>
-              <IconHome size={11} strokeWidth={1.5} />
+            <button onClick={() => goTo(home())} title="Home" style={navBtn(false)}>
+              <IconHome size={14} strokeWidth={1.5} />
             </button>
             <span style={{ width: "1px", height: "16px", background: "var(--color-border)" }} />
             <For each={crumbs()}>
@@ -307,11 +307,11 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                       all: "unset",
                       cursor: "pointer",
                       "font-family": FONT_MONO,
-                      "font-size": "11px",
+                      "font-size": "12px",
                       color: i() === crumbs().length - 1 ? "var(--color-text)" : "var(--color-text-muted)",
                       "font-weight": i() === crumbs().length - 1 ? 600 : 500,
                       padding: "2px 4px",
-                      "border-radius": "4px",
+                      "border-radius": "6px",
                       transition: "background 120ms ease, color 120ms ease",
                     }}
                     onMouseEnter={(el) => {
@@ -330,8 +330,8 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               )}
             </For>
             <span style={{ flex: 1 }} />
-            <button onClick={() => refetch()} title="refresh" style={navBtn(false)}>
-              <IconRefresh size={11} strokeWidth={1.5} />
+            <button onClick={() => refetch()} title="Refresh" style={navBtn(false)}>
+              <IconRefresh size={14} strokeWidth={1.5} />
             </button>
           </div>
 
@@ -343,21 +343,21 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               gap: "6px",
               padding: "6px 10px",
               border: "1px solid var(--color-border)",
-              "border-radius": "4px",
+              "border-radius": "10px",
               background: "var(--color-surface-solid)",
             }}
           >
-            <IconSearch size={11} strokeWidth={1.5} />
+            <IconSearch size={14} strokeWidth={1.5} />
             <input
               value={filter()}
               onInput={(e) => setFilter(e.currentTarget.value)}
-              placeholder={props.kind === "file" ? "filter files and folders…" : "filter folders…"}
+              placeholder={props.kind === "file" ? "Filter files and folders…" : "Filter folders…"}
               autofocus
               style={{
                 all: "unset",
                 flex: 1,
-                "font-family": FONT_MONO,
-                "font-size": "12px",
+                "font-family": FONT_SANS,
+                "font-size": "13px",
                 color: "var(--color-text)",
                 padding: "3px 10px",
               }}
@@ -386,20 +386,18 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               gap: "6px",
               padding: "6px 10px",
               border: "1px dashed var(--color-border)",
-              "border-radius": "4px",
+              "border-radius": "10px",
               background: "var(--color-bg-subtle)",
             }}
           >
             <span
               style={{
-                "font-family": FONT_MONO,
-                "font-size": "10px",
+                "font-family": FONT_SANS,
+                "font-size": "12px",
                 color: "var(--color-text-faint)",
-                "letter-spacing": "0.08em",
-                "text-transform": "uppercase",
               }}
             >
-              go to
+              Path
             </span>
             <input
               value={pathInput()}
@@ -426,16 +424,16 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 all: "unset",
                 cursor: pathInput().trim() ? "pointer" : "not-allowed",
                 padding: "3px 10px",
-                "border-radius": "4px",
+                "border-radius": "7px",
                 background: pathInput().trim() ? "var(--color-surface-solid)" : "transparent",
                 border: "1px solid var(--color-border)",
-                "font-family": FONT_MONO,
-                "font-size": "10px",
+                "font-family": FONT_SANS,
+                "font-size": "12px",
                 color: "var(--color-text-muted)",
                 opacity: pathInput().trim() ? 1 : 0.5,
               }}
             >
-              go
+              Go
             </button>
           </div>
 
@@ -455,7 +453,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               flex: 1,
               "overflow-y": "auto",
               border: "1px solid var(--color-border)",
-              "border-radius": "4px",
+              "border-radius": "10px",
               background: "var(--color-surface-solid)",
               "min-height": "240px",
               position: "relative",
@@ -510,7 +508,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                           gap: "10px",
                         }}
                       >
-                        <span>couldn't read this folder</span>
+                        <span>Couldn’t read this folder</span>
                         <span style={{ color: "var(--color-text-faint)", "max-width": "360px", "line-height": 1.5 }}>
                           {error()}
                         </span>
@@ -521,14 +519,14 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                             all: "unset",
                             cursor: "pointer",
                             padding: "5px 12px",
-                            "border-radius": "4px",
+                            "border-radius": "8px",
                             border: "1px solid var(--color-border)",
-                            "font-family": FONT_MONO,
-                            "font-size": "11px",
+                            "font-family": FONT_SANS,
+                            "font-size": "12px",
                             color: "var(--color-text)",
                           }}
                         >
-                          retry
+                          Retry
                         </button>
                       </div>
                     }
@@ -546,7 +544,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                         gap: "8px",
                       }}
                     >
-                      <Show when={(entries() ?? []).length === 0} fallback={<span>nothing matches the filter</span>}>
+                      <Show when={(entries() ?? []).length === 0} fallback={<span>Nothing matches the filter.</span>}>
                         <Show
                           when={
                             /\/Desktop$|\/Documents$|\/Downloads$/.test(cwd()) ||
@@ -557,8 +555,8 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                           fallback={
                             <span>
                               {props.kind === "file"
-                                ? "this folder does not contain any files"
-                                : "this folder is empty · pick it below"}
+                                ? "This folder does not contain any files."
+                                : "This folder is empty. You can still choose it below."}
                             </span>
                           }
                         >
@@ -614,7 +612,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               {cwd().replace(home(), "~")}
             </span>
             <button onClick={cancel} style={cancelBtn()}>
-              cancel
+              Cancel
             </button>
             <Show when={props.kind !== "file"}>
               <button
@@ -622,11 +620,11 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                   const valid = await validateDirectoryPath(sdk.url, cwd())
                   if (valid) pick(valid)
                 }}
-                title="choose the current folder"
+                title="Choose the current folder"
                 style={primaryBtn()}
               >
                 <IconArrowRight size={11} strokeWidth={2} />
-                use this folder
+                Use this folder
               </button>
             </Show>
           </div>
@@ -663,15 +661,15 @@ function PickerRow(props: {
         display: "flex",
         "align-items": "center",
         gap: "10px",
-        padding: "8px 12px",
+        padding: "9px 12px",
         "border-bottom": "1px solid var(--color-border)",
         background: hover() ? "var(--color-accent-subtle)" : "transparent",
         transform: hover() ? "translateX(2px)" : "translateX(0)",
         transition: "background 160ms ease, transform 160ms ease",
       }}
     >
-      <Show when={folder()} fallback={<IconFile size={13} strokeWidth={1.5} />}>
-        <IconFolder size={13} strokeWidth={1.5} />
+      <Show when={folder()} fallback={<IconFile size={15} strokeWidth={1.5} />}>
+        <IconFolder size={15} strokeWidth={1.5} />
       </Show>
       <span
         style={{
@@ -679,14 +677,14 @@ function PickerRow(props: {
           overflow: "hidden",
           "text-overflow": "ellipsis",
           "white-space": "nowrap",
-          "font-family": FONT_MONO,
-          "font-size": "12px",
+          "font-family": FONT_SANS,
+          "font-size": "13px",
           color: "var(--color-text)",
         }}
       >
         {props.entry.name}
       </span>
-      <Show when={folder()} fallback={<span style={chooseLabel(hover())}>choose</span>}>
+      <Show when={folder()} fallback={<span style={chooseLabel(hover())}>Choose</span>}>
         <Show when={!props.pickingFile}>
           <button
             type="button"
@@ -694,10 +692,10 @@ function PickerRow(props: {
               event.stopPropagation()
               props.onPick()
             }}
-            title="choose this folder"
+            title="Choose this folder"
             style={chooseButton(hover())}
           >
-            choose
+            Choose
           </button>
         </Show>
         <IconChevronRight
@@ -718,11 +716,9 @@ const chooseButton = (visible: boolean): JSX.CSSProperties => ({
   all: "unset",
   cursor: "pointer",
   padding: "2px 8px",
-  "border-radius": "4px",
-  "font-family": FONT_MONO,
-  "font-size": "10px",
-  "letter-spacing": "0.08em",
-  "text-transform": "uppercase",
+  "border-radius": "7px",
+  "font-family": FONT_SANS,
+  "font-size": "11px",
   color: "var(--color-text-muted)",
   border: "1px solid var(--color-border)",
   background: "var(--color-surface-solid)",
@@ -733,10 +729,8 @@ const chooseButton = (visible: boolean): JSX.CSSProperties => ({
 })
 
 const chooseLabel = (visible: boolean): JSX.CSSProperties => ({
-  "font-family": FONT_MONO,
-  "font-size": "10px",
-  "letter-spacing": "0.08em",
-  "text-transform": "uppercase",
+  "font-family": FONT_SANS,
+  "font-size": "11px",
   color: "var(--color-text-muted)",
   opacity: visible ? 1 : 0.55,
 })
@@ -745,12 +739,11 @@ function SectionLabel(props: { children: JSX.Element }): JSX.Element {
   return (
     <div
       style={{
-        "font-family": FONT_MONO,
-        "font-size": "10px",
+        "font-family": FONT_SANS,
+        "font-size": "11px",
+        "font-weight": 600,
         color: "var(--color-text-faint)",
-        "letter-spacing": "0.08em",
-        "text-transform": "uppercase",
-        padding: "4px 6px",
+        padding: "5px 8px",
       }}
     >
       {props.children}
@@ -779,8 +772,8 @@ function SidebarRow(props: {
         display: "flex",
         "align-items": "center",
         gap: "8px",
-        padding: "5px 8px",
-        "border-radius": "4px",
+        padding: "6px 8px",
+        "border-radius": "8px",
         background: props.active ? "var(--color-bg-elevated)" : "transparent",
         border: props.active ? "1px solid var(--color-border-strong)" : "1px solid transparent",
         transition: "background 160ms ease, border-color 160ms ease, transform 160ms ease",
@@ -794,12 +787,12 @@ function SidebarRow(props: {
         el.currentTarget.style.transform = "translateX(0)"
       }}
     >
-      <IconFolder size={11} strokeWidth={1.5} />
+      <IconFolder size={14} strokeWidth={1.5} />
       <div style={{ flex: 1, "min-width": 0, display: "flex", "flex-direction": "column" }}>
         <span
           style={{
-            "font-family": FONT_MONO,
-            "font-size": "11px",
+            "font-family": FONT_SANS,
+            "font-size": "12px",
             color: "var(--color-text)",
             "font-weight": props.active ? 600 : 500,
             overflow: "hidden",
@@ -835,9 +828,9 @@ function navBtn(disabled: boolean): JSX.CSSProperties {
     display: "inline-flex",
     "align-items": "center",
     "justify-content": "center",
-    width: "22px",
-    height: "22px",
-    "border-radius": "4px",
+    width: "28px",
+    height: "28px",
+    "border-radius": "7px",
     color: "var(--color-text-muted)",
     background: "var(--color-surface-solid)",
     border: "1px solid var(--color-border)",
@@ -850,11 +843,11 @@ function cancelBtn(): JSX.CSSProperties {
     all: "unset",
     cursor: "pointer",
     padding: "6px 12px",
-    "border-radius": "4px",
+    "border-radius": "8px",
     border: "1px solid var(--color-border)",
     background: "var(--color-surface-solid)",
-    "font-family": FONT_MONO,
-    "font-size": "11px",
+    "font-family": FONT_SANS,
+    "font-size": "13px",
     color: "var(--color-text-muted)",
   } as JSX.CSSProperties
 }
@@ -864,11 +857,11 @@ function primaryBtn(): JSX.CSSProperties {
     all: "unset",
     cursor: "pointer",
     padding: "6px 14px",
-    "border-radius": "4px",
+    "border-radius": "8px",
     background: "var(--color-accent)",
     color: "var(--color-on-accent)",
-    "font-family": FONT_MONO,
-    "font-size": "11px",
+    "font-family": FONT_SANS,
+    "font-size": "13px",
     "font-weight": 500,
     display: "inline-flex",
     "align-items": "center",

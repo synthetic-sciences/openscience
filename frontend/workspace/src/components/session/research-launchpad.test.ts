@@ -154,13 +154,15 @@ describe("research launchpad", () => {
 
   test("keeps the expanded catalog readable above the floating composer", () => {
     const css = styles()
+    const source = view()
     const start = css.indexOf("/* Readable expanded research catalog */")
     const end = css.indexOf("/* Final readable compute control room */", start)
     const catalog = css.slice(start, end)
 
     expect(start).toBeGreaterThan(-1)
     expect(end).toBeGreaterThan(start)
-    expect(catalog).toContain(".research-launchpad__catalog .research-launchpad__worktree select")
+    expect(source).not.toContain("Starter workspace")
+    expect(source).not.toContain("working tree")
     expect(catalog).toContain(".research-launchpad__catalog .research-launchpad__starter-copy small")
     expect(catalog).toContain(".research-launchpad__catalog .research-launchpad__workflow-filters button span")
     expect(catalog).toContain(".research-launchpad__catalog .research-launchpad__workflow-copy > span")

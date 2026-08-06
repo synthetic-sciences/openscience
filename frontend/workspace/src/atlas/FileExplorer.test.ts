@@ -25,8 +25,8 @@ describe("file explorer surface", () => {
     expect(value).toContain("readAccess(sdk.request, current)")
     expect(value).toContain("Read only")
     expect(value).toContain("Read & write")
-    expect(value).toContain("Available for")
-    expect(value).toContain('label: "This project"')
+    expect(value).not.toContain("Available for")
+    expect(value).toContain('scope: "project"')
   })
 
   test("routes unconnected absolute files to a permission boundary rather than re-rooting", () => {

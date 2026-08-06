@@ -22,7 +22,7 @@ export function FileTabs(props: {
         onClick={() => props.onSelect(undefined)}
       >
         <span class="files-tab__label" data-tab-label>
-          Files
+          Browse
         </span>
       </button>
 

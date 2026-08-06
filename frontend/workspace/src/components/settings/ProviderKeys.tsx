@@ -143,7 +143,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
           />
         </label>
         <Button type="submit" size="small" variant="primary" disabled={saving() || !key().trim()}>
-          {saving() ? "saving…" : "save key"}
+          {saving() ? "Saving…" : "Save key"}
         </Button>
       </form>
 
@@ -173,7 +173,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
                   }
                 >
                   <Button size="small" variant="secondary" onClick={() => void remove(item.id)}>
-                    remove
+                    Remove
                   </Button>
                 </Show>
               </div>

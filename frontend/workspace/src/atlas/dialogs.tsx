@@ -16,7 +16,7 @@ function card(): JSX.CSSProperties {
     "max-width": "92vw",
     background: "var(--color-surface-solid)",
     border: "1px solid var(--color-border-strong)",
-    "border-radius": "4px",
+    "border-radius": "12px",
     "box-shadow": "var(--shadow-md)",
     overflow: "hidden",
   }
@@ -27,12 +27,12 @@ function actionBtn(primary = false, danger = false): JSX.CSSProperties {
     all: "unset",
     cursor: "pointer",
     padding: "7px 14px",
-    "border-radius": "4px",
+    "border-radius": "8px",
     border: primary ? "1px solid var(--color-accent)" : "1px solid var(--color-border)",
     background: danger ? "var(--color-error, #ef4444)" : primary ? "var(--color-accent)" : "var(--color-bg-elevated)",
     color: danger || primary ? "var(--color-on-accent)" : "var(--color-text)",
-    "font-family": FONT_MONO,
-    "font-size": "12px",
+    "font-family": FONT_SANS,
+    "font-size": "13px",
     "font-weight": 500,
   }
 }
@@ -79,10 +79,10 @@ export function confirmDialog(
             }}
           >
             <button type="button" style={actionBtn(false)} onClick={() => done(false)}>
-              {opts.cancelLabel ?? "cancel"}
+              {opts.cancelLabel ?? "Cancel"}
             </button>
             <button type="button" style={actionBtn(true, opts.danger)} onClick={() => done(true)}>
-              {opts.confirmLabel ?? "confirm"}
+              {opts.confirmLabel ?? "Confirm"}
             </button>
           </div>
         </div>
@@ -157,10 +157,10 @@ export function promptDialog(
             }}
           >
             <button type="button" style={actionBtn(false)} onClick={() => done(null)}>
-              cancel
+              Cancel
             </button>
             <button type="button" style={actionBtn(true)} onClick={() => done(value())}>
-              {opts.confirmLabel ?? "ok"}
+              {opts.confirmLabel ?? "OK"}
             </button>
           </div>
         </div>

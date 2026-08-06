@@ -31,13 +31,6 @@ const accessOptions = [
   { value: "write" as const, label: "Read & write" },
 ]
 
-const scopeOptions = [
-  { value: "installation" as const, label: "Every project" },
-  { value: "project" as const, label: "This project" },
-  { value: "session" as const, label: "This session" },
-  { value: "once" as const, label: "One request" },
-]
-
 const errorMessage = (value: unknown) => {
   if (value instanceof Error) return value.message
   return String(value || "Request failed")
@@ -72,7 +65,6 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
   const params = useParams()
   const [state, setState] = createStore({
     access: "read" as FilesystemAccess,
-    scope: "session" as FilesystemScope,
     busy: false,
     error: undefined as string | undefined,
   })
@@ -92,7 +84,7 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
     grantAccess(sdk.request, current, {
       path: requestedFolder(props.file.path),
       access: state.access,
-      scope: state.scope,
+      scope: "project",
     })
       .then(() => refetch())
       .then(() => setState({ busy: false, error: undefined }))
@@ -161,19 +153,6 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
                   triggerStyle={selectTrigger()}
                 />
               </div>
-              <div style={field()}>
-                <span>Available for</span>
-                <Select
-                  aria-label="External file access duration"
-                  options={scopeOptions}
-                  current={scopeOptions.find((option) => option.value === state.scope)}
-                  value={(option) => option.value}
-                  label={(option) => option.label}
-                  onSelect={(option) => option && setState("scope", option.value)}
-                  variant="secondary"
-                  triggerStyle={selectTrigger()}
-                />
-              </div>
             </div>
             <Show when={state.error ?? (snapshot.error ? errorMessage(snapshot.error) : undefined)}>
               {(message) => (
@@ -205,7 +184,7 @@ const field = (): JSX.CSSProperties => ({
 
 const fieldGrid = (): JSX.CSSProperties => ({
   display: "grid",
-  "grid-template-columns": "minmax(0, 1fr) minmax(0, 1fr)",
+  "grid-template-columns": "minmax(0, 1fr)",
   gap: "8px",
 })
 
