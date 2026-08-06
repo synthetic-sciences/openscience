@@ -18,11 +18,18 @@ const stores = new Set(["auth.json", "credentials.json", "mcp-auth.json"])
 // Per-process scratch that must not be transplanted.
 const transient = /(?:\.tmp|\.lock)$/
 // A SQLite -wal/-shm is only meaningful beside the exact database it was
-// written for. Landing one next to the target's own artifacts.db pairs a
-// journal with a database it never described; dropping it when the database
-// IS being carried loses every transaction still in the log. So it travels
-// with its database and only with its database.
+// written for. Landing one next to the target's own database pairs a journal
+// with a database it never described; dropping it when its database IS being
+// carried loses every transaction still in the log.
 const journal = /(?:-wal|-shm)$/
+// The artifact store is merged through SQLite instead of transplanted.
+// `mergeArtifacts` opens the legacy database in place, reads valid journal
+// state there, and writes clean rows into the target, so its process-local
+// sidecars are the exception to the general journal rule above.
+const artifactJournals = new Set([
+  path.join("artifact-store", "artifacts.db-wal"),
+  path.join("artifact-store", "artifacts.db-shm"),
+])
 
 export interface DataResolution {
   path: string
@@ -235,9 +242,10 @@ export async function resolveDataDirectory(input: {
   // of the tree was settled then, and re-walking it to rediscover that is what
   // made a single unreadable file expensive on every launch.
   const source = sealed
-    ? await describe(legacy, outstanding)
+    ? (await describe(legacy, outstanding)).filter((file) => !artifactJournals.has(file.path))
     : (await inventory(legacy)).filter(
-        (file) => !reserved.has(file.path.split(path.sep)[0]) && !transient.test(file.path),
+        (file) =>
+          !reserved.has(file.path.split(path.sep)[0]) && !transient.test(file.path) && !artifactJournals.has(file.path),
       )
   if (source.length === 0) {
     // Nothing left to fetch — the stragglers are gone from the legacy root
