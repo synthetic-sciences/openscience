@@ -1,0 +1,84 @@
+.host-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border-weak-base);
+  background: var(--color-bg);
+}
+
+.host-strip__tile {
+  /* Each tile is its own query container, and the grid above gives all three
+     the same width, so they change layout together rather than each wrapping
+     at whatever width its own caption happens to need. */
+  container-type: inline-size;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.host-strip__reading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Beside the value there is room for the caption only while the tile is wide
+   enough for both. Narrower than that, the caption drops onto its own line
+   under the number and takes the full tile width, which is far more readable
+   than squeezing "~0 of 8 cores busy" into a few characters per line. Widen
+   the pane and it returns to the side. */
+@container (max-width: 180px) {
+  .host-strip__reading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+}
+
+.host-strip__value {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.host-strip__caption {
+  /* Wraps rather than truncates so the free/busy numbers stay readable at any
+     width. min-height reserves two lines (10px * 1.4 line-height) on every
+     tile unconditionally, so a caption that needs to wrap grows all three
+     tiles together instead of leaving the other two short and ragged. */
+  min-width: 0;
+  min-height: 28px;
+  overflow-wrap: break-word;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--color-text-faint);
+  white-space: normal;
+}
+
+.host-strip__meter {
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-bg-subtle) 72%, transparent);
+}
+
+.host-strip__fill,
+.host-strip__share {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.host-strip__fill {
+  background: color-mix(in srgb, var(--color-text-faint) 40%, transparent);
+}
+
+.host-strip__share {
+  background: var(--color-accent);
+}

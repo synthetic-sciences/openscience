@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { ComputeJobs } from "@/atlas/ComputeJobs"
 import { createComputeJobsAPI, type Status } from "@/atlas/ComputeJobsAPI"
+import { HostStrip } from "@/atlas/HostStrip"
 import { KernelPanel } from "@/atlas/KernelPanel"
 import { useSDK } from "@/context/sdk"
 import type { ProjectRequest } from "@/utils/openscience-fetch"
@@ -11,6 +12,7 @@ import "@/atlas/ComputeSurface.css"
 type Tab = "kernels" | "jobs"
 
 type ComputeSurfaceProps = {
+  strip?: Component
   kernels?: Component<{ onEnsureSession?: () => Promise<string | undefined> }>
   jobs?: Component<{
     onEnsureSession?: () => Promise<string | undefined>
@@ -32,6 +34,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
   const [state, setState] = createStore({ tab: "kernels" as Tab, active: 0 })
   const id = createUniqueId()
   const refs: Partial<Record<Tab, HTMLButtonElement>> = {}
+  const strip = props.strip ?? HostStrip
   const kernels = props.kernels ?? KernelPanel
   const jobs = props.jobs ?? ComputeJobs
   const api = createComputeJobsAPI(props.request ?? useSDK().request)
@@ -74,6 +77,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
 
   return (
     <section class="compute-surface" aria-label="Compute">
+      <Dynamic component={strip} />
       <div
         class="compute-surface__tabs"
         role="tablist"

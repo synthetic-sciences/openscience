@@ -64,6 +64,7 @@ describe("compute surface", () => {
     const mounted = { kernels: 0, jobs: 0 }
     const host = mount(() =>
       subject.ComputeSurface({
+        strip: () => document.createElement("section"),
         kernels: child("kernels", mounted),
         jobs: child("jobs", mounted),
         request: request(),
@@ -99,6 +100,7 @@ describe("compute surface", () => {
     const mounted = { kernels: 0, jobs: 0 }
     const host = mount(() =>
       subject.ComputeSurface({
+        strip: () => document.createElement("section"),
         kernels: child("kernels", mounted),
         jobs: child("jobs", mounted),
         request: request(),
@@ -125,6 +127,7 @@ describe("compute surface", () => {
     const mounted = { kernels: 0, jobs: 0 }
     const host = mount(() =>
       subject.ComputeSurface({
+        strip: () => document.createElement("section"),
         kernels: child("kernels", mounted),
         jobs: child("jobs", mounted),
         request: request(["running", "succeeded", "running"]),
@@ -146,6 +149,7 @@ describe("compute surface", () => {
     const calls = { count: 0 }
     const host = mount(() =>
       subject.ComputeSurface({
+        strip: () => document.createElement("section"),
         kernels: child("kernels", mounted),
         jobs: child("jobs", mounted),
         request: Object.assign(
@@ -183,5 +187,27 @@ describe("compute surface", () => {
     expect(css).toMatch(/\.compute-surface__badge\s*\{[^}]*border-radius: 999px/s)
     expect(css).toMatch(/\.compute-surface__badge\s*\{[^}]*position: absolute/s)
     expect(css).toMatch(/\.compute-surface__badge\s*\{[^}]*min-width: 14px/s)
+  })
+
+  test("renders the host strip above the tablist", () => {
+    const host = mount(() =>
+      subject.ComputeSurface({
+        strip: () => {
+          const strip = document.createElement("section")
+          strip.dataset.computeChild = "strip"
+          return strip
+        },
+        kernels: child("kernels", { kernels: 0, jobs: 0 }),
+        jobs: child("jobs", { kernels: 0, jobs: 0 }),
+        request: request(),
+      }),
+    )
+    const surface = host.querySelector(".compute-surface")
+    const children = [...(surface?.children ?? [])]
+    const strip = children.findIndex((element) => element.matches('[data-compute-child="strip"]'))
+    const tabs = children.findIndex((element) => element.matches('[role="tablist"]'))
+
+    expect(strip).toBe(0)
+    expect(tabs).toBeGreaterThan(strip)
   })
 })
