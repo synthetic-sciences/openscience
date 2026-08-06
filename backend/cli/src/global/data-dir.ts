@@ -16,8 +16,21 @@ const pending = ".openscience-import"
 // the boot path.
 const reserved = new Set(["bin", "log", ".xdg-data-migration-v1.json", marker])
 const stores = new Set(["auth.json", "credentials.json", "mcp-auth.json"])
-// Per-process scratch that must not be transplanted.
-const transient = /(?:\.tmp|\.lock)$/
+// Per-process scratch that must not be transplanted — including this code's
+// own staging copies, so a previous root that was once a target does not have
+// them imported back as if they were data.
+const transient = /(?:\.tmp|\.lock|\.openscience-import)$/
+/** How long a staging file must sit untouched before it counts as abandoned.
+ *  Well past any real copy, so a live import's file is never reaped. */
+const STALE_STAGING = 60 * 60 * 1000
+/** After this, the process holding the import lease is assumed to have died. */
+const STALE_LOCK = 10 * 60 * 1000
+/** How long to wait for that process before importing anyway. Bounded low on
+ *  purpose: the duplicated work this avoids is self-limiting — a loser skips
+ *  whatever the winner has already landed, before reading a byte of it — so
+ *  buying a shorter wait with a little redundancy is the right trade. Startup
+ *  latency is not. */
+const LEASE_WAIT = 2_000
 // A SQLite -wal/-shm is only meaningful beside the exact database it was
 // written for. Landing one next to the target's own database pairs a journal
 // with a database it never described; dropping it when its database IS being
@@ -90,6 +103,105 @@ async function inventory(root: string) {
     }
   }
   return files.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/**
+ * Delete staging copies an interrupted import left behind.
+ *
+ * Each in-flight copy is named per call, which is what keeps two concurrent
+ * imports from writing the same file — but it also means a process killed
+ * mid-copy leaves a name nothing will ever reuse or overwrite. Without this
+ * they accumulate in the data root indefinitely, a silent leak of exactly the
+ * disk this whole feature is meant to be careful with.
+ *
+ * Age-gated rather than unconditional: another process may be part-way through
+ * writing one right now, and reaping that would turn a healthy concurrent
+ * import into a deferred file.
+ */
+async function sweep(root: string) {
+  const stack = [root]
+  const now = Date.now()
+  while (stack.length) {
+    const dir = stack.pop()
+    if (!dir) continue
+    for (const entry of await entries(dir)) {
+      if (entry.isSymbolicLink()) continue
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(full)
+        continue
+      }
+      if (!entry.name.endsWith(pending)) continue
+      const stat = await fs.stat(full).catch(() => undefined)
+      if (!stat || now - stat.mtimeMs < STALE_STAGING) continue
+      await fs.rm(full, { force: true }).catch(() => undefined)
+    }
+  }
+}
+
+/**
+ * Best-effort exclusion so one launch does the import while its siblings wait.
+ *
+ * Correctness never depended on this — exclusive create and the JsonStore lease
+ * already make concurrent imports safe. What they do not prevent is waste: the
+ * CLI and the server it spawns would each walk and hash the whole previous root
+ * at the same moment, and their artifact merges would contend on SQLite until
+ * one lost to SQLITE_BUSY and quietly skipped artifacts altogether.
+ *
+ * Everything here degrades toward "just do the work". A lock that cannot be
+ * taken, a holder that died, a wait that runs long — each falls through to an
+ * unsynchronised import rather than delaying a boot. Making startup depend on a
+ * lock file would be a worse failure than the duplicated effort it avoids.
+ */
+async function lease(target: string) {
+  const lockpath = path.join(target, ".openscience-import.lock")
+  await fs.mkdir(target, { recursive: true }).catch(() => undefined)
+  const take = async () =>
+    fs
+      .open(lockpath, "wx", 0o600)
+      .then((handle) => handle)
+      .catch(() => undefined)
+
+  const held = await take()
+  const owned =
+    held ??
+    // A holder that crashed leaves the file behind forever, so an old lock is
+    // assumed dead rather than trusted.
+    (await (async () => {
+      const stat = await fs.stat(lockpath).catch(() => undefined)
+      if (!stat || Date.now() - stat.mtimeMs < STALE_LOCK) return undefined
+      await fs.rm(lockpath, { force: true }).catch(() => undefined)
+      return take()
+    })())
+
+  if (!owned) return undefined
+  await owned.writeFile(JSON.stringify({ pid: process.pid, at: Date.now() })).catch(() => undefined)
+  return async () => {
+    await owned.close().catch(() => undefined)
+    await fs.rm(lockpath, { force: true }).catch(() => undefined)
+  }
+}
+
+/** Wait for whoever holds the lease, but only while there is visibly someone
+ *  to wait for, and only until the marker says the work is done. Returns
+ *  whether the caller can skip the import entirely. */
+async function settled(target: string) {
+  const lockpath = path.join(target, ".openscience-import.lock")
+  // Failing to take the lease is not proof that anyone holds it — the open can
+  // fail for its own reasons, and treating that as contention meant a launch
+  // sat here for the full wait with nobody on the other end. No lock file, no
+  // waiting.
+  if (!(await fs.stat(lockpath).catch(() => undefined))) return false
+  const deadline = Date.now() + LEASE_WAIT
+  while (Date.now() < deadline) {
+    await Bun.sleep(25)
+    const record = await Bun.file(path.join(target, marker))
+      .json()
+      .catch(() => undefined)
+    if (record && Array.isArray(record.pending) && record.pending.length === 0) return true
+    if (!(await fs.stat(lockpath).catch(() => undefined))) return false
+  }
+  return false
 }
 
 /** A marker's `pending` list is on-disk data a user can edit, so treat it as
@@ -312,6 +424,13 @@ export async function resolveDataDirectory(input: {
   if (mode === "settled") return { path: target }
   if (legacy === target) return { path: target }
 
+  // Past here the run is going to read the previous root, so it is worth one
+  // attempt at not doing that three times over. Losing the lease is not an
+  // error: wait briefly, and if the holder finishes, there is nothing left to
+  // do. If it does not, fall through and import anyway.
+  const release = await lease(target)
+  if (!release && (await settled(target))) return { path: target }
+
   // A resume revisits only the paths the previous run named. The rest of the
   // tree was settled then, and re-walking it to rediscover that is what made a
   // single unreadable file expensive on every launch. An import or a rescan
@@ -340,7 +459,13 @@ export async function resolveDataDirectory(input: {
     return { path: target }
   }
 
-  const occupied = (await entries(target)).some((entry) => !reserved.has(entry.name))
+  // Not on a resume. That path runs on every launch for as long as one file
+  // stays unreadable, and walking the whole target each time to look for
+  // orphans costs more than the retry it is attached to. An orphan can wait
+  // for the next full pass — the rescan comes around within the interval.
+  if (mode !== "resume") await sweep(target)
+
+  const occupied = (await entries(target)).some((entry) => !reserved.has(entry.name) && !transient.test(entry.name))
 
   // Once a single file has landed in the target this process must keep using
   // the target, whatever fails afterwards. Falling back to the legacy root at
@@ -531,5 +656,9 @@ export async function resolveDataDirectory(input: {
       error: error instanceof Error ? error.message : String(error),
     } satisfies DataResolution
   })
+  // Released on every path, including the failed one — a lease that outlives
+  // its holder would make the next launch wait out the full stale timeout for
+  // nothing.
+  await release?.()
   return result
 }

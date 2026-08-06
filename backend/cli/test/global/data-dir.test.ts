@@ -538,6 +538,117 @@ describe("OpenScience data directory", () => {
     await fs.chmod(path.join(legacy, "artifact-store", "blobs", "orphan"), 0o600)
   })
 
+  test("one concurrent boot does the import, the rest wait it out", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(path.join(legacy, "storage", "session"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+    await fs.writeFile(path.join(legacy, "auth.json"), JSON.stringify({ "openai-codex": { access: "kept" } }))
+    for (let i = 0; i < 60; i++)
+      await fs.writeFile(path.join(legacy, "storage", "session", `ses_${i}.json`), `{"i":${i}}`)
+
+    const results = await Promise.all([
+      resolveDataDirectory({ home, legacy }),
+      resolveDataDirectory({ home, legacy }),
+      resolveDataDirectory({ home, legacy }),
+    ])
+
+    expect(results.map((result) => result.path)).toEqual([target, target, target])
+    // Exactly one run should have done the copying. The others are correct
+    // either way — this is about not walking and hashing the same tree three
+    // times over, and not contending on the artifact database while doing it.
+    expect(results.filter((result) => result.migrated).length).toBe(1)
+    expect(results.find((result) => result.migrated)?.migrated?.files).toBe(61)
+    for (let i = 0; i < 60; i++)
+      expect(fsSync.existsSync(path.join(target, "storage", "session", `ses_${i}.json`))).toBe(true)
+    expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("kept")
+    // The lease must not outlive the run that took it.
+    expect(fsSync.existsSync(path.join(target, ".openscience-import.lock"))).toBe(false)
+  })
+
+  test("an uncontended import never waits on the lease", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+
+    // The lease is an optimisation, so it must never be able to add latency to
+    // a launch. Failing to acquire it once meant waiting the full timeout with
+    // nobody on the other end, which cost every spawned process ten seconds.
+    const started = performance.now()
+    const result = await resolveDataDirectory({ home, legacy })
+    const elapsed = performance.now() - started
+
+    expect(result.migrated?.files).toBe(1)
+    expect(elapsed).toBeLessThan(1000)
+  })
+
+  test("imports anyway when the lease holder never finishes", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.mkdir(target, { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+    // A lease left behind by a process that died long ago. Waiting out its
+    // full staleness on every launch would be worse than the duplicated work
+    // the lease exists to avoid.
+    const lock = path.join(target, ".openscience-import.lock")
+    await fs.writeFile(lock, JSON.stringify({ pid: 999999, at: 0 }))
+    const old = new Date(Date.now() - 30 * 60 * 1000)
+    await fs.utimes(lock, old, old)
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.path).toBe(target)
+    expect(result.migrated?.files).toBe(1)
+    expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
+    expect(fsSync.existsSync(lock)).toBe(false)
+  })
+
+  test("reaps abandoned staging files without touching live ones", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(path.join(target, "storage"), { recursive: true })
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+
+    // Left by a process killed mid-copy. The per-call name means nothing will
+    // ever reuse it, so without a sweep it stays forever.
+    const abandoned = path.join(target, "storage", "ses_x.json.999.abc.openscience-import")
+    const live = path.join(target, "storage", "ses_y.json.111.def.openscience-import")
+    await fs.writeFile(abandoned, "half a file")
+    await fs.writeFile(live, "in flight right now")
+    const old = new Date(Date.now() - 3 * 60 * 60 * 1000)
+    await fs.utimes(abandoned, old, old)
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.error).toBeUndefined()
+    expect(fsSync.existsSync(abandoned)).toBe(false)
+    // A concurrent import may be part-way through writing this one; reaping it
+    // would turn a healthy copy into a deferred file.
+    expect(fsSync.existsSync(live)).toBe(true)
+    expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
+  })
+
+  test("never imports a staging file as if it were data", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+    // A previous root that was itself a target once can still hold these.
+    await fs.writeFile(path.join(legacy, "auth.json.123.xyz.openscience-import"), "{}")
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.migrated?.files).toBe(1)
+    expect(fsSync.existsSync(path.join(target, "auth.json.123.xyz.openscience-import"))).toBe(false)
+  })
+
   test("carries a SQLite journal only alongside its own database", async () => {
     const home = await root()
     const legacy = path.join(home, "share", "openscience")
