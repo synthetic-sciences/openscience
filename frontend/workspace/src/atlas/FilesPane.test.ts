@@ -282,7 +282,9 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>('[data-file-row="notes.md"]')?.click()
     await settle()
 
-    expect(calls).toContain("/settings/compute/modal/volumes/weights/file?path=notes.md")
+    // With no leading slash the route's dirname() yields "." and Modal answers
+    // NOT_FOUND, so a file at the volume root cannot be fetched at all.
+    expect(calls).toContain("/settings/compute/modal/volumes/weights/file?path=/notes.md")
     expect(host.querySelector("[data-stub-view]")).toBeNull()
     expect(got).toEqual([{ name: "notes.md", text: "remote bytes" }])
   })

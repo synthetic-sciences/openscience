@@ -452,7 +452,12 @@ export function FilesPane(
   const downloadRemote = async (row: FileRow) => {
     const volume = encodeURIComponent(current().id.slice("modal:".length))
     setBusy(true)
-    return transport(`/settings/compute/modal/volumes/${volume}/file`, undefined, { path: row.path ?? row.name })
+    // Leading slash on purpose. The route resolves the containing directory with
+    // path.posix.dirname (routes/settings/compute.ts), and dirname("hello.txt")
+    // is ".", which Modal answers with NOT_FOUND -- so a file at a volume's root
+    // could not be downloaded at all. "/hello.txt" gives dirname "/", the root.
+    const target = `/${(row.path ?? row.name).replace(/^\/+/, "")}`
+    return transport(`/settings/compute/modal/volumes/${volume}/file`, undefined, { path: target })
       .then(async (response) => {
         if (!response.ok) throw new Error((await response.text()) || `Download failed (${response.status})`)
         const blob = await response.blob()
