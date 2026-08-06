@@ -33,8 +33,9 @@ const mount = (view: () => JSX.Element) => {
 
 const settle = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms))
 
+let unique = 0
 const props = (over: Record<string, unknown> = {}) => ({
-  file: { name: "notes.md", path: "notes.md", volume: "weights", size: 12 },
+  file: { name: "notes.md", path: `notes-${(unique += 1)}.md`, volume: "weights", size: 12 },
   read: async () => new Blob(["# Objective"], { type: "text/markdown" }),
   onDownload: () => {},
   onClose: () => {},
@@ -180,5 +181,63 @@ describe("remote file view", () => {
     host.querySelector<HTMLButtonElement>('[aria-label="Close notes.md"]')!.click()
 
     expect(events).toEqual(["download", "close"])
+  })
+
+  // Switching tabs unmounts this viewer, so without a cache every switch went
+  // back to Modal for bytes already in hand.
+  test("does not re-fetch a file it has already pulled down", async () => {
+    let reads = 0
+    const file = { name: "shared.md", path: "shared.md", volume: "weights", size: 12 }
+    const view = () =>
+      subject.RemoteFileView(
+        props({
+          file,
+          read: async () => {
+            reads += 1
+            return new Blob(["# Objective"], { type: "text/markdown" })
+          },
+        }) as never,
+      )
+
+    const first = mount(view)
+    await settle()
+    expect(first.querySelector("[data-remote-text]")?.textContent).toContain("# Objective")
+    expect(reads).toBe(1)
+
+    cleanups.splice(0).forEach((fn) => fn())
+    document.body.replaceChildren()
+
+    const second = mount(view)
+    await settle()
+
+    expect(second.querySelector("[data-remote-text]")?.textContent).toContain("# Objective")
+    expect(reads).toBe(1)
+  })
+
+  // A Volume file can change, unlike an artifact version; the size a listing
+  // reports is the cheapest signal of that.
+  test("fetches again when the file has changed size", async () => {
+    let reads = 0
+    const read = async () => {
+      reads += 1
+      return new Blob(["# Objective"], { type: "text/markdown" })
+    }
+    mount(() =>
+      subject.RemoteFileView(
+        props({ file: { name: "grew.md", path: "grew.md", volume: "weights", size: 12 }, read }) as never,
+      ),
+    )
+    await settle()
+    cleanups.splice(0).forEach((fn) => fn())
+    document.body.replaceChildren()
+
+    mount(() =>
+      subject.RemoteFileView(
+        props({ file: { name: "grew.md", path: "grew.md", volume: "weights", size: 4096 }, read }) as never,
+      ),
+    )
+    await settle()
+
+    expect(reads).toBe(2)
   })
 })
