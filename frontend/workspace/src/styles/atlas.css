@@ -1484,6 +1484,17 @@ html[data-color-scheme="dark"] .atlas-overlay {
   flex-direction: column;
 }
 
+.atlas-dialog__danger[data-component="button"] {
+  border-color: color-mix(in srgb, var(--color-error) 72%, var(--color-border));
+  background-color: var(--color-error);
+  color: var(--color-on-accent);
+}
+
+.atlas-dialog__danger[data-component="button"]:hover:not(:disabled),
+.atlas-dialog__danger[data-component="button"]:focus-visible:not(:disabled) {
+  background-color: color-mix(in srgb, var(--color-error) 88%, var(--color-on-accent));
+}
+
 .atlas-drawer-right {
   position: fixed;
   top: 0;

@@ -80,7 +80,7 @@ export default function Home(): JSX.Element {
       title: `Remove ${name}?`,
       message:
         "This removes the project from your home list. Its files and sessions stay on disk, and importing the folder restores it.",
-      confirmLabel: "remove",
+      confirmLabel: "Remove",
       danger: true,
     })
     if (!ok) return

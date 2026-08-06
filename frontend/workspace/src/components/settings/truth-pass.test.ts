@@ -94,8 +94,14 @@ describe("launch settings truth pass", () => {
   })
 
   test("keeps deferred cloud storage out of Storage", () => {
-    expect(source("Storage.tsx")).not.toContain("Cloud storage")
-    expect(source("Storage.tsx")).not.toContain("manage cloud credentials")
+    const storage = source("Storage.tsx")
+
+    expect(storage).not.toContain("Cloud storage")
+    expect(storage).not.toContain("manage cloud credentials")
+    expect(storage).not.toContain("window.prompt")
+    expect(storage).toContain('aria-label="New data directory"')
+    expect(storage).toContain("Copy data")
+    expect(storage).toContain("Reset location")
   })
 
   test("connectors persist enablement and inspect real server capabilities", () => {

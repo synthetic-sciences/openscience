@@ -430,7 +430,7 @@ export default function Page(): JSX.Element {
       title: "Undo from here?",
       message:
         "Hides this message and everything after it, and rolls back the file changes they made. You can restore until you send the next message.",
-      confirmLabel: "undo",
+      confirmLabel: "Undo",
       danger: true,
     })
     if (!ok) return

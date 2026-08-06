@@ -42,6 +42,8 @@ export const Storage: Component = () => {
   const [error, setError] = createSignal<string>()
   const [status, setStatus] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
+  const [editing, setEditing] = createSignal(false)
+  const [target, setTarget] = createSignal("")
 
   const load = async () => {
     setError(undefined)
@@ -53,26 +55,32 @@ export const Storage: Component = () => {
   }
   onMount(() => void load())
 
-  const relocate = async () => {
+  const chooseLocation = async () => {
     if (busy()) return
     setError(undefined)
     setStatus(undefined)
-    let target: string | undefined
-    if (platform.openDirectoryPickerDialog) {
-      const picked = await platform.openDirectoryPickerDialog({ title: "Choose a new data location" }).catch(() => null)
-      target = Array.isArray(picked) ? picked[0] : (picked ?? undefined)
-    } else {
-      target = window.prompt("New absolute path for the data directory:") ?? undefined
-    }
-    if (!target?.trim()) return
+    setEditing(true)
+    if (!platform.openDirectoryPickerDialog) return
+    const picked = await platform.openDirectoryPickerDialog({ title: "Choose a new data location" }).catch(() => null)
+    const path = Array.isArray(picked) ? picked[0] : picked
+    if (path) setTarget(path)
+  }
+
+  const relocate = async () => {
+    const path = target().trim()
+    if (busy() || !path) return
     setBusy(true)
+    setError(undefined)
+    setStatus(undefined)
     try {
       const res = await settingsApi<{ ok: boolean; target: string; restart_required: boolean }>(
         base(),
         fetchFn(),
         "/settings/storage/location",
-        { method: "POST", body: JSON.stringify({ path: target.trim() }) },
+        { method: "POST", body: JSON.stringify({ path }) },
       )
+      setEditing(false)
+      setTarget("")
       setStatus(`Data copied to ${res.target}. Restart OpenScience to use the new location.`)
       await load()
     } catch (err) {
@@ -98,6 +106,13 @@ export const Storage: Component = () => {
     }
   }
 
+  const cancelLocation = () => {
+    if (busy()) return
+    setEditing(false)
+    setTarget("")
+    setError(undefined)
+  }
+
   const maxBytes = createMemo(() => Math.max(1, ...(usage()?.entries.map((e) => e.bytes) ?? [1])))
 
   return (
@@ -113,10 +128,14 @@ export const Storage: Component = () => {
 
       <div class="flex flex-col gap-8 px-4 pb-10 sm:px-8 max-w-[760px]">
         <Show when={error()}>
-          <div style={bannerStyle("var(--color-error)", "var(--color-error-muted)")}>{error()}</div>
+          <div role="alert" style={bannerStyle("var(--color-error)", "var(--color-error-muted)")}>
+            {error()}
+          </div>
         </Show>
         <Show when={status()}>
-          <div style={bannerStyle("var(--color-success)", "var(--color-success-muted)")}>{status()}</div>
+          <div aria-live="polite" style={bannerStyle("var(--color-success)", "var(--color-success-muted)")}>
+            {status()}
+          </div>
         </Show>
 
         {/* Data location */}
@@ -145,14 +164,68 @@ export const Storage: Component = () => {
               <div class="flex gap-2 flex-shrink-0">
                 <Show when={usage()?.pointer}>
                   <Button size="small" variant="secondary" disabled={busy()} onClick={() => void resetLocation()}>
-                    reset
+                    Reset location
                   </Button>
                 </Show>
-                <Button size="small" variant="secondary" disabled={busy()} onClick={() => void relocate()}>
-                  {busy() ? "Working…" : "Change location"}
-                </Button>
+                <Show when={!editing()}>
+                  <Button size="small" variant="secondary" disabled={busy()} onClick={() => void chooseLocation()}>
+                    Change location
+                  </Button>
+                </Show>
               </div>
             </div>
+            <Show when={editing()}>
+              <div class="flex flex-col gap-2 mt-4 pt-4 border-t border-border-weak-base">
+                <label for="storage-location-input" class="text-12-medium text-text-strong">
+                  New data directory
+                </label>
+                <input
+                  id="storage-location-input"
+                  aria-label="New data directory"
+                  value={target()}
+                  onInput={(event) => setTarget(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return
+                    event.preventDefault()
+                    void relocate()
+                  }}
+                  placeholder="/Users/you/OpenScience-data"
+                  spellcheck={false}
+                  autofocus
+                  class="text-12-mono text-text-strong bg-transparent outline-none"
+                  style={{
+                    width: "100%",
+                    "box-sizing": "border-box",
+                    padding: "8px 10px",
+                    border: "1px solid var(--color-border)",
+                    "border-radius": "4px",
+                    "font-family": FONT_CODE,
+                  }}
+                />
+                <p class="text-12-regular text-text-weak max-w-[62ch]">
+                  OpenScience copies the current data into an empty folder and switches to it after restart. The
+                  original stays in place as a safety copy.
+                </p>
+                <div class="flex flex-wrap items-center justify-end gap-2 mt-1">
+                  <Show when={platform.openDirectoryPickerDialog}>
+                    <Button size="small" variant="secondary" disabled={busy()} onClick={() => void chooseLocation()}>
+                      Browse…
+                    </Button>
+                  </Show>
+                  <Button size="small" variant="secondary" disabled={busy()} onClick={cancelLocation}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="primary"
+                    disabled={busy() || !target().trim()}
+                    onClick={() => void relocate()}
+                  >
+                    {busy() ? "Copying…" : "Copy data"}
+                  </Button>
+                </div>
+              </div>
+            </Show>
           </div>
         </div>
 

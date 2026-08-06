@@ -541,7 +541,7 @@ export function AtlasCanvas(): JSX.Element {
     const title = await promptDialog(dialog, {
       title: "Stage a new node",
       placeholder: "node title",
-      confirmLabel: "stage",
+      confirmLabel: "Stage",
     })
     if (!title) return
     setCreating(true)
