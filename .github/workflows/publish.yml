@@ -75,7 +75,9 @@ jobs:
       - name: Cache CLI build
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: backend/cli/dist
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
           key: cli-build-${{ github.run_id }}
 
     outputs:
@@ -109,7 +111,9 @@ jobs:
       - name: Restore CLI build
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: backend/cli/dist
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
           key: cli-build-${{ github.run_id }}
           fail-on-cache-miss: true
 
@@ -162,7 +166,9 @@ jobs:
       - name: Restore CLI build
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: backend/cli/dist
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
           key: cli-build-${{ github.run_id }}
           fail-on-cache-miss: true
 
