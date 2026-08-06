@@ -324,33 +324,48 @@ describe("files pane", () => {
     expect([...host.querySelectorAll("[data-file-name]")].map((node) => node.textContent)).toEqual(["ckpt", "notes.md"])
   })
 
-  test("downloads a Volume file rather than opening a tab it cannot read", async () => {
-    const got: Array<{ name: string; text: string }> = []
-    const { calls, request } = modal()
-    const host = mount(() =>
-      subject.FilesPane({
-        request,
-        onDownload: (name, blob) => void blob.text().then((text) => got.push({ name, text })),
-        view: () => {
-          const node = document.createElement("p")
-          node.dataset.stubView = "opened"
-          return node
-        },
-      }),
-    )
+  // A Volume file has no path on this machine, so a previewable one opens a tab
+  // backed by its bytes rather than by a path.
+  test("previews a Volume file of a format worth showing", async () => {
+    const { calls, request } = modal({
+      files: [
+        { path: "notes.md", type: "file", size: 12 },
+        { path: "model.safetensors", type: "file", size: 40 },
+      ],
+    })
+    const host = mount(() => subject.FilesPane({ request }))
     await settle()
     await enterModal(host)
-
     host.querySelector<HTMLButtonElement>('[data-file-row="weights"]')?.click()
     await settle()
+
     host.querySelector<HTMLButtonElement>('[data-file-row="notes.md"]')?.click()
     await settle()
 
-    // With no leading slash the route's dirname() yields "." and Modal answers
-    // NOT_FOUND, so a file at the Volume root cannot be fetched at all.
+    expect(host.querySelector('[data-tab="notes.md"]')).not.toBeNull()
+    expect(host.querySelector("[data-remote-text]")?.textContent).toContain("remote bytes")
     expect(calls).toContain("/settings/compute/modal/volumes/weights/file?path=/notes.md")
-    expect(host.querySelector("[data-stub-view]")).toBeNull()
-    expect(got).toEqual([{ name: "notes.md", text: "remote bytes" }])
+  })
+
+  test("downloads a Volume file it will not preview instead of opening an empty tab", async () => {
+    const got: string[] = []
+    const { request } = modal({
+      files: [
+        { path: "notes.md", type: "file", size: 12 },
+        { path: "model.safetensors", type: "file", size: 40 },
+      ],
+    })
+    const host = mount(() => subject.FilesPane({ request, onDownload: (name) => got.push(name) }))
+    await settle()
+    await enterModal(host)
+    host.querySelector<HTMLButtonElement>('[data-file-row="weights"]')?.click()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="model.safetensors"]')?.click()
+    await settle()
+
+    expect(got).toEqual(["model.safetensors"])
+    expect(host.querySelector('[data-tab="model.safetensors"]')).toBeNull()
   })
 
   test("renders the tab strip, the picker and a table", async () => {

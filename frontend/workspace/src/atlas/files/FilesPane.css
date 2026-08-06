@@ -906,3 +906,110 @@
   width: 12px;
   font-size: 11px;
 }
+
+/* ------------------------------------------------------------ remote viewer */
+
+.remote-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.remote-view__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-weak-base);
+}
+.remote-view__title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-right: auto;
+  min-width: 0;
+}
+.remote-view__name {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.remote-view__sub {
+  color: var(--color-text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.remote-view__action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 7px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.remote-view__action:hover {
+  background: var(--color-surface);
+}
+.remote-view__action:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 1px;
+}
+.remote-view__action--icon {
+  padding: 4px 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-faint);
+}
+
+.remote-view__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.remote-view__text {
+  margin: 0;
+  padding: 12px;
+  color: var(--color-text);
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 1.55;
+  /* Wrap rather than scroll sideways: a docked pane is ~400px and a long line
+     otherwise takes the whole body with it. */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.remote-view__image {
+  display: block;
+  max-width: 100%;
+  margin: 12px auto;
+  background: #fff;
+}
+.remote-view__frame {
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  border: 0;
+}
+.remote-view__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 30px 16px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+.remote-view__empty p {
+  margin: 0;
+}
+.remote-view__hint {
+  color: var(--color-text-faint);
+  font-size: 12px;
+}

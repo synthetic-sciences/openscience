@@ -22,6 +22,8 @@ import { FileTabs } from "@/atlas/files/FileTabs"
 import { TrashList } from "@/atlas/files/TrashList"
 import { buildSources, type PaneSource } from "@/atlas/files/sources"
 import { readSource, writeSource } from "@/atlas/files/last-source"
+import { RemoteFileView, type RemoteFile } from "@/atlas/files/RemoteFileView"
+import { remotePreview } from "@/atlas/files/remote-preview"
 import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/resource"
 import type { StoredArtifact } from "@/artifacts/store"
 import { uiStore } from "@/atlas/store/ui"
@@ -52,6 +54,11 @@ export interface PaneFile {
    */
   source: string
   readonly?: boolean
+  /**
+   * Set when the tab is a file inside a Modal Volume. Such a file has no path on
+   * this machine, so it is previewed from its bytes rather than read from disk.
+   */
+  remote?: RemoteFile
 }
 
 async function json(response: Response): Promise<unknown> {
@@ -487,6 +494,16 @@ export function FilesPane(
    * did. The seam exists because a standalone mount has no document to click
    * through and no object URLs to revoke.
    */
+  const remoteBytes = async (file: RemoteFile) => {
+    const response = await transport(
+      `/settings/compute/modal/volumes/${encodeURIComponent(file.volume)}/file`,
+      undefined,
+      { path: `/${file.path.replace(/^\/+/, "")}` },
+    )
+    if (!response.ok) throw new Error((await response.text()) || `Could not read ${file.name} (${response.status})`)
+    return response.blob()
+  }
+
   const downloadRemote = async (row: FileRow) => {
     const volume = path()[0]
     if (!volume) return
@@ -526,6 +543,13 @@ export function FilesPane(
       source: from.name,
       readonly: from.readonly,
     }
+    const known = tabs().some((tab) => tab.name === file.name)
+    setTabs(known ? tabs().map((tab) => (tab.name === file.name ? file : tab)) : [...tabs(), file])
+    setActive(file.name)
+  }
+
+  const openRemote = (remote: RemoteFile) => {
+    const file: PaneFile = { name: remote.name, path: remote.path, source: current().name, readonly: true, remote }
     const known = tabs().some((tab) => tab.name === file.name)
     setTabs(known ? tabs().map((tab) => (tab.name === file.name ? file : tab)) : [...tabs(), file])
     setActive(file.name)
@@ -771,8 +795,15 @@ export function FilesPane(
                 setFilter("")
                 return
               }
-              // Nothing local to open: a Volume file comes down over the API.
-              if (current().kind === "modal") return void downloadRemote(row)
+              // Nothing local to open: a Volume file is previewed from its
+              // bytes when it is a format worth showing, and downloaded when it
+              // is not.
+              if (current().kind === "modal") {
+                const volume = path()[0]
+                if (!volume) return
+                if (!remotePreview(row.name, row.size)) return void downloadRemote(row)
+                return openRemote({ name: row.name, path: row.path ?? row.name, volume, size: row.size })
+              }
               open(row)
             }}
           />
@@ -792,19 +823,28 @@ export function FilesPane(
 
       <Show when={selected()} keyed fallback={browser()}>
         {(file) =>
-          // FileView reads the SDK, sync and router contexts, so a standalone
-          // mount cannot render it; `view` lets that harness substitute a stub
-          // exactly as `request` substitutes the transport. Production never
-          // passes it and always gets the real viewer.
-          props.view?.(file) ?? (
-            <FileView
-              directory={projectRoot()}
-              path={file.path}
-              subtitle={file.source}
-              active
-              writable={file.readonly ? false : undefined}
+          file.remote ? (
+            <RemoteFileView
+              file={file.remote}
+              read={remoteBytes}
+              onDownload={(remote) => void downloadRemote({ name: remote.name, type: "file", path: remote.path })}
               onClose={() => closeTab(file.name)}
             />
+          ) : (
+            // FileView reads the SDK, sync and router contexts, so a standalone
+            // mount cannot render it; `view` lets that harness substitute a stub
+            // exactly as `request` substitutes the transport. Production never
+            // passes it and always gets the real viewer.
+            (props.view?.(file) ?? (
+              <FileView
+                directory={projectRoot()}
+                path={file.path}
+                subtitle={file.source}
+                active
+                writable={file.readonly ? false : undefined}
+                onClose={() => closeTab(file.name)}
+              />
+            ))
           )
         }
       </Show>
