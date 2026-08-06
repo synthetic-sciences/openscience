@@ -1,4 +1,15 @@
-import { For, Match, Show, Switch, createMemo, createResource, createSignal, type JSX } from "solid-js"
+import {
+  For,
+  Match,
+  Show,
+  Switch,
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  onCleanup,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useDialog } from "@synsci/ui/context/dialog"
@@ -211,20 +222,32 @@ export function FilesPane(
   // Whether Modal is offered at all. Asking costs a settings read, so it waits
   // until someone opens the picker looking for a source; the Volumes themselves
   // are not listed until that source is actually entered.
-  const [wanted, setWanted] = createSignal(false)
-  const [modalReady] = createResource(
-    () => (wanted() ? (sdk?.directory ?? true) : undefined),
-    () =>
-      transport("/settings/compute")
-        .then(json)
-        .then((value) => {
-          const providers =
-            (value as { providers?: Array<{ id: string; connected: boolean; enabled: boolean }> }).providers ?? []
-          const modal = providers.find((provider) => provider.id === "modal")
-          return Boolean(modal?.connected && modal.enabled)
-        })
-        .catch(() => false),
-  )
+  //
+  // Every open re-asks rather than latching the first answer: a provider
+  // disabled in Settings has to disappear, and opening the picker is exactly
+  // when the answer has to be current.
+  //
+  // A signal fed by an effect, deliberately not a resource. Reading a resource
+  // from the render tree increments the nearest <Suspense> counter, and this
+  // pane renders inside RightPane's -- the same trap that once blanked the whole
+  // pane while a thumbnail loaded.
+  const [opened, setOpened] = createSignal(0)
+  const [modalReady, setModalReady] = createSignal(false)
+  createEffect(() => {
+    if (opened() === 0) return
+    let live = true
+    onCleanup(() => (live = false))
+    void transport("/settings/compute")
+      .then(json)
+      .then((value) => {
+        const providers =
+          (value as { providers?: Array<{ id: string; connected: boolean; enabled: boolean }> }).providers ?? []
+        const modal = providers.find((provider) => provider.id === "modal")
+        return Boolean(modal?.connected && modal.enabled)
+      })
+      .catch(() => false)
+      .then((ready) => live && setModalReady(ready))
+  })
 
   const sources = createMemo(() =>
     buildSources({
@@ -232,7 +255,7 @@ export function FilesPane(
       projectName: projectName(),
       grants: connectedFilesystemGrants(snapshot.latest),
       sessionRoot: sessionFilesystemRoot(snapshot.latest),
-      modal: modalReady.latest,
+      modal: modalReady(),
     }),
   )
 
@@ -609,7 +632,7 @@ export function FilesPane(
         <SourceMenu
           sources={sources()}
           active={current()}
-          onOpen={() => setWanted(true)}
+          onOpen={() => setOpened(opened() + 1)}
           onPick={(next) => {
             choose(next.id)
             setPath([])

@@ -176,7 +176,10 @@ describe("files pane", () => {
     await settle()
 
     expect(host.querySelector("[data-source-button]")?.textContent).toContain("All artifacts")
-    expect(host.querySelector("[data-artifact-grid]")).not.toBeNull()
+    // The store is empty in this fixture, so the surface is the empty state
+    // rather than a grid container.
+    expect(host.querySelector(".artifact-surface")).not.toBeNull()
+    expect(host.querySelector('[data-source-item="modal"]')).toBeNull()
   })
 
   // #253 shipped Modal Volumes as a browsable source inside the screen this pane
@@ -185,12 +188,11 @@ describe("files pane", () => {
   // every local source, and AWS and GCP are due to land beside it.
   const modal = (over: { connected?: boolean; enabled?: boolean; files?: unknown[] } = {}) => {
     const calls: string[] = []
+    const state = { connected: over.connected ?? true, enabled: over.enabled ?? true }
     const request = async (path: string, _init?: RequestInit, query?: Record<string, string>) => {
       calls.push(query?.path === undefined ? path : `${path}?path=${query.path}`)
       if (path === "/settings/compute")
-        return listing({
-          providers: [{ id: "modal", connected: over.connected ?? true, enabled: over.enabled ?? true }],
-        })
+        return listing({ providers: [{ id: "modal", connected: state.connected, enabled: state.enabled }] })
       if (path === "/settings/compute/modal/volumes") return listing([{ name: "weights" }, { name: "datasets" }])
       if (path.includes("/volumes/") && path.endsWith("/files"))
         return listing(
@@ -203,7 +205,7 @@ describe("files pane", () => {
       if (path.startsWith("/file/artifact-store")) return listing([])
       return listing([])
     }
-    return { calls, request }
+    return { calls, request, state }
   }
 
   const enterModal = async (host: HTMLElement) => {
@@ -251,6 +253,46 @@ describe("files pane", () => {
 
     expect(host.querySelector('[data-source-item="modal"]')).toBeNull()
     expect(calls).not.toContain("/settings/compute/modal/volumes")
+  })
+
+  // Disabling a provider in Settings has to remove its entry, not leave it
+  // there until the pane is remounted.
+  test("drops the Modal entry once the provider is disabled", async () => {
+    const { request, state } = modal()
+    const host = mount(() => subject.FilesPane({ request }))
+    await settle()
+
+    const button = () => host.querySelector<HTMLButtonElement>("[data-source-button]")!
+    button().click()
+    await settle()
+    expect(host.querySelector('[data-source-item="modal"]')).not.toBeNull()
+    button().click()
+
+    state.enabled = false
+    button().click()
+    await settle()
+
+    expect(host.querySelector('[data-source-item="modal"]')).toBeNull()
+    expect(host.textContent).not.toContain("Remote")
+  })
+
+  // The entry can vanish while it is the source being browsed.
+  test("falls back when the Modal source disappears from under the picker", async () => {
+    const { request, state } = modal()
+    const host = mount(() => subject.FilesPane({ request }))
+    await settle()
+    await enterModal(host)
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("Modal")
+
+    state.connected = false
+    host.querySelector<HTMLButtonElement>("[data-source-button]")!.click()
+    await settle()
+
+    expect(host.querySelector("[data-source-button]")?.textContent).toContain("All artifacts")
+    // The store is empty in this fixture, so the surface is the empty state
+    // rather than a grid container.
+    expect(host.querySelector(".artifact-surface")).not.toBeNull()
+    expect(host.querySelector('[data-source-item="modal"]')).toBeNull()
   })
 
   test("lists the Volumes as the first level inside Modal", async () => {
