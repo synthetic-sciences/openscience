@@ -66,7 +66,7 @@ describe("mobile compose and model sheets", () => {
     expect(css).toContain("overflow: visible")
     expect(css).not.toContain("overflow-x: auto")
     expect(css).toContain(".workspace-composer__overflow > div")
-    expect(css).toContain("width: min(258px, calc(100vw - 24px))")
+    expect(css).toContain("width: min(286px, calc(100vw - 24px))")
     expect(css).toContain("left: -44px")
     expect(css).toContain("max-height: min(440px, calc(100dvh - 140px))")
     expect(css).toContain(".workspace-composer__capability-divider")

@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test"
 import { Preferences, SettingsPreferencesRoutes } from "../../src/server/routes/settings/preferences"
 
-test("trace navigation is opt-in by default", () => {
+test("advanced navigation is opt-in by default", () => {
   expect(Preferences.parse({})).toMatchObject({
     show_trace: false,
-    atlas_enabled: true,
+    atlas_enabled: false,
     delegation_enabled: true,
     delegation_specialist: null,
   })

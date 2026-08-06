@@ -51,7 +51,8 @@ import { Binary } from "@synsci/util/binary"
 import { showToast } from "@synsci/ui/toast"
 import { uiStore } from "@/atlas/store/ui"
 import { projectHref, projectPathname } from "@/utils/project-route"
-import { displayProviderForModel } from "@/context/model-catalog"
+import { canonicalKey, displayProviderForModel } from "@/context/model-catalog"
+import { RECOMMENDED_MODELS } from "@/context/models"
 import { DialogSelectModel } from "./dialog-select-model"
 import { ModelSettingsPopover, modelSummary } from "./model-settings-popover"
 import { DialogSettings } from "./dialog-settings"
@@ -178,18 +179,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const setModal = (value: { connected: boolean; enabled: boolean }) => setCap("modal", value)
 
   const reviewModels = createMemo(() => {
+    const recommendations = RECOMMENDED_MODELS.map((item) => {
+      const key = canonicalKey(item.providerID, item.modelID)
+      return local.model.list().find((model) => canonicalKey(model.provider.id, model.id) === key)
+    }).filter((model): model is NonNullable<typeof model> => Boolean(model))
     const options = [
       ...local.model.pinned(),
+      ...recommendations,
       local.model.current(),
       ...local.model.recent(),
-      ...local.model
-        .list()
-        .filter((model) => local.model.visible({ providerID: model.provider.id, modelID: model.id })),
     ].filter((model): model is NonNullable<typeof model> => Boolean(model))
     const seen = new Set<string>()
     return options
       .filter((model) => {
-        const key = `${model.provider.id}/${model.id}`
+        const key = canonicalKey(model.provider.id, model.id)
         if (seen.has(key)) return false
         seen.add(key)
         return true

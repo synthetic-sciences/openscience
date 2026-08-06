@@ -122,7 +122,7 @@ export default function General() {
 
         {/* Account */}
         <Section title="Account" description="Your OpenScience identity and subscription.">
-          <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+          <div class="overflow-hidden rounded-[8px] border border-border-weak-base bg-surface-base/25">
             <Row title="Email">
               <span class="text-13-regular text-text-strong">
                 {(account()?.user?.email as string) ?? (account()?.session === false ? "Not connected" : "—")}
@@ -137,8 +137,8 @@ export default function General() {
               </Row>
             </Show>
             <Row title="Billing" description="Manage your subscription, wallet, and invoices.">
-              <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardCli)}>
-                manage billing
+              <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
+                Manage
               </Button>
             </Row>
             <Row title="Session" description="Disconnect this machine from OpenScience.">
@@ -148,7 +148,7 @@ export default function General() {
                 disabled={busy() || account()?.session === false}
                 onClick={() => void signOut()}
               >
-                sign out
+                Disconnect
               </Button>
             </Row>
             <Show when={account()?.session === false}>
@@ -181,15 +181,15 @@ export default function General() {
           </div>
         </Section>
 
-        <Section title="Workspace" description="Choose which advanced surfaces appear in every project.">
-          <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">
+        <Section title="Navigation" description="Choose which optional research surfaces appear in each project.">
+          <div class="overflow-hidden rounded-[8px] border border-border-weak-base bg-surface-base/25">
             <Row
               title="Atlas"
               description="Show the research map in project navigation. Your map data is never changed."
             >
               <Switch
                 hideLabel
-                checked={prefs()?.atlas_enabled ?? true}
+                checked={prefs()?.atlas_enabled ?? false}
                 disabled={!prefs()}
                 onChange={(atlas_enabled) => void savePref({ atlas_enabled })}
               >
@@ -223,7 +223,7 @@ function message(err: unknown) {
 const Section: Component<{ title: string; description?: string; children: JSX.Element }> = (props) => (
   <div class="flex flex-col gap-3">
     <div class="flex flex-col gap-0.5">
-      <h3 class="text-13-medium text-text-weak tracking-wide">{props.title}</h3>
+      <h3 class="text-14-medium text-text-strong tracking-[-0.01em]">{props.title}</h3>
       <Show when={props.description}>
         <p class="text-12-regular text-text-weak">{props.description}</p>
       </Show>

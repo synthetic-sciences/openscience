@@ -12765,7 +12765,7 @@
                       "type": "boolean"
                     },
                     "atlas_enabled": {
-                      "default": true,
+                      "default": false,
                       "type": "boolean"
                     },
                     "delegation_enabled": {
@@ -12835,7 +12835,7 @@
                       "type": "boolean"
                     },
                     "atlas_enabled": {
-                      "default": true,
+                      "default": false,
                       "type": "boolean"
                     },
                     "delegation_enabled": {
@@ -12893,7 +12893,7 @@
                     "type": "boolean"
                   },
                   "atlas_enabled": {
-                    "default": true,
+                    "default": false,
                     "type": "boolean"
                   },
                   "delegation_enabled": {

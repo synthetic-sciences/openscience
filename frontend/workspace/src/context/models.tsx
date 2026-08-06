@@ -8,11 +8,13 @@ import { canonicalKey, isChatModel, isFrontier, preferredModel, preferredModels,
 
 export { canonicalKey, FRONTIER_MODELS, type ModelKey } from "./model-catalog"
 
-export const DEFAULT_PINNED_MODELS: ModelKey[] = [
+export const RECOMMENDED_MODELS: ModelKey[] = [
   { providerID: "openai", modelID: "gpt-5.6-sol" },
   { providerID: "anthropic", modelID: "claude-opus-5" },
   { providerID: "moonshotai", modelID: "kimi-k3" },
 ]
+
+export const DEFAULT_PINNED_MODELS: ModelKey[] = []
 
 type Visibility = "show" | "hide"
 type User = ModelKey & { visibility: Visibility; favorite?: boolean }
@@ -49,7 +51,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       createStore<Store>({
         user: [],
         recent: [],
-        pinned: DEFAULT_PINNED_MODELS,
+        pinned: [],
         variant: {},
         tier: {},
       }),
@@ -143,9 +145,9 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       setStore("recent", uniq)
     }
 
-    // The quick picker starts with one flagship from each of three major model
-    // families. Explicit user pinning remains authoritative after first load.
-    const pinned = createMemo(() => (store.pinned ?? DEFAULT_PINNED_MODELS).slice(0, 3))
+    // New installations start unpinned. The composer independently presents a
+    // small recommended trio, so pinning is always an explicit user choice.
+    const pinned = createMemo(() => (store.pinned ?? []).slice(0, 3))
     const isPinned = (model: ModelKey) => {
       const key = canonicalKey(model.providerID, model.modelID)
       return pinned().some((item) => canonicalKey(item.providerID, item.modelID) === key)

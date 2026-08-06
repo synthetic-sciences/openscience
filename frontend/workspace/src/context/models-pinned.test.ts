@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { DEFAULT_PINNED_MODELS, togglePinned } from "./models"
+import { DEFAULT_PINNED_MODELS, RECOMMENDED_MODELS, togglePinned } from "./models"
 
 const model = (modelID: string, providerID = "anthropic") => ({ modelID, providerID })
 
 describe("pinned models", () => {
-  test("starts with the requested flagship trio", () => {
-    expect(DEFAULT_PINNED_MODELS).toEqual([
+  test("starts unpinned while keeping the requested flagship trio as recommendations", () => {
+    expect(DEFAULT_PINNED_MODELS).toEqual([])
+    expect(RECOMMENDED_MODELS).toEqual([
       model("gpt-5.6-sol", "openai"),
       model("claude-opus-5"),
       model("kimi-k3", "moonshotai"),
@@ -27,8 +28,8 @@ describe("pinned models", () => {
     })
   })
 
-  test("unpins a default through its routed provider alias", () => {
-    expect(togglePinned(DEFAULT_PINNED_MODELS, model("anthropic/claude-opus-5", "openrouter"))).toEqual({
+  test("unpins a recommendation through its routed provider alias", () => {
+    expect(togglePinned(RECOMMENDED_MODELS, model("anthropic/claude-opus-5", "openrouter"))).toEqual({
       models: [model("gpt-5.6-sol", "openai"), model("kimi-k3", "moonshotai")],
       pinned: false,
       limited: false,

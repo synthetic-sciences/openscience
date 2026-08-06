@@ -97,7 +97,7 @@ html[data-color-scheme="dark"]
 }
 
 [data-model-settings-popover] {
-  width: min(286px, calc(100vw - 24px)) !important;
+  width: min(320px, calc(100vw - 24px)) !important;
   padding: 6px !important;
   border: 1px solid var(--model-control-border-strong) !important;
   border-radius: 12px !important;
@@ -185,6 +185,73 @@ html[data-color-scheme="dark"]
 .model-settings-more {
   min-height: 40px !important;
   color: var(--model-control-text) !important;
+}
+
+.model-settings-browser {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.model-settings-search {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 2px 6px 5px;
+  padding: 0 9px;
+  border: 1px solid var(--model-control-border);
+  border-radius: 8px;
+  background: var(--model-control-raised);
+  color: var(--model-control-faint);
+}
+
+.model-settings-search:focus-within {
+  border-color: var(--model-control-border-strong);
+  color: var(--model-control-muted);
+}
+
+.model-settings-search input {
+  all: unset;
+  min-width: 0;
+  flex: 1;
+  color: var(--model-control-text);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.model-settings-search input::placeholder {
+  color: var(--model-control-faint);
+}
+
+.model-settings-catalog {
+  min-height: 80px;
+  max-height: min(310px, calc(72dvh - 132px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--model-control-border-strong) transparent;
+}
+
+.model-settings-group + .model-settings-group {
+  margin-top: 2px;
+}
+
+[data-model-settings-popover] [data-model-catalog-item] {
+  min-height: 46px;
+}
+
+.model-settings-empty {
+  margin: 0;
+  padding: 24px 14px;
+  color: var(--model-control-faint);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.model-settings-manage {
+  min-height: 38px !important;
 }
 
 [data-model-menu-value] {
@@ -288,6 +355,20 @@ html[data-color-scheme="dark"]
     overscroll-behavior: contain;
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
     scrollbar-width: none;
+  }
+
+  .model-settings-catalog {
+    max-height: min(56dvh, 430px);
+  }
+
+  .model-settings-search {
+    min-height: 42px;
+    margin: 8px 14px;
+    padding-inline: 12px;
+  }
+
+  [data-model-settings-popover] [data-model-catalog-item] {
+    min-height: 58px;
   }
 
   .mobile-model-settings__body::-webkit-scrollbar {

@@ -6,21 +6,16 @@ import { IconButton } from "@synsci/ui/icon-button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type Component } from "solid-js"
 import { useLocal } from "@/context/local"
-import { useSync } from "@/context/sync"
-import { displayProviderForModel } from "@/context/model-catalog"
-import { DialogSelectModel } from "./dialog-select-model"
+import { canonicalKey, displayProviderForModel } from "@/context/model-catalog"
+import { RECOMMENDED_MODELS } from "@/context/models"
+import { DialogSettings } from "./dialog-settings"
+import { modelGroup, modelGroupLabel, modelGroupLabelRank } from "./model-groups"
 import { modelControl } from "./model-presentation"
 import "./model-settings-popover.css"
 
 const row = "model-settings-row flex w-full min-w-0 items-center justify-between text-left transition-colors"
 
 export type InferenceSource = "managed" | "byok" | "chatgpt"
-
-const SOURCE_LABELS: Record<InferenceSource, string> = {
-  managed: "Atlas credits",
-  byok: "BYOK",
-  chatgpt: "Codex subscription",
-}
 
 export function modelSummary(input: { reasoning: boolean; context: number; provider: string }) {
   const context =
@@ -33,8 +28,8 @@ export function modelSummary(input: { reasoning: boolean; context: number; provi
 }
 
 /**
- * How the current model is billed and routed: Atlas credits (managed), the
- * user's own key (byok), or a ChatGPT subscription (chatgpt). Uses only signals
+ * How the current model is billed and routed: managed inference, the user's
+ * own key (byok), or a ChatGPT subscription (chatgpt). Uses only signals
  * that are decisive client-side; anything ambiguous returns undefined so the
  * trigger never claims a source it cannot prove.
  *
@@ -151,34 +146,64 @@ export const ModelOptionList: Component<ModelOptionListProps> = (props) => {
 
 export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (props) => {
   const local = useLocal()
-  const sync = useSync()
   const dialog = useDialog()
   const mobile = createMediaQuery("(max-width: 719px)")
   const [open, setOpen] = createSignal(false)
-  const [view, setView] = createSignal<"root" | "effort" | "speed">("root")
+  const [view, setView] = createSignal<"root" | "models" | "effort" | "speed">("root")
+  const [query, setQuery] = createSignal("")
   const [notice, setNotice] = createSignal("")
   const refs = { content: undefined as HTMLElement | undefined }
   const current = createMemo(() => local.model.current())
+  const recommended = createMemo(() => {
+    const models = local.model.list()
+    return RECOMMENDED_MODELS.map((item) => {
+      const key = canonicalKey(item.providerID, item.modelID)
+      return models.find((model) => canonicalKey(model.provider.id, model.id) === key)
+    }).filter((model): model is NonNullable<typeof model> => Boolean(model))
+  })
   const quick = createMemo(() => {
-    // Keep every pin at the top, but leave room for the current selection when
-    // it is not pinned so choosing from More models never makes it disappear.
-    const models = [
-      ...local.model.pinned(),
-      current(),
-      ...local.model.recent(),
-      ...local.model
-        .list()
-        .filter((model) => local.model.visible({ providerID: model.provider.id, modelID: model.id })),
-    ].filter((model): model is NonNullable<typeof model> => Boolean(model))
+    // Pins are explicit. New installations instead see a calm recommended trio
+    // with the current model retained when it falls outside that set.
+    const models = [...local.model.pinned(), ...recommended(), current(), ...local.model.recent()].filter(
+      (model): model is NonNullable<typeof model> => Boolean(model),
+    )
     const seen = new Set<string>()
     return models
       .filter((model) => {
-        const key = `${model.provider.id}/${model.id}`
+        const key = canonicalKey(model.provider.id, model.id)
         if (seen.has(key)) return false
         seen.add(key)
         return true
       })
       .slice(0, 5)
+  })
+  const catalog = createMemo(() => {
+    const value = query().trim().toLowerCase()
+    return local.model
+      .list()
+      .filter(
+        (model) =>
+          local.model.pin.has({ providerID: model.provider.id, modelID: model.id }) ||
+          local.model.visible({ providerID: model.provider.id, modelID: model.id }),
+      )
+      .filter((model) => {
+        if (!value) return true
+        const provider = displayProviderForModel(model.provider, model.id).name
+        return `${model.name} ${model.id} ${provider}`.toLowerCase().includes(value)
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+  })
+  const groups = createMemo(() => {
+    const map = new Map<string, ReturnType<typeof catalog>>()
+    for (const model of catalog()) {
+      const label = modelGroupLabel(
+        modelGroup(model, local.model.pin.has({ providerID: model.provider.id, modelID: model.id })),
+      )
+      map.set(label, [...(map.get(label) ?? []), model])
+    }
+    return [...map.entries()].sort(
+      ([left], [right]) => modelGroupLabelRank(left) - modelGroupLabelRank(right) || left.localeCompare(right),
+    )
   })
   const control = createMemo(() =>
     modelControl({
@@ -190,15 +215,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
       advanced: [],
     }),
   )
-  const source = createMemo(() => {
-    const m = current()
-    if (!m) return undefined
-    return inferenceSource({
-      providerID: m.provider.id,
-      credential: m.provider.source,
-      billing: sync.data.config.billing?.llm,
-    })
-  })
   // The inline chip surfaces only a non-default effort; "standard" is the
   // default and stays silent so the strip carries no redundant state.
   const chip = createMemo(() => {
@@ -234,14 +250,21 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   }
 
   const choose = () => {
+    setQuery("")
+    setView("models")
+    focus("[data-model-catalog-search]")
+  }
+
+  const manage = () => {
     setOpen(false)
-    queueMicrotask(() => dialog.show(() => <DialogSelectModel />))
+    queueMicrotask(() => dialog.show(() => <DialogSettings initial="models" />))
   }
 
   const onMenuKeyDown = (event: KeyboardEvent) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
     const target = event.target
     if (!(target instanceof HTMLElement)) return
+    if (target instanceof HTMLInputElement) return
     if (target.matches("[data-model-menu-back]") || target.closest('[role="radiogroup"]')) return
     const scope = target.closest<HTMLElement>("[data-model-menu-scope]") ?? refs.content
     if (!scope) return
@@ -265,7 +288,10 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
       open={open()}
       onOpenChange={(next) => {
         setOpen(next)
-        if (!next) setView("root")
+        if (!next) {
+          setView("root")
+          setQuery("")
+        }
       }}
       modal={mobile()}
       placement="top-end"
@@ -289,13 +315,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
           fallback={
             <>
               <span class="truncate">{control().trigger}</span>
-              <Show when={source()}>
-                {(value) => (
-                  <span data-model-source-label class="shrink-0">
-                    · {SOURCE_LABELS[value()]}
-                  </span>
-                )}
-              </Show>
               <span aria-hidden="true" class="shrink-0 text-text-weak">
                 ⌄
               </span>
@@ -347,7 +366,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
               <Match when={view() === "root"}>
                 <div data-model-menu-scope class="flex flex-col">
                   <div class="model-settings-models" role="radiogroup" aria-label="Model">
-                    <p class="model-settings-heading">Pinned and recent</p>
+                    <p class="model-settings-heading">Quick models</p>
                     <For each={quick()}>
                       {(model) => {
                         const selected = () =>
@@ -375,11 +394,17 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                             <span class="model-settings-model">
                               <strong>{model.name}</strong>
                               <small>
-                                {modelSummary({
-                                  reasoning: model.capabilities.reasoning,
-                                  context: model.limit.context,
-                                  provider: provider(),
-                                })}
+                                {canonicalKey(model.provider.id, model.id) === "openai/gpt-5-6-sol"
+                                  ? "Balanced research, coding, and tool use"
+                                  : canonicalKey(model.provider.id, model.id) === "anthropic/claude-opus-5"
+                                    ? "Deep analysis and scientific review"
+                                    : canonicalKey(model.provider.id, model.id) === "moonshotai/kimi-k3"
+                                      ? "Long-context research and synthesis"
+                                      : modelSummary({
+                                          reasoning: model.capabilities.reasoning,
+                                          context: model.limit.context,
+                                          provider: provider(),
+                                        })}
                               </small>
                             </span>
                             <Show when={selected()}>
@@ -444,6 +469,88 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                       </button>
                     )}
                   </Show>
+                </div>
+              </Match>
+
+              <Match when={view() === "models"}>
+                <div data-model-menu-scope class="model-settings-browser">
+                  <button
+                    type="button"
+                    data-model-menu-back="models"
+                    class={`${row} justify-start`}
+                    onClick={() => setView("root")}
+                  >
+                    <span aria-hidden="true">‹</span>
+                    <span data-model-menu-label>Models</span>
+                  </button>
+                  <div class="model-settings-divider" />
+                  <label class="model-settings-search">
+                    <Icon name="magnifying-glass" size="small" aria-hidden="true" />
+                    <input
+                      data-model-catalog-search
+                      type="search"
+                      value={query()}
+                      onInput={(event) => setQuery(event.currentTarget.value)}
+                      placeholder="Find a model or provider"
+                      aria-label="Find a model or provider"
+                    />
+                  </label>
+                  <div class="model-settings-catalog" role="radiogroup" aria-label="Available models">
+                    <For each={groups()}>
+                      {(group) => (
+                        <section class="model-settings-group" aria-label={group[0]}>
+                          <p class="model-settings-heading">{group[0]}</p>
+                          <For each={group[1]}>
+                            {(model) => {
+                              const selected = () =>
+                                current()?.provider.id === model.provider.id && current()?.id === model.id
+                              return (
+                                <button
+                                  type="button"
+                                  role="radio"
+                                  data-model-menu-item
+                                  data-model-catalog-item
+                                  aria-checked={selected()}
+                                  class={row}
+                                  onClick={() => {
+                                    local.model.set(
+                                      { providerID: model.provider.id, modelID: model.id },
+                                      { recent: true },
+                                    )
+                                    setOpen(false)
+                                  }}
+                                >
+                                  <span class="model-settings-model">
+                                    <strong>{model.name}</strong>
+                                    <small>
+                                      {modelSummary({
+                                        reasoning: model.capabilities.reasoning,
+                                        context: model.limit.context,
+                                        provider: displayProviderForModel(model.provider, model.id).name,
+                                      })}
+                                    </small>
+                                  </span>
+                                  <Show when={selected()}>
+                                    <Icon name="check" size="small" class="model-settings-check" aria-hidden="true" />
+                                  </Show>
+                                </button>
+                              )
+                            }}
+                          </For>
+                        </section>
+                      )}
+                    </For>
+                    <Show when={catalog().length === 0}>
+                      <p class="model-settings-empty">No models match “{query()}”.</p>
+                    </Show>
+                  </div>
+                  <div class="model-settings-divider" />
+                  <button type="button" data-model-menu-item class={`${row} model-settings-manage`} onClick={manage}>
+                    <span data-model-menu-label>Manage models</span>
+                    <span aria-hidden="true" data-model-menu-value>
+                      ›
+                    </span>
+                  </button>
                 </div>
               </Match>
 

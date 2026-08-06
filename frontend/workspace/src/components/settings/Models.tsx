@@ -8,7 +8,7 @@ import { displayProviderForModel } from "@/context/model-catalog"
 import { CodexConnection } from "./CodexConnection"
 import { ManagedInference } from "./ManagedInference"
 import { ProviderKeys } from "./ProviderKeys"
-import { MODEL_GROUPS, modelGroup } from "../model-groups"
+import { modelGroup, modelGroupLabel, modelGroupRank } from "../model-groups"
 
 type Option = {
   key: ModelKey
@@ -17,13 +17,31 @@ type Option = {
   provider: string
   group: ReturnType<typeof modelGroup>
   pinned: boolean
+  reasoning: boolean
+  context: number
   value: string
+}
+
+type Scope = "all" | "reasoning" | "latest" | "long"
+
+const scopes: Array<{ id: Scope; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "reasoning", label: "Reasoning" },
+  { id: "latest", label: "Latest" },
+  { id: "long", label: "Long context" },
+]
+
+const context = (limit: number) => {
+  if (limit >= 1_000_000) return `${(limit / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}m`
+  if (limit >= 1_000) return `${Math.round(limit / 1_000).toLocaleString()}k`
+  return limit.toLocaleString()
 }
 
 export default function Models() {
   const sync = useGlobalSync()
   const models = useModels()
   const [query, setQuery] = createSignal("")
+  const [scope, setScope] = createSignal<Scope>("all")
   const [error, setError] = createSignal<string>()
 
   const options = createMemo<Option[]>(() => {
@@ -39,6 +57,8 @@ export default function Models() {
           label: item.name,
           latest: item.latest,
           pinned,
+          reasoning: item.capabilities.reasoning,
+          context: item.limit.context,
           provider: displayProviderForModel(item.provider, item.id).name,
           value: `${item.provider.id}/${item.id}`,
         }
@@ -46,19 +66,33 @@ export default function Models() {
       .sort((a, b) => a.label.localeCompare(b.label))
   })
   const filtered = createMemo(() => {
-    const value = query().trim().toLowerCase()
-    if (!value) return options()
-    return options().filter((model) => model.label.toLowerCase().includes(value))
+    const terms = query().trim().toLowerCase().split(/\s+/).filter(Boolean)
+    return options().filter((model) => {
+      if (scope() === "reasoning" && !model.reasoning) return false
+      if (scope() === "latest" && !model.latest) return false
+      if (scope() === "long" && model.context < 500_000) return false
+
+      const label = modelGroupLabel(model.group).toLowerCase()
+      const haystack = `${model.label} ${model.provider} ${model.value} ${label}`.toLowerCase()
+      return terms.every((term) => {
+        if (term === "is:reasoning") return model.reasoning
+        if (term === "is:latest") return model.latest
+        if (term === "is:long") return model.context >= 500_000
+        if (term.startsWith("provider:")) return `${model.provider} ${label}`.toLowerCase().includes(term.slice(9))
+        return haystack.includes(term)
+      })
+    })
   })
   const primary = () => options().find((model) => model.value === sync.data.config.model)
   const background = () => options().find((model) => model.value === sync.data.config.small_model)
-  const groups = createMemo(() =>
-    MODEL_GROUPS.map((group) => ({
-      ...group,
-      models: filtered().filter((model) => model.group === group.id),
-    })).filter((group) => group.models.length > 0),
-  )
-  const [notice, setNotice] = createSignal("Pinned models stay at the top of every model picker.")
+  const groups = createMemo(() => {
+    const map = new Map<ReturnType<typeof modelGroup>, Option[]>()
+    for (const model of filtered()) map.set(model.group, [...(map.get(model.group) ?? []), model])
+    return [...map.entries()]
+      .map(([id, items]) => ({ id, label: modelGroupLabel(id), models: items }))
+      .sort((a, b) => modelGroupRank(a.id) - modelGroupRank(b.id) || a.label.localeCompare(b.label))
+  })
+  const [notice, setNotice] = createSignal("New installations start unpinned. Choose up to three quick models.")
 
   const togglePin = (model: Option) => {
     const result = models.pinned.toggle(model.key)
@@ -176,7 +210,7 @@ export default function Models() {
               Composer models
             </h3>
             <p class="text-12-regular text-text-weak">
-              Pin up to three models for quick access. Hidden models remain available here.
+              Pick quick models and control what appears in the composer. Hidden models remain available here.
             </p>
           </div>
           <div class="flex items-center justify-between gap-3">
@@ -187,39 +221,63 @@ export default function Models() {
               {models.pinned.list().length}/3 pinned
             </span>
           </div>
-          <input
-            type="search"
-            aria-label="Filter models"
-            value={query()}
-            onInput={(event) => setQuery(event.currentTarget.value)}
-            placeholder="Filter models"
-            class="h-8 rounded-[4px] border border-border-weak-base bg-surface-base px-3 text-13-regular text-text-strong outline-none placeholder:text-text-weak focus:border-border-strong-base"
-          />
+          <div class="flex flex-col gap-2">
+            <label class="flex h-9 items-center gap-2 rounded-[7px] border border-border-weak-base bg-surface-base px-3 text-text-weak focus-within:border-border-strong-base">
+              <Icon name="magnifying-glass" size="small" />
+              <input
+                type="search"
+                aria-label="Filter models"
+                value={query()}
+                onInput={(event) => setQuery(event.currentTarget.value)}
+                placeholder="Search name, provider, or try is:reasoning"
+                class="min-w-0 flex-1 bg-transparent text-13-regular text-text-strong outline-none placeholder:text-text-weaker"
+              />
+            </label>
+            <div class="flex flex-wrap items-center gap-1.5" aria-label="Model filters">
+              <For each={scopes}>
+                {(item) => (
+                  <button
+                    type="button"
+                    aria-pressed={scope() === item.id}
+                    onClick={() => setScope(item.id)}
+                    class="min-h-7 rounded-[6px] border px-2.5 text-11-medium transition-colors hover:text-text-strong focus-visible:outline focus-visible:outline-1 focus-visible:outline-border-strong"
+                    classList={{
+                      "border-border-strong-base bg-surface-raised-base text-text-strong": scope() === item.id,
+                      "border-border-weak-base bg-transparent text-text-weak": scope() !== item.id,
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
           <div class="overflow-hidden rounded-[6px] border border-border-weak-base bg-surface-base/40">
             <For each={groups()}>
               {(group) => (
-                <section aria-labelledby={`composer-models-${group.id}`}>
+                <section aria-labelledby={`composer-models-${group.id.replace(/[^a-z0-9-]/gi, "-")}`}>
                   <div class="flex min-h-8 items-center border-b border-border-weak-base bg-surface-raised-base/70 px-4">
                     <h4
-                      id={`composer-models-${group.id}`}
-                      class="text-11-medium uppercase tracking-[0.045em] text-text-weaker"
+                      id={`composer-models-${group.id.replace(/[^a-z0-9-]/gi, "-")}`}
+                      class="text-11-medium tracking-[0.01em] text-text-weak"
                     >
                       {group.label}
                     </h4>
                   </div>
                   <For each={group.models}>
                     {(model) => (
-                      <div class="flex min-h-12 items-center justify-between gap-3 border-b border-border-weak-base px-4 py-2.5 last:border-none">
-                        <div class="flex min-w-0 flex-1 items-center gap-2">
-                          <span class="truncate text-13-medium text-text-strong">{model.label}</span>
-                          <span class="shrink-0 rounded-[4px] border border-border-weak-base px-1.5 py-0.5 text-11-medium text-text-weak">
+                      <div class="flex min-h-[52px] items-center justify-between gap-3 border-b border-border-weak-base px-4 py-2.5 last:border-none">
+                        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span class="flex min-w-0 items-center gap-2">
+                            <strong class="truncate text-13-medium text-text-strong">{model.label}</strong>
+                            <Show when={model.latest}>
+                              <span class="shrink-0 text-10-medium text-text-weaker">latest</span>
+                            </Show>
+                          </span>
+                          <span class="truncate text-11-regular text-text-weak">
+                            {model.reasoning ? "Reasoning" : "General"} · {context(model.context)} context ·{" "}
                             {model.provider}
                           </span>
-                          <Show when={model.latest}>
-                            <span class="shrink-0 rounded-[4px] bg-surface-raised-base px-1.5 py-0.5 text-11-medium text-text-weak">
-                              latest
-                            </span>
-                          </Show>
                         </div>
                         <div class="flex shrink-0 items-center gap-2">
                           <button

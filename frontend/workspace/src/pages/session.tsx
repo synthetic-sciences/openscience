@@ -58,7 +58,6 @@ import { StatusDot } from "@/atlas/shared/StatusDot"
 import { IconTrash } from "@/atlas/shared/Icon"
 import { toast } from "@/atlas/Toast"
 import { artifactContext } from "@/artifacts/context"
-import { fetchSetupSession } from "@/atlas/setup-session"
 import { createSessionTabs } from "@/atlas/store/sessionTabs"
 import { ProjectTrustControl } from "@/atlas/ProjectTrust"
 import { projectTrustApi, type ProjectTrustApi } from "@/atlas/project-trust"
@@ -106,33 +105,19 @@ export default function Page(): JSX.Element {
   const pending: { value?: Promise<string | undefined>; context?: SessionContext } = {}
   const [mobileSessionsOpen, setMobileSessionsOpen] = createSignal(false)
   const [sessionsCollapsed, setSessionsCollapsed] = createSignal(readSessionSidebar())
-  const [atlasConnected, setAtlasConnected] = createSignal(false)
   const sessionTabs = createSessionTabs()
 
   createEffect(
     on(
       () => server.url,
       (url) => {
-        setAtlasConnected(false)
-        if (!url) return
-        void fetchSetupSession(url, platform.fetch ?? fetch)
-          .then(setAtlasConnected)
-          .catch(() => setAtlasConnected(false))
-      },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => server.url,
-      (url) => {
-        productPreferences.sync({ show_trace: false, atlas_enabled: true })
+        productPreferences.sync({ show_trace: false, atlas_enabled: false })
         if (!url) return
         const endpoint = `${url.replace(/\/$/, "")}/settings/preferences`
         void (platform.fetch ?? fetch)(endpoint)
           .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Preferences unavailable"))))
           .then((preferences) => productPreferences.sync(preferences as ProductPreferences))
-          .catch(() => productPreferences.sync({ show_trace: false, atlas_enabled: true }))
+          .catch(() => productPreferences.sync({ show_trace: false, atlas_enabled: false }))
       },
     ),
   )
@@ -177,7 +162,7 @@ export default function Page(): JSX.Element {
     return task
   }
 
-  const atlasAvailable = () => atlasConnected() && productPreferences.atlas()
+  const atlasAvailable = () => productPreferences.atlas()
 
   createEffect(() => {
     if (productPreferences.atlas()) return
