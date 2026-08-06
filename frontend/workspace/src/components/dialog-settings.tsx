@@ -12,6 +12,26 @@ import { SettingsNavContext } from "./settings/nav"
 // Select) into the soft, rounded, iOS-style language settings uses — and widens
 // the modal when expanded — without touching global component CSS or tokens.
 const SETTINGS_STYLES = `
+.settings-dialog {
+  font-family: var(--font-family-sans);
+  font-feature-settings: var(--font-family-sans--font-feature-settings, normal);
+}
+.settings-dialog h2,
+.settings-dialog h3,
+.settings-dialog h4 {
+  font-family: inherit;
+  letter-spacing: -0.012em;
+}
+.settings-dialog .atlas-section-label,
+.settings-section-label {
+  color: var(--text-weak);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 16px;
+  text-transform: none;
+}
 .settings-dialog [data-component="switch"] [data-slot="switch-control"] {
   width: 38px;
   height: 22px;

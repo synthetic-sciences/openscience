@@ -201,7 +201,7 @@ export const Credentials: Component = () => {
                           aria-label={`Remove ${svc.label}`}
                           onClick={() => void disconnect(svc.id)}
                         >
-                          remove
+                          Remove
                         </Button>
                       </Show>
                       <Button
@@ -210,7 +210,7 @@ export const Credentials: Component = () => {
                         aria-label={`${svc.connected ? "Update" : "Connect"} ${svc.label}`}
                         onClick={() => openForm(svc)}
                       >
-                        {editing() === svc.id ? "cancel" : svc.connected ? "update" : "connect"}
+                        {editing() === svc.id ? "Cancel" : svc.connected ? "Update" : "Connect"}
                       </Button>
                     </div>
                   </div>
@@ -240,7 +240,7 @@ export const Credentials: Component = () => {
                                   spellcheck={false}
                                   placeholder={
                                     f.placeholder ??
-                                    (svc.set_fields.includes(f.name) ? "•••••• (leave blank to keep)" : "")
+                                    (svc.set_fields.includes(f.name) ? "•••••• (Leave blank to keep)" : "")
                                   }
                                   value={values()[f.name] ?? ""}
                                   onInput={(e) => setValues({ ...values(), [f.name]: e.currentTarget.value })}
@@ -267,7 +267,7 @@ export const Credentials: Component = () => {
                           disabled={saving()}
                           onClick={() => void save(svc.id)}
                         >
-                          {saving() ? "saving…" : "save"}
+                          {saving() ? "Saving…" : "Save"}
                         </Button>
                         <Button
                           type="button"
@@ -276,7 +276,7 @@ export const Credentials: Component = () => {
                           disabled={saving()}
                           onClick={() => setEditing(undefined)}
                         >
-                          cancel
+                          Cancel
                         </Button>
                       </div>
                     </form>
@@ -291,7 +291,7 @@ export const Credentials: Component = () => {
             when={customOpen()}
             fallback={
               <button type="button" onClick={() => setCustomOpen(true)} style={addRowStyle()}>
-                + add custom key
+                + Add custom key
               </button>
             }
           >
@@ -332,7 +332,7 @@ export const Credentials: Component = () => {
                   spellcheck={false}
                   value={customValue()}
                   onInput={(e) => setCustomValue(e.currentTarget.value)}
-                  placeholder="secret value"
+                  placeholder="Secret value"
                   style={fieldStyle()}
                 />
               </label>
@@ -344,10 +344,10 @@ export const Credentials: Component = () => {
                   disabled={saving() || !customName().trim() || !customValue().trim()}
                   onClick={() => void saveCustom()}
                 >
-                  save
+                  Save
                 </Button>
                 <Button type="button" size="small" variant="secondary" onClick={() => setCustomOpen(false)}>
-                  cancel
+                  Cancel
                 </Button>
               </div>
             </form>

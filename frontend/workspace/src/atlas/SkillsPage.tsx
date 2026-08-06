@@ -184,23 +184,23 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
               <FilterMenu options={categories()} value={category()} onSelect={setCategory} />
               <SearchInput value={search()} onInput={setSearch} placeholder="Search skills" />
               <AddMenu
-                label="add skill"
+                label="Add skill"
                 items={[
                   {
                     icon: "pencil-line",
-                    label: "write from scratch",
+                    label: "Write from scratch",
                     description: "Author a new SKILL.md in the editor",
                     onSelect: () => setView("scratch"),
                   },
                   {
                     icon: "cloud-upload",
-                    label: "upload a skill",
+                    label: "Upload a skill",
                     description: "Import a SKILL.md file from disk",
                     onSelect: () => fileInput?.click(),
                   },
                   {
                     icon: "github",
-                    label: "import from GitHub",
+                    label: "Import from GitHub",
                     description: "Install from a public git repo URL",
                     onSelect: () => setView("github"),
                   },
@@ -394,11 +394,11 @@ function ScratchForm(props: {
         />
         <div class="flex items-center gap-2">
           <FormButton
-            label={props.busy ? "creating…" : "create skill"}
+            label={props.busy ? "Creating…" : "Create skill"}
             disabled={props.busy || !valid()}
             onClick={() => props.onCreate(name().trim(), description().trim(), body())}
           />
-          <FormButton label="cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
+          <FormButton label="Cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
     </div>
@@ -418,11 +418,11 @@ function GithubForm(props: { busy: boolean; onCancel: () => void; onInstall: (ur
         </p>
         <div class="flex items-center gap-2">
           <FormButton
-            label={props.busy ? "installing…" : "install"}
+            label={props.busy ? "Installing…" : "Install"}
             disabled={props.busy || !url().trim()}
             onClick={() => props.onInstall(url().trim())}
           />
-          <FormButton label="cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
+          <FormButton label="Cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
     </div>

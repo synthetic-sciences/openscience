@@ -306,16 +306,22 @@ export function RightPane(
             onMouseLeave={(event) => (event.currentTarget.style.background = "transparent")}
           />
           <div class="research-inspector__header">
-            <div class="research-inspector__context">
-              <span>Research</span>
-              <strong>
-                {context() === "files" && uiStore.file()
-                  ? uiStore.file()!.name
-                  : context() === "files" && uiStore.saved()
-                    ? uiStore.saved()!.title
-                    : labels[context()]}
-              </strong>
-            </div>
+            <Show
+              when={uiStore.workTabs().length > 0}
+              fallback={
+                <div class="research-inspector__context">
+                  <strong>{labels[context()]}</strong>
+                </div>
+              }
+            >
+              <WorkTabStrip
+                tabs={uiStore.workTabs()}
+                active={uiStore.activeWorkTab()}
+                onSelect={uiStore.activateWorkTab}
+                onClose={uiStore.closeWorkTab}
+                onReorder={uiStore.moveWorkTab}
+              />
+            </Show>
             <div class="research-inspector__controls">
               <Show when={!narrow()}>
                 <button
@@ -344,15 +350,6 @@ export function RightPane(
               </button>
             </div>
           </div>
-          <Show when={uiStore.workTabs().length > 0}>
-            <WorkTabStrip
-              tabs={uiStore.workTabs()}
-              active={uiStore.activeWorkTab()}
-              onSelect={uiStore.activateWorkTab}
-              onClose={uiStore.closeWorkTab}
-              onReorder={uiStore.moveWorkTab}
-            />
-          </Show>
           <Suspense fallback={<InspectorLoading label={labels[context()]} />}>
             <Show when={uiStore.file()} keyed>
               {(file) => (

@@ -541,7 +541,7 @@ const Compute: Component = () => {
                     disabled={!modal()?.enabled || Boolean(busy())}
                     onClick={() => void check()}
                   >
-                    {busy() === "modal:check" ? "testing…" : "test connection"}
+                    {busy() === "modal:check" ? "Testing…" : "Test connection"}
                   </Button>
                   <Button
                     size="small"
@@ -549,7 +549,7 @@ const Compute: Component = () => {
                     disabled={!app().trim() || !image().trim() || Boolean(busy())}
                     onClick={() => void saveModal()}
                   >
-                    {busy() === "modal:save" ? "saving…" : "save defaults"}
+                    {busy() === "modal:save" ? "Saving…" : "Save defaults"}
                   </Button>
                 </div>
               </Show>
@@ -578,7 +578,7 @@ const Compute: Component = () => {
                       subtitle="Add a plain SSH, Slurm, or PBS host, then run a real connection check."
                     >
                       <Button size="small" variant="secondary" onClick={() => setAdding(true)}>
-                        add host
+                        Add host
                       </Button>
                     </Row>
                   </Panel>
@@ -699,7 +699,7 @@ const Compute: Component = () => {
                     variant="primary"
                     disabled={!label().trim() || !host().trim() || busy() === "add"}
                   >
-                    {busy() === "add" ? "adding…" : "add host"}
+                    {busy() === "add" ? "Adding…" : "Add host"}
                   </Button>
                 </div>
               </form>

@@ -156,11 +156,11 @@ export default function Specialists() {
               <FilterMenu options={modeOptions()} value={modeFilter()} onSelect={setModeFilter} />
               <SearchInput value={search()} onInput={setSearch} placeholder="Search specialists" />
               <AddMenu
-                label="add specialist"
+                label="Add specialist"
                 items={[
                   {
                     icon: "pencil-line",
-                    label: "write from scratch",
+                    label: "Write from scratch",
                     description: "Define a custom agent persisted to config",
                     onSelect: () => setCreating(true),
                   },
@@ -312,11 +312,11 @@ function CreateForm(props: {
         />
         <div class="flex items-center gap-2">
           <FormButton
-            label={props.busy ? "creating…" : "create specialist"}
+            label={props.busy ? "Creating…" : "Create specialist"}
             disabled={props.busy || !valid()}
             onClick={() => props.onCreate(name().trim(), description().trim(), prompt(), mode())}
           />
-          <FormButton label="cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
+          <FormButton label="Cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
     </div>

@@ -238,7 +238,7 @@ const Sandbox: Component = () => {
                   onKeyDown={(e) => e.key === "Enter" && addPath()}
                 />
                 <Button size="small" variant="secondary" disabled={busy() || !newPath().trim()} onClick={addPath}>
-                  add
+                  Add
                 </Button>
               </div>
             </div>
@@ -253,7 +253,7 @@ const Sandbox: Component = () => {
                   </span>
                 </div>
                 <Button size="small" variant="secondary" disabled={testing() || !status()?.available} onClick={runTest}>
-                  {testing() ? "testing…" : "run self-test"}
+                  {testing() ? "Testing…" : "Run self-test"}
                 </Button>
               </div>
               <Show when={test()}>
@@ -277,7 +277,7 @@ const Sandbox: Component = () => {
                       class="text-12-medium pt-1"
                       classList={{ "text-text-success": t().ok, "text-text-danger": !t().ok }}
                     >
-                      {t().ok ? "Containment verified." : "Containment FAILED — do not rely on the sandbox."}
+                      {t().ok ? "Containment verified." : "Containment failed — do not rely on the sandbox."}
                     </span>
                   </div>
                 )}

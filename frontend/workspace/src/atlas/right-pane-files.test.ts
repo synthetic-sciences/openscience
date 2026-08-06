@@ -27,6 +27,8 @@ test("keeps the explorer and selected file preview inside the contextual pane", 
   // Collection surfaces and individual files share one reorderable,
   // closable, project/session-scoped work strip.
   expect(pane).toContain("<WorkTabStrip")
+  expect(pane.match(/<WorkTabStrip/g)).toHaveLength(1)
+  expect(pane.indexOf("<WorkTabStrip")).toBeLessThan(pane.indexOf('class="research-inspector__controls"'))
   expect(pane).toContain("onSelect={uiStore.activateWorkTab}")
   expect(pane).toContain("onReorder={uiStore.moveWorkTab}")
   expect(pane).toContain("<Show when={uiStore.file()} keyed>")

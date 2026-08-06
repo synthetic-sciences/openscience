@@ -43,10 +43,10 @@ export const PanelBody: ParentComponent = (props) => (
   <div class="flex flex-col gap-6 px-4 pb-12 sm:px-8 max-w-[820px]">{props.children}</div>
 )
 
-// Muted "SECTION" subheader with a trailing count.
+// Muted sentence-case subheader with a trailing count.
 export const SectionLabel: Component<{ label: string; count?: number }> = (props) => (
   <div class="flex items-center gap-2 px-0.5">
-    <span class="atlas-section-label">{props.label}</span>
+    <span class="settings-section-label">{props.label}</span>
     <Show when={props.count !== undefined}>
       <span class="text-10-regular text-text-weaker">{props.count}</span>
     </Show>

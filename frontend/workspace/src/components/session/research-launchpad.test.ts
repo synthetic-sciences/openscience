@@ -13,7 +13,6 @@ import {
 } from "./research-launchpad"
 
 const view = () => readFileSync(fileURLToPath(new URL("./session-new-view.tsx", import.meta.url)), "utf8")
-const styles = () => readFileSync(fileURLToPath(new URL("../../styles/atlas.css", import.meta.url)), "utf8")
 const server = await createServer({
   root: fileURLToPath(new URL("../../..", import.meta.url)),
   mode: "production",
@@ -27,11 +26,8 @@ const server = await createServer({
     resolve: { conditions: ["browser", "production"] },
   },
 })
-const [subject, launchpad, web] = await Promise.all([
+const [subject, web] = await Promise.all([
   server.ssrLoadModule("/src/components/session/session-new-view.tsx") as Promise<typeof import("./session-new-view")>,
-  server.ssrLoadModule("/src/components/session/research-launchpad.ts") as Promise<
-    typeof import("./research-launchpad")
-  >,
   server.ssrLoadModule("solid-js/web") as Promise<typeof import("solid-js/web")>,
 ])
 const cleanups: Array<() => void> = []
@@ -124,83 +120,21 @@ describe("research launchpad", () => {
   test("keeps the default session empty instead of presenting a landing page", () => {
     const source = view()
 
-    expect(source).toContain('class="research-launchpad__bar"')
-    expect(source).toContain('aria-label="Research starters"')
-    expect(source).not.toContain(">New research</span>")
-    expect(source).toContain("<span>Starters</span>")
-    expect(source).not.toContain("What will you investigate?")
-    expect(source).not.toContain('aria-label="Starting suggestions"')
-    expect(source).not.toContain("props.suggestions.slice")
-    expect(source).not.toContain('class="research-launchpad__loop"')
-    expect(source).not.toContain('aria-label="Research loop"')
-    expect(source).not.toContain('class="research-launchpad__footer"')
-    expect(source).not.toContain("Local compute")
-    expect(source).not.toContain("Remote compute")
-    expect(source).not.toContain("models.list().length.toLocaleString()")
-    expect(source).toContain("<Show when={catalogOpen()}>")
-    expect(source).toContain("setCatalogOpen(false)")
+    expect(source).toContain('aria-label="New research session"')
+    expect(source).not.toContain("Starters")
+    expect(source).not.toContain("catalogOpen")
+    expect(source).not.toContain("/file/starters")
+    expect(source).not.toContain("researchWorkflows")
   })
 
-  test("gives the empty session a compact work-tab scale", () => {
-    const css = styles()
+  test("mounts a genuinely blank new-session canvas", () => {
+    expect(subject.NewSessionView).toBeFunction()
 
-    expect(css).toContain("/* Claude Science forensic reset */")
-    expect(css).toContain(".research-launchpad__bar")
-    expect(css).toContain("padding: 18px 20px")
-    expect(css).toContain("font-size: 15px")
-    const reset = css.slice(css.indexOf("/* Claude Science forensic reset */"))
-    expect(reset).not.toContain("radial-gradient(")
-  })
-
-  test("keeps the expanded catalog readable above the floating composer", () => {
-    const css = styles()
-    const source = view()
-    const start = css.indexOf("/* Readable expanded research catalog */")
-    const end = css.indexOf("/* Final readable compute control room */", start)
-    const catalog = css.slice(start, end)
-
-    expect(start).toBeGreaterThan(-1)
-    expect(end).toBeGreaterThan(start)
-    expect(source).not.toContain("Starter workspace")
-    expect(source).not.toContain("working tree")
-    expect(catalog).toContain(".research-launchpad__catalog .research-launchpad__starter-copy small")
-    expect(catalog).toContain(".research-launchpad__catalog .research-launchpad__workflow-filters button span")
-    expect(catalog).toContain(".research-launchpad__catalog .research-launchpad__workflow-copy > span")
-    expect(catalog).toContain("min-height: 44px")
-    expect(catalog).toContain("border-radius: 16px")
-    expect(catalog).toContain("@media (max-width: 720px)")
-    expect(catalog).toContain("calc(var(--workspace-composer-reserve) + 20px)")
-    expect(catalog).not.toMatch(/font-size:\s*(?:[7-9]|1[01](?:\.\d+)?)px/)
-    expect(catalog).not.toContain("text-transform: uppercase")
-  })
-
-  test("mounts an empty default canvas and reveals deeper research actions on demand", async () => {
-    expect(subject.NewSessionCanvas).toBeFunction()
-
-    const grid = document.createElement("div")
-    grid.className = "research-launchpad__grid"
-    grid.textContent = "Full workflow library"
-    const host = mount(() =>
-      subject.NewSessionCanvas({
-        children: grid,
-      }),
-    )
-
-    expect(host.querySelector("h1")).toBeNull()
-    expect(host.querySelector(".research-launchpad__bar")?.textContent).toContain("Starters")
-    expect(host.querySelectorAll("[data-suggestion]")).toHaveLength(0)
-    expect(host.querySelector(".research-launchpad__loop")).toBeNull()
-    expect(host.querySelector(".research-launchpad__grid")).toBeNull()
-    expect(host.querySelector(".research-launchpad__footer")).toBeNull()
-    expect(host.textContent).not.toContain("Local compute")
-    expect(host.textContent).not.toContain("models")
-    expect(host.querySelector('[data-action="setup-model"]')).toBeNull()
-
-    const browse = host.querySelector<HTMLButtonElement>('[data-action="browse-research"]')
-    expect(browse?.getAttribute("aria-expanded")).toBe("false")
-    browse?.click()
-    await Promise.resolve()
-    expect(browse?.getAttribute("aria-expanded")).toBe("true")
-    expect(host.querySelector(".research-launchpad__grid")).not.toBeNull()
+    const host = mount(() => subject.NewSessionView())
+    const canvas = host.querySelector('[data-component="research-launchpad"]')
+    expect(canvas?.getAttribute("aria-label")).toBe("New research session")
+    expect(host.querySelectorAll("button")).toHaveLength(0)
+    expect(host.querySelectorAll("h1, h2, h3")).toHaveLength(0)
+    expect(host.textContent).toBe("")
   })
 })

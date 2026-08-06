@@ -149,7 +149,7 @@ export const Storage: Component = () => {
                   </Button>
                 </Show>
                 <Button size="small" variant="secondary" disabled={busy()} onClick={() => void relocate()}>
-                  {busy() ? "working…" : "change location"}
+                  {busy() ? "Working…" : "Change location"}
                 </Button>
               </div>
             </div>

@@ -6258,6 +6258,14 @@ button.research-launchpad__status-item:hover {
   background: var(--color-bg);
 }
 
+.research-inspector__header .inspector-tabs {
+  min-width: 0;
+  flex: 1;
+  align-self: stretch;
+  padding: 4px 6px 0;
+  border-bottom: 0;
+}
+
 .research-inspector__context {
   gap: 0;
   padding: 7px 10px;

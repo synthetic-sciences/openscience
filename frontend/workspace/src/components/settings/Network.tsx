@@ -204,7 +204,7 @@ export default function Network() {
                   onClick={clearCustom}
                   aria-label="Clear allowed domains"
                 >
-                  clear
+                  Clear
                 </button>
               </Show>
             </div>
@@ -232,7 +232,7 @@ export default function Network() {
                 <input
                   type="text"
                   aria-label="Add allowed domain"
-                  placeholder="add a domain, e.g. example.org"
+                  placeholder="Add a domain, e.g. example.org"
                   value={customDomain()}
                   disabled={saving()}
                   class="flex-1 h-9 px-3 rounded-xs border border-border-weak-base bg-surface-raised-base/40 text-13-regular text-text-strong placeholder:text-text-weak/60 outline-none focus:border-border-base font-mono"
@@ -246,7 +246,7 @@ export default function Network() {
                   onClick={addCustom}
                 >
                   <Icon name="plus" size="small" />
-                  add
+                  Add
                 </button>
               </div>
             </div>

@@ -104,7 +104,7 @@ const Permissions: Component = () => {
                         </span>
                       </div>
                       <Button size="small" variant="ghost" disabled={busy()} onClick={() => void revoke(approval)}>
-                        revoke
+                        Revoke
                       </Button>
                     </div>
                   )}
