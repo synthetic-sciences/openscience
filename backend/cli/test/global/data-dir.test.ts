@@ -5,6 +5,15 @@ import fsSync from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { resolveDataDirectory } from "@/global/data-dir"
+import { SecretBox } from "@/util/secret-box"
+
+// Windows' chmod only toggles the read-only bit, so `chmod 000` there leaves a
+// file perfectly readable and there is no portable way to stage the
+// "unreadable source" cases. Those tests are POSIX-only by nature; everything
+// else in this file — the copy, the hash verification, the exclusive link, the
+// credential re-seal, the rescan — runs everywhere and is what the Windows and
+// macOS legs of CI exist to cover.
+const unreadable = test.skipIf(process.platform === "win32")
 
 const roots: string[] = []
 
@@ -293,7 +302,7 @@ describe("OpenScience data directory", () => {
     expect(await fs.readFile(path.join(result.path, "openscience-session.json"), "utf8")).toContain("kept")
   })
 
-  test("an unreadable file costs that file and nothing else", async () => {
+  unreadable("an unreadable file costs that file and nothing else", async () => {
     const home = await root()
     const legacy = path.join(home, "share", "openscience")
     const target = path.join(home, ".openscience")
@@ -312,7 +321,9 @@ describe("OpenScience data directory", () => {
     // Sealed, but the straggler is named, so the retry costs one stat rather
     // than a fresh walk of the whole legacy tree on every later launch.
     const record = path.join(target, ".xdg-data-migration-v2.json")
-    expect(JSON.parse(await fs.readFile(record, "utf8")).pending).toEqual(["storage/session/locked.json"])
+    expect(JSON.parse(await fs.readFile(record, "utf8")).pending).toEqual([
+      path.join("storage", "session", "locked.json"),
+    ])
 
     await fs.chmod(path.join(legacy, "storage", "session", "locked.json"), 0o600)
     const retry = await resolveDataDirectory({ home, legacy })
@@ -329,7 +340,59 @@ describe("OpenScience data directory", () => {
     expect(settled.path).toBe(target)
   })
 
-  test("a straggler that disappears stops being chased", async () => {
+  test("picks up what an older install kept writing to the previous root", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(path.join(legacy, "storage", "session"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"first"}')
+    await fs.writeFile(path.join(legacy, "storage", "session", "ses_a.json"), '{"id":"a"}')
+
+    const first = await resolveDataDirectory({ home, legacy })
+    expect(first.migrated?.files).toBe(2)
+
+    // A second, older install goes on using the previous root: a new session,
+    // and a credential it refreshed there.
+    await fs.writeFile(path.join(legacy, "storage", "session", "ses_b.json"), '{"id":"b"}')
+    await fs.writeFile(path.join(legacy, "auth.json"), JSON.stringify({ "openai-codex": { access: "later" } }))
+
+    // Inside the interval nothing is re-read — that is what keeps the steady
+    // state off the boot path.
+    expect((await resolveDataDirectory({ home, legacy })).migrated).toBeUndefined()
+    expect(fsSync.existsSync(path.join(target, "storage", "session", "ses_b.json"))).toBe(false)
+
+    const record = path.join(target, ".xdg-data-migration-v2.json")
+    const aged = JSON.parse(await fs.readFile(record, "utf8"))
+    await fs.writeFile(record, JSON.stringify({ ...aged, checkedAt: 0 }))
+
+    const rescan = await resolveDataDirectory({ home, legacy })
+
+    expect(rescan.path).toBe(target)
+    expect(await fs.readFile(path.join(target, "storage", "session", "ses_b.json"), "utf8")).toContain("b")
+    expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("later")
+    // The original import's record survives the rescan.
+    expect(JSON.parse(await fs.readFile(record, "utf8")).migratedAt).toBe(aged.migratedAt)
+  })
+
+  test("stops watching a previous root that no longer exists", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+
+    await resolveDataDirectory({ home, legacy })
+    const record = path.join(home, ".openscience", ".xdg-data-migration-v2.json")
+    await fs.writeFile(record, JSON.stringify({ ...JSON.parse(await fs.readFile(record, "utf8")), checkedAt: 0 }))
+    await fs.rm(legacy, { recursive: true, force: true })
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.path).toBe(path.join(home, ".openscience"))
+    expect(result.migrated).toBeUndefined()
+    expect(result.error).toBeUndefined()
+  })
+
+  unreadable("a straggler that disappears stops being chased", async () => {
     const home = await root()
     const legacy = path.join(home, "share", "openscience")
     const target = path.join(home, ".openscience")
@@ -387,27 +450,92 @@ describe("OpenScience data directory", () => {
     expect(fsSync.existsSync(path.join(target, ".xdg-data-migration-v2.json"))).toBe(true)
   })
 
-  test("does not import credentials sealed with a different machine key", async () => {
+  test("re-seals credentials under the target's own machine key", async () => {
     const home = await root()
     const legacy = path.join(home, "share", "openscience")
     const target = path.join(home, ".openscience")
+    const before = Buffer.alloc(32, 1)
+    const after = Buffer.alloc(32, 2)
     await fs.mkdir(legacy, { recursive: true })
     await fs.mkdir(target, { recursive: true })
-    await fs.writeFile(path.join(legacy, "credentials.key"), Buffer.alloc(32, 1))
-    await fs.writeFile(path.join(target, "credentials.key"), Buffer.alloc(32, 2))
+    await fs.writeFile(path.join(legacy, "credentials.key"), before)
+    await fs.writeFile(path.join(target, "credentials.key"), after)
     await fs.writeFile(
       path.join(legacy, "credentials.json"),
-      JSON.stringify({ github: { fields: { GITHUB_TOKEN: "ciphertext" }, updated_at: "1" } }),
+      JSON.stringify({
+        github: {
+          fields: { GITHUB_TOKEN: SecretBox.seal(before, "ghp_real"), STALE: "not-even-base64-gcm" },
+          updated_at: "1",
+        },
+      }),
     )
-    await fs.writeFile(path.join(legacy, "auth.json"), JSON.stringify({ "openai-codex": { access: "kept" } }))
 
     const result = await resolveDataDirectory({ home, legacy })
 
-    expect(result.warning).toContain("different machine key")
-    // Undecryptable entries would show as "set" in the UI and inject nothing.
-    expect(fsSync.existsSync(path.join(target, "credentials.json"))).toBe(false)
-    expect(await fs.readFile(path.join(target, "credentials.key"))).toEqual(Buffer.alloc(32, 2))
-    expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("kept")
+    expect(result.error).toBeUndefined()
+    const store = JSON.parse(await fs.readFile(path.join(target, "credentials.json"), "utf8"))
+    // Readable with the key this machine actually uses — the point of the
+    // exercise. Carried verbatim it would decrypt to nothing while the UI
+    // still called it "set".
+    expect(SecretBox.open(after, store.github.fields.GITHUB_TOKEN)).toBe("ghp_real")
+    // A field that will not open is unrecoverable; carrying it forward would
+    // recreate the silent dud.
+    expect(store.github.fields.STALE).toBeUndefined()
+    expect(await fs.readFile(path.join(target, "credentials.key"))).toEqual(after)
+  })
+
+  test("keeps a credential the target already has over the legacy one", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    const before = Buffer.alloc(32, 1)
+    const after = Buffer.alloc(32, 2)
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.mkdir(target, { recursive: true })
+    await fs.writeFile(path.join(legacy, "credentials.key"), before)
+    await fs.writeFile(path.join(target, "credentials.key"), after)
+    await fs.writeFile(
+      path.join(legacy, "credentials.json"),
+      JSON.stringify({
+        github: { fields: { GITHUB_TOKEN: SecretBox.seal(before, "old") }, updated_at: "1" },
+        modal: { fields: { MODAL_TOKEN: SecretBox.seal(before, "recovered") }, updated_at: "1" },
+      }),
+    )
+    await fs.writeFile(
+      path.join(target, "credentials.json"),
+      JSON.stringify({ github: { fields: { GITHUB_TOKEN: SecretBox.seal(after, "current") }, updated_at: "2" } }),
+    )
+
+    await resolveDataDirectory({ home, legacy })
+
+    const store = JSON.parse(await fs.readFile(path.join(target, "credentials.json"), "utf8"))
+    expect(SecretBox.open(after, store.github.fields.GITHUB_TOKEN)).toBe("current")
+    expect(SecretBox.open(after, store.modal.fields.MODAL_TOKEN)).toBe("recovered")
+  })
+
+  unreadable("does not import an artifact whose blob never landed", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await artifact(legacy, "orphan")
+    await artifact(target, "current")
+    // The row travels through the SQLite merge, the bytes through the file
+    // copy. Break only the bytes.
+    await fs.chmod(path.join(legacy, "artifact-store", "blobs", "orphan"), 0o000)
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.error).toBeUndefined()
+    expect(fsSync.existsSync(path.join(target, "artifact-store", "blobs", "orphan"))).toBe(false)
+    const db = new Database(path.join(target, "artifact-store", "artifacts.db"), { readonly: true })
+    // An artifact listed but unopenable is worse than one that never arrived.
+    expect((db.query("SELECT id FROM artifacts ORDER BY id").all() as Array<{ id: string }>).map((r) => r.id)).toEqual([
+      "art_current",
+    ])
+    expect((db.query("SELECT count(*) AS v FROM blobs").get() as { v: number }).v).toBe(1)
+    expect((db.query("SELECT count(*) AS v FROM versions").get() as { v: number }).v).toBe(1)
+    db.close()
+    await fs.chmod(path.join(legacy, "artifact-store", "blobs", "orphan"), 0o600)
   })
 
   test("carries a SQLite journal only alongside its own database", async () => {

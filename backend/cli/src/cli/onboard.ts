@@ -1,5 +1,7 @@
 import * as prompts from "@clack/prompts"
 import path from "path"
+import fs from "fs/promises"
+import type { Argv } from "yargs"
 import { cmd } from "./cmd/cmd"
 import { UI } from "./ui"
 import { OpenScience } from "../openscience"
@@ -202,10 +204,102 @@ export const InitCommand = cmd({
   },
 })
 
+/**
+ * Measure the pre-2.0.2 data directory, and optionally remove it.
+ *
+ * The import copies rather than moves, deliberately: the previous root is the
+ * only thing standing between a bad import and a user's history. The cost is
+ * that it survives forever, silently, as a full duplicate — and because
+ * nothing mentions it, the disk it holds is never reclaimed. So: name it,
+ * measure it, and delete it only when asked.
+ *
+ * Removal is gated on the import having actually finished. While files are
+ * still outstanding, that directory is the only copy of them.
+ */
+async function reportLegacyRoot(prune: boolean) {
+  const legacy = Global.LegacyData
+  if (!legacy) return
+  const found = await measure(legacy)
+  if (!found) return
+
+  const size = found.bytes > 1024 * 1024 ? `${(found.bytes / 1024 / 1024).toFixed(0)} MB` : `${found.bytes} bytes`
+  const outstanding = Global.DataMigration.migrated?.deferred ?? 0
+  prompts.log.info(`Previous data directory: ${legacy} (${found.files} files, ${size})`)
+
+  if (outstanding > 0) {
+    prompts.log.warn(
+      `${outstanding} file(s) have not been imported out of it yet, so it is still the only copy of those. ` +
+        `Re-run once they are readable before removing it.`,
+    )
+    return
+  }
+  if (!prune) {
+    prompts.log.info(`Everything importable has been copied into ${Global.Path.data}.`)
+    prompts.log.info("Remove it with: openscience doctor --prune-legacy")
+    return
+  }
+  // Refuse anything that is not plausibly the old data root, so a stray
+  // OPENSCIENCE_DATA_DIR or a symlinked home cannot turn this into rm -rf.
+  if (legacy === Global.Path.data || legacy === Global.Path.home || path.dirname(legacy) === legacy) {
+    prompts.log.error(`Refusing to remove ${legacy}: it is the directory OpenScience is currently using.`)
+    return
+  }
+  // Interactively, deleting a directory full of the user's history deserves a
+  // second look. Non-interactively there is nobody to ask, and blocking on a
+  // prompt nobody can answer would hang a scripted run forever — the flag was
+  // typed on purpose, so let it stand as the answer.
+  const confirmed = process.stdin.isTTY
+    ? await prompts.confirm({ message: `Delete ${legacy} and its ${found.files} files?` })
+    : true
+  if (prompts.isCancel(confirmed) || !confirmed) {
+    prompts.log.info("Left in place.")
+    return
+  }
+  const failure = await fs
+    .rm(legacy, { recursive: true, force: true })
+    .then(() => undefined)
+    .catch((error: unknown) => (error instanceof Error ? error.message : String(error)))
+  if (failure) prompts.log.error(`Could not remove ${legacy}: ${failure}`)
+  if (!failure) prompts.log.success(`Removed ${legacy}, reclaiming ${size}.`)
+}
+
+async function measure(root: string) {
+  const stack = [root]
+  let files = 0
+  let bytes = 0
+  let seen = false
+  while (stack.length) {
+    const dir = stack.pop()
+    if (!dir) continue
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => undefined)
+    if (!entries) continue
+    seen = true
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(full)
+        continue
+      }
+      const stat = await fs.stat(full).catch(() => undefined)
+      if (!stat) continue
+      files += 1
+      bytes += stat.size
+    }
+  }
+  return seen ? { files, bytes } : undefined
+}
+
 export const DoctorCommand = cmd({
   command: "doctor",
   describe: "check what's configured and what's missing",
-  async handler() {
+  builder: (yargs: Argv) =>
+    yargs.option("prune-legacy", {
+      type: "boolean",
+      describe: "delete the pre-2.0.2 data directory once its contents have been imported",
+      default: false,
+    }),
+  async handler(args) {
     UI.empty()
     prompts.intro("openscience doctor")
 
@@ -259,6 +353,8 @@ export const DoctorCommand = cmd({
         `Legacy data directories are ignored because current directories exist: ${Global.LegacyConflicts.map((item) => item.legacy).join(", ")}. Merge or remove them.`,
       )
     }
+
+    await reportLegacyRoot(args.pruneLegacy === true)
 
     const session = await OpenScience.getSession()
     if (session) {

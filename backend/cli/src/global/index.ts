@@ -64,9 +64,10 @@ const pointer = (() => {
     return
   }
 })()
+const previous = migrateDir(xdgData!)
 const resolved = await resolveDataDirectory({
   home: process.env.OPENSCIENCE_TEST_HOME || os.homedir(),
-  legacy: migrateDir(xdgData!),
+  legacy: previous,
   explicit,
   pointer,
 })
@@ -81,6 +82,12 @@ migrateFile(config, "synsc.json", "openscience.json")
 export namespace Global {
   export const LegacyConflicts = detectedLegacyConflicts as readonly { legacy: string; current: string }[]
   export const DataMigration = resolved
+  /** The XDG data directory earlier releases used. The import copies out of it
+   *  rather than moving, so it survives as a safety copy — and, left alone,
+   *  as a permanent duplicate nothing ever tells the user they can delete.
+   *  `openscience doctor` reports it and can remove it. Undefined once the
+   *  data root is the same directory or the user has cleaned it up. */
+  export const LegacyData = previous === data ? undefined : previous
   export const Path = {
     // Allow override via OPENSCIENCE_TEST_HOME for test isolation
     get home() {

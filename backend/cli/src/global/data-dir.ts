@@ -1,9 +1,10 @@
 import fs from "fs/promises"
 import { Database, type SQLQueryBindings } from "bun:sqlite"
 import { createHash } from "node:crypto"
-import { constants, createReadStream } from "node:fs"
+import { constants, createReadStream, existsSync } from "node:fs"
 import path from "node:path"
 import { JsonStore } from "../util/jsonstore"
+import { SecretBox } from "../util/secret-box"
 
 const marker = ".xdg-data-migration-v2.json"
 /** Suffix for a copy in flight. Never collides with a real name, and marks
@@ -30,6 +31,10 @@ const artifactJournals = new Set([
   path.join("artifact-store", "artifacts.db-wal"),
   path.join("artifact-store", "artifacts.db-shm"),
 ])
+/** How long a sealed import trusts itself before re-reading the previous root.
+ *  Only pays a walk once per interval per machine, and only while that root
+ *  still exists — which is what makes it affordable to keep watching at all. */
+const RESCAN_INTERVAL = Number(process.env["OPENSCIENCE_LEGACY_RESCAN_MS"]) || 6 * 60 * 60 * 1000
 
 export interface DataResolution {
   path: string
@@ -109,15 +114,42 @@ async function describe(root: string, names: string[]) {
   return files.filter((file) => file !== undefined).sort((a, b) => a.path.localeCompare(b.path))
 }
 
-/** Whether both roots seal credentials.json with the same machine key — true
- *  only when the legacy key was the one carried across, i.e. the target had
- *  none of its own. */
-async function sameKey(legacy: string, target: string) {
-  const [old, current] = await Promise.all(
+/**
+ * Re-seal a legacy credential store under the target root's machine key.
+ *
+ * Every field value in credentials.json is AES-256-GCM sealed with the
+ * machine-local credentials.key. When the target already had a key of its own,
+ * the legacy key is not carried across, and copying the ciphertexts verbatim
+ * hands the user entries the UI reports as "set" while decryptFields silently
+ * drops every one — a configured GitHub token that injects no GITHUB_TOKEN.
+ * Both keys are on disk here, so translate rather than discard.
+ *
+ * Returns undefined when there is nothing to translate or the legacy key is
+ * unreadable. A field that will not open is left out: it is unrecoverable, and
+ * carrying it forward would recreate exactly the silent-dud entry this exists
+ * to prevent.
+ */
+async function reseal(legacy: string, target: string, data: Record<string, unknown>) {
+  const [from, to] = await Promise.all(
     [legacy, target].map((root) => fs.readFile(path.join(root, "credentials.key")).catch(() => undefined)),
   )
-  if (!old) return true
-  return !!current && old.equals(current)
+  if (!from || !to) return undefined
+  if (from.equals(to)) return data
+  const out: Record<string, unknown> = {}
+  for (const [service, entry] of Object.entries(data)) {
+    if (!entry || typeof entry !== "object") continue
+    const fields = (entry as { fields?: unknown }).fields
+    if (!fields || typeof fields !== "object") continue
+    const moved: Record<string, string> = {}
+    for (const [name, value] of Object.entries(fields as Record<string, unknown>)) {
+      if (typeof value !== "string") continue
+      try {
+        moved[name] = SecretBox.seal(to, SecretBox.open(from, value))
+      } catch {}
+    }
+    if (Object.keys(moved).length > 0) out[service] = { ...entry, fields: moved }
+  }
+  return out
 }
 
 async function object(file: string) {
@@ -167,10 +199,28 @@ async function mergeArtifacts(legacy: string, target: string) {
           statement.run(...row)
         }
       }
+      // Rows and the bytes they describe travel by different routes: metadata
+      // through this merge, blob content through the file copy. A blob whose
+      // file was deferred or unreadable would otherwise leave a row pointing at
+      // nothing, and the artifact reading as present right up until someone
+      // opens it. So the file on disk decides, and what it excludes cascades:
+      // no blob, no version; no current version, no artifact.
+      const store = path.join(target, "artifact-store")
+      const kept = new Set(
+        (old.query("SELECT sha256, path FROM blobs").all() as Array<{ sha256: string; path: string }>)
+          .filter((row) => existsSync(path.join(store, row.path)))
+          .map((row) => row.sha256),
+      )
+      const usable = new Set(
+        (old.query("SELECT id, sha256 FROM versions").all() as Array<{ id: string; sha256: string }>)
+          .filter((row) => kept.has(row.sha256))
+          .map((row) => row.id),
+      )
       db.transaction(() => {
         copy(
           "SELECT sha256, size, path, created_at FROM blobs",
           "INSERT OR IGNORE INTO blobs (sha256, size, path, created_at) VALUES (?1, ?2, ?3, ?4)",
+          (row) => kept.has(row[0] as string),
         )
         copy(
           `SELECT id, schema_version, project_id, source_key, title, kind, current_version_id, state,
@@ -178,6 +228,10 @@ async function mergeArtifacts(legacy: string, target: string) {
           `INSERT OR IGNORE INTO artifacts
             (id, schema_version, project_id, source_key, title, kind, current_version_id, state, ${column}
              created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10${trashed ? ", ?11" : ""})`,
+          // current_version_id has no foreign key behind it but the UI resolves
+          // it unconditionally, so an artifact whose current version did not
+          // survive is worse than one that never arrived.
+          (row) => usable.has(row[6] as string),
         )
         const artifacts = new Set(db.query("SELECT id FROM artifacts").values().flat())
         copy(
@@ -186,7 +240,9 @@ async function mergeArtifacts(legacy: string, target: string) {
           `INSERT OR IGNORE INTO versions
             (id, artifact_id, version, filename, mime_type, size, sha256, session_id, message_id, execution_id,
              source_path, capture_quality, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
-          (row) => artifacts.has(row[1] as string),
+          // Both gates matter: the artifact has to have landed, and the blob
+          // the version names has to be a file that exists.
+          (row) => artifacts.has(row[1] as string) && kept.has(row[6] as string),
         )
         const versions = new Set(db.query("SELECT id FROM versions").values().flat())
         copy(
@@ -227,33 +283,60 @@ export async function resolveDataDirectory(input: {
 
   const target = path.join(path.resolve(input.home), ".openscience")
   const legacy = path.resolve(input.legacy)
-  // A sealed marker with nothing outstanding is the steady state for every
-  // user after their first upgrade, so it has to be the cheapest path here:
-  // one stat, no walk.
   const sealed = await Bun.file(path.join(target, marker))
     .json()
-    .then((value) => (value && typeof value === "object" ? (value as { pending?: unknown }) : undefined))
+    .then((value) => (value && typeof value === "object" ? (value as Record<string, unknown>) : undefined))
     .catch(() => undefined)
   const outstanding = Array.isArray(sealed?.pending) ? (sealed.pending as unknown[]).filter(isRelative) : []
-  if (sealed && outstanding.length === 0) return { path: target }
+
+  // Sealing the import once and never looking back is what let a second,
+  // older install keep writing to the legacy root unseen: it refreshes its
+  // own session and auth there, and none of it is ever picked up. So the
+  // marker is a checkpoint, not a verdict. What it must not become is a cost
+  // on every command, hence the ordering here — the two cases that end the
+  // function are both decided before anything walks a directory.
+  const mode = await (async (): Promise<"import" | "resume" | "rescan" | "settled"> => {
+    if (!sealed) return "import"
+    if (outstanding.length > 0) return "resume"
+    // Once the previous root is gone there is nothing left to watch, and this
+    // is the steady state for anyone who has cleaned it up: one failed stat.
+    const still = await fs
+      .stat(legacy)
+      .then((stat) => stat.isDirectory())
+      .catch(() => false)
+    if (!still) return "settled"
+    const last = Number(sealed.checkedAt ?? sealed.migratedAt)
+    if (Number.isFinite(last) && Date.now() - last < RESCAN_INTERVAL) return "settled"
+    return "rescan"
+  })()
+  if (mode === "settled") return { path: target }
   if (legacy === target) return { path: target }
 
-  // A resumed import revisits only the paths the previous run named. The rest
-  // of the tree was settled then, and re-walking it to rediscover that is what
-  // made a single unreadable file expensive on every launch.
-  const source = sealed
-    ? (await describe(legacy, outstanding)).filter((file) => !artifactJournals.has(file.path))
-    : (await inventory(legacy)).filter(
-        (file) =>
-          !reserved.has(file.path.split(path.sep)[0]) && !transient.test(file.path) && !artifactJournals.has(file.path),
-      )
+  // A resume revisits only the paths the previous run named. The rest of the
+  // tree was settled then, and re-walking it to rediscover that is what made a
+  // single unreadable file expensive on every launch. An import or a rescan
+  // both want the whole tree — a rescan is exactly a repeat import, and it is
+  // cheap precisely because everything already present is skipped by lstat
+  // before it is ever read.
+  const source =
+    mode === "resume"
+      ? (await describe(legacy, outstanding)).filter((file) => !artifactJournals.has(file.path))
+      : (await inventory(legacy)).filter(
+          (file) =>
+            !reserved.has(file.path.split(path.sep)[0]) &&
+            !transient.test(file.path) &&
+            !artifactJournals.has(file.path),
+        )
   if (source.length === 0) {
-    // Nothing left to fetch — the stragglers are gone from the legacy root
-    // too. Clear the list so the next launch takes the one-stat path.
+    // Nothing to fetch — either the stragglers are gone from the legacy root
+    // too, or the rescan found it empty. Record the check so the next launch
+    // takes the cheap path.
     if (sealed)
-      await Bun.write(path.join(target, marker), `${JSON.stringify({ ...sealed, pending: [] }, null, 2)}\n`, {
-        mode: 0o600,
-      }).catch(() => undefined)
+      await Bun.write(
+        path.join(target, marker),
+        `${JSON.stringify({ ...sealed, pending: [], checkedAt: Date.now() }, null, 2)}\n`,
+        { mode: 0o600 },
+      ).catch(() => undefined)
     return { path: target }
   }
 
@@ -355,22 +438,20 @@ export async function resolveDataDirectory(input: {
     for (const name of stores) {
       const old = source.find((file) => file.path === name)
       if (!old) continue
-      // Entries in credentials.json are AES-256-GCM ciphertexts sealed with
-      // the machine-local credentials.key. Importing them under a different
-      // key produces entries the UI reports as "set" while decryptFields
-      // silently drops every one — the user sees a configured GitHub token
-      // and gets no GITHUB_TOKEN. Only carry them when the key came across
-      // too, which is exactly when the target had none of its own.
-      if (name === "credentials.json" && !(await sameKey(legacy, target))) {
-        notes.push("legacy credentials.json not imported: it is sealed with a different machine key")
-        continue
-      }
       // A corrupt legacy store must cost that store, not the import. Left
       // unguarded this threw past the marker write, so every later boot
       // re-ran the whole import and failed at the same byte, forever.
       const outcome = await (async () => {
         const previous = await JsonStore.read(path.join(target, name))
-        const legacyData = await object(path.join(legacy, name))
+        const raw = await object(path.join(legacy, name))
+        // Credentials are the one store whose values are not portable on
+        // their own; everything else is plaintext JSON that means the same
+        // thing in either root.
+        const legacyData = name === "credentials.json" ? await reseal(legacy, target, raw) : raw
+        if (!legacyData) {
+          notes.push("legacy credentials.json not imported: its machine key is unreadable")
+          return 0
+        }
         if (!Object.keys(legacyData).some((key) => !(key in previous))) return 0
         const count = { value: 0 }
         await JsonStore.update(path.join(target, name), (current) => {
@@ -394,15 +475,18 @@ export async function resolveDataDirectory(input: {
     // not a database". Recovering a user's credentials and history must not
     // hinge on that — record the reason and finish the import without it,
     // rather than throwing away everything already verified.
-    // Only on a first import. A resume is chasing a handful of named files;
-    // replaying every artifact row to re-discover that they are all already
-    // there would cost more than the retry it is part of.
-    const artifacts = sealed
-      ? 0
-      : await mergeArtifacts(legacy, target).catch((error: unknown) => {
-          notes.push(`legacy artifact store not imported: ${error instanceof Error ? error.message : String(error)}`)
-          return 0
-        })
+    // Skipped only on a resume, which is chasing a handful of named files:
+    // replaying every artifact row to rediscover that they are all already
+    // there would cost more than the retry it is part of. A rescan does run
+    // it — new artifacts written to the previous root are exactly what it is
+    // looking for.
+    const artifacts =
+      mode === "resume"
+        ? 0
+        : await mergeArtifacts(legacy, target).catch((error: unknown) => {
+            notes.push(`legacy artifact store not imported: ${error instanceof Error ? error.message : String(error)}`)
+            return 0
+          })
     const bytes = copied.reduce((total, file) => total + file.bytes, 0)
     const migration = {
       source: legacy,
@@ -421,12 +505,13 @@ export async function resolveDataDirectory(input: {
     // stayed unreadable, which for a root-owned leftover is forever. Naming
     // the stragglers means the retry costs one stat each and the common case
     // still short-circuits on the first line of the function.
-    // A resume keeps the original import's record and only updates what is
+    // A later pass keeps the original import's record and only updates what is
     // still outstanding — overwriting it with a retry's counts would erase the
-    // one account of what actually moved.
+    // one account of what actually moved. `checkedAt` is what paces the rescan,
+    // so it is stamped on every pass, including the first.
     const record = sealed
-      ? { ...sealed, pending: deferred, resumedAt: Date.now() }
-      : { ...migration, migratedAt: Date.now(), pending: deferred }
+      ? { ...sealed, pending: deferred, checkedAt: Date.now() }
+      : { ...migration, migratedAt: Date.now(), checkedAt: Date.now(), pending: deferred }
     await Bun.write(path.join(target, marker), `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 })
     if (deferred.length > 0)
       notes.push(`${deferred.length} file(s) could not be read from ${legacy}; the next launch will retry them`)

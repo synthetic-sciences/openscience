@@ -35,6 +35,7 @@ import { OpenScience } from "@/openscience"
 import { lazy } from "@/util/lazy"
 import { JsonStore } from "@/util/jsonstore"
 import { SecretFile } from "@/util/secret-file"
+import { SecretBox } from "@/util/secret-box"
 
 type FieldType = "password" | "text" | "textarea"
 
@@ -139,26 +140,16 @@ async function machineKey(): Promise<Buffer> {
   return SecretFile.key(keyPath)
 }
 
+// The envelope itself lives in util/secret-box so the data-directory import can
+// share it: moving a store between roots means holding both machine keys at
+// once, and that code sits below Global in the module graph.
 async function encrypt(plain: string): Promise<string> {
-  const key = await machineKey()
-  const iv = crypto.randomBytes(12)
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv)
-  const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()])
-  const tag = cipher.getAuthTag()
-  return Buffer.concat([iv, tag, enc]).toString("base64")
+  return SecretBox.seal(await machineKey(), plain)
 }
 
-// Inverse of encrypt(): iv(12) | tag(16) | ciphertext. Throws on a bad key/tag,
-// which callers treat as "unreadable field, skip it".
+// Throws on a bad key/tag, which callers treat as "unreadable field, skip it".
 async function decrypt(payload: string): Promise<string> {
-  const key = await machineKey()
-  const buf = Buffer.from(payload, "base64")
-  const iv = buf.subarray(0, 12)
-  const tag = buf.subarray(12, 28)
-  const enc = buf.subarray(28)
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv)
-  decipher.setAuthTag(tag)
-  return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8")
+  return SecretBox.open(await machineKey(), payload)
 }
 
 function parseStore(data: Record<string, unknown>): Store {
