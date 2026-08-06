@@ -1,12 +1,16 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, test } from "bun:test"
 import { Memory } from "../../src/settings/memory"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
 const blank = () => ({ enabled: true, categories: [] })
 
-afterEach(async () => {
+beforeEach(async () => {
   await Memory.set("global", blank())
+})
+
+afterEach(async () => {
+  await Memory.set("global", { enabled: false, categories: [] })
 })
 
 test("append saves an agent note and reports capacity", async () => {
@@ -125,6 +129,18 @@ test("project scope is stored per directory", async () => {
       const doc = await Memory.get("project")
       expect(doc.categories.flatMap((c) => c.notes.map((n) => n.text))).toContain("This repo uses uv, not pip")
       await Memory.set("project", blank())
+    },
+  })
+})
+
+test("new personal and project memory scopes default to disabled", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Memory.set("global", { enabled: false, categories: [] })
+  expect((await Memory.get("global")).enabled).toBe(false)
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect((await Memory.get("project")).enabled).toBe(false)
     },
   })
 })

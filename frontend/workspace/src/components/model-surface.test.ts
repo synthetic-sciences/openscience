@@ -10,7 +10,6 @@ describe("model control surface", () => {
     const files = [
       "./prompt-input.tsx",
       "./dialog-select-model.tsx",
-      "./dialog-manage-models.tsx",
       "./model-tooltip.tsx",
       "./model-settings-popover.tsx",
     ].map(source)
@@ -23,16 +22,14 @@ describe("model control surface", () => {
     expect(files[1]).toContain("displayProviderForModel")
   })
 
-  test("shows model names with provider markings without provider grouping", () => {
+  test("groups model names under clear provider headings", () => {
     const picker = source("./dialog-select-model.tsx")
-    const manage = source("./dialog-manage-models.tsx")
     const tooltip = source("./model-tooltip.tsx")
 
     expect(picker).toContain("{i.name}")
     expect(picker).toContain("displayProviderForModel(i.provider, i.id).name")
-    expect(manage).toContain("{i.name}")
-    expect(picker).not.toContain("groupBy=")
-    expect(manage).not.toContain("groupBy=")
+    expect(picker).toContain("groupBy={category}")
+    expect(picker).toContain("modelGroupLabel")
     expect(tooltip).toContain("props.model.name")
   })
 
@@ -62,6 +59,7 @@ describe("model control surface", () => {
     expect(settings).toContain("data-model-quick")
     expect(settings).toContain("modelSummary")
     expect(settings).toContain("More models")
+    expect(settings).toContain("Pinned and recent")
     expect(settings).toContain("data-model-menu-value")
     expect(styles).toContain("width: min(286px, calc(100vw - 24px))")
     expect(styles).toContain("min-height: 58px")

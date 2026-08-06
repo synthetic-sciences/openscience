@@ -70,7 +70,7 @@ export namespace Memory {
 
   function defaultDoc(): Doc {
     return {
-      enabled: true,
+      enabled: false,
       categories: [{ id: "about-you", name: "About you", notes: [] }],
     }
   }

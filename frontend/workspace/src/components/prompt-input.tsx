@@ -82,12 +82,6 @@ interface PromptInputProps {
   onSubmit?: () => void
 }
 
-type MemoryPreference = {
-  enabled: boolean
-  categories: Array<unknown>
-  budget?: number
-}
-
 type ComputePreference = {
   providers: Array<{ id: string; connected: boolean; enabled: boolean }>
 }
@@ -154,7 +148,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     modeOpen: false,
     reviewAuto: false,
     reviewModel: null as ReviewPreferences["model"],
-    memory: { enabled: true, categories: [] } as MemoryPreference,
     delegation: true,
     specialist: null as string | null,
     specialists: [] as SpecialistOption[],
@@ -169,8 +162,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const setReviewAuto = (value: boolean) => setCap("reviewAuto", value)
   const reviewModel = () => cap.reviewModel
   const setReviewModel = (value: ReviewPreferences["model"]) => setCap("reviewModel", value)
-  const memory = () => cap.memory
-  const setMemory = (value: MemoryPreference) => setCap("memory", value)
   const delegation = () => cap.delegation
   const setDelegation = (value: boolean) => setCap("delegation", value)
   const specialist = () => cap.specialist
@@ -273,14 +264,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     loadCompute()
     void Promise.all([
       settingsApi<ReviewPreferences>(sdk.url, platform.fetch ?? fetch, "/settings/review"),
-      settingsApi<MemoryPreference>(sdk.url, platform.fetch ?? fetch, "/settings/memory?scope=global"),
       settingsApi<CapabilityPreferences>(sdk.url, platform.fetch ?? fetch, "/settings/preferences"),
       sdk.client.app.agents(),
     ])
-      .then(([review, next, preferences, response]) => {
+      .then(([review, preferences, response]) => {
         setReviewAuto(review.auto)
         setReviewModel(review.model)
-        setMemory(next)
         setDelegation(preferences.delegation_enabled)
         setSpecialist(preferences.delegation_specialist)
         setSpecialists(
@@ -384,23 +373,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         />
       )),
     )
-  }
-
-  const toggleMemory = () => {
-    const previous = memory()
-    const next = { ...previous, enabled: !previous.enabled }
-    setMemory(next)
-    setCapabilityBusy(true)
-    void settingsApi<MemoryPreference>(sdk.url, platform.fetch ?? fetch, "/settings/memory?scope=global", {
-      method: "PUT",
-      body: JSON.stringify(next),
-    })
-      .then(setMemory)
-      .catch((error) => {
-        setMemory(previous)
-        showToast({ variant: "error", title: "Could not update memory", description: String(error) })
-      })
-      .finally(() => setCapabilityBusy(false))
   }
 
   const toggleModal = () => {
@@ -2367,22 +2339,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             <span>Reviewer model</span>
                             <span class="workspace-composer__capability-value">
                               {reviewerLabel()} <span class="workspace-composer__capability-chevron">›</span>
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitemcheckbox"
-                            aria-checked={memory().enabled}
-                            disabled={capabilityBusy()}
-                            onClick={toggleMemory}
-                          >
-                            <span>Memory</span>
-                            <span
-                              aria-hidden="true"
-                              class="workspace-composer__capability-switch"
-                              data-checked={memory().enabled ? "true" : "false"}
-                            >
-                              <span />
                             </span>
                           </button>
                           <div role="separator" class="workspace-composer__capability-divider" />

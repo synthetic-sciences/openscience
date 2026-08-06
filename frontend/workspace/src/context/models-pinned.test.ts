@@ -27,6 +27,14 @@ describe("pinned models", () => {
     })
   })
 
+  test("unpins a default through its routed provider alias", () => {
+    expect(togglePinned(DEFAULT_PINNED_MODELS, model("anthropic/claude-opus-5", "openrouter"))).toEqual({
+      models: [model("gpt-5.6-sol", "openai"), model("kimi-k3", "moonshotai")],
+      pinned: false,
+      limited: false,
+    })
+  })
+
   test("keeps the quick selector capped at three models", () => {
     const current = [model("claude-opus-4-8"), model("gpt-5-5", "openai"), model("gpt-5-5", "openai-codex")]
     expect(togglePinned(current, model("gemini-3-6-flash", "google"))).toEqual({

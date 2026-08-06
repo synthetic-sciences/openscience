@@ -49,7 +49,6 @@ import { SearchRoutes } from "./routes/search"
 import { GlobalRoutes } from "./routes/global"
 import { AccountRoutes } from "./routes/account"
 import { SettingsSkillsRoutes } from "./routes/settings/skills"
-import { MemorySettingsRoutes } from "./routes/settings/memory"
 import { NetworkSettingsRoutes } from "./routes/settings/network"
 import { CredentialsRoutes } from "./routes/settings/credentials"
 import { StorageRoutes } from "./routes/settings/storage"
@@ -322,7 +321,6 @@ export namespace Server {
         .route("/provenance", ProvenanceRoutes())
         .route("/mcp", McpRoutes())
         .route("/settings/skills", SettingsSkillsRoutes())
-        .route("/settings/memory", MemorySettingsRoutes())
         .route("/settings/network", NetworkSettingsRoutes())
         .route("/settings/usage", SettingsUsageRoutes())
         .post(

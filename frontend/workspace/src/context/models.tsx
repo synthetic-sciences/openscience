@@ -4,7 +4,7 @@ import { uniqueBy } from "remeda"
 import { createSimpleContext } from "@synsci/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
-import { isChatModel, isFrontier, preferredModel, preferredModels, type ModelKey } from "./model-catalog"
+import { canonicalKey, isChatModel, isFrontier, preferredModel, preferredModels, type ModelKey } from "./model-catalog"
 
 export { canonicalKey, FRONTIER_MODELS, type ModelKey } from "./model-catalog"
 
@@ -26,10 +26,11 @@ type Store = {
 
 export const togglePinned = (current: ModelKey[], model: ModelKey) => {
   const models = current.slice(0, 3)
-  const pinned = models.some((item) => item.providerID === model.providerID && item.modelID === model.modelID)
+  const key = canonicalKey(model.providerID, model.modelID)
+  const pinned = models.some((item) => canonicalKey(item.providerID, item.modelID) === key)
   if (pinned) {
     return {
-      models: models.filter((item) => item.providerID !== model.providerID || item.modelID !== model.modelID),
+      models: models.filter((item) => canonicalKey(item.providerID, item.modelID) !== key),
       pinned: false,
       limited: false,
     }
@@ -145,8 +146,10 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     // The quick picker starts with one flagship from each of three major model
     // families. Explicit user pinning remains authoritative after first load.
     const pinned = createMemo(() => (store.pinned ?? DEFAULT_PINNED_MODELS).slice(0, 3))
-    const isPinned = (model: ModelKey) =>
-      pinned().some((item) => item.providerID === model.providerID && item.modelID === model.modelID)
+    const isPinned = (model: ModelKey) => {
+      const key = canonicalKey(model.providerID, model.modelID)
+      return pinned().some((item) => canonicalKey(item.providerID, item.modelID) === key)
+    }
     const togglePin = (model: ModelKey) => {
       const result = togglePinned(pinned(), model)
       if (!result.limited) setStore("pinned", result.models)

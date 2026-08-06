@@ -140,6 +140,15 @@ html[data-color-scheme="dark"]
   flex-direction: column;
 }
 
+.model-settings-heading {
+  padding: 6px 10px 4px;
+  color: var(--model-control-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 [data-model-settings-popover] [data-model-quick] {
   min-height: 50px;
 }
@@ -290,6 +299,11 @@ html[data-color-scheme="dark"]
     padding-inline: 20px;
     border-radius: 0;
     font-size: 14px;
+  }
+
+  .model-settings-heading {
+    padding: 10px 20px 5px;
+    font-size: 11px;
   }
 
   [data-model-settings-popover] details {

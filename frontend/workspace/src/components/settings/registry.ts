@@ -25,7 +25,6 @@ export type SettingsSection = "inference" | "capabilities" | "runtime" | "app"
 export type SettingsPanelId =
   | "models"
   | "skills"
-  | "memory"
   | "connectors"
   | "specialists"
   | "compute"
@@ -66,13 +65,6 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "brain",
     section: "capabilities",
     component: lazy(() => import("./Skills")),
-  },
-  {
-    id: "memory",
-    title: "Memory",
-    icon: "brain",
-    section: "capabilities",
-    component: lazy(() => import("./Memory")),
   },
   {
     id: "connectors",

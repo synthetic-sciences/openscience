@@ -160,6 +160,8 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const refs = { content: undefined as HTMLElement | undefined }
   const current = createMemo(() => local.model.current())
   const quick = createMemo(() => {
+    // Keep every pin at the top, but leave room for the current selection when
+    // it is not pinned so choosing from More models never makes it disappear.
     const models = [
       ...local.model.pinned(),
       current(),
@@ -176,7 +178,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
         seen.add(key)
         return true
       })
-      .slice(0, 3)
+      .slice(0, 5)
   })
   const control = createMemo(() =>
     modelControl({
@@ -345,6 +347,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
               <Match when={view() === "root"}>
                 <div data-model-menu-scope class="flex flex-col">
                   <div class="model-settings-models" role="radiogroup" aria-label="Model">
+                    <p class="model-settings-heading">Pinned and recent</p>
                     <For each={quick()}>
                       {(model) => {
                         const selected = () =>

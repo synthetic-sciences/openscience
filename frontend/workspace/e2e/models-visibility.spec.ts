@@ -25,13 +25,13 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
 
   await picker.getByRole("button", { name: "manage models" }).first().click()
 
-  const manage = page.getByRole("dialog", { name: "manage models" })
-  await expect(manage).toBeVisible()
-  const search = manage.getByPlaceholder("search models")
+  const manage = page.getByRole("dialog")
+  await expect(manage.getByRole("heading", { name: "Models", exact: true })).toBeVisible()
+  const search = manage.getByLabel("Filter models")
   await expect(search).toBeVisible()
   await search.fill(name)
 
-  const row = manage.locator(`[data-slot="list-item"][data-key="${key}"]`)
+  const row = manage.getByText(name, { exact: true }).locator("xpath=ancestor::div[contains(@class, 'min-h-12')]")
   const toggle = row.locator('[data-component="switch"]')
   const input = toggle.locator('[data-slot="switch-input"]')
   await expect(toggle).toBeVisible()
@@ -39,7 +39,7 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
   await toggle.locator('[data-slot="switch-control"]').click()
   await expect(input).toHaveAttribute("aria-checked", "false")
 
-  await page.keyboard.press("Escape")
+  await manage.getByRole("button", { name: "Close" }).click()
   await expect(manage).toHaveCount(0)
 
   const pickerAgain = await openModelPicker(page)

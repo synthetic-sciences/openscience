@@ -11,14 +11,25 @@ describe("launch settings truth pass", () => {
     expect(DEFAULT_PANEL).toBe("models")
   })
 
-  test("keeps local models deferred and exposes the working memory implementation", () => {
+  test("keeps local models and memory out of Customize for now", () => {
     const ids = SETTINGS_PANELS.map((item) => item.id as string)
 
     expect(ids).not.toContain("local-models")
-    expect(ids).toContain("memory")
+    expect(ids).not.toContain("memory")
     expect(source("LocalModels.tsx")).toContain("const LocalModels: Component = () =>")
-    expect(source("Memory.tsx")).toContain("export default")
-    expect(findPanel("memory").section).toBe("capabilities")
+    expect(ids).toEqual([
+      "models",
+      "skills",
+      "connectors",
+      "specialists",
+      "compute",
+      "network",
+      "permissions",
+      "sandbox",
+      "credentials",
+      "storage",
+      "general",
+    ])
   })
 
   test("keeps the real skills catalog in Customize rather than a work tab", () => {

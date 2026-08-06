@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createSignal, type JSX } from "solid-js"
+import { Icon } from "@synsci/ui/icon"
 import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
 import { useGlobalSync } from "@/context/global-sync"
@@ -7,12 +8,15 @@ import { displayProviderForModel } from "@/context/model-catalog"
 import { CodexConnection } from "./CodexConnection"
 import { ManagedInference } from "./ManagedInference"
 import { ProviderKeys } from "./ProviderKeys"
+import { MODEL_GROUPS, modelGroup } from "../model-groups"
 
 type Option = {
   key: ModelKey
   label: string
   latest: boolean
   provider: string
+  group: ReturnType<typeof modelGroup>
+  pinned: boolean
   value: string
 }
 
@@ -22,18 +26,25 @@ export default function Models() {
   const [query, setQuery] = createSignal("")
   const [error, setError] = createSignal<string>()
 
-  const options = createMemo<Option[]>(() =>
-    models
+  const options = createMemo<Option[]>(() => {
+    models.pinned.list()
+    return models
       .list()
-      .map((model) => ({
-        key: { providerID: model.provider.id, modelID: model.id },
-        label: model.name,
-        latest: model.latest,
-        provider: displayProviderForModel(model.provider, model.id).name,
-        value: `${model.provider.id}/${model.id}`,
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label)),
-  )
+      .map((item) => {
+        const key = { providerID: item.provider.id, modelID: item.id }
+        const pinned = models.pinned.has(key)
+        return {
+          group: modelGroup(item, pinned),
+          key,
+          label: item.name,
+          latest: item.latest,
+          pinned,
+          provider: displayProviderForModel(item.provider, item.id).name,
+          value: `${item.provider.id}/${item.id}`,
+        }
+      })
+      .sort((a, b) => a.label.localeCompare(b.label))
+  })
   const filtered = createMemo(() => {
     const value = query().trim().toLowerCase()
     if (!value) return options()
@@ -41,6 +52,23 @@ export default function Models() {
   })
   const primary = () => options().find((model) => model.value === sync.data.config.model)
   const background = () => options().find((model) => model.value === sync.data.config.small_model)
+  const groups = createMemo(() =>
+    MODEL_GROUPS.map((group) => ({
+      ...group,
+      models: filtered().filter((model) => model.group === group.id),
+    })).filter((group) => group.models.length > 0),
+  )
+  const [notice, setNotice] = createSignal("Pinned models stay at the top of every model picker.")
+
+  const togglePin = (model: Option) => {
+    const result = models.pinned.toggle(model.key)
+    if (result.limited) {
+      setNotice("Three models are already pinned. Unpin one before adding another.")
+      return
+    }
+    if (result.pinned) models.setVisibility(model.key, true)
+    setNotice(result.pinned ? `${model.label} pinned.` : `${model.label} unpinned.`)
+  }
 
   return (
     <div class="flex h-full flex-col overflow-y-auto no-scrollbar">
@@ -148,8 +176,16 @@ export default function Models() {
               Composer models
             </h3>
             <p class="text-12-regular text-text-weak">
-              Keep the main picker focused. Hidden models remain available here.
+              Pin up to three models for quick access. Hidden models remain available here.
             </p>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-11-regular text-text-weak" aria-live="polite">
+              {notice()}
+            </p>
+            <span class="shrink-0 rounded-full border border-border-weak-base px-2 py-0.5 text-11-medium text-text-weak">
+              {models.pinned.list().length}/3 pinned
+            </span>
           </div>
           <input
             type="search"
@@ -159,29 +195,56 @@ export default function Models() {
             placeholder="Filter models"
             class="h-8 rounded-[4px] border border-border-weak-base bg-surface-base px-3 text-13-regular text-text-strong outline-none placeholder:text-text-weak focus:border-border-strong-base"
           />
-          <div class="overflow-hidden rounded-[4px] border border-border-weak-base bg-surface-base/40">
-            <For each={filtered()}>
-              {(model) => (
-                <div class="flex min-h-11 items-center justify-between gap-4 border-b border-border-weak-base px-4 py-2.5 last:border-none">
-                  <div class="flex min-w-0 items-center gap-2">
-                    <span class="truncate text-13-medium text-text-strong">{model.label}</span>
-                    <span class="rounded-[4px] border border-border-weak-base px-1.5 py-0.5 text-11-medium text-text-weak">
-                      {model.provider}
-                    </span>
-                    <Show when={model.latest}>
-                      <span class="rounded-[4px] bg-surface-raised-base px-1.5 py-0.5 text-11-medium text-text-weak">
-                        latest
-                      </span>
-                    </Show>
+          <div class="overflow-hidden rounded-[6px] border border-border-weak-base bg-surface-base/40">
+            <For each={groups()}>
+              {(group) => (
+                <section aria-labelledby={`composer-models-${group.id}`}>
+                  <div class="flex min-h-8 items-center border-b border-border-weak-base bg-surface-raised-base/70 px-4">
+                    <h4
+                      id={`composer-models-${group.id}`}
+                      class="text-11-medium uppercase tracking-[0.045em] text-text-weaker"
+                    >
+                      {group.label}
+                    </h4>
                   </div>
-                  <Switch
-                    hideLabel
-                    checked={models.visible(model.key)}
-                    onChange={(checked) => models.setVisibility(model.key, checked)}
-                  >
-                    {`${models.visible(model.key) ? "Hide" : "Show"} ${model.label}`}
-                  </Switch>
-                </div>
+                  <For each={group.models}>
+                    {(model) => (
+                      <div class="flex min-h-12 items-center justify-between gap-3 border-b border-border-weak-base px-4 py-2.5 last:border-none">
+                        <div class="flex min-w-0 flex-1 items-center gap-2">
+                          <span class="truncate text-13-medium text-text-strong">{model.label}</span>
+                          <span class="shrink-0 rounded-[4px] border border-border-weak-base px-1.5 py-0.5 text-11-medium text-text-weak">
+                            {model.provider}
+                          </span>
+                          <Show when={model.latest}>
+                            <span class="shrink-0 rounded-[4px] bg-surface-raised-base px-1.5 py-0.5 text-11-medium text-text-weak">
+                              latest
+                            </span>
+                          </Show>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            class="flex size-7 items-center justify-center rounded-[5px] text-text-weak hover:bg-surface-raised-base hover:text-text-strong focus-visible:outline focus-visible:outline-1 focus-visible:outline-border-strong"
+                            data-pinned={model.pinned ? "true" : undefined}
+                            aria-pressed={model.pinned}
+                            aria-label={`${model.pinned ? "Unpin" : "Pin"} ${model.label}`}
+                            title={model.pinned ? "Remove from quick models" : "Pin to quick models"}
+                            onClick={() => togglePin(model)}
+                          >
+                            <Icon name={model.pinned ? "pin-filled" : "pin"} size="small" />
+                          </button>
+                          <Switch
+                            hideLabel
+                            checked={models.visible(model.key)}
+                            onChange={(checked) => models.setVisibility(model.key, checked)}
+                          >
+                            {`${models.visible(model.key) ? "Hide" : "Show"} ${model.label}`}
+                          </Switch>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </section>
               )}
             </For>
             <Show when={filtered().length === 0}>

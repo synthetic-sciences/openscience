@@ -27,6 +27,16 @@ describe("tool.registry", () => {
     })
   })
 
+  test("keeps memory unavailable while the feature is paused", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await ToolRegistry.ids()).not.toContain("memory")
+      },
+    })
+  })
+
   test("loads tools from .openscience/tool (singular)", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

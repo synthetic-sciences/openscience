@@ -283,9 +283,6 @@ import type {
   SettingsCredentialsListResponses,
   SettingsCredentialsRemoveResponses,
   SettingsCredentialsSetResponses,
-  SettingsMemoryGetResponses,
-  SettingsMemorySearchResponses,
-  SettingsMemorySetResponses,
   SettingsNetworkGetResponses,
   SettingsNetworkSetResponses,
   SettingsPreferencesGetResponses,
@@ -1725,121 +1722,6 @@ export class Skills extends HeyApiClient {
   }
 }
 
-export class Memory extends HeyApiClient {
-  /**
-   * Get memory
-   *
-   * Get the saved memory document for a scope (global or project), with its capacity gauge.
-   */
-  public get<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      scope?: "global" | "project"
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "scope" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SettingsMemoryGetResponses, unknown, ThrowOnError>({
-      url: "/settings/memory",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Set memory
-   *
-   * Replace the saved memory document for a scope (global or project).
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      scope?: "global" | "project"
-      enabled?: boolean
-      categories?: Array<{
-        id: string
-        name: string
-        notes: Array<{
-          id: string
-          text: string
-          createdAt: number
-          updatedAt?: number
-          source?: "user" | "agent"
-        }>
-      }>
-      budget?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "scope" },
-            { in: "body", key: "enabled" },
-            { in: "body", key: "categories" },
-            { in: "body", key: "budget" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<SettingsMemorySetResponses, unknown, ThrowOnError>({
-      url: "/settings/memory",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Search memory
-   *
-   * Full-text search (FTS5 BM25 keyword ranking with a recency tiebreak — not semantic) over saved memory notes and past session messages of the current project.
-   */
-  public search<ThrowOnError extends boolean = false>(
-    parameters: {
-      directory?: string
-      q: string
-      limit?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "q" },
-            { in: "query", key: "limit" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SettingsMemorySearchResponses, unknown, ThrowOnError>({
-      url: "/settings/memory/search",
-      ...options,
-      ...params,
-    })
-  }
-}
-
 export class Network extends HeyApiClient {
   /**
    * Get network allow-list
@@ -1963,11 +1845,6 @@ export class Settings extends HeyApiClient {
   private _skills?: Skills
   get skills(): Skills {
     return (this._skills ??= new Skills({ client: this.client }))
-  }
-
-  private _memory?: Memory
-  get memory(): Memory {
-    return (this._memory ??= new Memory({ client: this.client }))
   }
 
   private _network?: Network

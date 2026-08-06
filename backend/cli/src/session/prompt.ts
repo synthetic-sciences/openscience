@@ -60,7 +60,6 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
 import { PlanMode } from "@/tool/plan-mode"
 import { Inference } from "@/provider/inference"
-import { Memory } from "@/settings/memory"
 import { OpenScience } from "@/openscience"
 import { assertExternalDirectory } from "@/tool/external-directory"
 
@@ -863,7 +862,6 @@ export namespace SessionPrompt {
         ...(await SystemPrompt.environment(model)),
         ...(await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
-        ...(await Memory.recall()),
         ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),
         ...artifactContext,
       ]

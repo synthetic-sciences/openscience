@@ -31,7 +31,6 @@ import { ApplyPatchTool } from "./apply_patch"
 import { BiologyTools, BIOLOGY_TOOL_IDS } from "./biology"
 import { ArtifactTool } from "./artifact"
 import { LearnTool } from "./learn"
-import { MemoryTool } from "./memory"
 import { ScienceTools } from "./science"
 import { ProvenanceTools } from "./provenance"
 import { NotebookTool } from "./notebook"
@@ -142,7 +141,6 @@ export namespace ToolRegistry {
       RKernelTool,
       ArtifactTool,
       LearnTool,
-      MemoryTool,
       ModalTool,
       ComputeJobTool,
       ...custom,
@@ -152,11 +150,6 @@ export namespace ToolRegistry {
   const ARTIFACT_TOOL_ID = "artifact"
   const ARTIFACT_AGENTS = ["research", "biology", "ml"]
 
-  // Memory tool: only user-facing primary agents may read/write persistent
-  // memory; subagents (title, compaction, explore, ...) cannot. Plan mode is
-  // excluded because PlanMode.enforce blocks all mutating tools there anyway.
-  const MEMORY_TOOL_ID = "memory"
-  const MEMORY_AGENTS = ["research", "biology", "physics", "ml"]
   const MODAL_AGENTS = ["research", "biology", "physics", "ml"]
 
   export async function ids() {
@@ -182,10 +175,6 @@ export namespace ToolRegistry {
           // Artifact tool: only for artifact-oriented scientific agents.
           if (t.id === ARTIFACT_TOOL_ID) {
             return !!agent?.name && ARTIFACT_AGENTS.includes(agent.name)
-          }
-
-          if (t.id === MEMORY_TOOL_ID) {
-            return !!agent?.name && MEMORY_AGENTS.includes(agent.name)
           }
 
           if (t.id === "modal" || t.id === "compute_job") {
