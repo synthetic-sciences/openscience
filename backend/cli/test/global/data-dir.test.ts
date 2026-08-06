@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { Database } from "bun:sqlite"
 import fs from "fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -14,6 +15,60 @@ async function root() {
   const value = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-data-dir-"))
   roots.push(value)
   return value
+}
+
+async function artifact(root: string, key: string) {
+  const dir = path.join(root, "artifact-store")
+  await fs.mkdir(path.join(dir, "blobs"), { recursive: true })
+  await fs.writeFile(path.join(dir, "blobs", key), key)
+  const db = new Database(path.join(dir, "artifacts.db"), { create: true })
+  db.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE blobs (
+      sha256 TEXT PRIMARY KEY, size INTEGER NOT NULL, path TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL
+    );
+    CREATE TABLE artifacts (
+      id TEXT PRIMARY KEY, schema_version INTEGER NOT NULL, project_id TEXT NOT NULL, source_key TEXT NOT NULL,
+      title TEXT NOT NULL, kind TEXT NOT NULL, current_version_id TEXT NOT NULL, state TEXT NOT NULL,
+      trashed_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+      UNIQUE(project_id, source_key)
+    );
+    CREATE TABLE versions (
+      id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL REFERENCES artifacts(id), version INTEGER NOT NULL,
+      filename TEXT NOT NULL, mime_type TEXT NOT NULL, size INTEGER NOT NULL,
+      sha256 TEXT NOT NULL REFERENCES blobs(sha256), session_id TEXT NOT NULL, message_id TEXT,
+      execution_id TEXT, source_path TEXT NOT NULL, capture_quality TEXT NOT NULL, created_at INTEGER NOT NULL,
+      UNIQUE(artifact_id, version)
+    );
+    CREATE TABLE executions (
+      id TEXT PRIMARY KEY, artifact_version_id TEXT NOT NULL UNIQUE REFERENCES versions(id), command TEXT, code TEXT,
+      status TEXT NOT NULL, stdout TEXT, stderr TEXT, model TEXT, provider TEXT, effort TEXT, source TEXT,
+      permission_snapshot TEXT, inputs TEXT, capture_quality TEXT NOT NULL, files TEXT NOT NULL,
+      environment TEXT, created_at INTEGER NOT NULL
+    );
+  `)
+  db.query("INSERT INTO blobs VALUES (?1, ?2, ?3, ?4)").run(key, key.length, `blobs/${key}`, 1)
+  db.query("INSERT INTO artifacts VALUES (?1, 1, ?2, ?3, ?4, 'document', ?5, 'active', NULL, 1, 1)").run(
+    `art_${key}`,
+    `prj_${key}`,
+    `/tmp/${key}.txt`,
+    key,
+    `ver_${key}`,
+  )
+  db.query("INSERT INTO versions VALUES (?1, ?2, 1, ?3, 'text/plain', ?4, ?5, ?6, NULL, ?7, ?8, 'exact', 1)").run(
+    `ver_${key}`,
+    `art_${key}`,
+    `${key}.txt`,
+    key.length,
+    key,
+    `ses_${key}`,
+    `exe_${key}`,
+    `/tmp/${key}.txt`,
+  )
+  db.query(
+    "INSERT INTO executions VALUES (?1, ?2, NULL, NULL, 'succeeded', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'exact', '[]', NULL, 1)",
+  ).run(`exe_${key}`, `ver_${key}`)
+  db.close()
 }
 
 describe("OpenScience data directory", () => {
@@ -40,7 +95,7 @@ describe("OpenScience data directory", () => {
     expect(await fs.readFile(path.join(result.path, "storage", "session.json"), "utf8")).toContain("kept")
     expect(await fs.readFile(path.join(legacy, "storage", "session.json"), "utf8")).toContain("kept")
     expect(await fs.readFile(path.join(result.path, "bin", "openscience"), "utf8")).toBe("launcher")
-    expect(JSON.parse(await fs.readFile(path.join(result.path, ".xdg-data-migration-v1.json"), "utf8")).source).toBe(
+    expect(JSON.parse(await fs.readFile(path.join(result.path, ".xdg-data-migration-v2.json"), "utf8")).source).toBe(
       legacy,
     )
 
@@ -50,20 +105,74 @@ describe("OpenScience data directory", () => {
     expect(repeated.conflict).toBeUndefined()
   })
 
-  test("reports a conflict instead of merging two populated roots", async () => {
+  test("merges missing projects, sessions, and credentials into a populated root", async () => {
     const home = await root()
     const legacy = path.join(home, "share", "openscience")
     const target = path.join(home, ".openscience")
-    await fs.mkdir(legacy, { recursive: true })
-    await fs.mkdir(target, { recursive: true })
-    await fs.writeFile(path.join(legacy, "old.json"), "old")
-    await fs.writeFile(path.join(target, "new.json"), "new")
+    await fs.mkdir(path.join(legacy, "storage", "project"), { recursive: true })
+    await fs.mkdir(path.join(legacy, "storage", "session", "prj_old"), { recursive: true })
+    await fs.mkdir(path.join(target, "storage", "project"), { recursive: true })
+    await fs.writeFile(path.join(target, ".xdg-data-migration-v1.json"), "{}")
+    await fs.writeFile(path.join(legacy, "storage", "project", "prj_old.json"), '{"name":"old"}')
+    await fs.writeFile(path.join(legacy, "storage", "session", "prj_old", "ses_old.json"), '{"title":"old"}')
+    await fs.writeFile(path.join(target, "storage", "project", "prj_new.json"), '{"name":"new"}')
+    await fs.writeFile(path.join(legacy, "shared.json"), "legacy")
+    await fs.writeFile(path.join(target, "shared.json"), "current")
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"access_token":"restored"}')
+    await fs.writeFile(
+      path.join(legacy, "auth.json"),
+      JSON.stringify({ "openai-codex": { access: "old" }, anthropic: { key: "kept" } }),
+    )
+    await fs.writeFile(
+      path.join(target, "auth.json"),
+      JSON.stringify({ "openai-codex": { access: "current" }, openrouter: { key: "current" } }),
+    )
 
     const result = await resolveDataDirectory({ home, legacy })
 
     expect(result.path).toBe(target)
-    expect(result.conflict).toEqual({ legacy, current: target })
-    expect(await fs.readFile(path.join(target, "new.json"), "utf8")).toBe("new")
-    expect(await fs.readFile(path.join(legacy, "old.json"), "utf8")).toBe("old")
+    expect(result.conflict).toBeUndefined()
+    expect(result.migrated?.merged).toBe(1)
+    expect(await fs.readFile(path.join(target, "storage", "project", "prj_old.json"), "utf8")).toContain("old")
+    expect(await fs.readFile(path.join(target, "storage", "project", "prj_new.json"), "utf8")).toContain("new")
+    expect(await fs.readFile(path.join(target, "storage", "session", "prj_old", "ses_old.json"), "utf8")).toContain(
+      "old",
+    )
+    expect(await fs.readFile(path.join(target, "shared.json"), "utf8")).toBe("current")
+    expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("restored")
+    expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))).toEqual({
+      "openai-codex": { access: "current" },
+      anthropic: { key: "kept" },
+      openrouter: { key: "current" },
+    })
+    expect(await fs.readFile(path.join(legacy, "storage", "project", "prj_old.json"), "utf8")).toContain("old")
+
+    const repeated = await resolveDataDirectory({ home, legacy })
+    expect(repeated.migrated).toBeUndefined()
+  })
+
+  test("merges legacy artifact records and blobs into an existing artifact store", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await artifact(legacy, "legacy")
+    await artifact(target, "current")
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.error).toBeUndefined()
+    expect(result.migrated?.artifacts).toBe(1)
+    expect(await fs.readFile(path.join(target, "artifact-store", "blobs", "legacy"), "utf8")).toBe("legacy")
+    const current = new Database(path.join(target, "artifact-store", "artifacts.db"), { readonly: true })
+    expect(
+      (current.query("SELECT id FROM artifacts ORDER BY id").all() as Array<{ id: string }>).map((row) => row.id),
+    ).toEqual(["art_current", "art_legacy"])
+    expect((current.query("SELECT count(*) AS value FROM versions").get() as { value: number }).value).toBe(2)
+    expect((current.query("SELECT count(*) AS value FROM executions").get() as { value: number }).value).toBe(2)
+    current.close()
+
+    const source = new Database(path.join(legacy, "artifact-store", "artifacts.db"), { readonly: true })
+    expect((source.query("SELECT count(*) AS value FROM artifacts").get() as { value: number }).value).toBe(1)
+    source.close()
   })
 })

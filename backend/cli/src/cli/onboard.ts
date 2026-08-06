@@ -232,12 +232,12 @@ export const DoctorCommand = cmd({
 
     if (Global.DataMigration.migrated) {
       prompts.log.success(
-        `Data copied to ~/.openscience and verified (${Global.DataMigration.migrated.files} files). The previous XDG directory remains as a safety copy.`,
+        `Legacy data imported into ~/.openscience and verified (${Global.DataMigration.migrated.files} files, ${Global.DataMigration.migrated.merged} credential stores merged, ${Global.DataMigration.migrated.artifacts} artifacts restored). Existing OpenScience data was kept, and the previous XDG directory remains as a safety copy.`,
       )
     }
     if (Global.DataMigration.error) {
       prompts.log.warn(
-        `Data migration to ~/.openscience did not complete; OpenScience is still using the previous directory. ${Global.DataMigration.error}`,
+        `Data migration to ~/.openscience did not complete; OpenScience is using ${Global.DataMigration.path}. ${Global.DataMigration.error}`,
       )
     }
 
