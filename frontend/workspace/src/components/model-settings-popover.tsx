@@ -164,7 +164,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const quick = createMemo(() => {
     // Pins are explicit. New installations instead see a calm recommended trio
     // with the current model retained when it falls outside that set.
-    const models = [...local.model.pinned(), ...recommended(), current(), ...local.model.recent()].filter(
+    const models = [...local.model.pinned(), ...recommended(), current()].filter(
       (model): model is NonNullable<typeof model> => Boolean(model),
     )
     const seen = new Set<string>()
@@ -237,7 +237,11 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
     if (view() === "speed" && !value.speed) setView("root")
   })
 
-  const focus = (selector: string) => queueMicrotask(() => refs.content?.querySelector<HTMLElement>(selector)?.focus())
+  const focus = (selector: string, reset = false) =>
+    queueMicrotask(() => {
+      if (reset && refs.content) refs.content.scrollTop = 0
+      refs.content?.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true })
+    })
 
   const show = (next: "effort" | "speed") => {
     setView(next)
@@ -246,13 +250,13 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
 
   const root = (next: "effort" | "speed") => {
     setView("root")
-    focus(`[data-model-menu-row="${next}"]`)
+    focus(`[data-model-menu-row="${next}"]`, true)
   }
 
   const choose = () => {
     setQuery("")
     setView("models")
-    focus("[data-model-catalog-search]")
+    focus("[data-model-catalog-search]", true)
   }
 
   const manage = () => {
@@ -344,7 +348,8 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
         <Kobalte.Content
           ref={(element) => (refs.content = element)}
           data-model-settings-popover
-          class="z-50 max-h-[min(72dvh,440px)] overflow-y-auto outline-none"
+          data-model-settings-view={view()}
+          class="z-50 outline-none"
           onKeyDown={onMenuKeyDown}
         >
           <header class="mobile-model-settings__header">

@@ -97,7 +97,10 @@ html[data-color-scheme="dark"]
 }
 
 [data-model-settings-popover] {
+  box-sizing: border-box;
   width: min(320px, calc(100vw - 24px)) !important;
+  max-height: min(72dvh, 440px);
+  overflow: hidden;
   padding: 6px !important;
   border: 1px solid var(--model-control-border-strong) !important;
   border-radius: 12px !important;
@@ -190,6 +193,21 @@ html[data-color-scheme="dark"]
 .model-settings-browser {
   min-height: 0;
   display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-model-settings-view="models"] {
+  height: min(72dvh, 440px);
+  display: flex;
+  flex-direction: column;
+}
+
+[data-model-settings-view="models"] .mobile-model-settings__body {
+  min-height: 0;
+  display: flex;
+  flex: 1;
   flex-direction: column;
 }
 
@@ -225,8 +243,8 @@ html[data-color-scheme="dark"]
 }
 
 .model-settings-catalog {
-  min-height: 80px;
-  max-height: min(310px, calc(72dvh - 132px));
+  min-height: 0;
+  flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -252,6 +270,8 @@ html[data-color-scheme="dark"]
 
 .model-settings-manage {
   min-height: 38px !important;
+  flex: 0 0 38px;
+  background: var(--model-control-surface);
 }
 
 [data-model-menu-value] {
