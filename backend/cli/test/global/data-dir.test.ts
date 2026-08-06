@@ -202,13 +202,13 @@ describe("OpenScience data directory", () => {
     expect(result.error).toBeUndefined()
     expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
     expect(fsSync.existsSync(path.join(target, "artifact-store", "artifacts.db"))).toBe(true)
-    for (const orphan of [
-      "log",
-      "artifact-store/artifacts.db-wal",
-      "artifact-store/artifacts.db-shm",
-      "auth.json.lock",
-    ])
-      expect(fsSync.existsSync(path.join(target, orphan))).toBe(false)
+    // Only the genuinely disposable things. The -wal/-shm beside artifacts.db
+    // are NOT orphans here — that database is being carried, so its journal
+    // travels with it, and whether the files still exist afterwards is
+    // SQLite's business: opening the database checkpoints or discards a
+    // journal it cannot use, and it does so on some platforms and not others.
+    // Journal pairing has its own test, over files SQLite never touches.
+    for (const orphan of ["log", "auth.json.lock"]) expect(fsSync.existsSync(path.join(target, orphan))).toBe(false)
   })
 
   test("imports credentials and history even when the legacy artifact store is corrupt", async () => {
