@@ -208,28 +208,22 @@ export function FilesPane(
   const [snapshot, { refetch: refetchSnapshot }] = createResource(identity, (current) =>
     readAccess(transport, current).catch(() => undefined),
   )
-  // Modal Volumes are a browsable source, but listing them calls Modal's API, so
-  // it waits until someone opens the picker looking for a source. `wanted` is
-  // what makes that lazy: the resource has no key until the menu is first
-  // opened. A provider that is not connected and enabled is not asked at all.
+  // Whether Modal is offered at all. Asking costs a settings read, so it waits
+  // until someone opens the picker looking for a source; the Volumes themselves
+  // are not listed until that source is actually entered.
   const [wanted, setWanted] = createSignal(false)
-  const [volumes] = createResource(
+  const [modalReady] = createResource(
     () => (wanted() ? (sdk?.directory ?? true) : undefined),
-    async () => {
-      const providers = await transport("/settings/compute")
+    () =>
+      transport("/settings/compute")
         .then(json)
-        .then(
-          (value) =>
-            (value as { providers?: Array<{ id: string; connected: boolean; enabled: boolean }> }).providers ?? [],
-        )
-        .catch(() => [])
-      const modal = providers.find((provider) => provider.id === "modal")
-      if (!modal?.connected || !modal.enabled) return [] as string[]
-      return transport("/settings/compute/modal/volumes")
-        .then(json)
-        .then((value) => (Array.isArray(value) ? (value as Array<{ name: string }>).map((item) => item.name) : []))
-        .catch(() => [])
-    },
+        .then((value) => {
+          const providers =
+            (value as { providers?: Array<{ id: string; connected: boolean; enabled: boolean }> }).providers ?? []
+          const modal = providers.find((provider) => provider.id === "modal")
+          return Boolean(modal?.connected && modal.enabled)
+        })
+        .catch(() => false),
   )
 
   const sources = createMemo(() =>
@@ -238,7 +232,7 @@ export function FilesPane(
       projectName: projectName(),
       grants: connectedFilesystemGrants(snapshot.latest),
       sessionRoot: sessionFilesystemRoot(snapshot.latest),
-      volumes: volumes.latest,
+      modal: modalReady.latest,
     }),
   )
 
@@ -316,8 +310,29 @@ export function FilesPane(
     // entries carry a path relative to the volume root rather than to any
     // directory on disk.
     if (kind === "modal") {
-      const volume = encodeURIComponent(id.slice("modal:".length))
-      return transport(`/settings/compute/modal/volumes/${volume}/files`, undefined, { path: `/${target}` })
+      // The first level inside Modal is the Volume list; everything below it is
+      // a path inside whichever Volume was entered.
+      const [volume, ...rest] = target.split("/").filter(Boolean)
+      if (!volume) {
+        return transport("/settings/compute/modal/volumes")
+          .then(json)
+          .then((value) => {
+            setError("")
+            if (!Array.isArray(value)) return [] as FileRow[]
+            // Volumes are folders here: entering one lists it.
+            return (value as Array<{ name: string }>).map((item) => ({
+              name: item.name,
+              type: "directory" as const,
+            }))
+          })
+          .catch((value) => {
+            setError(`Modal Volumes could not be listed. ${errorMessage(value)}`)
+            return [] as FileRow[]
+          })
+      }
+      return transport(`/settings/compute/modal/volumes/${encodeURIComponent(volume)}/files`, undefined, {
+        path: `/${rest.join("/")}`,
+      })
         .then(json)
         .then((value) => {
           setError("")
@@ -330,7 +345,7 @@ export function FilesPane(
           }))
         })
         .catch((value) => {
-          setError(`This Volume could not be read. ${errorMessage(value)}`)
+          setError(`${volume} could not be read. ${errorMessage(value)}`)
           return [] as FileRow[]
         })
     }
@@ -450,14 +465,15 @@ export function FilesPane(
    * through and no object URLs to revoke.
    */
   const downloadRemote = async (row: FileRow) => {
-    const volume = encodeURIComponent(current().id.slice("modal:".length))
+    const volume = path()[0]
+    if (!volume) return
     setBusy(true)
     // Leading slash on purpose. The route resolves the containing directory with
     // path.posix.dirname (routes/settings/compute.ts), and dirname("hello.txt")
-    // is ".", which Modal answers with NOT_FOUND -- so a file at a volume's root
+    // is ".", which Modal answers with NOT_FOUND -- so a file at a Volume's root
     // could not be downloaded at all. "/hello.txt" gives dirname "/", the root.
     const target = `/${(row.path ?? row.name).replace(/^\/+/, "")}`
-    return transport(`/settings/compute/modal/volumes/${volume}/file`, undefined, { path: target })
+    return transport(`/settings/compute/modal/volumes/${encodeURIComponent(volume)}/file`, undefined, { path: target })
       .then(async (response) => {
         if (!response.ok) throw new Error((await response.text()) || `Download failed (${response.status})`)
         const blob = await response.blob()

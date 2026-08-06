@@ -20,8 +20,8 @@ export function buildSources(input: {
   projectName: string
   grants: FilesystemGrant[]
   sessionRoot?: string
-  /** Modal Volume names, once they have been fetched. Absent until then. */
-  volumes?: string[]
+  /** Whether Modal is connected and enabled. Its Volumes are browsed, not listed here. */
+  modal?: boolean
 }): PaneSource[] {
   const list: PaneSource[] = [
     { id: "artifacts", group: "Artifacts", name: "All artifacts", root: "", kind: "artifacts" },
@@ -59,20 +59,14 @@ export function buildSources(input: {
       readonly: grant.access === "read",
     })
   }
-  // A volume browses and downloads but never writes: the pane reaches it over
-  // the Modal API, not a mount, so there is nothing to save back through.
-  for (const volume of input.volumes ?? []) {
-    list.push({
-      id: `modal:${volume}`,
-      group: "Remote",
-      name: volume,
-      sub: "Modal Volume",
-      // Empty, not "/": the pane joins a source's root with the folders walked
-      // into it, and a "/" root would ask the volume for "//data".
-      root: "",
-      kind: "modal",
-      readonly: true,
-    })
+  // One entry per provider, not one per volume: Remote is where every cloud
+  // connector will land, and an account with forty Volumes would bury the local
+  // sources under them. The Volumes are the first level inside this source.
+  //
+  // It browses and downloads but never writes: the pane reaches Modal over its
+  // API, not a mount, so there is nothing to save back through.
+  if (input.modal) {
+    list.push({ id: "modal", group: "Remote", name: "Modal", sub: "Volumes", root: "", kind: "modal", readonly: true })
   }
   return list
 }

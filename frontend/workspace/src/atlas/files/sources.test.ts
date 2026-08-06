@@ -59,30 +59,32 @@ describe("pane sources", () => {
     expect(groups.map((g) => g.group)).toEqual(["Artifacts", "This computer"])
   })
 
-  // Modal Volumes were a browsable source before this pane replaced the screen
-  // that carried them; they belong under Remote, which nothing else emits.
-  test("lists each Modal Volume as its own remote source", () => {
-    const list = buildSources({ projectRoot: "/p", projectName: "p", grants: [], volumes: ["weights", "datasets"] })
-    const remote = list.filter((source) => source.kind === "modal")
+  // One entry per provider. Remote will hold AWS, GCP and the rest, and an
+  // account with forty Volumes listed individually would bury the local sources.
+  test("offers Modal as one remote source, not one per Volume", () => {
+    const remote = buildSources({ projectRoot: "/p", projectName: "p", grants: [], modal: true }).filter(
+      (source) => source.kind === "modal",
+    )
 
-    expect(remote.map((source) => source.name)).toEqual(["weights", "datasets"])
-    expect(remote.map((source) => source.id)).toEqual(["modal:weights", "modal:datasets"])
-    expect(remote.every((source) => source.group === "Remote")).toBe(true)
-    // A volume is browsable and downloadable, never writable from here.
-    expect(remote.every((source) => source.readonly)).toBe(true)
-    // Empty root: the pane joins root with the walked path, so "/" would ask
-    // the volume for "//data".
+    expect(remote).toHaveLength(1)
+    expect(remote[0]!.id).toBe("modal")
+    expect(remote[0]!.name).toBe("Modal")
+    expect(remote[0]!.group).toBe("Remote")
+    // Browsable and downloadable, never writable: it is an API, not a mount.
+    expect(remote[0]!.readonly).toBe(true)
+    // Empty root: the pane joins root with the walked path, and the first level
+    // inside this source is the Volume list.
     expect(remote[0]!.root).toBe("")
   })
 
-  test("omits the remote group entirely when no volume is reachable", () => {
-    const groups = groupSources(buildSources({ projectRoot: "/p", projectName: "p", grants: [], volumes: [] }))
+  test("omits the remote group entirely when Modal is not connected", () => {
+    const groups = groupSources(buildSources({ projectRoot: "/p", projectName: "p", grants: [], modal: false }))
 
     expect(groups.map((g) => g.group)).not.toContain("Remote")
   })
 
-  test("keeps volumes after local sources so the picker order is stable", () => {
-    const groups = groupSources(buildSources({ projectRoot: "/p", projectName: "p", grants: [], volumes: ["weights"] }))
+  test("keeps remote sources after local ones so the picker order is stable", () => {
+    const groups = groupSources(buildSources({ projectRoot: "/p", projectName: "p", grants: [], modal: true }))
 
     expect(groups.map((g) => g.group)).toEqual(["Artifacts", "This computer", "Remote"])
   })

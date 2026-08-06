@@ -180,11 +180,13 @@ describe("files pane", () => {
   })
 
   // #253 shipped Modal Volumes as a browsable source inside the screen this pane
-  // replaced. The capability moves here rather than being lost with that screen.
+  // replaced. The capability moves here rather than being lost with that screen,
+  // as ONE Remote entry: an account with forty Volumes would otherwise bury
+  // every local source, and AWS and GCP are due to land beside it.
   const modal = (over: { connected?: boolean; enabled?: boolean; files?: unknown[] } = {}) => {
     const calls: string[] = []
     const request = async (path: string, _init?: RequestInit, query?: Record<string, string>) => {
-      calls.push(query?.path ? `${path}?path=${query.path}` : path)
+      calls.push(query?.path === undefined ? path : `${path}?path=${query.path}`)
       if (path === "/settings/compute")
         return listing({
           providers: [{ id: "modal", connected: over.connected ?? true, enabled: over.enabled ?? true }],
@@ -204,21 +206,29 @@ describe("files pane", () => {
     return { calls, request }
   }
 
+  const enterModal = async (host: HTMLElement) => {
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-source-item="modal"]')?.click()
+    await settle()
+  }
+
   test("does not ask Modal for anything until the picker is opened", async () => {
     const { calls, request } = modal()
     const host = mount(() => subject.FilesPane({ request }))
     await settle()
 
-    expect(calls.some((path) => path.includes("modal"))).toBe(false)
-    expect(calls.some((path) => path === "/settings/compute")).toBe(false)
+    expect(calls.some((path) => path.includes("compute"))).toBe(false)
 
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
     await settle()
 
-    expect(calls).toContain("/settings/compute/modal/volumes")
+    expect(calls).toContain("/settings/compute")
+    // Opening the picker asks whether Modal is available, not what is in it.
+    expect(calls).not.toContain("/settings/compute/modal/volumes")
   })
 
-  test("lists each Volume under Remote once the picker is opened", async () => {
+  test("offers Modal as a single Remote entry", async () => {
     const { request } = modal()
     const host = mount(() => subject.FilesPane({ request }))
     await settle()
@@ -226,12 +236,12 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
     await settle()
 
-    expect(host.querySelector('[data-source-item="modal:weights"]')).not.toBeNull()
-    expect(host.querySelector('[data-source-item="modal:datasets"]')).not.toBeNull()
+    expect(host.querySelector('[data-source-item="modal"]')).not.toBeNull()
+    expect(host.querySelectorAll('[data-source-item^="modal:"]')).toHaveLength(0)
     expect(host.textContent).toContain("Remote")
   })
 
-  test("offers no Volume when Modal is connected but disabled", async () => {
+  test("offers nothing remote when Modal is connected but disabled", async () => {
     const { calls, request } = modal({ enabled: false })
     const host = mount(() => subject.FilesPane({ request }))
     await settle()
@@ -239,24 +249,37 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
     await settle()
 
-    expect(host.querySelector('[data-source-item="modal:weights"]')).toBeNull()
+    expect(host.querySelector('[data-source-item="modal"]')).toBeNull()
     expect(calls).not.toContain("/settings/compute/modal/volumes")
   })
 
-  test("browses a Volume over the Modal API, not the local file route", async () => {
+  test("lists the Volumes as the first level inside Modal", async () => {
     const { calls, request } = modal()
     const host = mount(() => subject.FilesPane({ request }))
     await settle()
+    await enterModal(host)
 
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    expect(calls).toContain("/settings/compute/modal/volumes")
+    // Sorted by the table, as every other listing is.
+    expect([...host.querySelectorAll("[data-file-name]")].map((node) => node.textContent)).toEqual([
+      "datasets",
+      "weights",
+    ])
+    // A Volume path is not this machine's path; the local listing must not run.
+    expect(calls.filter((path) => path.startsWith("/file?")).length).toBe(0)
+  })
+
+  test("browses inside a Volume over the Modal API", async () => {
+    const { calls, request } = modal()
+    const host = mount(() => subject.FilesPane({ request }))
     await settle()
-    host.querySelector<HTMLButtonElement>('[data-source-item="modal:weights"]')?.click()
+    await enterModal(host)
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="weights"]')?.click()
     await settle()
 
     expect(calls).toContain("/settings/compute/modal/volumes/weights/files?path=/")
     expect([...host.querySelectorAll("[data-file-name]")].map((node) => node.textContent)).toEqual(["ckpt", "notes.md"])
-    // A Volume path is not this machine's path; the local listing must not run.
-    expect(calls.filter((path) => path.startsWith("/file?")).length).toBe(0)
   })
 
   test("downloads a Volume file rather than opening a tab it cannot read", async () => {
@@ -274,16 +297,15 @@ describe("files pane", () => {
       }),
     )
     await settle()
+    await enterModal(host)
 
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    await settle()
-    host.querySelector<HTMLButtonElement>('[data-source-item="modal:weights"]')?.click()
+    host.querySelector<HTMLButtonElement>('[data-file-row="weights"]')?.click()
     await settle()
     host.querySelector<HTMLButtonElement>('[data-file-row="notes.md"]')?.click()
     await settle()
 
     // With no leading slash the route's dirname() yields "." and Modal answers
-    // NOT_FOUND, so a file at the volume root cannot be fetched at all.
+    // NOT_FOUND, so a file at the Volume root cannot be fetched at all.
     expect(calls).toContain("/settings/compute/modal/volumes/weights/file?path=/notes.md")
     expect(host.querySelector("[data-stub-view]")).toBeNull()
     expect(got).toEqual([{ name: "notes.md", text: "remote bytes" }])
