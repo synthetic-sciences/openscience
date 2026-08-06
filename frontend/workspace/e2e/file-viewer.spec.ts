@@ -5,8 +5,10 @@ test("smoke file viewer renders real file content", async ({ page, openSession }
   await openSession()
 
   await openFilesSources(page)
-  await expect(page.getByRole("button", { name: "Open session files", exact: true })).toBeEnabled()
-  await expect(page.getByRole("button", { name: "Connect another location", exact: true })).toBeVisible()
+  await expect(page.getByRole("searchbox", { name: "Search Session files", exact: true })).toBeEnabled()
+  await page.locator("[data-source-button]").click()
+  await expect(page.getByRole("button", { name: "Add folder…", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Close source menu", exact: true }).click()
 
   await openWorkspaceFile(page, "package.json")
   await expect(page.getByText("@synsci/monorepo")).toBeVisible()

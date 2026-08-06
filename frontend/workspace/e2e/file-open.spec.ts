@@ -16,7 +16,7 @@ test("open files become tabs in the right pane", async ({ page, openSession }) =
 
   // Opening a second file adds a tab and activates it.
   await openWorkspaceFile(page, "README.md")
-  const tabs = page.locator('.inspector-tabs [role="tab"]')
+  const tabs = page.locator('.files-tabs [role="tab"]')
   await expect(tabs).toHaveCount(3)
   await expect(fileTab(page, "package.json")).toHaveAttribute("aria-selected", "false")
 
@@ -37,11 +37,11 @@ test("open files become tabs in the right pane", async ({ page, openSession }) =
   await page.keyboard.press("Alt+ArrowRight")
   await expect(tabs.nth(1)).toHaveAttribute("title", "README.md")
 
-  await fileTab(page, "README.md").getByRole("button", { name: "Close README.md" }).click()
-  await fileTab(page, "package.json").getByRole("button", { name: "Close package.json" }).click()
+  await page.getByRole("button", { name: "Close README.md", exact: true }).click()
+  await page.getByRole("button", { name: "Close package.json", exact: true }).click()
   await expect(fileTab(page, "README.md")).toHaveCount(0)
   await expect(fileTab(page, "package.json")).toHaveCount(0)
-  await expect(tabs).toHaveCount(2)
+  await expect(tabs).toHaveCount(1)
 })
 
 test("can edit, discard, save, and close a text file", async ({ page, sdk, openSession }) => {
@@ -68,7 +68,7 @@ test("can edit, discard, save, and close a text file", async ({ page, sdk, openS
     await expect.poll(() => readFileSync(filepath, "utf8")).toBe("saved\n")
     await expect(page.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(0)
 
-    await tab.getByRole("button", { name: `Close ${filename}` }).click()
+    await page.getByRole("button", { name: `Close ${filename}`, exact: true }).click()
     await expect(tab).toHaveCount(0)
   } finally {
     rmSync(directory, { recursive: true, force: true })

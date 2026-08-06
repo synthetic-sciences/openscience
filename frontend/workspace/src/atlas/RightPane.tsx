@@ -216,10 +216,15 @@ export function RightPane(
   const [expanded, setExpanded] = createSignal(false)
   const [viewport, setViewport] = createSignal(typeof window === "undefined" ? 1440 : window.innerWidth)
   const [narrow, setNarrow] = createSignal(typeof window !== "undefined" && window.innerWidth < INLINE_PANE_BREAKPOINT)
+  const [seen, setSeen] = createSignal(context() === "files")
   const paneWidth = createMemo(() => paneWidthForViewport(width(), viewport()))
   const drag = { start: null as { x: number; width: number } | null }
+  const browser = () => context() === "files" && !uiStore.file() && !uiStore.saved()
 
   createEffect(on(key, () => setWidth(initial())))
+  createEffect(() => {
+    if (context() === "files") setSeen(true)
+  })
 
   onMount(() => {
     const resize = () => {
@@ -382,15 +387,27 @@ export function RightPane(
                 </div>
               )}
             </Show>
+            <Show when={seen()}>
+              <div
+                data-component="files-context"
+                aria-hidden={browser() ? undefined : "true"}
+                style={{
+                  flex: 1,
+                  "min-height": 0,
+                  "min-width": 0,
+                  display: browser() ? "flex" : "none",
+                  "flex-direction": "column",
+                }}
+              >
+                <FilesPane />
+              </div>
+            </Show>
             <Switch>
               <Match when={context() === "artifact" && artifact()}>
                 {(current) => <ArtifactInspector context={current()} />}
               </Match>
               <Match when={context() === "files" && uiStore.saved()}>
                 {(current) => <StoredArtifactView artifact={current()} />}
-              </Match>
-              <Match when={context() === "files" && !uiStore.file() && !uiStore.saved()}>
-                <FilesPane />
               </Match>
               <Match when={context() === "terminal"}>
                 <TerminalSurface />

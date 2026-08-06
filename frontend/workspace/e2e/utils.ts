@@ -62,26 +62,36 @@ export function sessionPath(directory: string, sessionID?: string) {
   return `${dirPath(directory)}/session${sessionID ? `/${sessionID}` : ""}`
 }
 
-/**
- * Opens the Files context in the right pane and lands on the "Files sources"
- * list. A single sidebar click reaches the sources from any state (closed,
- * another context, or a file open) — clicking again while already on the
- * sources list would toggle the pane closed, so guard on visibility first.
- */
-export async function openFilesSources(page: Page) {
-  const sources = page.getByRole("region", { name: "Files sources" })
-  if (await sources.isVisible().catch(() => false)) return
-  await page.getByRole("button", { name: "Open project files", exact: true }).click()
-  await expect(sources).toBeVisible()
+const prefix = (value: string) => new RegExp(`^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`)
+
+async function pickSource(page: Page, name: string) {
+  const picker = page.locator("[data-source-button]")
+  const label = picker.locator(".files-source__name")
+  if ((await picker.getAttribute("aria-expanded")) !== "true") await picker.click()
+  await page.getByRole("menuitemradio", { name: prefix(name) }).click()
+  await expect(label).toHaveText(name)
 }
 
-async function openFileRow(page: Page, name: string) {
-  await page.getByLabel("Filter files").fill(name)
-  await page.getByRole("listitem", { name: `Open file ${name}`, exact: true }).click()
+/** Opens the Files browser and selects the session filesystem source. */
+export async function openFilesSources(page: Page) {
+  const files = page.getByRole("region", { name: "Files", exact: true })
+  if (!(await files.isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "Open project files", exact: true }).click()
+    await expect(files).toBeVisible()
+  }
+  const browser = files.getByRole("tab", { name: "Files", exact: true })
+  if ((await browser.getAttribute("aria-selected")) !== "true") await browser.click()
+  await pickSource(page, "Session files")
+}
+
+export async function openFileRow(page: Page, name: string) {
+  const files = page.getByRole("region", { name: "Files", exact: true })
+  await files.getByRole("searchbox", { name: prefix("Search") }).fill(name)
+  await files.getByRole("button", { name: prefix(name) }).click()
 }
 
 export function fileTab(page: Page, title: string) {
-  return page.locator(`.inspector-tabs [role="tab"][title="${title}"]`)
+  return page.locator(`.files-tabs [role="tab"][title="${title}"]`)
 }
 
 /**
@@ -100,15 +110,14 @@ export function sessionTab(page: Page, title: string) {
  */
 export async function openWorkspaceFile(page: Page, relativePath: string) {
   await openFilesSources(page)
-  await page.getByRole("button", { name: "Open session files", exact: true }).click()
   const segments = relativePath.split("/")
   const filename = segments.pop()
   if (!filename) throw new Error(`Cannot open a folder as a file: ${relativePath}`)
   for (const segment of segments) {
-    await page.getByRole("listitem", { name: `Open folder ${segment}`, exact: true }).click()
+    await openFileRow(page, segment)
   }
   await openFileRow(page, filename)
-  const tab = fileTab(page, relativePath)
+  const tab = fileTab(page, filename)
   await expect(tab).toHaveAttribute("aria-selected", "true")
   return tab
 }
@@ -120,9 +129,9 @@ export async function openWorkspaceFile(page: Page, relativePath: string) {
 export async function openConnectedFile(page: Page, folder: string, filename: string) {
   await openFilesSources(page)
   const name = folder.split("/").filter(Boolean).pop() ?? folder
-  await page.getByRole("button", { name: `Open connected location ${name}`, exact: true }).click()
+  await pickSource(page, name)
   await openFileRow(page, filename)
-  const tab = fileTab(page, `${folder}/${filename}`)
+  const tab = fileTab(page, filename)
   await expect(tab).toHaveAttribute("aria-selected", "true")
   return tab
 }
@@ -186,14 +195,14 @@ export async function modelRowValue(page: Page, kind: "effort" | "speed") {
 /** Connects an outside folder through the Files pane UI form. */
 export async function connectFolder(page: Page, folder: string, access: "read" | "write") {
   await openFilesSources(page)
-  await page.getByRole("button", { name: "Connect another location", exact: true }).click()
-  const form = page.getByRole("form", { name: "Connect file or folder access" })
-  await form.getByPlaceholder("Choose or paste a file or folder path").fill(folder)
-  await form.getByRole("button", { name: "Location access", exact: true }).click()
-  await page.getByRole("option", { name: access === "write" ? "Read & write" : "Read only", exact: true }).click()
-  await form.getByRole("button", { name: "Location access duration", exact: true }).click()
-  await page.getByRole("option", { name: "This session", exact: true }).click()
-  await form.getByRole("button", { name: "Request access", exact: true }).click()
+  await page.locator("[data-source-button]").click()
+  await page.getByRole("button", { name: "Add folder…", exact: true }).click()
+  const form = page.getByRole("form", { name: "Connect a folder" })
+  await form.getByLabel("Folder path").fill(folder)
+  await form.getByLabel("Folder access").selectOption(access)
+  await form.getByLabel("Folder access duration").selectOption("session")
+  await form.getByRole("button", { name: "Connect", exact: true }).click()
+  await expect(form).toBeHidden()
   const name = folder.split("/").filter(Boolean).pop() ?? folder
-  await expect(page.getByRole("button", { name: `Open connected location ${name}`, exact: true })).toBeVisible()
+  await pickSource(page, name)
 }

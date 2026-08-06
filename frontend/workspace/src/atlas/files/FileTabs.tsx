@@ -1,12 +1,15 @@
 import { For, type JSX } from "solid-js"
 import { middle } from "@/atlas/files/truncate"
 
+const DRAG = "text/openscience-file-tab"
+
 export function FileTabs(props: {
   open: string[]
   /** The open file the pane is showing, or undefined for the browser itself. */
   active?: string
   onSelect: (id?: string) => void
   onClose: (id: string) => void
+  onReorder?: (id: string, to: number) => void
 }): JSX.Element {
   return (
     <div class="files-tabs" role="tablist" aria-label="Open files">
@@ -24,7 +27,7 @@ export function FileTabs(props: {
       </button>
 
       <For each={props.open}>
-        {(name) => (
+        {(name, index) => (
           // Two sibling controls, one row: selecting a tab and closing it are
           // separate actions, so neither may contain the other. A close control
           // nested in the tab button (a role="button" span) was invalid content
@@ -39,7 +42,26 @@ export function FileTabs(props: {
               data-tab={name}
               aria-selected={props.active === name}
               title={name}
+              draggable="true"
               onClick={() => props.onSelect(name)}
+              onDragStart={(event) => {
+                event.dataTransfer?.setData(DRAG, name)
+                if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"
+              }}
+              onDragOver={(event) => {
+                if (event.dataTransfer?.types.includes(DRAG)) event.preventDefault()
+              }}
+              onDrop={(event) => {
+                const dragged = event.dataTransfer?.getData(DRAG)
+                if (!dragged || dragged === name) return
+                event.preventDefault()
+                props.onReorder?.(dragged, index())
+              }}
+              onKeyDown={(event) => {
+                if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return
+                event.preventDefault()
+                props.onReorder?.(name, index() + (event.key === "ArrowRight" ? 1 : -1))
+              }}
             >
               <span class="files-tab__label" data-tab-label>
                 {middle(name, 22)}

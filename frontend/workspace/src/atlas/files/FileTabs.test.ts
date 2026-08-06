@@ -78,6 +78,24 @@ describe("file tabs", () => {
     expect(closed).toEqual(["train_lr.py"])
   })
 
+  test("reorders file tabs with the keyboard", () => {
+    const moved: Array<[string, number]> = []
+    const host = mount(() =>
+      subject.FileTabs({
+        open: ["train.py", "README.md"],
+        active: "train.py",
+        onSelect: () => {},
+        onClose: () => {},
+        onReorder: (id, to) => moved.push([id, to]),
+      }),
+    )
+    const tab = host.querySelector<HTMLButtonElement>('[data-tab="train.py"]')!
+
+    tab.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", altKey: true, bubbles: true }))
+
+    expect(moved).toEqual([["train.py", 1]])
+  })
+
   test("keeps close a sibling of the tab it closes, not a control inside it", () => {
     // Nested interactive content is invalid, and the nested label folds into the
     // parent's accessible name: the tab would announce as "train_lr.py Close

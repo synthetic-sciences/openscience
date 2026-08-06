@@ -560,6 +560,16 @@ export function FilesPane(
     if (active() === name) setActive(undefined)
   }
 
+  const move = (name: string, to: number) => {
+    const items = [...tabs()]
+    const index = items.findIndex((tab) => tab.name === name)
+    if (index === -1) return
+    const target = Math.max(0, Math.min(to, items.length - 1))
+    if (target === index) return
+    items.splice(target, 0, items.splice(index, 1)[0])
+    setTabs(items)
+  }
+
   const selected = createMemo(() => tabs().find((tab) => tab.name === active()))
 
   // The picker walks the real filesystem and hands back an absolute path. It
@@ -819,6 +829,7 @@ export function FilesPane(
         active={active()}
         onSelect={(id) => setActive(id)}
         onClose={closeTab}
+        onReorder={move}
       />
 
       <Show when={selected()} keyed fallback={browser()}>
