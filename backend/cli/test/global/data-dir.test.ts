@@ -103,7 +103,6 @@ describe("OpenScience data directory", () => {
     const repeated = await resolveDataDirectory({ home, legacy })
     expect(repeated.path).toBe(result.path)
     expect(repeated.migrated).toBeUndefined()
-    expect(repeated.conflict).toBeUndefined()
   })
 
   test("merges missing projects, sessions, and credentials into a populated root", async () => {
@@ -132,7 +131,7 @@ describe("OpenScience data directory", () => {
     const result = await resolveDataDirectory({ home, legacy })
 
     expect(result.path).toBe(target)
-    expect(result.conflict).toBeUndefined()
+    expect(result.error).toBeUndefined()
     expect(result.migrated?.merged).toBe(1)
     expect(await fs.readFile(path.join(target, "storage", "project", "prj_old.json"), "utf8")).toContain("old")
     expect(await fs.readFile(path.join(target, "storage", "project", "prj_new.json"), "utf8")).toContain("new")
@@ -269,5 +268,123 @@ describe("OpenScience data directory", () => {
     expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
     for (const id of ["a", "b", "c"])
       expect(fsSync.existsSync(path.join(target, "storage", "session", `ses_${id}.json`))).toBe(true)
+  })
+
+  test("survives a file vanishing between the walk and the copy", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    await fs.mkdir(path.join(legacy, "storage", "session"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+    for (let i = 0; i < 400; i++)
+      await fs.writeFile(path.join(legacy, "storage", "session", `ses_${i}.json`), `{"i":${i}}`)
+
+    // A still-running instance deleting sessions throughout the import. This
+    // walk sits behind a top-level await in global/index.ts, so an escaping
+    // ENOENT would stop the CLI from booting at all.
+    const doomed = Array.from({ length: 400 }, (_, i) => path.join(legacy, "storage", "session", `ses_${i}.json`))
+    const killer = setInterval(() => {
+      const victim = doomed.pop()
+      if (victim) fsSync.rmSync(victim, { force: true })
+    }, 0)
+    const result = await resolveDataDirectory({ home, legacy }).finally(() => clearInterval(killer))
+
+    expect(result.path).toBe(path.join(home, ".openscience"))
+    expect(result.error).toBeUndefined()
+    expect(await fs.readFile(path.join(result.path, "openscience-session.json"), "utf8")).toContain("kept")
+  })
+
+  test("an unreadable file costs that file and nothing else", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(path.join(legacy, "storage", "session"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+    await fs.writeFile(path.join(legacy, "auth.json"), JSON.stringify({ "openai-codex": { access: "kept" } }))
+    await fs.writeFile(path.join(legacy, "storage", "session", "locked.json"), "{}")
+    await fs.chmod(path.join(legacy, "storage", "session", "locked.json"), 0o000)
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.error).toBeUndefined()
+    expect(result.migrated?.deferred).toBe(1)
+    expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
+    expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("kept")
+    // Nothing was sealed, so the next launch retries the file it could not read.
+    expect(fsSync.existsSync(path.join(target, ".xdg-data-migration-v2.json"))).toBe(false)
+    await fs.chmod(path.join(legacy, "storage", "session", "locked.json"), 0o600)
+    const retry = await resolveDataDirectory({ home, legacy })
+    expect(retry.migrated?.deferred).toBe(0)
+    expect(fsSync.existsSync(path.join(target, "storage", "session", "locked.json"))).toBe(true)
+    expect(fsSync.existsSync(path.join(target, ".xdg-data-migration-v2.json"))).toBe(true)
+  })
+
+  test("a corrupt legacy credential store does not abort the import", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.writeFile(path.join(legacy, "openscience-session.json"), '{"api_key":"kept"}')
+    await fs.writeFile(path.join(legacy, "auth.json"), '{"openai-codex":{"acce')
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.path).toBe(target)
+    expect(result.error).toBeUndefined()
+    expect(result.warning).toContain("auth.json")
+    expect(await fs.readFile(path.join(target, "openscience-session.json"), "utf8")).toContain("kept")
+    // Sealed: a corrupt source is not going to parse on the next boot either,
+    // so re-running the whole import forever helps nobody.
+    expect(fsSync.existsSync(path.join(target, ".xdg-data-migration-v2.json"))).toBe(true)
+  })
+
+  test("does not import credentials sealed with a different machine key", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.mkdir(target, { recursive: true })
+    await fs.writeFile(path.join(legacy, "credentials.key"), Buffer.alloc(32, 1))
+    await fs.writeFile(path.join(target, "credentials.key"), Buffer.alloc(32, 2))
+    await fs.writeFile(
+      path.join(legacy, "credentials.json"),
+      JSON.stringify({ github: { fields: { GITHUB_TOKEN: "ciphertext" }, updated_at: "1" } }),
+    )
+    await fs.writeFile(path.join(legacy, "auth.json"), JSON.stringify({ "openai-codex": { access: "kept" } }))
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.warning).toContain("different machine key")
+    // Undecryptable entries would show as "set" in the UI and inject nothing.
+    expect(fsSync.existsSync(path.join(target, "credentials.json"))).toBe(false)
+    expect(await fs.readFile(path.join(target, "credentials.key"))).toEqual(Buffer.alloc(32, 2))
+    expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("kept")
+  })
+
+  test("carries a SQLite journal only alongside its own database", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    // `settings/memory/index.db` is the second WAL database (memory-index.ts)
+    // and nothing merges it, so what the copy decides is what survives.
+    await fs.mkdir(path.join(legacy, "settings", "memory"), { recursive: true })
+    await fs.mkdir(path.join(legacy, "settings", "notes"), { recursive: true })
+    await fs.mkdir(path.join(target, "settings", "memory"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "settings", "memory", "index.db"), "legacy-index")
+    await fs.writeFile(path.join(legacy, "settings", "memory", "index.db-wal"), "memory-journal")
+    await fs.writeFile(path.join(target, "settings", "memory", "index.db"), "current-index")
+    await fs.writeFile(path.join(legacy, "settings", "notes", "index.db"), "legacy-notes")
+    await fs.writeFile(path.join(legacy, "settings", "notes", "index.db-wal"), "notes-journal")
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.error).toBeUndefined()
+    // notes/index.db is carried, so its journal travels with it — dropping it
+    // would lose every transaction still in the log.
+    expect(await fs.readFile(path.join(target, "settings", "notes", "index.db"), "utf8")).toBe("legacy-notes")
+    expect(await fs.readFile(path.join(target, "settings", "notes", "index.db-wal"), "utf8")).toBe("notes-journal")
+    // memory/index.db is not — the target has its own — so the legacy journal
+    // must not land beside a database it never described.
+    expect(await fs.readFile(path.join(target, "settings", "memory", "index.db"), "utf8")).toBe("current-index")
+    expect(fsSync.existsSync(path.join(target, "settings", "memory", "index.db-wal"))).toBe(false)
   })
 })

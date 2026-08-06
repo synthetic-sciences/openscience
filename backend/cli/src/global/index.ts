@@ -71,7 +71,6 @@ const resolved = await resolveDataDirectory({
   pointer,
 })
 const data = resolved.path
-if (resolved.conflict) detectedLegacyConflicts.push(resolved.conflict)
 
 // Legacy file names inside the migrated dirs (pre-rename releases).
 migrateFile(data, "synsci-session.json", "openscience-session.json")
