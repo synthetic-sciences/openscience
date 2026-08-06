@@ -63,6 +63,30 @@ const TEXT = new Set([
 
 const IMAGE = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"])
 
+const MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  avif: "image/avif",
+  pdf: "application/pdf",
+}
+
+/**
+ * The content type a previewed file's bytes should carry.
+ *
+ * The route answers every download as `application/octet-stream`, and a blob:
+ * URL serves the Blob's recorded type -- so an <img> given octet-stream shows a
+ * broken image and an <iframe> given it downloads the file instead of rendering
+ * it. The bytes are re-typed from the extension before the URL is made.
+ */
+export function remoteMime(filename: string): string | undefined {
+  return MIME[extension(filename)]
+}
+
 /**
  * What a remote file may be previewed as, or undefined when it may not be.
  *

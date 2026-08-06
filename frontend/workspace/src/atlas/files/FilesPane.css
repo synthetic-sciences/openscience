@@ -1013,3 +1013,40 @@
   color: var(--color-text-faint);
   font-size: 12px;
 }
+
+.files-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 8px;
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+}
+.files-loading__spark {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+  animation: files-pulse 1s ease-in-out infinite;
+}
+@keyframes files-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .files-loading__spark {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* Shown but not actionable: the rows describe the folder being left. */
+.files-table--busy .files-row {
+  opacity: 0.5;
+  cursor: default;
+}

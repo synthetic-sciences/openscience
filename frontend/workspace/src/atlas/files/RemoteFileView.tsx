@@ -2,7 +2,7 @@ import { Match, Show, Switch, createEffect, createSignal, onCleanup, type JSX } 
 import { IconDownload, IconX } from "@/atlas/shared/Icon"
 import { bytes } from "./bytes"
 import { thumbLanguage } from "./artifact-thumb"
-import { remotePreview, type RemotePreview } from "./remote-preview"
+import { remoteMime, remotePreview, type RemotePreview } from "./remote-preview"
 
 export interface RemoteFile {
   name: string
@@ -62,10 +62,28 @@ export function RemoteFileView(props: RemoteFileViewProps): JSX.Element {
           if (live) setText({ body, html })
           return
         }
-        // Fetched to a blob rather than pointed at the route: the endpoint
-        // answers with Content-Disposition: attachment, which a browser may
-        // honour by downloading instead of rendering.
-        revoke = URL.createObjectURL(blob)
+        // The app's CSP is img-src 'self' data: https: and frame-src 'self' blob:
+        // (server.ts), so the two shapes need different carriers:
+        //
+        // An image cannot come from a blob: URL at all -- verified in the app,
+        // where a valid PNG decodes as data: and fails as blob: -- so its bytes
+        // become a data: URL.
+        //
+        // A PDF may use blob:, but only once it is re-typed: these bytes arrive
+        // as application/octet-stream, and an <iframe> handed that downloads the
+        // file instead of displaying it.
+        const mime = remoteMime(file.name)
+        if (shape === "image") {
+          const encoded = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(String(reader.result))
+            reader.onerror = () => reject(reader.error ?? new Error("could not decode the image"))
+            reader.readAsDataURL(mime ? new Blob([blob], { type: mime }) : blob)
+          })
+          if (live) setUrl(encoded)
+          return
+        }
+        revoke = URL.createObjectURL(mime && blob.type !== mime ? new Blob([blob], { type: mime }) : blob)
         if (live) setUrl(revoke)
       } catch (error) {
         if (live) setFailed(error instanceof Error ? error.message : String(error))

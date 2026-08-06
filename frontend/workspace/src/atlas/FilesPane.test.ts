@@ -326,6 +326,50 @@ describe("files pane", () => {
 
   // A Volume file has no path on this machine, so a previewable one opens a tab
   // backed by its bytes rather than by a path.
+  // A Volume listing spawns a Modal process and takes seconds. The rows still on
+  // screen describe the folder being left, so clicking a second one appended its
+  // name to the path the first click had already set -- asking the server for a
+  // folder inside a folder that was never opened, which came back as a NOT_FOUND
+  // traceback.
+  test("refuses clicks on a listing that is being replaced", async () => {
+    const asked: string[] = []
+    let release: ((value: Response) => void) | undefined
+    const request = async (path: string, _init?: RequestInit, query?: Record<string, string>) => {
+      if (path === "/settings/compute") return listing({ providers: [{ id: "modal", connected: true, enabled: true }] })
+      if (path === "/settings/compute/modal/volumes") return listing([{ name: "weights" }])
+      if (path.includes("/volumes/") && path.endsWith("/files")) {
+        asked.push(query?.path ?? "")
+        // The second listing never resolves, so the pane stays mid-flight.
+        if (asked.length > 1) return new Promise<Response>((resolve) => (release = resolve))
+        return listing([
+          { path: "alpha", type: "directory", size: 0 },
+          { path: "beta", type: "directory", size: 0 },
+        ])
+      }
+      if (path.startsWith("/file/artifact-store")) return listing([])
+      return listing([])
+    }
+    const host = mount(() => subject.FilesPane({ request }))
+    await settle()
+    await enterModal(host)
+    host.querySelector<HTMLButtonElement>('[data-file-row="weights"]')?.click()
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-file-row="alpha"]')?.click()
+    await settle()
+
+    expect(host.querySelector("[data-files-loading]")).not.toBeNull()
+    expect(host.querySelector<HTMLButtonElement>('[data-file-row="beta"]')?.disabled).toBe(true)
+
+    // The click that used to produce volume/alpha/beta.
+    host.querySelector<HTMLButtonElement>('[data-file-row="beta"]')?.click()
+    await settle()
+
+    expect(asked).not.toContain("/alpha/beta")
+    expect(asked.at(-1)).toBe("/alpha")
+    release?.(listing([]))
+  })
+
   test("previews a Volume file of a format worth showing", async () => {
     const { calls, request } = modal({
       files: [

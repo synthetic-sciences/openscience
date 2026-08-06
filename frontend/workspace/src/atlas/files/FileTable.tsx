@@ -19,6 +19,13 @@ export function FileTable(props: {
   depth: number
   onOpen: (row: FileRow) => void
   onUp: () => void
+  /**
+   * A listing is in flight. The rows on screen still describe the folder being
+   * left, so they are shown but not clickable: clicking one would append its
+   * name to the path the previous click already set, asking the server for a
+   * folder inside a folder that was never opened.
+   */
+  busy?: boolean
 }): JSX.Element {
   const sorted = createMemo(() =>
     [...props.rows].sort((a, b) =>
@@ -27,9 +34,15 @@ export function FileTable(props: {
   )
 
   return (
-    <div class="files-table">
+    <div class="files-table" classList={{ "files-table--busy": props.busy }} aria-busy={props.busy}>
       <Show when={props.depth > 0}>
-        <button type="button" class="files-row files-row--up" data-file-up onClick={() => props.onUp()}>
+        <button
+          type="button"
+          class="files-row files-row--up"
+          data-file-up
+          disabled={props.busy}
+          onClick={() => props.onUp()}
+        >
           <span class="files-row__glyph" aria-hidden="true">
             ↑
           </span>
@@ -46,6 +59,7 @@ export function FileTable(props: {
               class="files-row"
               classList={{ "files-row--ignored": row.ignored }}
               data-file-row={row.name}
+              disabled={props.busy}
               onClick={() => props.onOpen(row)}
             >
               <span class="files-row__glyph" aria-hidden="true">

@@ -66,9 +66,10 @@ describe("remote file view", () => {
     expect(host.querySelector("[data-remote-text]")?.textContent).toContain("# Objective")
   })
 
-  // The route answers with Content-Disposition: attachment, which a browser may
-  // honour by downloading rather than rendering, so bytes go through a blob.
-  test("renders an image from a blob rather than the route", async () => {
+  // The app's CSP is img-src 'self' data: https: -- no blob: -- so an image
+  // rendered from a blob: URL never decodes. Verified in the running app: the
+  // same PNG loads as data: and fails as blob:.
+  test("renders an image from a data URL, which the CSP allows", async () => {
     const host = mount(() =>
       subject.RemoteFileView(
         props({
@@ -79,7 +80,35 @@ describe("remote file view", () => {
     )
     await settle()
 
-    expect(host.querySelector("[data-remote-image]")?.getAttribute("src")).toStartWith("blob:")
+    expect(host.querySelector("[data-remote-image]")?.getAttribute("src")).toStartWith("data:image/png")
+  })
+
+  // frame-src does allow blob:, so a PDF keeps it -- but the bytes arrive as
+  // application/octet-stream, and an <iframe> handed that downloads the file
+  // instead of displaying it.
+  test("renders a PDF from a blob typed as a PDF", async () => {
+    let seen: string | undefined
+    const create = URL.createObjectURL.bind(URL)
+    URL.createObjectURL = (blob: Blob) => {
+      seen = (blob as Blob).type
+      return create(blob)
+    }
+    try {
+      const host = mount(() =>
+        subject.RemoteFileView(
+          props({
+            file: { name: "paper.pdf", path: "paper.pdf", volume: "weights", size: 40 },
+            read: async () => new Blob([new Uint8Array([37, 80, 68, 70])], { type: "application/octet-stream" }),
+          }) as never,
+        ),
+      )
+      await settle()
+
+      expect(seen).toBe("application/pdf")
+      expect(host.querySelector("[data-remote-pdf]")?.getAttribute("src")).toStartWith("blob:")
+    } finally {
+      URL.createObjectURL = create
+    }
   })
 
   test("offers download instead of guessing at a format it cannot render", async () => {

@@ -72,6 +72,30 @@ const errorMessage = (value: unknown) => {
   return String(value || "Request failed")
 }
 
+/**
+ * One line a person can act on.
+ *
+ * A failure from the compute routes arrives as a JSON envelope wrapping a
+ * multi-kilobyte Python traceback, and putting that in the pane buries the
+ * screen in stack frames. Unwrap what we can, keep the first line, and cap it.
+ */
+const concise = (value: unknown) => {
+  const raw = errorMessage(value)
+  const unwrapped = (() => {
+    try {
+      const parsed = JSON.parse(raw) as { data?: { message?: string }; message?: string; error?: string }
+      return parsed.data?.message ?? parsed.message ?? parsed.error ?? raw
+    } catch {
+      return raw
+    }
+  })()
+  const line = unwrapped
+    .split("\n")[0]!
+    .replace(/^Error:\s*/, "")
+    .trim()
+  return line.length > 160 ? `${line.slice(0, 159)}…` : line
+}
+
 // FileExplorer.tsx:57-77 keeps equivalent readAccess/grantAccess/revokeAccess
 // helpers, but they are private, unexported, and typed against ProjectRequest
 // (which carries a .url this pane's injected transport does not). They are
@@ -356,7 +380,7 @@ export function FilesPane(
             }))
           })
           .catch((value) => {
-            setError(`Modal Volumes could not be listed. ${errorMessage(value)}`)
+            setError(`Modal Volumes could not be listed. ${concise(value)}`)
             return [] as FileRow[]
           })
       }
@@ -375,7 +399,7 @@ export function FilesPane(
           }))
         })
         .catch((value) => {
-          setError(`${volume} could not be read. ${errorMessage(value)}`)
+          setError(`${volume} could not be read. ${concise(value)}`)
           return [] as FileRow[]
         })
     }
@@ -528,7 +552,7 @@ export function FilesPane(
         anchor.remove()
         setTimeout(() => URL.revokeObjectURL(url), 0)
       })
-      .catch((value) => setError(`${row.name} could not be downloaded. ${errorMessage(value)}`))
+      .catch((value) => setError(`${row.name} could not be downloaded. ${concise(value)}`))
       .finally(() => setBusy(false))
   }
 
@@ -760,6 +784,17 @@ export function FilesPane(
         />
       </div>
 
+      {/* A Volume listing spawns a Modal process and takes seconds. Without this
+          the pane looks frozen, and the rows still on screen describe the folder
+          being left -- which is how clicking a second one asked for a folder
+          inside a folder that was never opened. */}
+      <Show when={entries.loading}>
+        <div class="files-loading" role="status" data-files-loading>
+          <span class="files-loading__spark" aria-hidden="true" />
+          Loading {current().name}…
+        </div>
+      </Show>
+
       <Show when={error()}>
         <div class="files-notice" role="status">
           {error()}
@@ -792,6 +827,7 @@ export function FilesPane(
           <FileTable
             rows={rows()}
             depth={path().length}
+            busy={entries.loading}
             onUp={() => {
               setPath(path().slice(0, -1))
               // Symmetric with descending: a query typed for the folder being

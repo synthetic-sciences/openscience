@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { REMOTE_PREVIEW_LIMIT, remotePreview } from "./remote-preview"
+import { REMOTE_PREVIEW_LIMIT, remoteMime, remotePreview } from "./remote-preview"
 
 describe("remote file previews", () => {
   test("previews the formats a viewer can actually render", () => {
@@ -36,5 +36,20 @@ describe("remote file previews", () => {
   test("is case-insensitive about the extension", () => {
     expect(remotePreview("NOTES.MD")).toBe("text")
     expect(remotePreview("Figure.PNG")).toBe("image")
+  })
+
+  // The route answers every download as application/octet-stream, and a blob:
+  // URL serves the Blob's own type -- an <img> given octet-stream shows a broken
+  // image, and an <iframe> given it downloads the file instead of rendering it.
+  test("names a content type for everything it renders from bytes", () => {
+    expect(remoteMime("fit.png")).toBe("image/png")
+    expect(remoteMime("photo.JPEG")).toBe("image/jpeg")
+    expect(remoteMime("plot.svg")).toBe("image/svg+xml")
+    expect(remoteMime("paper.pdf")).toBe("application/pdf")
+  })
+
+  test("names none for what it never turns into a blob", () => {
+    expect(remoteMime("notes.md")).toBeUndefined()
+    expect(remoteMime("model.safetensors")).toBeUndefined()
   })
 })
