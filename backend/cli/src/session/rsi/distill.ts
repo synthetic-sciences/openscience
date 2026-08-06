@@ -5,7 +5,6 @@
  * 1. Extracts the decomposition pattern, tool sequence, and failure recovery
  * 2. Generates a SKILL.md in the standard format
  * 3. Writes to ~/.openscience/learned-skills/{name}/SKILL.md
- * 4. Uploads to dashboard via the learned skill sync API
  */
 
 import path from "path"
@@ -13,7 +12,6 @@ import fs from "fs/promises"
 import { Global } from "@/global"
 import { Log } from "@/util/log"
 import { RSITrajectory } from "./trajectory"
-import { OpenScience } from "@/openscience"
 
 export namespace RSIDistill {
   const log = Log.create({ service: "rsi-distill" })
@@ -41,15 +39,6 @@ export namespace RSIDistill {
     await fs.mkdir(dir, { recursive: true })
     await Bun.write(path.join(dir, "SKILL.md"), content)
     log.info("learned skill distilled", { name, score: trajectory.score })
-
-    // Upload to dashboard (async, non-blocking)
-    OpenScience.uploadLearnedSkill(name, description, content, {
-      agent: trajectory.agent,
-      trajectory_id: trajectory.sessionId,
-      score: trajectory.score,
-    }).catch((e) => {
-      log.warn("failed to upload learned skill", { name, error: e instanceof Error ? e.message : String(e) })
-    })
 
     return name
   }

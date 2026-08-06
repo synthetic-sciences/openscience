@@ -12288,10 +12288,6 @@ export type SettingsSkillsInstallData = {
      * Public git repository URL containing one or more SKILL.md skills
      */
     url: string
-    /**
-     * Bypass the server-side Layer-3 classifier review
-     */
-    skipClassifier?: boolean
   }
   path?: never
   query?: {
@@ -12601,6 +12597,7 @@ export type AppSkillsResponses = {
     location: string
     category?: string
     tags?: Array<string>
+    origin: "default" | "installed" | "learned" | "user" | "project"
     entry?: boolean
   }>
 }
@@ -12650,6 +12647,7 @@ export type AppSkillWriteResponses = {
     location: string
     category?: string
     tags?: Array<string>
+    origin: "default" | "installed" | "learned" | "user" | "project"
     entry?: boolean
   }
 }

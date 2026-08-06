@@ -11,15 +11,11 @@ import {
   type Rejection,
 } from "./review"
 import { Progress } from "./progress"
-import { OpenScience } from "../../openscience"
+import { gitFetchPinned } from "./git-fetch"
 
 export interface InstallOptions {
   confirm?: boolean
   progress?: Progress
-  /** Skip Layer 3 (LLM classifier) and the cloud upload side-effect. Local
-   *  install only. Local regex layers (1, 2, 4) still run. Off by default;
-   *  on means "I accept that no LLM reviewed this skill." */
-  skipClassifier?: boolean
 }
 
 export interface InstallResult {
@@ -36,13 +32,21 @@ function installedDir(): string {
   return path.join(base, "installed-skills")
 }
 
+const LEDGER = ".openscience-install.json"
+
+interface LocalInstall {
+  repo_url: string
+  pinned_sha: string
+  installed_at: string
+  skills: { name: string; description: string; verdict: "pass" | "warn" }[]
+}
+
 export namespace Install {
-  /** Add skill(s) from a git URL. Local-first: writes to disk, then
-   *  uploads. Throws on unrecoverable error (URL invalid, no skills, etc.). */
+  /** Add skill(s) from a git URL. The repository, security verdict and all
+   *  installed contents stay on this machine. */
   export async function add(url: string, options: InstallOptions = {}): Promise<InstallResult> {
     const confirm = options.confirm ?? true
     const progress = options.progress ?? Progress.silent()
-    const skipClassifier = options.skipClassifier ?? false
 
     progress.start("Fetching repo")
     const parsed = parseSkillUrl(url)
@@ -59,43 +63,12 @@ export namespace Install {
       const l2 = classifierInjectionRegexPass(surviving)
       surviving = surviving.filter((s) => !l2.rejected.find((r) => r.name === s.name))
 
-      // Layer 3 (server-side) — skipped when --skip-classifier is set.
       const reasoningByName: Record<string, string> = {}
-      const classifierRejected: Rejection[] = []
-      if (!skipClassifier && surviving.length > 0) {
-        const review = await OpenScience.requestSkillReview(
-          surviving.map((s) => ({
-            namespace: s.namespace,
-            name: s.name,
-            description: s.description,
-            content: s.content,
-            scripts: s.scripts,
-          })),
-        )
-        if (!review) {
-          throw new Error(
-            "Layer-3 classifier unreachable. Aborting install. " +
-              "(Pass --skip-classifier to bypass at your own risk.)",
-          )
-        }
-        for (const r of review.per_skill) {
-          reasoningByName[r.name] = r.reasoning
-          if (r.verdict === "reject") {
-            classifierRejected.push({
-              name: r.name,
-              reason: `classifier rejected: ${r.reasoning}`,
-            })
-          }
-        }
-        surviving = surviving.filter((s) => !classifierRejected.find((r) => r.name === s.name))
-      }
-
-      // Layer 4
       const l4 = suspiciousRegexPass(surviving)
 
       progress.done("Security checks complete")
 
-      const rejected = [...l1.rejected, ...l2.rejected, ...classifierRejected]
+      const rejected = [...l1.rejected, ...l2.rejected]
 
       if (confirm && !(await confirmInteractive(parsed, sha, surviving, l4.warnings, reasoningByName))) {
         return {
@@ -106,7 +79,7 @@ export namespace Install {
         }
       }
 
-      // Write to disk + upload. Layout mirrors the upstream plugin
+      // Write to disk. Layout mirrors the upstream plugin
       // convention: <ns>/skills/<name>/SKILL.md so future hooks/, scripts/
       // additions live where users expect.
       const installed: InstallResult["installed"] = []
@@ -123,41 +96,31 @@ export namespace Install {
           const skillDir = path.join(skillsDir, skill.name)
           await fs.mkdir(skillDir, { recursive: true })
           await fs.writeFile(path.join(skillDir, "SKILL.md"), skill.content)
-          for (const f of skill.scripts) {
+          for (const f of [...skill.scripts, ...skill.references]) {
             const target = path.join(skillDir, f.path)
-            await fs.mkdir(path.dirname(target), { recursive: true })
-            await fs.writeFile(target, f.content)
-          }
-          for (const f of skill.references) {
-            const target = path.join(skillDir, f.path)
+            const resolved = path.resolve(target)
+            if (!resolved.startsWith(path.resolve(skillDir) + path.sep)) {
+              throw new Error(`Unsafe companion path in ${skill.name}: ${f.path}`)
+            }
             await fs.mkdir(path.dirname(target), { recursive: true })
             await fs.writeFile(target, f.content)
           }
 
           const warningsForSkill = l4.warnings.filter((w) => w.name === skill.name)
           const verdict: "pass" | "warn" = warningsForSkill.length ? "warn" : "pass"
-          if (!skipClassifier) {
-            // Pointer-only upload — the backend stores the install ledger
-            // (repo_url + pinned_sha + classifier verdict), not the SKILL.md
-            // content. Other machines re-fetch from git on next sync.
-            // Best-effort; local install stands if the upload fails.
-            await OpenScience.postInstalledSkill({
-              namespace: skill.namespace,
-              name: skill.name,
-              description: skill.description,
-              repo_url: parsed.cloneUrl,
-              pinned_sha: sha,
-              review_verdict: verdict,
-              review_meta: {
-                reasoning: reasoningByName[skill.name] ?? "",
-                warnings: warningsForSkill,
-              },
-            }).catch(() => {
-              /* swallow — disk is canonical */
-            })
-          }
           installed.push({ namespace: skill.namespace, name: skill.name, verdict })
         }
+        const ledger: LocalInstall = {
+          repo_url: parsed.cloneUrl,
+          pinned_sha: sha,
+          installed_at: new Date().toISOString(),
+          skills: surviving.map((skill) => ({
+            name: skill.name,
+            description: skill.description,
+            verdict: l4.warnings.some((warning) => warning.name === skill.name) ? "warn" : "pass",
+          })),
+        }
+        await Bun.write(path.join(nsDir, LEDGER), JSON.stringify(ledger, null, 2) + "\n")
       } catch (err) {
         // Rollback partial files
         await fs.rm(nsDir, { recursive: true, force: true }).catch(() => {})
@@ -175,14 +138,7 @@ export namespace Install {
     }
   }
 
-  /** Remove an installed skill (namespace or namespace/name).
-   *
-   *  Local-first: the on-disk directory is always removed if it exists.
-   *  The backend archive call is best-effort — if it fails (offline,
-   *  unauthorized, etc.) the local view still reflects the removal. The
-   *  next successful sync will reconcile. The returned count reflects what
-   *  was removed locally OR archived on the backend, whichever is larger,
-   *  so the user sees a stable count even when offline. */
+  /** Remove an installed skill (namespace or namespace/name) locally. */
   export async function remove(target: string): Promise<{ archived: number }> {
     const [namespace, name] = target.split("/", 2)
     const root = installedDir()
@@ -195,31 +151,109 @@ export namespace Install {
         .then(() => true)
         .catch(() => false)
       await fs.rm(dir, { recursive: true, force: true }).catch(() => {})
-      const ok = await OpenScience.deleteInstalledSkill(namespace, name).catch(() => false)
-      return { archived: ok || existedLocally ? 1 : 0 }
+      return { archived: existedLocally ? 1 : 0 }
     }
 
     const dir = path.join(root, namespace)
-    let localCount = 0
-    try {
-      const entries = await fs.readdir(path.join(dir, "skills"))
-      localCount = entries.length
-    } catch {
-      /* skills/ subdir absent */
-    }
+    const localCount = await fs
+      .readdir(path.join(dir, "skills"))
+      .then((entries) => entries.length)
+      .catch(() => 0)
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {})
-    const result = await OpenScience.deleteInstalledNamespace(namespace).catch(() => null)
-    return { archived: Math.max(result?.archived ?? 0, localCount) }
+    return { archived: localCount }
   }
 
   export async function list(): Promise<{ namespace: string; name: string; description: string; verdict: string }[]> {
-    const rows = await OpenScience.fetchInstalledSkills()
-    return (rows ?? []).map((r) => ({
-      namespace: r.namespace,
-      name: r.name,
-      description: r.description,
-      verdict: r.review_verdict,
-    }))
+    const root = installedDir()
+    const namespaces = await fs.readdir(root, { withFileTypes: true }).catch(() => [])
+    const groups = await Promise.all(
+      namespaces
+        .filter((entry) => entry.isDirectory())
+        .map(async (entry) => {
+          const dir = path.join(root, entry.name)
+          const ledger = await Bun.file(path.join(dir, LEDGER))
+            .json()
+            .then((value) => value as LocalInstall)
+            .catch(() => undefined)
+          const records = new Map(ledger?.skills.map((skill) => [skill.name, skill]) ?? [])
+          const skills = await fs.readdir(path.join(dir, "skills"), { withFileTypes: true }).catch(() => [])
+          return Promise.all(
+            skills
+              .filter((skill) => skill.isDirectory())
+              .map(async (skill) => {
+                const record = records.get(skill.name)
+                const content = await Bun.file(path.join(dir, "skills", skill.name, "SKILL.md"))
+                  .text()
+                  .catch(() => "")
+                const description = record?.description ?? content.match(/^description:\s*(.+)$/m)?.[1]?.trim() ?? ""
+                return {
+                  namespace: entry.name,
+                  name: skill.name,
+                  description,
+                  verdict: record?.verdict ?? "pass",
+                }
+              }),
+          )
+        }),
+    )
+    return groups.flat()
+  }
+
+  /** One-time compatibility import for installations that previously kept
+   *  their third-party install ledger in Atlas. New installs never call Atlas. */
+  export async function importLegacy(
+    rows: {
+      namespace: string
+      name: string
+      description: string
+      repo_url: string
+      pinned_sha: string
+      review_verdict: string
+    }[],
+  ): Promise<number> {
+    const root = installedDir()
+    const groups = Map.groupBy(rows, (row) => row.namespace)
+    const counts = await Promise.all(
+      [...groups.entries()].map(async ([namespace, skills]) => {
+        const dir = path.join(root, namespace)
+        const current = await Bun.file(path.join(dir, LEDGER))
+          .json()
+          .then((value) => value as LocalInstall)
+          .catch(() => undefined)
+        const records = new Map(current?.skills.map((skill) => [skill.name, skill]) ?? [])
+        const imported = await Promise.all(
+          skills.map(async (skill) => {
+            const target = path.join(dir, "skills", skill.name)
+            if (await Bun.file(path.join(target, "SKILL.md")).exists()) return 0
+            await gitFetchPinned({
+              repo_url: skill.repo_url,
+              pinned_sha: skill.pinned_sha,
+              namespace,
+              skillName: skill.name,
+              destDir: target,
+            })
+            records.set(skill.name, {
+              name: skill.name,
+              description: skill.description,
+              verdict: skill.review_verdict === "warn" ? "warn" : "pass",
+            })
+            return 1
+          }),
+        )
+        const first = skills[0]
+        if (!first) return 0
+        const ledger: LocalInstall = {
+          repo_url: current?.repo_url ?? first.repo_url,
+          pinned_sha: current?.pinned_sha ?? first.pinned_sha,
+          installed_at: current?.installed_at ?? new Date().toISOString(),
+          skills: [...records.values()],
+        }
+        await fs.mkdir(dir, { recursive: true })
+        await Bun.write(path.join(dir, LEDGER), JSON.stringify(ledger, null, 2) + "\n")
+        return imported.reduce<number>((total, value) => total + value, 0)
+      }),
+    )
+    return counts.reduce<number>((total, value) => total + value, 0)
   }
 }
 

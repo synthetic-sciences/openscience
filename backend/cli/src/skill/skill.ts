@@ -8,8 +8,6 @@ import { State } from "../project/state"
 import { runtimeRegexPass, classifierInjectionRegexPass } from "./install/review"
 import { NamedError } from "@synsci/util/error"
 import { ConfigMarkdown } from "../config/markdown"
-import INITIALIZE_ATLAS_GRAPH_MD from "./system/initialize-atlas-graph.txt"
-import GOAL_MD from "./system/goal.txt"
 import { Log } from "../util/log"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
@@ -17,19 +15,8 @@ import { Flag } from "@/flag/flag"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Session } from "@/session"
-import { OpenScience } from "@/openscience"
-import { Installation } from "@/installation"
 import { ProjectTrust } from "@/project/trust"
-
-// System skills the product invokes directly (e.g. the canvas prefills
-// `/initialize-atlas-graph`) but which are not part of the server skill
-// catalog. Their SKILL.md is embedded so they resolve in every install —
-// including the compiled binary, which ships no skills and otherwise depends on
-// the API index. Kept in sync with skills/research/<name>/SKILL.md by a test.
-const SYSTEM_SKILLS: Array<{ name: string; content: string }> = [
-  { name: "goal", content: GOAL_MD },
-  { name: "initialize-atlas-graph", content: INITIALIZE_ATLAS_GRAPH_MD },
-]
+import { BundledSkills } from "./bundled"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -39,6 +26,7 @@ export namespace Skill {
     location: z.string(),
     category: z.string().optional(),
     tags: z.array(z.string()).optional(),
+    origin: z.enum(["default", "installed", "learned", "user", "project"]),
     /** Whether the skill is user-facing (shows in / autocomplete) or an
      *  internal helper used transitively by other skills. Defaults to true.
      *  Driven by `openscience-skills.json` `entries[]` for URL-installed skills;
@@ -74,11 +62,12 @@ export namespace Skill {
   const SKILL_GLOB = new Bun.Glob("**/SKILL.md")
   const USER_SKILL_DIR = path.join(Global.Path.data, "user-skills")
   const UserSkillName = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)
+  const priority = { default: 0, installed: 1, learned: 2, user: 3, project: 4 } as const
 
   async function compute() {
     const skills: Record<string, Info> = {}
 
-    const addSkill = async (match: string) => {
+    const addSkill = async (match: string, origin: Info["origin"]) => {
       const md = await ConfigMarkdown.parse(match).catch((err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
@@ -105,11 +94,12 @@ export namespace Skill {
         return
       }
 
-      // Warn on duplicate skill names
-      if (skills[parsed.data.name]) {
+      const existing = skills[parsed.data.name]
+      if (existing && priority[existing.origin] > priority[origin]) return
+      if (existing) {
         log.warn("duplicate skill name", {
           name: parsed.data.name,
-          existing: skills[parsed.data.name].location,
+          existing: existing.location,
           duplicate: match,
         })
       }
@@ -121,6 +111,7 @@ export namespace Skill {
         category: parsed.data.category,
         tags: parsed.data.tags,
         entry: parsed.data.entry,
+        origin,
       }
     }
 
@@ -134,12 +125,6 @@ export namespace Skill {
           }),
         )
       : []
-    // Also include global ~/.claude/skills/
-    const globalClaude = `${Global.Path.home}/.claude`
-    if (await Filesystem.isDir(globalClaude)) {
-      claudeDirs.push(globalClaude)
-    }
-
     if (!Flag.OPENSCIENCE_DISABLE_CLAUDE_CODE_SKILLS) {
       for (const dir of claudeDirs) {
         const matches = await Array.fromAsync(
@@ -156,7 +141,20 @@ export namespace Skill {
         })
 
         for (const match of matches) {
-          await addSkill(match)
+          await addSkill(match, "project")
+        }
+      }
+
+      const globalClaude = `${Global.Path.home}/.claude`
+      if (await Filesystem.isDir(globalClaude)) {
+        for await (const match of CLAUDE_SKILL_GLOB.scan({
+          cwd: globalClaude,
+          absolute: true,
+          onlyFiles: true,
+          followSymlinks: true,
+          dot: true,
+        })) {
+          await addSkill(match, "installed")
         }
       }
     }
@@ -169,103 +167,33 @@ export namespace Skill {
         onlyFiles: true,
         followSymlinks: true,
       })) {
-        await addSkill(match)
+        await addSkill(match, "project")
       }
     }
 
-    // === Server-side Skills: fetched from API, cached locally ===
+    // Default skills are an immutable release asset. Source builds scan the
+    // repository tree; compiled releases materialize their embedded archive to
+    // a versioned cache directory. Neither path needs Atlas or a network.
     if (!Flag.OPENSCIENCE_DISABLE_BUNDLED_SKILLS) {
-      const cacheDir = Global.Path.cache
-
-      // Try fetching skill index from dashboard API
-      const index = await OpenScience.fetchSkillIndex()
-      if (index) {
-        for (const skill of index) {
-          if (!skills[skill.name]) {
-            // Block skills with injection patterns (same check as addSkill)
-            const desc = (skill.description ?? "").toLowerCase()
-            if (desc.includes("always run this skill") || desc.includes("must always run")) {
-              log.warn("blocked API skill with injection pattern", {
-                name: skill.name,
-                reason: "description contains injection directive",
-              })
-              continue
-            }
-            const cachePath = path.join(cacheDir, "skills", skill.name, "SKILL.md")
-            skills[skill.name] = {
-              name: skill.name,
-              description: skill.description,
-              location: cachePath, // may not exist yet — fetched lazily when invoked
-              category: skill.category,
-              tags: skill.tags,
-            }
-          }
-        }
-        log.info("Loaded skill index from API", { count: index.length })
-      } else {
-        // Offline fallback: scan cached skills directory
-        const cachedSkillsDir = path.join(cacheDir, "skills")
-        if (await Filesystem.isDir(cachedSkillsDir)) {
-          let count = 0
-          for await (const match of SKILL_GLOB.scan({
-            cwd: cachedSkillsDir,
-            absolute: true,
-            onlyFiles: true,
-            followSymlinks: true,
-          })) {
-            await addSkill(match)
-            count++
-          }
-          log.info("Loaded cached skills (offline)", { count })
-        }
-      }
-
-      // Development fallback: only when running from source (not compiled binary)
-      const devSkillsPath = path.join(import.meta.dir, "../../skills")
-      if (Installation.VERSION === "local" && (await Filesystem.isDir(devSkillsPath))) {
+      const root = await BundledSkills.root()
+      if (root) {
         let count = 0
         for await (const match of SKILL_GLOB.scan({
-          cwd: devSkillsPath,
+          cwd: root,
           absolute: true,
           onlyFiles: true,
-          followSymlinks: true,
+          followSymlinks: false,
         })) {
-          await addSkill(match)
+          await addSkill(match, "default")
           count++
         }
-        log.info("Loaded dev skills", { path: devSkillsPath, count })
+        log.info("Loaded bundled skills", { path: root, count })
       }
     }
 
-    // === Learned Skills: from RSI distillation, cloud-synced + local ===
+    // Learned skills are private local state. Atlas login does not change or
+    // synchronize this directory.
     const learnedDir = path.join(Global.Path.data, "learned-skills")
-
-    // Sync from cloud: fetch learned skills index and write any missing to disk.
-    // Gated on the same flag as the skill index above so it is one consistent
-    // "no server-side skill I/O" switch — this keeps skill discovery from
-    // blocking on a slow/unreachable backend (#138) and makes it deterministic
-    // in tests (preload sets the flag). The local learned-skills scan below still
-    // runs regardless.
-    const cloudLearned = Flag.OPENSCIENCE_DISABLE_BUNDLED_SKILLS
-      ? null
-      : await OpenScience.fetchLearnedSkills().catch(() => null)
-    if (cloudLearned) {
-      for (const entry of cloudLearned) {
-        const skillDir = path.join(learnedDir, entry.name)
-        const skillPath = path.join(skillDir, "SKILL.md")
-        const exists = await Bun.file(skillPath).exists()
-        if (!exists) {
-          const content = await OpenScience.fetchLearnedSkillContent(entry.name).catch(() => null)
-          if (content) {
-            await fs.mkdir(skillDir, { recursive: true })
-            await Bun.write(skillPath, content)
-            log.info("synced learned skill from cloud", { name: entry.name })
-          }
-        }
-      }
-    }
-
-    // Scan local learned-skills directory (includes both local and just-synced cloud skills)
     if (await Filesystem.isDir(learnedDir)) {
       let learnedCount = 0
       for await (const match of SKILL_GLOB.scan({
@@ -274,7 +202,7 @@ export namespace Skill {
         onlyFiles: true,
         followSymlinks: true,
       })) {
-        await addSkill(match)
+        await addSkill(match, "learned")
         learnedCount++
       }
       if (learnedCount > 0) {
@@ -291,7 +219,7 @@ export namespace Skill {
         onlyFiles: true,
         followSymlinks: true,
       })) {
-        await addSkill(match)
+        await addSkill(match, "user")
         userCount++
       }
       if (userCount > 0) {
@@ -302,10 +230,8 @@ export namespace Skill {
     // === Installed Skills: URL-installed third-party skills ===
     // Local-first store at:
     //   ~/.openscience/installed-skills/<ns>/skills/<name>/SKILL.md
-    // mirroring the upstream plugin convention. Cloud sync via
-    // /api/cli/installed-skills returns install pointers (repo_url + sha);
-    // each machine re-fetches from git on first sync. The DB row is just
-    // the install ledger / kill-switch hook.
+    // mirroring the upstream plugin convention. The repository pointer,
+    // pinned SHA and local security verdict live beside the installed files.
     const installedDir = path.join(Global.Path.data, "installed-skills")
 
     // One-time on-disk migration from the legacy flat layout
@@ -342,47 +268,6 @@ export namespace Skill {
       }
     }
 
-    // Same gate as the learned + index fetches above: a slow/unreachable backend
-    // must not wedge skill discovery, and tests stay network-independent. The
-    // local installed-skills scan below still runs regardless.
-    const cloudInstalled = Flag.OPENSCIENCE_DISABLE_BUNDLED_SKILLS
-      ? null
-      : await OpenScience.fetchInstalledSkills().catch(() => null)
-    if (cloudInstalled) {
-      for (const entry of cloudInstalled) {
-        const skillDir = path.join(installedDir, entry.namespace, "skills", entry.name)
-        const skillPath = path.join(skillDir, "SKILL.md")
-        const exists = await Bun.file(skillPath).exists()
-        if (!exists) {
-          // Pointer-only DB: re-fetch from git using stored repo_url + sha.
-          // Skips Layer 3 — the first install's classifier verdict is
-          // authoritative; the SHA is content-addressed so the content is
-          // provably identical. Layers 1 + 2 still run as paranoid defense.
-          try {
-            const { gitFetchPinned } = await import("./install/git-fetch")
-            await gitFetchPinned({
-              repo_url: entry.repo_url,
-              pinned_sha: entry.pinned_sha,
-              namespace: entry.namespace,
-              skillName: entry.name,
-              destDir: skillDir,
-            })
-            log.info("synced installed skill from git", {
-              namespace: entry.namespace,
-              name: entry.name,
-              sha: entry.pinned_sha.slice(0, 7),
-            })
-          } catch (e) {
-            log.warn("failed to sync installed skill from git", {
-              namespace: entry.namespace,
-              name: entry.name,
-              error: e instanceof Error ? e.message : String(e),
-            })
-          }
-        }
-      }
-    }
-
     if (await Filesystem.isDir(installedDir)) {
       let installedCount = 0
       const entriesByNs = new Map<string, Set<string> | null>()
@@ -413,7 +298,7 @@ export namespace Skill {
         onlyFiles: true,
         followSymlinks: true,
       })) {
-        await addSkill(match)
+        await addSkill(match, "installed")
         installedCount++
         // SKILL_GLOB matches <installedDir>/<ns>/skills/<name>/SKILL.md.
         const rel = match.slice(installedDir.length + 1)
@@ -448,23 +333,7 @@ export namespace Skill {
         onlyFiles: true,
         followSymlinks: true,
       })) {
-        await addSkill(match)
-      }
-    }
-
-    // System skills: embedded so they resolve in every install even when the
-    // server catalog and the shipping binary omit them. Materialize to the cache
-    // only when not already loaded (dev/source and API entries take precedence).
-    // Respects the bundled-skills opt-out, same as the catalog.
-    if (!Flag.OPENSCIENCE_DISABLE_BUNDLED_SKILLS) {
-      for (const sys of SYSTEM_SKILLS) {
-        if (skills[sys.name]) continue
-        const file = path.join(Global.Path.cache, "system-skills", sys.name, "SKILL.md")
-        if (!(await Bun.file(file).exists())) {
-          await fs.mkdir(path.dirname(file), { recursive: true })
-          await Bun.write(file, sys.content)
-        }
-        await addSkill(file)
+        await addSkill(match, "project")
       }
     }
 
@@ -528,6 +397,7 @@ export namespace Skill {
       return {
         ...parsed.data,
         location: file,
+        origin: "user",
       } satisfies Info
     } finally {
       await fs.rm(tmp, { force: true }).catch(() => {})

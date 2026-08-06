@@ -26,6 +26,7 @@ interface Skill {
   name: string
   description?: string
   location: string
+  origin?: Source
   category?: string
   tags?: string[]
   entry?: boolean
@@ -33,29 +34,33 @@ interface Skill {
 
 type Action = "allow" | "deny"
 type View = "list" | "scratch" | "github"
-type Source = "bundled" | "learned" | "installed"
+type Source = "default" | "learned" | "installed" | "user" | "project"
 type SourceView = "all" | Source
 
-// The catalog draws from three origins; the badge is a real taxonomy, not
-// decoration. Derived from the skill's on-disk location (learned skills live in
-// a learned-skills store; bundled ship with the binary under …/skills).
-function sourceOf(location: string): Source {
-  const l = (location ?? "").toLowerCase()
-  if (l.includes("learned")) return "learned"
-  if (l.includes("backend/cli/skills") || l.includes("resources/skills") || l.includes("/app/skills")) return "bundled"
-  return "installed"
+function sourceOf(skill: Skill): Source {
+  if (skill.origin) return skill.origin
+  const location = skill.location.toLowerCase()
+  if (location.includes("learned-skills")) return "learned"
+  if (location.includes("installed-skills") || location.includes(".claude/skills")) return "installed"
+  if (location.includes("user-skills")) return "user"
+  if (location.includes(".openscience/")) return "project"
+  return "default"
 }
 
 const SOURCE_DOT: Record<Source, string> = {
-  bundled: "var(--color-text-faint)",
+  default: "var(--color-text-faint)",
   learned: "var(--color-success, #3fb950)",
   installed: "var(--color-text-interactive-base, var(--color-text))",
+  user: "var(--color-warning, #d29922)",
+  project: "var(--color-info, #58a6ff)",
 }
 
 const SOURCE_LABEL: Record<Source, string> = {
-  bundled: "Bundled",
-  learned: "Personal",
-  installed: "Imported",
+  default: "Default",
+  learned: "Learned",
+  installed: "Installed",
+  user: "Personal",
+  project: "Project",
 }
 
 export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
@@ -117,12 +122,14 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
   })
 
   const sources = createMemo(() => {
-    const count = (value: Source) => all().filter((skill) => sourceOf(skill.location) === value).length
+    const count = (value: Source) => all().filter((skill) => sourceOf(skill) === value).length
     return [
       { id: "all", label: "All sources", count: all().length },
-      { id: "bundled", label: "Bundled", count: count("bundled") },
-      { id: "installed", label: "Imported", count: count("installed") },
-      { id: "learned", label: "Personal", count: count("learned") },
+      { id: "default", label: "Default", count: count("default") },
+      { id: "installed", label: "Installed", count: count("installed") },
+      { id: "learned", label: "Learned", count: count("learned") },
+      { id: "user", label: "Personal", count: count("user") },
+      { id: "project", label: "Project", count: count("project") },
     ]
   })
 
@@ -131,7 +138,7 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
     const cat = category()
     const origin = source()
     return all()
-      .filter((skill) => origin === "all" || sourceOf(skill.location) === origin)
+      .filter((skill) => origin === "all" || sourceOf(skill) === origin)
       .filter((s) => cat === "all" || (s.category ?? "uncategorized") === cat)
       .filter((s) => !q || s.name.toLowerCase().includes(q) || (s.description ?? "").toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -332,7 +339,7 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
 }
 
 function SkillRow(props: { skill: Skill; on: boolean; onToggle: (v: boolean) => void }): JSX.Element {
-  const source = () => sourceOf(props.skill.location)
+  const source = () => sourceOf(props.skill)
   return (
     <div class="skills-workspace__row" data-enabled={props.on ? "true" : "false"}>
       <div class="skills-workspace__identity">

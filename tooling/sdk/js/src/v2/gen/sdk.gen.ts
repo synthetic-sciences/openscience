@@ -1689,7 +1689,6 @@ export class Skills extends HeyApiClient {
     parameters?: {
       directory?: string
       url?: string
-      skipClassifier?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1700,7 +1699,6 @@ export class Skills extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "url" },
-            { in: "body", key: "skipClassifier" },
           ],
         },
       ],

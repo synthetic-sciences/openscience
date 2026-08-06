@@ -66,6 +66,7 @@ export interface Skill {
   name: string
   description: string
   location: string
+  origin: "default" | "installed" | "learned" | "user" | "project"
   category?: string
   tags?: string[]
   entry?: boolean

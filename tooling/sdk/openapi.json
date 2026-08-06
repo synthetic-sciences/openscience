@@ -31404,10 +31404,6 @@
                     "description": "Public git repository URL containing one or more SKILL.md skills",
                     "type": "string",
                     "minLength": 1
-                  },
-                  "skipClassifier": {
-                    "description": "Bypass the server-side Layer-3 classifier review",
-                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -32120,6 +32116,16 @@
                           "type": "string"
                         }
                       },
+                      "origin": {
+                        "type": "string",
+                        "enum": [
+                          "default",
+                          "installed",
+                          "learned",
+                          "user",
+                          "project"
+                        ]
+                      },
                       "entry": {
                         "type": "boolean"
                       }
@@ -32127,7 +32133,8 @@
                     "required": [
                       "name",
                       "description",
-                      "location"
+                      "location",
+                      "origin"
                     ]
                   }
                 }
@@ -32191,6 +32198,16 @@
                         "type": "string"
                       }
                     },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "default",
+                        "installed",
+                        "learned",
+                        "user",
+                        "project"
+                      ]
+                    },
                     "entry": {
                       "type": "boolean"
                     }
@@ -32198,7 +32215,8 @@
                   "required": [
                     "name",
                     "description",
-                    "location"
+                    "location",
+                    "origin"
                   ]
                 }
               }

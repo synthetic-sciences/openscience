@@ -5,36 +5,33 @@ frontmatter and a body) that the agent loads on demand to prime itself for a tas
 This note explains where skills are discovered and how a bare name resolves —
 useful when a skill is unexpectedly "not found".
 
-## Sources (in load order)
+## Sources
 
 The catalog is assembled in `backend/cli/src/skill/skill.ts` from several sources,
 keyed by skill `name`:
 
-1. **Project `.claude/skills/`** — skills committed to the repo being worked in,
-   plus `~/.claude/skills/` (opt out with `OPENSCIENCE_DISABLE_CLAUDE_CODE_SKILLS`).
-2. **The Atlas skill catalog** — released builds fetch the index from
-   `/api/cli/skills` (name + description only; content is fetched lazily on first
-   use) and cache it. This is the primary source of the bundled library in a
-   shipped binary, which carries no skills of its own.
-3. **Dev / bundled tree** — when running from source, the repo's `skills/`
-   directory is loaded directly.
-4. **System skills** — a small set the product invokes directly (e.g.
-   `initialize-atlas-graph`, which the canvas and research agent run) is embedded
-   in the binary and materialized locally when the catalog omits it, so it
-   resolves in every install.
-5. **Learned skills** — distilled from prior runs (RSI), synced from the cloud
-   and cached under the data directory.
-6. **User skills** — authored locally via `openscience skill new`, private by
-   default.
+1. **Default skills** — the repository's `backend/cli/skills/` tree. Release
+   builds embed the complete tree, including scripts, references, assets, and
+   templates, in a verified archive. No login or download is required.
+2. **Installed skills** — Git-installed packs under
+   `~/.openscience/installed-skills/`, plus compatible global
+   `~/.claude/skills/` packs.
+3. **Learned skills** — private skills distilled from prior local runs under
+   `~/.openscience/learned-skills/`.
+4. **Personal skills** — authored through Customize or
+   `openscience skill new`, stored under `~/.openscience/user-skills/`.
+5. **Project skills** — `.openscience/{skill,skills}` and `.claude/skills`
+   directories committed to the current project, plus `skills.paths` entries.
 
-All of steps 2–4 respect the `OPENSCIENCE_DISABLE_BUNDLED_SKILLS` opt-out.
+`OPENSCIENCE_DISABLE_BUNDLED_SKILLS` disables only the default release library.
+`OPENSCIENCE_DISABLE_CLAUDE_CODE_SKILLS` disables compatible Claude skill paths.
 
 ## Resolution
 
-`Skill.get(name)` looks up the assembled name→skill map. Earlier sources win on a
-name collision, so a local or system skill shadows a catalog entry of the same
-name. If a name isn't present, the skill tool returns a "not found" error with the
-closest fuzzy matches.
+`Skill.get(name)` looks up the assembled name→skill map. On a name collision the
+precedence is project → personal → learned → installed → default. If a name isn't
+present, the skill tool returns a "not found" error with the closest fuzzy
+matches.
 
 ## Authoring
 
