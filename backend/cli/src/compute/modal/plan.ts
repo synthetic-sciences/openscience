@@ -96,26 +96,28 @@ export namespace ModalPlan {
   }
 
   async function inputs(root: string, patterns: string[]) {
+    const project = await Filesystem.canonical(root)
+    if (!project) throw new Error(`Modal project directory is unavailable: ${root}`)
     const files = new Map<string, ModalAdapter.File>()
     const found = new Set<string>()
     for (const pattern of patterns) {
       if (path.isAbsolute(pattern) || pattern.split(/[\\/]/).includes("..")) {
         throw new Error(`Modal upload pattern must stay inside the project: ${pattern}`)
       }
-      const scan = new Bun.Glob(pattern).scan({ cwd: root, dot: true, onlyFiles: true, followSymlinks: true })
+      const scan = new Bun.Glob(pattern).scan({ cwd: project, dot: true, onlyFiles: true, followSymlinks: true })
       for await (const file of scan) found.add(posix(file))
     }
-    const excludes = await ignored(root, [...found])
+    const excludes = await ignored(project, [...found])
     for (const relative of found) {
       if (excludes.has(relative)) continue
       if (forbidden(relative)) throw new Error(`Modal upload policy denied: ${relative}`)
-      const canonical = await Filesystem.canonical(path.resolve(root, relative))
-      if (!canonical || !Filesystem.contains(root, canonical)) {
+      const canonical = await Filesystem.canonical(path.resolve(project, relative))
+      if (!canonical || !Filesystem.contains(project, canonical)) {
         throw new Error(`Modal upload escaped the project: ${relative}`)
       }
-      const resolved = posix(path.relative(root, canonical))
+      const resolved = posix(path.relative(project, canonical))
       const canonicalIgnored =
-        resolved === relative ? excludes.has(resolved) : (await ignored(root, [resolved])).has(resolved)
+        resolved === relative ? excludes.has(resolved) : (await ignored(project, [resolved])).has(resolved)
       if (canonicalIgnored) continue
       if (forbidden(resolved)) throw new Error(`Modal upload policy denied: ${relative}`)
       const info = await fs.stat(canonical)

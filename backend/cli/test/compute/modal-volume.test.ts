@@ -162,7 +162,7 @@ describe("ModalVolume", () => {
       path.join(alias, "staging"),
     )
 
-    expect(downloaded[0]?.staging).toBe(path.join(real, "staging", "outputs", "model.bin"))
+    expect(downloaded[0]?.staging).toBe(await fs.realpath(path.join(real, "staging", "outputs", "model.bin")))
     expect(await Bun.file(downloaded[0]!.staging).text()).toBe("weights")
   })
 })

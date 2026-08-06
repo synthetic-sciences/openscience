@@ -38,16 +38,12 @@ describe("ModalAdapter sandbox lifecycle", () => {
     )
     await Bun.write(path.join(root, ".openscience-ready"), "approved\n")
     const result = path.join(root, ".openscience-exit-code")
-    const wait = async (attempts = 100): Promise<string> => {
-      if (await Bun.file(result).exists()) return Bun.file(result).text()
-      if (!attempts) throw new Error("Modal wrapper did not record the command result")
-      await Bun.sleep(20)
-      return wait(attempts - 1)
-    }
-    expect(await wait()).toBe("0\n")
+    const timeout = setTimeout(() => child.kill(), 10_000)
+    const code = await child.exited.finally(() => clearTimeout(timeout))
+    expect(code).toBe(0)
+    expect(await Bun.file(result).text()).toBe("0\n")
     expect(await Bun.file(path.join(root, "result.txt")).text()).toBe("artifact")
     expect(await Bun.file(path.join(root, ".openscience-run.log")).text()).toBe("completed\n")
-    expect(await child.exited).toBe(0)
     await fs.rm(root, { recursive: true, force: true })
   })
 

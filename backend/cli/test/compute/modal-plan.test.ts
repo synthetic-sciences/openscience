@@ -57,6 +57,17 @@ describe("ModalPlan", () => {
     )
   })
 
+  test("accepts a project root reached through a symlink", async () => {
+    const root = await project()
+    const alias = `${root}-alias`
+    roots.push(alias)
+    await fs.symlink(root, alias)
+
+    const prepared = await ModalPlan.prepare(input(alias))
+
+    expect(prepared.plan.uploads.map((file) => file.path)).toEqual(["src/train.py"])
+  })
+
   test("denies secrets, control directories, and paths outside the project", async () => {
     const root = await project()
     await fs.writeFile(path.join(root, ".env"), "MODAL_TOKEN_SECRET=secret\n")
