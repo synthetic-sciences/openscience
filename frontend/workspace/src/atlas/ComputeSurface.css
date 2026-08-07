@@ -239,39 +239,63 @@
 
 /* 3a nests the kernel in its own card rather than letting it sit flat on the
    panel — the runtime is a distinct object with its own controls, and the
-   inset says so. */
+   inset says so. The card itself carries no padding: the head owns its own,
+   so the divider under it can run the full width of the plate. */
 .compute-surface .kernel-card {
-  gap: 12px;
+  gap: 0;
   margin: 0 0 18px;
-  padding: 16px 16px 14px;
+  padding: 0;
   border-radius: 18px;
   background: var(--color-bg-elevated);
   box-shadow: inset 0 0 0 1px var(--color-border);
+  overflow: hidden;
 }
 
-/* Two columns, two rows, every child placed explicitly. The base grid is
-   42px | 1fr | auto for a square badge beside the name; 3a stacks an eyebrow
-   over the name instead, and leaving three children to flow into two columns
-   pushed the badge and the title to opposite ends and wrapped the owner pill
-   onto a full-width row of its own. */
+/* The head is the toggle. A caret-sized hit target is well under the 44px a
+   thumb can reliably hit on a tablet, and this pane is read on one. */
+.compute-surface .kernel-card__plate {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 16px 14px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compute-surface .kernel-card__plate:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.compute-surface .kernel-card[data-open="true"] .kernel-card__plate {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Flex, not the base grid: the head is two groups pushed apart, and the left
+   group stacks an eyebrow over the name. */
 .compute-surface .kernel-card__header {
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  align-items: start;
-  justify-items: start;
-  gap: 6px 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .compute-surface .kernel-card__title {
-  grid-area: 2 / 1;
-  align-items: start;
-  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
 /* The language badge becomes the eyebrow's voice: small mono capitals over the
    name, rather than a coloured tile beside it. */
 .compute-surface .kernel-card__language {
-  grid-area: 1 / 1;
+  order: -1;
   width: auto;
   height: auto;
   border-radius: 0;
@@ -281,6 +305,7 @@
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .compute-surface .kernel-card__title strong {
@@ -288,53 +313,209 @@
   font-weight: 400;
   line-height: 1.1;
   letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.compute-surface .kernel-card__title span {
+.compute-surface .kernel-card__lede {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 10px;
+}
+
+.compute-surface .kernel-card__uptime {
   font-family: var(--font-code);
-  font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--color-text-faint);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.compute-surface .kernel-card__caret {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 9px;
+  color: var(--color-text-muted);
 }
 
 /* Lifecycle reads as a pill, so a glance finds the runtime's state without
-   reading the metric grid underneath. */
+   opening the plate. */
 .compute-surface .kernel-card__owner,
 .compute-surface .kernel-card__state {
+  display: inline-flex;
+  align-items: center;
   padding: 3px 8px;
   border-radius: 999px;
   font-family: var(--font-code);
   font-size: 9.5px;
+  font-weight: 400;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
-/* The card is a one-column grid, so a pill left to itself stretches the full
-   width and stops reading as a pill. */
 .compute-surface .kernel-card__state {
-  align-self: start;
-  justify-self: start;
-  gap: 6px;
+  flex: none;
   min-height: 0;
+  gap: 0;
   box-shadow: inset 0 0 0 1px var(--color-border-strong);
 }
 
+/* The card is a one-column grid, so a pill left to itself would stretch the
+   full width and stop reading as a pill. */
 .compute-surface .kernel-card__owner {
-  grid-area: 1 / 2;
-  justify-self: end;
+  justify-self: start;
+  margin: 12px 16px 0;
 }
 
-.compute-surface .kernel-card__state strong {
-  font-size: inherit;
+/* The tone used to reach the eye through a 5px dot beside the label. The 3a
+   pill has no dot, so the tone has to be the pill: a tinted ground and a ring
+   in the status colour. color-mix against the card's own ground keeps that
+   legible in all sixteen themes rather than only the dark one it was drawn in. */
+.compute-surface .kernel-card__state[data-tone="active"] {
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 12%, var(--color-bg-elevated));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-success) 38%, var(--color-bg-elevated));
+}
+
+.compute-surface .kernel-card__state[data-tone="pending"] {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--color-bg-elevated));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-warning) 38%, var(--color-bg-elevated));
+}
+
+.compute-surface .kernel-card__state[data-tone="danger"] {
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 12%, var(--color-bg-elevated));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-error) 38%, var(--color-bg-elevated));
+}
+
+/* Ready and muted stay uncoloured. A kernel that is merely alive is not news,
+   and colouring it would spend the eye's attention on the common case. */
+.compute-surface .kernel-card__state[data-tone="ready"],
+.compute-surface .kernel-card__state[data-tone="muted"] {
+  color: var(--color-text-muted);
+}
+
+/* The identity disclosure is set in the same mono capitals as the instrument
+   labels, so it reads as the last row of the record rather than a link. */
+.compute-surface .kernel-card__identity summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  font-family: var(--font-code);
+  font-size: 9.5px;
   font-weight: 400;
-  letter-spacing: inherit;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  list-style: none;
 }
 
-.compute-surface .kernel-card__state-dot {
-  width: 5px;
-  height: 5px;
+.compute-surface .kernel-card__identity summary::-webkit-details-marker {
+  display: none;
+}
+
+.compute-surface .kernel-card__identity summary::after {
+  content: "▾";
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.compute-surface .kernel-card__identity[open] summary::after {
+  content: "▴";
+}
+
+/* Two figures that survive the collapse, because "is this runtime in my way"
+   is the question a collapsed list still has to answer. */
+.compute-surface .kernel-card__usage {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.compute-surface .kernel-card__usage-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.compute-surface .kernel-card__usage-item:last-child {
+  flex: none;
+  width: 126px;
+}
+
+.compute-surface .kernel-card__usage-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.compute-surface .kernel-card__usage-label > span:first-child {
+  font-size: 9.5px;
+  letter-spacing: 0.11em;
+  color: var(--color-text-faint);
+}
+
+.compute-surface .kernel-card__usage-label strong {
+  font-weight: 400;
+  color: var(--color-text);
+}
+
+.compute-surface .kernel-card__usage-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+/* Instrument blue, matching the host strip's gauge — the terracotta on this
+   surface belongs to the primary action alone. */
+.compute-surface .kernel-card__usage-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--border-info-selected);
+}
+
+.compute-surface .kernel-card__usage-cores {
+  display: flex;
+  gap: 3px;
+}
+
+.compute-surface .kernel-card__usage-cores > div {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+
+.compute-surface .kernel-card__usage-cores > div[data-lit="true"] {
+  background: var(--border-info-selected);
+}
+
+/* The opened body keeps the head's horizontal rhythm. */
+.compute-surface .kernel-card__metrics,
+.compute-surface .kernel-card__environment,
+.compute-surface .kernel-card__recovery,
+.compute-surface .kernel-card__controls,
+.compute-surface .kernel-card__control-note,
+.compute-surface .kernel-card__identity {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+
+.compute-surface .kernel-card__identity {
+  margin-bottom: 14px;
 }
 
 /* Label and value joined by a dotted leader, as a printed record would set
@@ -487,4 +668,17 @@
     grid-column: 1 / -1;
     justify-content: flex-end;
   }
+}
+
+/* A grid item with `justify-self: end` is sized to its content, not its
+   column, so the base rule's `text-overflow: ellipsis` never fired: a working
+   directory longer than the pane overflowed leftward and painted on top of its
+   own label. Stretching the value to the column is what makes it clip. */
+.compute-surface .kernel-card__environment-row {
+  align-items: start;
+}
+
+.compute-surface .kernel-card__environment-row code,
+.compute-surface .kernel-card__environment-row p {
+  justify-self: stretch;
 }

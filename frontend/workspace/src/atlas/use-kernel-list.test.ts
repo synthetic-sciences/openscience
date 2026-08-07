@@ -59,6 +59,10 @@ const mount = (view: () => JSX.Element) => {
   const host = document.createElement("div")
   document.body.append(host)
   cleanups.push(web.render(view, host))
+  // The 3a plate collapses by default, so the metric ledger these assertions
+  // read is not rendered until each card is opened. Reconciliation is the
+  // subject here, not the collapse, so open every plate up front.
+  host.querySelectorAll<HTMLButtonElement>(".kernel-card__plate").forEach((plate) => plate.click())
   return host
 }
 

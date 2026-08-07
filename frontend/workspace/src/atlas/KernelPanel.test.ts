@@ -63,8 +63,10 @@ describe("kernel control room", () => {
 
     expect(panel).toContain("Runtime state was preserved.")
     expect(panel).toContain("Previous in-memory variables and queued work were cleared.")
-    expect(panel).toContain("every in-memory variable and queued")
-    expect(panel).toContain("cell is lost")
+    // The standing paragraph under the controls is gone with the 3a plate;
+    // the same warning rides on the button that causes the loss.
+    expect(panel).toContain("All in-memory variables and queued cells will be lost.")
+    expect(panel).not.toContain('class="kernel-card__control-note"')
     expect(panel).toContain('class="kernel-card__recovery"')
     expect(panel).toContain('role="status"')
   })

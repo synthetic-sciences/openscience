@@ -7,6 +7,7 @@ import { type KernelStatus } from "@/notebook/runtime"
 import { useExecutionAuthority } from "./use-execution-authority"
 import { useKernelList } from "./use-kernel-list"
 import { identify } from "@/atlas/poll-identity"
+import type { Capacity } from "./host-instruments"
 import { KernelCard, type KernelAction } from "./KernelCard"
 
 type KernelsPayload = { kernels: KernelStatus[] }
@@ -23,6 +24,9 @@ const time = (value: number | null) => {
 
 type KernelPanelProps = {
   onEnsureSession?: () => Promise<string | undefined>
+  // Measured once by the host strip above and passed down, so every plate's
+  // ceiling agrees with the headline figure the user is reading beside it.
+  capacity?: Partial<Capacity>
   // The transport is a prop so a poll-behavior test can mount the real
   // component against a controlled response instead of a live SDK; the
   // session SDK supplies it in the product. See HostStrip.tsx for the same
@@ -331,9 +335,11 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
         >
           <div class="kernel-panel__list">
             <For each={kernels}>
-              {(kernel) => (
+              {(kernel, index) => (
                 <KernelCard
                   kernel={kernel}
+                  index={index()}
+                  capacity={props.capacity}
                   routeID={params.id}
                   action={view.action}
                   restartDisabled={!authority.allowed()}

@@ -1,9 +1,21 @@
-import { createEffect, createUniqueId, For, Match, onCleanup, Show, Switch, type Component, type JSX } from "solid-js"
+import {
+  createEffect,
+  createSignal,
+  createUniqueId,
+  For,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  type Component,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { ComputeJobs } from "@/atlas/ComputeJobs"
 import { createComputeJobsAPI, type Status } from "@/atlas/ComputeJobsAPI"
 import { HostStrip } from "@/atlas/HostStrip"
+import type { Capacity } from "@/atlas/host-instruments"
 import { KernelPanel } from "@/atlas/KernelPanel"
 import { useSDK } from "@/context/sdk"
 import type { ProjectRequest } from "@/utils/openscience-fetch"
@@ -13,7 +25,10 @@ type Tab = "kernels" | "jobs"
 
 type ComputeSurfaceProps = {
   strip?: Component
-  kernels?: Component<{ onEnsureSession?: () => Promise<string | undefined> }>
+  kernels?: Component<{
+    onEnsureSession?: () => Promise<string | undefined>
+    capacity?: Partial<Capacity>
+  }>
   jobs?: Component<{
     onEnsureSession?: () => Promise<string | undefined>
     onActiveChange?: (count: number) => void
@@ -44,6 +59,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
   const kernels = props.kernels ?? KernelPanel
   const jobs = props.jobs ?? ComputeJobs
   const api = createComputeJobsAPI(props.request ?? useSDK().request)
+  const [capacity, setCapacity] = createSignal<Capacity | undefined>()
 
   const refresh = async () => {
     const list = await api.list().catch(() => undefined)
@@ -85,7 +101,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
 
   return (
     <section class="compute-surface" aria-label="Compute">
-      <Dynamic component={strip} onKernels={(live: number) => setState("kernels", live)} />
+      <Dynamic component={strip} onKernels={(live: number) => setState("kernels", live)} onCapacity={setCapacity} />
       <div
         class="compute-surface__tabs"
         role="tablist"
@@ -135,7 +151,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
             aria-labelledby={`${id}-kernels-tab`}
             tabindex={0}
           >
-            <Dynamic component={kernels} onEnsureSession={props.onEnsureSession} />
+            <Dynamic component={kernels} onEnsureSession={props.onEnsureSession} capacity={capacity()} />
           </div>
         </Match>
         <Match when={state.tab === "jobs"}>

@@ -13,6 +13,11 @@ type HostStripProps = {
   // same number would double the request rate on a route whose CPU figures are
   // measured per client across the window between polls.
   onKernels?: (live: number) => void
+  // The kernel plates draw their RAM bar against the host's total and their
+  // core segments against its core count. Both are already on this poll's
+  // body, so lifting the reading here is cheaper — and always consistent with
+  // the strip above — than giving every card its own /notebook/compute poll.
+  onCapacity?: (capacity: Capacity) => void
 }
 
 // Names this mounted strip to the server. Both host and kernel CPU figures are
@@ -73,6 +78,11 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
     // last known figure rather than asserting zero kernels.
     const live = data.latest?.kernels?.live
     if (typeof live === "number") props.onKernels?.(live)
+  })
+
+  createEffect(() => {
+    const capacity = data.latest
+    if (capacity) props.onCapacity?.(capacity)
   })
 
   return (
