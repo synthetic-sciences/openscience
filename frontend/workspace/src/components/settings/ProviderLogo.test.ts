@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { MODEL_PROVIDERS } from "./model-providers"
-import { PROVIDER_LOGO_IDS, providerLogoSource, providerLogoTheme } from "./ProviderLogo"
+import { providerLogoSource } from "./ProviderLogo"
 
 const CREDENTIALS = [
   "aws",
@@ -25,11 +25,6 @@ describe("provider logos", () => {
 
   test("covers every built-in compute and integration credential", () => {
     for (const id of CREDENTIALS) expect(providerLogoSource(id).kind).not.toBe("fallback")
-  })
-
-  test("gives every built-in provider its own colorful treatment", () => {
-    const fallback = providerLogoTheme("custom:lab-service")
-    for (const id of PROVIDER_LOGO_IDS) expect(providerLogoTheme(id)).not.toEqual(fallback)
   })
 
   test("uses a monogram only for user-defined services", () => {

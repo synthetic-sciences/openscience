@@ -278,33 +278,6 @@ const SETTINGS_STYLES = `
   gap: 11px;
   padding: 10px 12px 10px 14px;
 }
-.provider-logo {
-  color: var(--provider-logo-ink);
-  border-color: var(--provider-logo-ring);
-  background: var(--provider-logo-wash);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.42),
-    0 3px 10px var(--provider-logo-shadow);
-  transition:
-    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 160ms ease;
-}
-.provider-logo__status {
-  border: 1px solid color-mix(in srgb, var(--surface-raised-base) 82%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--icon-success-base) 20%, transparent);
-}
-.settings-list-row:hover .provider-logo,
-.settings-dialog label:hover .provider-logo {
-  transform: translateY(-1px) scale(1.03);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    0 5px 14px var(--provider-logo-shadow);
-}
-@media (prefers-reduced-motion: reduce) {
-  .provider-logo {
-    transition: none;
-  }
-}
 .settings-list-copy {
   min-width: 0;
   display: flex;
