@@ -129,12 +129,14 @@ export function KernelCard(props: {
               <div class="kernel-card__usage-fill" style={{ width: `${Math.round(usage().fill * 100)}%` }} />
             </div>
           </div>
-          {/* A share of the whole machine reads the same as a share of one
-              core, so the unit is stated rather than left to be inferred. The
-              segments say the rest: how many cores that share occupies. */}
+          {/* 100% is one core, so a kernel across two reads about 200% — the
+              `top` convention, and worth stating rather than leaving to be
+              inferred from a number that exceeds 100. The segments carry the
+              machine's scale: one per core, lit by how many this kernel
+              occupies. */}
           <div
             class="kernel-card__usage-item"
-            title={`Share of this machine's ${usage().segments} cores. Each segment is one core.`}
+            title={`Percent of one core, so a kernel across two cores reads about 200%. Each segment is one of this machine's ${usage().segments} cores.`}
           >
             <div class="kernel-card__usage-label">
               <span>CPU</span>
@@ -174,12 +176,10 @@ export function KernelCard(props: {
         >
           <Metric label="Target" value={kernelTargetLabel(props.kernel)} />
           <Metric label="Uptime" value={uptime()} />
-          {/* The same value the head states, not a second reading of the same
-              field: the head normalises against the host's cores, so computing
-              this row independently would print a per-core figure beside a
-              machine one — 187.5% and 23.4% for one kernel. Only the placeholder
-              differs, because a lone "—" among three "Unavailable" siblings
-              reads as a different kind of absence rather than the same one. */}
+          {/* The same value the head states, so the two cannot drift apart.
+              Only the placeholder differs, because a lone "—" among three
+              "Unavailable" siblings reads as a different kind of absence
+              rather than the same one. */}
           <Metric label="CPU" value={usage().cpu === "—" ? "Unavailable" : usage().cpu} />
           <Metric label="Memory" value={kernelMemoryLabel(props.kernel.resources?.memory_bytes)} />
           <Metric label="GPU" value={kernelGpuLabel(props.kernel.resources?.gpu_percent)} />

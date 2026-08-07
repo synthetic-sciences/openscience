@@ -101,10 +101,9 @@ const list = (source: () => KernelStatus[] | undefined) => {
         },
         routeID: "ses_current",
         action: "",
-        // CPU is stated as a share of the machine, so a card with no host
-        // reading cannot state it at all. The surface supplies this in the
-        // app; supplying it here keeps the subject reconciliation, not
-        // degradation.
+        // The surface supplies this in the app; supplying it here keeps the
+        // plate's RAM ceiling and core segments realistic rather than making
+        // degradation the subject.
         capacity: { memory: { total: 16_400_000_000, available: 12_000_000_000 }, cpu: { cores: 8 } },
         onControl: () => {},
       }),
@@ -164,7 +163,7 @@ describe("kernel list reconciliation", () => {
 
     expect(host.querySelector('[data-kernel-id="kernel-a"]')).toBe(card)
     expect(usage(card)).toContain("2.4 GB")
-    expect(usage(card)).toContain("23.4%")
+    expect(usage(card)).toContain("187.5%")
   })
 
   test("mounts a newly appeared kernel and unmounts one that disappeared", async () => {
