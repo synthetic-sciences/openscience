@@ -1,11 +1,15 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, test } from "bun:test"
 import { MemorySettingsRoutes } from "../../src/server/routes/settings/memory"
 import { Memory } from "../../src/settings/memory"
 
 const app = MemorySettingsRoutes()
 
-afterEach(async () => {
+beforeEach(async () => {
   await Memory.set("global", { enabled: true, categories: [] })
+})
+
+afterEach(async () => {
+  await Memory.set("global", { enabled: false, categories: [] })
 })
 
 test("GET / returns the doc with a backend-computed capacity gauge", async () => {

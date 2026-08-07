@@ -4,3 +4,4 @@ gen
 app.log
 src/provider/models-snapshot.ts
 src/web/assets.generated.ts
+src/skill/bundled.generated.ts

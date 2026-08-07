@@ -34,6 +34,46 @@ export const BYOK_LLM_ENV_KEYS = [
   "PERPLEXITY_API_KEY",
 ]
 
+/** Atlas-synced non-model credentials that approved agent subprocesses may
+ * consume. Modal stays outside this list because its token resolves only in the
+ * trusted compute adapter. */
+export const SYNCED_SERVICE_ENV_KEYS = [
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_DEFAULT_REGION",
+  "AWS_REGION",
+  "GOOGLE_CLOUD_PROJECT",
+  "GCLOUD_PROJECT",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+  "AZURE_TENANT_ID",
+  "AZURE_CLIENT_ID",
+  "AZURE_CLIENT_SECRET",
+  "AZURE_SUBSCRIPTION_ID",
+  "AZURE_OPENAI_API_KEY",
+  "AZURE_API_KEY",
+  "AZURE_OPENAI_ENDPOINT",
+  "NVIDIA_API_KEY",
+  "GITHUB_TOKEN",
+  "GH_TOKEN",
+  "OPENALEX_MAILTO",
+  "OPENALEX_API_KEY",
+  "SEMANTIC_SCHOLAR_API_KEY",
+  "TINKER_API_KEY",
+  "TINKER_BASE_URL",
+  "HF_TOKEN",
+  "HUGGING_FACE_HUB_TOKEN",
+  "WANDB_API_KEY",
+  "LANGSMITH_API_KEY",
+  "LANGCHAIN_API_KEY",
+  "LANGSMITH_TRACING",
+  "PINECONE_API_KEY",
+  "TENSORPOOL_API_KEY",
+  "LAMBDA_API_KEY",
+  "PRIME_INTELLECT_API_KEY",
+  "VAST_API_KEY",
+  "RUNPOD_API_KEY",
+] as const
+
 const MANAGED_SYNCED_LLM_KEYS = new Set(["OPENROUTER_API_KEY"])
 const MANAGED_SYNCED_BASE_URLS: Record<string, string> = {
   OPENROUTER_BASE_URL: "/api/llm/proxy/openrouter/",

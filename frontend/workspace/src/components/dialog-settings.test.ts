@@ -16,6 +16,15 @@ test("settings use a compact responsive navigation frame", () => {
   expect(dialog).not.toContain("w-[224px]")
 })
 
+test("settings enforce one sentence-case typography system", () => {
+  const dialog = source()
+
+  expect(dialog).toContain(".settings-dialog {")
+  expect(dialog).toContain("font-family: var(--font-family-sans)")
+  expect(dialog).toContain(".settings-section-label")
+  expect(dialog).toContain("text-transform: none")
+})
+
 test("settings dialog makes every registered capability navigable", () => {
   const dialog = source()
   const skills = SETTINGS_PANELS.find((panel) => panel.id === "skills")

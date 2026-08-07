@@ -137,8 +137,8 @@ export function isUserProviderConnection(input: {
   // "managed" means the Atlas proxy is carrying this route. That is not a
   // connection the reader set up, so it has no place in a panel about their own
   // keys — it falls through to the billing check and is filtered out. Which
-  // credential is paying is shown where it is actually useful: on the model
-  // itself, as the routing chip in the model picker.
+  // credential is paying remains an account-level concern rather than being
+  // repeated beside every model name in the composer.
   if (input.source === "api") return true
   return input.billing === "byok"
 }

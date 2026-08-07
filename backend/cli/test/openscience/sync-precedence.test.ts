@@ -1,4 +1,5 @@
 import { test, expect, afterEach } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { OpenScience } from "../../src/openscience"
 import { Global } from "../../src/global"
@@ -15,13 +16,20 @@ import { managedOpenRouterBaseURL } from "../../src/openscience/synced-env-polic
 // and provider base URLs are rejected (see synced-env-policy.ts).
 
 const realFetch = globalThis.fetch
-afterEach(() => {
+afterEach(async () => {
+  const gcp = process.env["GOOGLE_APPLICATION_CREDENTIALS"]
   globalThis.fetch = realFetch
   delete process.env["OPENROUTER_API_KEY"]
   delete process.env["OPENROUTER_BASE_URL"]
   delete process.env["ANTHROPIC_API_KEY"]
   delete process.env["META_MODEL_API_KEY"]
   delete process.env["META_MODEL_BASE_URL"]
+  delete process.env["AWS_ACCESS_KEY_ID"]
+  delete process.env["AWS_SECRET_ACCESS_KEY"]
+  delete process.env["GITHUB_TOKEN"]
+  delete process.env["GH_TOKEN"]
+  delete process.env["GOOGLE_APPLICATION_CREDENTIALS"]
+  if (gcp) await fs.rm(gcp, { force: true })
 })
 
 async function seedSession() {
@@ -104,4 +112,40 @@ test("a synced direct-provider BYOK key transfers when the slot is empty", async
   stubSync({ anthropic: { ANTHROPIC_API_KEY: "sk-ant-user-owned" } })
   await OpenScience.syncServices()
   expect(process.env["ANTHROPIC_API_KEY"]).toBe("sk-ant-user-owned")
+})
+
+test("synced compute and integration credentials reach approved agent subprocesses", async () => {
+  await seedSession()
+  stubSync({
+    aws: {
+      AWS_ACCESS_KEY_ID: "AKIAUSER",
+      AWS_SECRET_ACCESS_KEY: "aws-user-secret",
+    },
+    github: {
+      GITHUB_TOKEN: "github-user-token",
+      GH_TOKEN: "github-user-token",
+    },
+  })
+  await OpenScience.syncServices()
+  const env = OpenScience.filterEnvForSubprocess(process.env)
+  expect(env.AWS_ACCESS_KEY_ID).toBe("AKIAUSER")
+  expect(env.AWS_SECRET_ACCESS_KEY).toBe("aws-user-secret")
+  expect(env.GITHUB_TOKEN).toBe("github-user-token")
+  expect(env.GH_TOKEN).toBe("github-user-token")
+})
+
+test("synced GCP JSON is materialized owner-only and exposed by standard path", async () => {
+  await seedSession()
+  const value = JSON.stringify({ project_id: "atlas-test", private_key: "gcp-secret" })
+  stubSync({ gcp: { GOOGLE_APPLICATION_CREDENTIALS_JSON: value, GOOGLE_CLOUD_PROJECT: "atlas-test" } })
+  await OpenScience.syncServices()
+  const file = process.env["GOOGLE_APPLICATION_CREDENTIALS"]
+  expect(file).toBeTruthy()
+  if (!file) throw new Error("GCP credentials path was not materialized")
+  expect(await Bun.file(file).text()).toBe(value)
+  if (process.platform !== "win32") expect((await fs.stat(file)).mode & 0o777).toBe(0o600)
+  const env = OpenScience.filterEnvForSubprocess(process.env)
+  expect(env.GOOGLE_APPLICATION_CREDENTIALS).toBe(file)
+  expect(env.GOOGLE_CLOUD_PROJECT).toBe("atlas-test")
+  expect(env.GOOGLE_APPLICATION_CREDENTIALS_JSON).toBeUndefined()
 })

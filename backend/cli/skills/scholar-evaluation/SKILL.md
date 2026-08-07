@@ -1,3 +1,13 @@
+---
+name: scholar-evaluation
+description: Evaluate scholarly work with structured criteria for rigor, methodology, evidence, writing, and publication readiness.
+category: research
+tags:
+  - peer-review
+  - evaluation
+  - scholarly-writing
+---
+
 # Scholar Evaluation
 
 ## Overview

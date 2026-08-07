@@ -245,13 +245,13 @@ export default function Connectors() {
                 items={[
                   {
                     icon: "link",
-                    label: "remote URL",
+                    label: "Remote URL",
                     description: "Connect a hosted MCP server over HTTP",
                     onSelect: () => openForm("remote"),
                   },
                   {
                     icon: "console",
-                    label: "local command",
+                    label: "Local command",
                     description: "Run an MCP server process locally",
                     onSelect: () => openForm("local"),
                   },
@@ -417,7 +417,7 @@ export default function Connectors() {
                 disabled={busy()}
                 onClick={() => void refresh()}
               >
-                <Icon name="enter" size="small" /> refresh status
+                <Icon name="enter" size="small" /> Refresh status
               </button>
             </div>
           </Show>
@@ -673,11 +673,11 @@ function ConnectorForm(props: {
         />
         <div class="flex items-center gap-2">
           <FormButton
-            label={props.busy ? "saving…" : props.editing ? "save connector" : "add connector"}
+            label={props.busy ? "Saving…" : props.editing ? "Save connector" : "Add connector"}
             disabled={props.busy}
             onClick={props.onSave}
           />
-          <FormButton label="cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
+          <FormButton label="Cancel" variant="ghost" onClick={props.onCancel} disabled={props.busy} />
         </div>
       </div>
     </div>
@@ -747,7 +747,7 @@ function ConnectorInspection(props: { detail?: McpInspection }) {
 function CapabilityList(props: { title: string; empty: string; items: Array<{ name: string; description?: string }> }) {
   return (
     <section class="min-w-0">
-      <h3 class="text-11-medium uppercase tracking-wide text-text-weak mb-1.5">{props.title}</h3>
+      <h3 class="text-11-medium tracking-[0.01em] text-text-weak mb-1.5">{props.title}</h3>
       <Show when={props.items.length > 0} fallback={<p class="text-11-regular text-text-weak/70">{props.empty}</p>}>
         <ul class="flex flex-col gap-1.5">
           <For each={props.items}>

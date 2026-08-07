@@ -1,6 +1,7 @@
 import { createSignal, Show, type JSX } from "solid-js"
+import { Button } from "@synsci/ui/button"
 import { useDialog } from "@synsci/ui/context/dialog"
-import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
+import { FONT_CODE } from "@/styles/tokens"
 
 type Dialog = ReturnType<typeof useDialog>
 
@@ -16,24 +17,9 @@ function card(): JSX.CSSProperties {
     "max-width": "92vw",
     background: "var(--color-surface-solid)",
     border: "1px solid var(--color-border-strong)",
-    "border-radius": "4px",
+    "border-radius": "var(--radius-xl)",
     "box-shadow": "var(--shadow-md)",
     overflow: "hidden",
-  }
-}
-
-function actionBtn(primary = false, danger = false): JSX.CSSProperties {
-  return {
-    all: "unset",
-    cursor: "pointer",
-    padding: "7px 14px",
-    "border-radius": "4px",
-    border: primary ? "1px solid var(--color-accent)" : "1px solid var(--color-border)",
-    background: danger ? "var(--color-error, #ef4444)" : primary ? "var(--color-accent)" : "var(--color-bg-elevated)",
-    color: danger || primary ? "var(--color-on-accent)" : "var(--color-text)",
-    "font-family": FONT_MONO,
-    "font-size": "12px",
-    "font-weight": 500,
   }
 }
 
@@ -53,17 +39,14 @@ export function confirmDialog(
       () => (
         <div style={card()}>
           <div style={{ padding: "18px 20px 8px" }}>
-            <div style={{ "font-family": FONT_SANS, "font-size": "19px", color: "var(--color-text)" }}>
-              {opts.title}
-            </div>
+            <div class="text-16-medium text-text-strong">{opts.title}</div>
             <Show when={opts.message}>
               <div
+                class="text-13-regular text-text-weak"
                 style={{
                   "margin-top": "8px",
-                  "font-family": FONT_SANS,
-                  "font-size": "13px",
-                  color: "var(--color-text-muted)",
-                  "line-height": 1.5,
+                  "max-width": "58ch",
+                  "text-wrap": "pretty",
                 }}
               >
                 {opts.message}
@@ -78,12 +61,17 @@ export function confirmDialog(
               padding: "12px 20px 18px",
             }}
           >
-            <button type="button" style={actionBtn(false)} onClick={() => done(false)}>
-              {opts.cancelLabel ?? "cancel"}
-            </button>
-            <button type="button" style={actionBtn(true, opts.danger)} onClick={() => done(true)}>
-              {opts.confirmLabel ?? "confirm"}
-            </button>
+            <Button size="normal" variant="secondary" onClick={() => done(false)}>
+              {opts.cancelLabel ?? "Cancel"}
+            </Button>
+            <Button
+              size="normal"
+              variant="primary"
+              classList={{ "atlas-dialog__danger": opts.danger === true }}
+              onClick={() => done(true)}
+            >
+              {opts.confirmLabel ?? "Confirm"}
+            </Button>
           </div>
         </div>
       ),
@@ -109,17 +97,14 @@ export function promptDialog(
       () => (
         <div style={card()}>
           <div style={{ padding: "18px 20px 8px" }}>
-            <div style={{ "font-family": FONT_SANS, "font-size": "19px", color: "var(--color-text)" }}>
-              {opts.title}
-            </div>
+            <div class="text-16-medium text-text-strong">{opts.title}</div>
             <Show when={opts.message}>
               <div
+                class="text-13-regular text-text-weak"
                 style={{
                   "margin-top": "8px",
-                  "font-family": FONT_SANS,
-                  "font-size": "13px",
-                  color: "var(--color-text-muted)",
-                  "line-height": 1.5,
+                  "max-width": "58ch",
+                  "text-wrap": "pretty",
                 }}
               >
                 {opts.message}
@@ -143,8 +128,9 @@ export function promptDialog(
                 "border-radius": "4px",
                 background: "var(--color-bg)",
                 color: "var(--color-text)",
-                "font-family": FONT_MONO,
+                "font-family": FONT_CODE,
                 "font-size": "12px",
+                "line-height": "18px",
               }}
             />
           </div>
@@ -156,12 +142,12 @@ export function promptDialog(
               padding: "12px 20px 18px",
             }}
           >
-            <button type="button" style={actionBtn(false)} onClick={() => done(null)}>
-              cancel
-            </button>
-            <button type="button" style={actionBtn(true)} onClick={() => done(value())}>
-              {opts.confirmLabel ?? "ok"}
-            </button>
+            <Button size="normal" variant="secondary" onClick={() => done(null)}>
+              Cancel
+            </Button>
+            <Button size="normal" variant="primary" onClick={() => done(value())}>
+              {opts.confirmLabel ?? "OK"}
+            </Button>
           </div>
         </div>
       ),
@@ -187,22 +173,18 @@ export function alertDialog(
         <div style={card()}>
           <div style={{ padding: "18px 20px 8px" }}>
             <div
-              style={{
-                "font-family": FONT_SANS,
-                "font-size": "19px",
-                color: opts.danger ? "var(--color-error, #ef4444)" : "var(--color-text)",
-              }}
+              class="text-16-medium text-text-strong"
+              style={{ color: opts.danger ? "var(--color-error, #ef4444)" : undefined }}
             >
               {opts.title}
             </div>
             <Show when={opts.message}>
               <div
+                class="text-13-regular text-text-weak"
                 style={{
                   "margin-top": "8px",
-                  "font-family": FONT_SANS,
-                  "font-size": "13px",
-                  color: "var(--color-text-muted)",
-                  "line-height": 1.5,
+                  "max-width": "58ch",
+                  "text-wrap": "pretty",
                 }}
               >
                 {opts.message}
@@ -210,9 +192,14 @@ export function alertDialog(
             </Show>
           </div>
           <div style={{ display: "flex", "justify-content": "flex-end", padding: "12px 20px 18px" }}>
-            <button type="button" style={actionBtn(true)} onClick={done}>
-              ok
-            </button>
+            <Button
+              size="normal"
+              variant="primary"
+              classList={{ "atlas-dialog__danger": opts.danger === true }}
+              onClick={done}
+            >
+              OK
+            </Button>
           </div>
         </div>
       ),

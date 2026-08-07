@@ -6,13 +6,13 @@ export type ProductPreferences = {
 }
 
 const [trace, setTrace] = createSignal(false)
-const [atlas, setAtlas] = createSignal(true)
+const [atlas, setAtlas] = createSignal(false)
 
 export const productPreferences = {
   trace,
   atlas,
   sync(preferences: Partial<ProductPreferences>) {
     if (preferences.show_trace !== undefined) setTrace(preferences.show_trace === true)
-    if (preferences.atlas_enabled !== undefined) setAtlas(preferences.atlas_enabled !== false)
+    if (preferences.atlas_enabled !== undefined) setAtlas(preferences.atlas_enabled === true)
   },
 }

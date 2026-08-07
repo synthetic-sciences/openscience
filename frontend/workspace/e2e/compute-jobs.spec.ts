@@ -43,14 +43,15 @@ test("runs a reproducible local job and captures outputs from the right pane", a
     await pane.getByLabel("Memory in GB").fill("4")
     await pane.getByLabel("Artifact patterns").fill("outputs/**/*.csv")
 
-    // Dispatch is gated on an explicit review of the exact staged command.
+    // Dispatch is absent until an explicit review of the exact staged command.
     const dispatch = pane.getByRole("button", { name: "Dispatch", exact: true })
-    await expect(dispatch).toBeDisabled()
+    await expect(dispatch).toHaveCount(0)
     await pane.getByRole("button", { name: "Review command", exact: true }).click()
     await expect(pane.getByTestId("dispatch-preview")).toContainText("ui-compute-ok")
+    await expect(dispatch).toBeVisible()
     await dispatch.click()
 
-    await expect(pane.getByText("Playwright compute smoke", { exact: true }).first()).toBeVisible()
+    await expect(pane.getByText("Playwright compute smoke", { exact: true })).toHaveCount(1)
     await expect(pane.locator("pre")).toContainText("ui-compute-ok")
     await expect(pane.getByText(/This computer · succeeded/)).toBeVisible()
     await expect(pane.getByText("Captured outputs", { exact: true })).toBeVisible()
@@ -60,6 +61,26 @@ test("runs a reproducible local job and captures outputs from the right pane", a
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("shows a cancelled run without duplicating its expanded title", async ({ page, directory, openSession }) => {
+  await openSession()
+  await trustProject(createSdk(directory), directory)
+
+  const pane = await openJobs(page)
+  await pane.getByTitle("New job").click()
+  await pane.getByLabel("Job name").fill("Playwright cancellation")
+  await pane.getByRole("textbox", { name: "Command", exact: true }).fill("sleep 300")
+  await pane.getByRole("button", { name: "Review command", exact: true }).click()
+  await pane.getByRole("button", { name: "Dispatch", exact: true }).click()
+
+  await expect(pane.getByText("Playwright cancellation", { exact: true })).toHaveCount(1)
+  await expect(pane.getByText(/This computer · running/)).toBeVisible()
+  await pane.getByTitle("Cancel job").click()
+
+  await expect(pane.getByText(/This computer · cancelled/)).toBeVisible()
+  await expect(pane.locator("pre").filter({ hasText: "Run cancelled." })).toBeVisible()
+  await expect(pane.getByText("Playwright cancellation", { exact: true })).toHaveCount(1)
 })
 
 test("defaults a local compute job to the active research project", async ({ page }) => {

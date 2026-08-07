@@ -22,26 +22,26 @@ const fallback = {
 }
 
 const darkPalette = {
-  "background-base": "#1e1e1b",
-  "background-weak": "#242421",
-  "background-strong": "#191917",
-  "background-stronger": "#151513",
-  "surface-raised-strong": "#292926",
-  "surface-raised-strong-hover": "#30302d",
-  "surface-raised-stronger": "#30302d",
-  "surface-raised-stronger-hover": "#383834",
-  "surface-strong": "#333330",
-  "surface-raised-stronger-non-alpha": "#30302d",
-  "border-weaker-base": "#f2f1ec0a",
-  "border-weak-base": "#f2f1ec14",
-  "border-weak-hover": "#f2f1ec20",
-  "border-base": "#f2f1ec2b",
-  "border-hover": "#f2f1ec39",
-  "border-strong-base": "#f2f1ec4a",
-  "text-base": "#e2e0da",
-  "text-weak": "#b5b2ab",
-  "text-weaker": "#8d8a84",
-  "text-strong": "#f2f1ec",
+  "background-base": "#1c1d1c",
+  "background-weak": "#202120",
+  "background-strong": "#181918",
+  "background-stronger": "#141514",
+  "surface-raised-strong": "#252625",
+  "surface-raised-strong-hover": "#2a2b2a",
+  "surface-raised-stronger": "#2a2b2a",
+  "surface-raised-stronger-hover": "#30312f",
+  "surface-strong": "#2d2e2c",
+  "surface-raised-stronger-non-alpha": "#252625",
+  "border-weaker-base": "#f0efeb08",
+  "border-weak-base": "#f0efeb12",
+  "border-weak-hover": "#f0efeb1d",
+  "border-base": "#f0efeb27",
+  "border-hover": "#f0efeb34",
+  "border-strong-base": "#f0efeb43",
+  "text-base": "#deddd8",
+  "text-weak": "#b0afa9",
+  "text-weaker": "#85847f",
+  "text-strong": "#f0efeb",
 } as const
 
 const luminance = (color: string) => {
@@ -125,7 +125,7 @@ describe("OpenScience default theme", () => {
     expect(openscience.light.overrides["background-base"]).toBe("#f7f4ed")
     expect(openscience.light.overrides["text-strong"]).toBe("#241f1a")
     expect(openscience.light.overrides["surface-brand-base"]).toBe("#b85c3b")
-    expect(openscience.dark.seeds.neutral).toBe("#30302d")
+    expect(openscience.dark.seeds.neutral).toBe("#292a28")
     expect(openscience.dark.overrides["surface-brand-base"]).toBe("#d48765")
 
     for (const entry of Object.entries(darkPalette)) {

@@ -26,9 +26,9 @@ export const Preferences = z.object({
   // The session trace is an advanced observability surface. Keep the regular
   // workspace quiet unless the user explicitly enables it in General.
   show_trace: z.boolean().default(false),
-  // Atlas is part of the standard research workspace, but can be hidden from
-  // navigation without changing or deleting any Atlas data.
-  atlas_enabled: z.boolean().default(true),
+  // Atlas is opt-in navigation. The switch controls only whether its local
+  // project surface is shown; it never changes or deletes graph data.
+  atlas_enabled: z.boolean().default(false),
   // Composer delegation is available by default. A selected specialist makes
   // the next normal prompt explicitly delegate to that subagent.
   delegation_enabled: z.boolean().default(true),

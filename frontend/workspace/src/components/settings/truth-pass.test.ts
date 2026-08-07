@@ -11,14 +11,25 @@ describe("launch settings truth pass", () => {
     expect(DEFAULT_PANEL).toBe("models")
   })
 
-  test("keeps local models deferred and exposes the working memory implementation", () => {
+  test("keeps local models and memory out of Customize for now", () => {
     const ids = SETTINGS_PANELS.map((item) => item.id as string)
 
     expect(ids).not.toContain("local-models")
-    expect(ids).toContain("memory")
+    expect(ids).not.toContain("memory")
     expect(source("LocalModels.tsx")).toContain("const LocalModels: Component = () =>")
-    expect(source("Memory.tsx")).toContain("export default")
-    expect(findPanel("memory").section).toBe("capabilities")
+    expect(ids).toEqual([
+      "models",
+      "skills",
+      "connectors",
+      "specialists",
+      "compute",
+      "network",
+      "permissions",
+      "sandbox",
+      "credentials",
+      "storage",
+      "general",
+    ])
   })
 
   test("keeps the real skills catalog in Customize rather than a work tab", () => {
@@ -51,13 +62,47 @@ describe("launch settings truth pass", () => {
     expect(compute).toContain('title="Local machine"')
     expect(compute).toContain('title="Remote compute"')
     expect(compute).toContain("Connect directly over SSH. Atlas is not required.")
-    expect(compute).toContain('title="Atlas Compute"')
-    expect(compute).toContain("<Badge>coming later</Badge>")
+    expect(compute).toContain('title="Cloud credentials"')
+    expect(compute).not.toContain('title="Atlas Compute"')
+    expect(compute).not.toContain("coming later")
+  })
+
+  test("prefers an active Modal CLI profile without exposing its credentials", () => {
+    const compute = source("Compute.tsx")
+
+    expect(compute).toContain("Modal CLI configuration found at ~/.modal.toml.")
+    expect(compute).toContain('call<Info>("/modal/configure"')
+    expect(compute).toContain('source: "stored" | "modal_toml" | null')
+    expect(compute).toContain('label="Modal token ID"')
+    expect(compute).toContain('label="Modal token secret"')
+    expect(compute).toContain('type="password"')
+    expect(compute).toContain('label="Default timeout (minutes)"')
+    expect(compute).toContain("Agents use this as their starting limit")
+  })
+
+  test("keeps Modal action results visible inside the compute panel", () => {
+    const compute = source("Compute.tsx")
+
+    expect(compute).toContain("Configured — connection not tested")
+    expect(compute).toContain("Connection verified")
+    expect(compute).toContain("Connection check failed")
+    expect(compute).toContain("Defaults saved")
+    expect(compute).toContain("Unsaved default changes")
+    expect(compute).toContain('"Test connection"')
+    expect(compute).toContain('"Save defaults"')
+    expect(compute).toContain('"Add host"')
+    expect(compute).toContain('aria-live="polite"')
   })
 
   test("keeps deferred cloud storage out of Storage", () => {
-    expect(source("Storage.tsx")).not.toContain("Cloud storage")
-    expect(source("Storage.tsx")).not.toContain("manage cloud credentials")
+    const storage = source("Storage.tsx")
+
+    expect(storage).not.toContain("Cloud storage")
+    expect(storage).not.toContain("manage cloud credentials")
+    expect(storage).not.toContain("window.prompt")
+    expect(storage).toContain('aria-label="New data directory"')
+    expect(storage).toContain("Copy data")
+    expect(storage).toContain("Reset location")
   })
 
   test("connectors persist enablement and inspect real server capabilities", () => {
@@ -73,6 +118,13 @@ describe("launch settings truth pass", () => {
     expect(connectors).toContain("restoreRecord")
     expect(connectors).toContain("Add remote server")
     expect(connectors).toContain("Add local command")
+    expect(connectors).toContain('label="Add connector"')
+    expect(connectors).toContain('label: "Remote URL"')
+    expect(connectors).toContain('label: "Local command"')
+    expect(connectors).toContain('"Save connector"')
+    expect(connectors).toContain('label="Cancel"')
+    expect(connectors).toContain("Refresh status")
+    expect(connectors).not.toContain('label="cancel"')
     expect(connectors).not.toContain("https://mcp.example.com/mcp or a local command")
     expect(connectors).not.toContain("window.prompt")
   })

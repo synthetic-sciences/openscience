@@ -27,7 +27,6 @@ import { Command } from "../command"
 import { Global } from "../global"
 import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
-import { HarnessRoutes } from "./routes/harness"
 import { PtyRoutes } from "./routes/pty"
 import { McpRoutes } from "./routes/mcp"
 import { FileRoutes } from "./routes/file"
@@ -50,7 +49,6 @@ import { SearchRoutes } from "./routes/search"
 import { GlobalRoutes } from "./routes/global"
 import { AccountRoutes } from "./routes/account"
 import { SettingsSkillsRoutes } from "./routes/settings/skills"
-import { MemorySettingsRoutes } from "./routes/settings/memory"
 import { NetworkSettingsRoutes } from "./routes/settings/network"
 import { CredentialsRoutes } from "./routes/settings/credentials"
 import { StorageRoutes } from "./routes/settings/storage"
@@ -314,7 +312,6 @@ export namespace Server {
         .route("/config", ConfigRoutes())
         .route("/experimental", ExperimentalRoutes())
         .route("/session", SessionRoutes())
-        .route("/harness", HarnessRoutes())
         .route("/search", SearchRoutes())
         .route("/permission", PermissionRoutes())
         .route("/question", QuestionRoutes())
@@ -324,7 +321,6 @@ export namespace Server {
         .route("/provenance", ProvenanceRoutes())
         .route("/mcp", McpRoutes())
         .route("/settings/skills", SettingsSkillsRoutes())
-        .route("/settings/memory", MemorySettingsRoutes())
         .route("/settings/network", NetworkSettingsRoutes())
         .route("/settings/usage", SettingsUsageRoutes())
         .post(

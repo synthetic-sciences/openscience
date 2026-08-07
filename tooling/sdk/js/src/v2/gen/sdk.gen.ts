@@ -71,7 +71,6 @@ import type {
   FileReviewsResolveErrors,
   FileReviewsResolveResponses,
   FileReviewsRunResponses,
-  FileStarterResponses,
   FileStatusResponses,
   FileWriteResponses,
   FindFilesResponses,
@@ -92,126 +91,6 @@ import type {
   GlobalProjectCreateErrors,
   GlobalProjectCreateResponses,
   GlobalSyncResponses,
-  HarnessAblationAssessErrors,
-  HarnessAblationAssessResponses,
-  HarnessAblationInitializeErrors,
-  HarnessAblationInitializeResponses,
-  HarnessAuditInitializeErrors,
-  HarnessAuditInitializeResponses,
-  HarnessAuditObserveErrors,
-  HarnessAuditObserveResponses,
-  HarnessAuditSealErrors,
-  HarnessAuditSealResponses,
-  HarnessAuditSelectErrors,
-  HarnessAuditSelectResponses,
-  HarnessAuditStatusErrors,
-  HarnessAuditStatusResponses,
-  HarnessAutonomyReceiptErrors,
-  HarnessAutonomyReceiptResponses,
-  HarnessAutonomyRecordErrors,
-  HarnessAutonomyRecordResponses,
-  HarnessBenchmarkRecipeErrors,
-  HarnessBenchmarkRecipeResponses,
-  HarnessBenchmarksResponses,
-  HarnessBindErrors,
-  HarnessBindResponses,
-  HarnessBlueprintInitializeErrors,
-  HarnessBlueprintInitializeResponses,
-  HarnessBlueprintLeaseErrors,
-  HarnessBlueprintLeaseResponses,
-  HarnessBlueprintRecordErrors,
-  HarnessBlueprintRecordResponses,
-  HarnessBlueprintStatusErrors,
-  HarnessBlueprintStatusResponses,
-  HarnessCompareErrors,
-  HarnessCompareResponses,
-  HarnessConfirmationReceiptErrors,
-  HarnessConfirmationReceiptResponses,
-  HarnessConfirmationRecordErrors,
-  HarnessConfirmationRecordResponses,
-  HarnessConfirmationSelectionErrors,
-  HarnessConfirmationSelectionResponses,
-  HarnessContractErrors,
-  HarnessContractResponses,
-  HarnessEvaluateErrors,
-  HarnessEvaluateResponses,
-  HarnessEvaluationsErrors,
-  HarnessEvaluationsResponses,
-  HarnessEvolutionReceiptErrors,
-  HarnessEvolutionReceiptResponses,
-  HarnessEvolutionRecordErrors,
-  HarnessEvolutionRecordResponses,
-  HarnessFailureInitializeErrors,
-  HarnessFailureInitializeResponses,
-  HarnessFailureObserveErrors,
-  HarnessFailureObserveResponses,
-  HarnessFailureSealErrors,
-  HarnessFailureSealResponses,
-  HarnessFailureSelectErrors,
-  HarnessFailureSelectResponses,
-  HarnessFailureStatusErrors,
-  HarnessFailureStatusResponses,
-  HarnessFormalReceiptErrors,
-  HarnessFormalReceiptResponses,
-  HarnessFormalRecordErrors,
-  HarnessFormalRecordResponses,
-  HarnessIntegrityReceiptErrors,
-  HarnessIntegrityReceiptResponses,
-  HarnessIntegrityRecordErrors,
-  HarnessIntegrityRecordResponses,
-  HarnessInterventionAssessErrors,
-  HarnessInterventionAssessResponses,
-  HarnessInterventionInitializeErrors,
-  HarnessInterventionInitializeResponses,
-  HarnessInterventionObserveErrors,
-  HarnessInterventionObserveResponses,
-  HarnessInterventionStatusErrors,
-  HarnessInterventionStatusResponses,
-  HarnessJudgeReceiptErrors,
-  HarnessJudgeReceiptResponses,
-  HarnessJudgeRecordErrors,
-  HarnessJudgeRecordResponses,
-  HarnessLaunchReceiptErrors,
-  HarnessLaunchReceiptResponses,
-  HarnessLaunchRecordErrors,
-  HarnessLaunchRecordResponses,
-  HarnessMetaReceiptErrors,
-  HarnessMetaReceiptResponses,
-  HarnessMetaRecordErrors,
-  HarnessMetaRecordResponses,
-  HarnessMetaSelectionErrors,
-  HarnessMetaSelectionResponses,
-  HarnessOrchestrationCheckpointErrors,
-  HarnessOrchestrationCheckpointResponses,
-  HarnessOrchestrationStartErrors,
-  HarnessOrchestrationStartResponses,
-  HarnessOrchestrationStatusErrors,
-  HarnessOrchestrationStatusResponses,
-  HarnessReplicationReceiptErrors,
-  HarnessReplicationReceiptResponses,
-  HarnessReplicationRecordErrors,
-  HarnessReplicationRecordResponses,
-  HarnessReportErrors,
-  HarnessReportResponses,
-  HarnessSemanticReceiptErrors,
-  HarnessSemanticReceiptResponses,
-  HarnessSemanticRecordErrors,
-  HarnessSemanticRecordResponses,
-  HarnessSimulationReceiptErrors,
-  HarnessSimulationReceiptResponses,
-  HarnessSimulationRecordErrors,
-  HarnessSimulationRecordResponses,
-  HarnessSkillAttestErrors,
-  HarnessSkillAttestResponses,
-  HarnessSkillPromoteErrors,
-  HarnessSkillPromoteResponses,
-  HarnessSkillProposeErrors,
-  HarnessSkillProposeResponses,
-  HarnessSkillsResponses,
-  HarnessSynthesisReceiptErrors,
-  HarnessSynthesisReceiptResponses,
-  HarnessSynthesisRecordErrors,
-  HarnessSynthesisRecordResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -235,6 +114,7 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
+  NotebookComputeResponses,
   NotebookExecuteResponses,
   NotebookInterruptResponses,
   NotebookKernelCreateResponses,
@@ -366,14 +246,34 @@ import type {
   SettingsComputeJobsCancelErrors,
   SettingsComputeJobsCancelResponses,
   SettingsComputeJobsClearResponses,
+  SettingsComputeJobsEventsErrors,
+  SettingsComputeJobsEventsResponses,
   SettingsComputeJobsListResponses,
   SettingsComputeJobsLogErrors,
   SettingsComputeJobsLogResponses,
+  SettingsComputeJobsPlanErrors,
+  SettingsComputeJobsPlanResponses,
+  SettingsComputeJobsRetryErrors,
+  SettingsComputeJobsRetryResponses,
   SettingsComputeJobsStartErrors,
   SettingsComputeJobsStartResponses,
+  SettingsComputeModalCheckErrors,
+  SettingsComputeModalCheckResponses,
+  SettingsComputeModalConfigureErrors,
+  SettingsComputeModalConfigureResponses,
+  SettingsComputeModalUpdateErrors,
+  SettingsComputeModalUpdateResponses,
+  SettingsComputeModalVolumeFileErrors,
+  SettingsComputeModalVolumeFileResponses,
+  SettingsComputeModalVolumeFilesErrors,
+  SettingsComputeModalVolumeFilesResponses,
+  SettingsComputeModalVolumesErrors,
+  SettingsComputeModalVolumesResponses,
   SettingsComputeProviderConnectErrors,
   SettingsComputeProviderConnectResponses,
   SettingsComputeProviderDisconnectResponses,
+  SettingsComputeProviderEnabledErrors,
+  SettingsComputeProviderEnabledResponses,
   SettingsComputeSshAddErrors,
   SettingsComputeSshAddResponses,
   SettingsComputeSshRemoveResponses,
@@ -382,9 +282,6 @@ import type {
   SettingsCredentialsListResponses,
   SettingsCredentialsRemoveResponses,
   SettingsCredentialsSetResponses,
-  SettingsMemoryGetResponses,
-  SettingsMemorySearchResponses,
-  SettingsMemorySetResponses,
   SettingsNetworkGetResponses,
   SettingsNetworkSetResponses,
   SettingsPreferencesGetResponses,
@@ -978,6 +875,192 @@ export class Provider extends HeyApiClient {
       },
     })
   }
+
+  /**
+   * Enable or disable a connected compute provider
+   */
+  public enabled<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      enabled?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "enabled" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SettingsComputeProviderEnabledResponses,
+      SettingsComputeProviderEnabledErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/provider/{id}/enabled",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Volume extends HeyApiClient {
+  /**
+   * List files in a Modal Volume
+   */
+  public files<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SettingsComputeModalVolumeFilesResponses,
+      SettingsComputeModalVolumeFilesErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/modal/volumes/{name}/files",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Download a file from a Modal Volume
+   */
+  public file<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SettingsComputeModalVolumeFileResponses,
+      SettingsComputeModalVolumeFileErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/modal/volumes/{name}/file",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Modal extends HeyApiClient {
+  /**
+   * Update Modal compute defaults
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "app" },
+            { in: "body", key: "image" },
+            { in: "body", key: "network" },
+            { in: "body", key: "timeout_minutes" },
+            { in: "body", key: "concurrency" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      SettingsComputeModalUpdateResponses,
+      SettingsComputeModalUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/modal",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List Modal Volumes
+   */
+  public volumes<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      SettingsComputeModalVolumesResponses,
+      SettingsComputeModalVolumesErrors,
+      ThrowOnError
+    >({ url: "/settings/compute/modal/volumes", ...options })
+  }
+
+  /**
+   * Configure Modal from the active ~/.modal.toml profile
+   */
+  public configure<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<
+      SettingsComputeModalConfigureResponses,
+      SettingsComputeModalConfigureErrors,
+      ThrowOnError
+    >({ url: "/settings/compute/modal/configure", ...options })
+  }
+
+  /**
+   * Check the enabled Modal connection
+   */
+  public check<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<
+      SettingsComputeModalCheckResponses,
+      SettingsComputeModalCheckErrors,
+      ThrowOnError
+    >({ url: "/settings/compute/modal/check", ...options })
+  }
+
+  private _volume?: Volume
+  get volume(): Volume {
+    return (this._volume ??= new Volume({ client: this.client }))
+  }
 }
 
 export class Ssh extends HeyApiClient {
@@ -1100,6 +1183,9 @@ export class Jobs extends HeyApiClient {
             kind: "ssh"
             host_id: string
           }
+        | {
+            kind: "modal"
+          }
       resources?: {
         cpus?: number
         gpus?: number
@@ -1111,6 +1197,11 @@ export class Jobs extends HeyApiClient {
       container?: string
       artifacts?: Array<string>
       checkpoint?: string
+      uploads?: Array<string>
+      packages?: Array<string>
+      image?: string
+      gpu?: string
+      approval?: string
       sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -1130,6 +1221,11 @@ export class Jobs extends HeyApiClient {
             { in: "body", key: "container" },
             { in: "body", key: "artifacts" },
             { in: "body", key: "checkpoint" },
+            { in: "body", key: "uploads" },
+            { in: "body", key: "packages" },
+            { in: "body", key: "image" },
+            { in: "body", key: "gpu" },
+            { in: "body", key: "approval" },
             { in: "body", key: "sessionID" },
           ],
         },
@@ -1141,6 +1237,87 @@ export class Jobs extends HeyApiClient {
       ThrowOnError
     >({
       url: "/settings/compute/jobs",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Prepare an exact Modal run plan for approval
+   */
+  public plan<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      name?: string
+      command?: string
+      cwd?: string
+      target?:
+        | {
+            kind: "local"
+          }
+        | {
+            kind: "ssh"
+            host_id: string
+          }
+        | {
+            kind: "modal"
+          }
+      resources?: {
+        cpus?: number
+        gpus?: number
+        memory_gb?: number
+        time_minutes?: number
+        partition?: string
+      }
+      modules?: Array<string>
+      container?: string
+      artifacts?: Array<string>
+      checkpoint?: string
+      uploads?: Array<string>
+      packages?: Array<string>
+      image?: string
+      gpu?: string
+      approval?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "name" },
+            { in: "body", key: "command" },
+            { in: "body", key: "cwd" },
+            { in: "body", key: "target" },
+            { in: "body", key: "resources" },
+            { in: "body", key: "modules" },
+            { in: "body", key: "container" },
+            { in: "body", key: "artifacts" },
+            { in: "body", key: "checkpoint" },
+            { in: "body", key: "uploads" },
+            { in: "body", key: "packages" },
+            { in: "body", key: "image" },
+            { in: "body", key: "gpu" },
+            { in: "body", key: "approval" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SettingsComputeJobsPlanResponses,
+      SettingsComputeJobsPlanErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/jobs/plan",
       ...options,
       ...params,
       headers: {
@@ -1201,6 +1378,70 @@ export class Jobs extends HeyApiClient {
   }
 
   /**
+   * Read compute provider lifecycle logs
+   */
+  public events<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SettingsComputeJobsEventsResponses,
+      SettingsComputeJobsEventsErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/jobs/{id}/events",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Retry delivery from a retained Modal resource
+   */
+  public retry<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SettingsComputeJobsRetryResponses,
+      SettingsComputeJobsRetryErrors,
+      ThrowOnError
+    >({
+      url: "/settings/compute/jobs/{id}/retry",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Cancel a compute job
    */
   public cancel<ThrowOnError extends boolean = false>(
@@ -1247,6 +1488,11 @@ export class Compute extends HeyApiClient {
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _modal?: Modal
+  get modal(): Modal {
+    return (this._modal ??= new Modal({ client: this.client }))
   }
 
   private _ssh?: Ssh
@@ -1442,7 +1688,6 @@ export class Skills extends HeyApiClient {
     parameters?: {
       directory?: string
       url?: string
-      skipClassifier?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1453,7 +1698,6 @@ export class Skills extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "url" },
-            { in: "body", key: "skipClassifier" },
           ],
         },
       ],
@@ -1471,121 +1715,6 @@ export class Skills extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
-    })
-  }
-}
-
-export class Memory extends HeyApiClient {
-  /**
-   * Get memory
-   *
-   * Get the saved memory document for a scope (global or project), with its capacity gauge.
-   */
-  public get<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      scope?: "global" | "project"
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "scope" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SettingsMemoryGetResponses, unknown, ThrowOnError>({
-      url: "/settings/memory",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Set memory
-   *
-   * Replace the saved memory document for a scope (global or project).
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      scope?: "global" | "project"
-      enabled?: boolean
-      categories?: Array<{
-        id: string
-        name: string
-        notes: Array<{
-          id: string
-          text: string
-          createdAt: number
-          updatedAt?: number
-          source?: "user" | "agent"
-        }>
-      }>
-      budget?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "scope" },
-            { in: "body", key: "enabled" },
-            { in: "body", key: "categories" },
-            { in: "body", key: "budget" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<SettingsMemorySetResponses, unknown, ThrowOnError>({
-      url: "/settings/memory",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Search memory
-   *
-   * Full-text search (FTS5 BM25 keyword ranking with a recency tiebreak — not semantic) over saved memory notes and past session messages of the current project.
-   */
-  public search<ThrowOnError extends boolean = false>(
-    parameters: {
-      directory?: string
-      q: string
-      limit?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "q" },
-            { in: "query", key: "limit" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<SettingsMemorySearchResponses, unknown, ThrowOnError>({
-      url: "/settings/memory/search",
-      ...options,
-      ...params,
     })
   }
 }
@@ -1713,11 +1842,6 @@ export class Settings extends HeyApiClient {
   private _skills?: Skills
   get skills(): Skills {
     return (this._skills ??= new Skills({ client: this.client }))
-  }
-
-  private _memory?: Memory
-  get memory(): Memory {
-    return (this._memory ??= new Memory({ client: this.client }))
   }
 
   private _network?: Network
@@ -3727,4445 +3851,6 @@ export class Permission extends HeyApiClient {
   }
 }
 
-export class Benchmark extends HeyApiClient {
-  /**
-   * Materialize a source-verified benchmark execution recipe
-   *
-   * Resolves typed bindings into the pinned benchmark's native stages, artifacts, metrics, and launch-driver commitments without executing the external repository.
-   */
-  public recipe<ThrowOnError extends boolean = false>(
-    parameters: {
-      benchmark: string
-      directory?: string
-      recipeID?: string
-      bindings?: {
-        [key: string]: string
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "benchmark" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "recipeID" },
-            { in: "body", key: "bindings" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessBenchmarkRecipeResponses,
-      HarnessBenchmarkRecipeErrors,
-      ThrowOnError
-    >({
-      url: "/harness/benchmarks/{benchmark}/recipe",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Audit extends HeyApiClient {
-  /**
-   * Initialize an evaluator-owned active audit
-   *
-   * Commits an opaque probe pool and binds uncertainty-aware selection to the evaluator capability and audited artifact.
-   */
-  public initialize<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-      subject?: {
-        type: "run" | "candidate"
-        id: string
-        artifactSHA256: string
-      }
-      probes?: Array<
-        | {
-            id: string
-            commitment: string
-            features: Array<number>
-            stratum: string
-            weight?: number
-            priorLoss?: number
-          }
-        | {
-            id: string
-            commitment: string
-            sourceLosses: Array<number>
-            stratum: string
-            weight?: number
-          }
-      >
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "probes" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessAuditInitializeResponses,
-      HarnessAuditInitializeErrors,
-      ThrowOnError
-    >({
-      url: "/harness/audits",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected active audit
-   */
-  public status<ThrowOnError extends boolean = false>(
-    parameters: {
-      auditID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "auditID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessAuditStatusResponses, HarnessAuditStatusErrors, ThrowOnError>({
-      url: "/harness/audits/{auditID}/status",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Select the next opaque active-audit probe
-   *
-   * Combines weighted integral-variance reduction, failure UCB, failure-region diversity, and stratum coverage.
-   */
-  public select<ThrowOnError extends boolean = false>(
-    parameters: {
-      auditID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "auditID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessAuditSelectResponses, HarnessAuditSelectErrors, ThrowOnError>({
-      url: "/harness/audits/{auditID}/selection",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Record an evaluator-authenticated probe outcome
-   *
-   * Updates the GP posterior and stopping rule without promoting the audit estimate into benchmark evidence.
-   */
-  public observe<ThrowOnError extends boolean = false>(
-    parameters: {
-      auditID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-      probeID?: string
-      loss?: number
-      failure?: boolean
-      evidence?: Array<string>
-      note?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "auditID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "probeID" },
-            { in: "body", key: "loss" },
-            { in: "body", key: "failure" },
-            { in: "body", key: "evidence" },
-            { in: "body", key: "note" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessAuditObserveResponses, HarnessAuditObserveErrors, ThrowOnError>(
-      {
-        url: "/harness/audits/{auditID}/observations",
-        ...options,
-        ...params,
-        headers: {
-          "Content-Type": "application/json",
-          ...options?.headers,
-          ...params.headers,
-        },
-      },
-    )
-  }
-
-  /**
-   * Seal a terminal active-audit receipt
-   *
-   * Content-addresses the completed audit, exact subject artifact, committed pool, derived estimate, transfer qualification, and terminal revision for optional promotion gating.
-   */
-  public seal<ThrowOnError extends boolean = false>(
-    parameters: {
-      auditID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "auditID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessAuditSealResponses, HarnessAuditSealErrors, ThrowOnError>({
-      url: "/harness/audits/{auditID}/receipt",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Failure extends HeyApiClient {
-  /**
-   * Initialize a topic-aware adversarial failure stream
-   *
-   * Binds deterministic UCB1 topic allocation and server-derived failure anchors to a terminal active-audit receipt without adding generated cases to the population estimate.
-   */
-  public initialize<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-      subject?: {
-        type: "run" | "candidate"
-        id: string
-        artifactSHA256: string
-      }
-      auditReceiptID?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "auditReceiptID" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessFailureInitializeResponses,
-      HarnessFailureInitializeErrors,
-      ThrowOnError
-    >({
-      url: "/harness/failure-streams",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected failure discovery stream
-   */
-  public status<ThrowOnError extends boolean = false>(
-    parameters: {
-      streamID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "streamID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessFailureStatusResponses,
-      HarnessFailureStatusErrors,
-      ThrowOnError
-    >({
-      url: "/harness/failure-streams/{streamID}/status",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Select the next topic and authenticated failure anchors
-   *
-   * Forces every frozen topic once, then derives UCB1 from the immutable attempt journal with deterministic tie-breaking.
-   */
-  public select<ThrowOnError extends boolean = false>(
-    parameters: {
-      streamID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "streamID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessFailureSelectResponses,
-      HarnessFailureSelectErrors,
-      ThrowOnError
-    >({
-      url: "/harness/failure-streams/{streamID}/selection",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Record a validated adversarial generation attempt
-   *
-   * Consumes one attempt budget and derives admissibility and reward from the frozen correctness, topic, and novelty validators plus the target outcome.
-   */
-  public observe<ThrowOnError extends boolean = false>(
-    parameters: {
-      streamID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-      selectionID?: string
-      generation?:
-        | {
-            status: "failed"
-            mode: "generator_error" | "timeout" | "invalid_output" | "other"
-            outputSHA256?: string
-            evidence: Array<string>
-          }
-        | {
-            status: "generated"
-            caseSHA256: string
-            outputSHA256: string
-            embedding: Array<number>
-            evidence: Array<string>
-          }
-      validations?: Array<{
-        kind: "correctness" | "topic" | "novelty"
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        evidence: Array<string>
-        note?: string
-      }>
-      outcome?: {
-        loss: number
-        failure: boolean
-        outputSHA256: string
-        evidence: Array<string>
-      }
-      evaluatedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "streamID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "selectionID" },
-            { in: "body", key: "generation" },
-            { in: "body", key: "validations" },
-            { in: "body", key: "outcome" },
-            { in: "body", key: "evaluatedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessFailureObserveResponses,
-      HarnessFailureObserveErrors,
-      ThrowOnError
-    >({
-      url: "/harness/failure-streams/{streamID}/attempts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Seal a terminal failure discovery receipt
-   *
-   * Content-addresses the exact audit source, subject, topic contract, attempt journal, replayed UCB statistics, failure yield, and diversity evidence.
-   */
-  public seal<ThrowOnError extends boolean = false>(
-    parameters: {
-      streamID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "streamID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessFailureSealResponses, HarnessFailureSealErrors, ThrowOnError>({
-      url: "/harness/failure-streams/{streamID}/receipt",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Ablation extends HeyApiClient {
-  /**
-   * Freeze a matched scientific ablation plan
-   *
-   * Binds at least three evaluator-authenticated seed pairs before evaluation and permits exactly one declared contract factor to differ.
-   */
-  public initialize<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      schemaVersion?: 1
-      studyID?: string
-      factor?: {
-        kind:
-          | "profile"
-          | "orchestration"
-          | "search"
-          | "audit"
-          | "simulation"
-          | "evaluator_audit"
-          | "semantic_audit"
-          | "synthesis"
-          | "autonomy"
-          | "formal_proof"
-          | "replication"
-          | "fidelities"
-          | "skill"
-          | "tool"
-        name?: string
-      }
-      minEffect?: number
-      maxPairRegression?: number
-      pairs?: Array<{
-        baseline: {
-          sessionID: string
-          evaluatorToken: string
-        }
-        arm: {
-          sessionID: string
-          evaluatorToken: string
-        }
-      }>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "studyID" },
-            { in: "body", key: "factor" },
-            { in: "body", key: "minEffect" },
-            { in: "body", key: "maxPairRegression" },
-            { in: "body", key: "pairs" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessAblationInitializeResponses,
-      HarnessAblationInitializeErrors,
-      ThrowOnError
-    >({
-      url: "/harness/ablations",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Assess a frozen matched ablation
-   *
-   * Authenticates every paired run, verifies immutable contracts and final evaluations, then derives paired effects and a 95% interval.
-   */
-  public assess<ThrowOnError extends boolean = false>(
-    parameters: {
-      planID: string
-      directory?: string
-      runs?: Array<{
-        sessionID: string
-        evaluatorToken: string
-      }>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "planID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "runs" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessAblationAssessResponses,
-      HarnessAblationAssessErrors,
-      ThrowOnError
-    >({
-      url: "/harness/ablations/{planID}/assessment",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Intervention extends HeyApiClient {
-  /**
-   * Freeze an evaluator-owned controlled replay study
-   *
-   * Binds a candidate and exact evolution receipt to predeclared replay, retuning, ablation, repair, or transfer pairs before the candidate's final evaluation.
-   */
-  public initialize<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      schemaVersion?: 1
-      runID?: string
-      sessionID?: string
-      evaluatorToken?: string
-      subject?: {
-        type: "candidate"
-        id: string
-        artifact: {
-          uri: string
-          sha256: string
-        }
-      }
-      evolutionReceiptID?: string
-      validator?: {
-        name: "design-replay-interventions"
-        version: 1
-        scriptSHA256: string
-      }
-      pairs?: Array<{
-        family:
-          | "replay"
-          | "retune"
-          | "ablation"
-          | "repair"
-          | "model_transfer"
-          | "context_transfer"
-          | "evaluator_transfer"
-          | "split_transfer"
-        index: number
-        control: {
-          artifact: {
-            uri: string
-            sha256: string
-          }
-          condition: {
-            seed: number
-            model: {
-              provider: string
-              name: string
-              version: string
-            }
-            context: {
-              uri: string
-              sha256: string
-            }
-            evaluator: {
-              name: string
-              version: string
-              source: "benchmark" | "gate" | "external"
-            }
-            split: {
-              name: string
-              manifest: {
-                uri: string
-                sha256: string
-              }
-            }
-            environment: {
-              uri: string
-              sha256: string
-            }
-            budget: {
-              uri: string
-              sha256: string
-            }
-          }
-        }
-        arm: {
-          artifact: {
-            uri: string
-            sha256: string
-          }
-          condition: {
-            seed: number
-            model: {
-              provider: string
-              name: string
-              version: string
-            }
-            context: {
-              uri: string
-              sha256: string
-            }
-            evaluator: {
-              name: string
-              version: string
-              source: "benchmark" | "gate" | "external"
-            }
-            split: {
-              name: string
-              manifest: {
-                uri: string
-                sha256: string
-              }
-            }
-            environment: {
-              uri: string
-              sha256: string
-            }
-            budget: {
-              uri: string
-              sha256: string
-            }
-          }
-        }
-        change: {
-          uri: string
-          sha256: string
-        }
-      }>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "runID" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "evolutionReceiptID" },
-            { in: "body", key: "validator" },
-            { in: "body", key: "pairs" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessInterventionInitializeResponses,
-      HarnessInterventionInitializeErrors,
-      ThrowOnError
-    >({
-      url: "/harness/interventions",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Record an evaluator-authenticated intervention outcome
-   *
-   * Binds one numeric outcome to an exact frozen pair target without adding it to candidate fitness or the benchmark evaluation journal.
-   */
-  public observe<ThrowOnError extends boolean = false>(
-    parameters: {
-      candidateID: string
-      directory?: string
-      schemaVersion?: 1
-      sessionID?: string
-      evaluatorToken?: string
-      pairID?: string
-      role?: "control" | "arm"
-      targetSHA256?: string
-      status?: "passed" | "failed" | "inconclusive"
-      score?: number
-      evidence?: Array<string>
-      evaluatedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "candidateID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "pairID" },
-            { in: "body", key: "role" },
-            { in: "body", key: "targetSHA256" },
-            { in: "body", key: "status" },
-            { in: "body", key: "score" },
-            { in: "body", key: "evidence" },
-            { in: "body", key: "evaluatedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessInterventionObserveResponses,
-      HarnessInterventionObserveErrors,
-      ThrowOnError
-    >({
-      url: "/harness/interventions/{candidateID}/observations",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Assess a complete controlled replay study
-   *
-   * Recomputes direction-aware paired effects, confidence intervals, stability, tuning gap, component dependence, and transfer robustness from every frozen outcome.
-   */
-  public assess<ThrowOnError extends boolean = false>(
-    parameters: {
-      candidateID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "candidateID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessInterventionAssessResponses,
-      HarnessInterventionAssessErrors,
-      ThrowOnError
-    >({
-      url: "/harness/interventions/{candidateID}/assessment",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected controlled replay study
-   */
-  public status<ThrowOnError extends boolean = false>(
-    parameters: {
-      candidateID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "candidateID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessInterventionStatusResponses,
-      HarnessInterventionStatusErrors,
-      ThrowOnError
-    >({
-      url: "/harness/interventions/{candidateID}/status",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Judge extends HeyApiClient {
-  /**
-   * Qualify a bound benchmark evaluator
-   *
-   * Uses an independent auditor capability and a committed hidden fault suite to recompute evaluator discrimination and calibration metrics.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      auditorToken?: string
-      cases?: Array<{
-        id: string
-        commitment: string
-        kind: "clean" | "fault"
-        fault?:
-          | "wrong_answer"
-          | "unsupported_claim"
-          | "missing_evidence"
-          | "data_leakage"
-          | "non_reproducible"
-          | "reward_hacking"
-          | "invalid_statistics"
-          | "invalid_simulation"
-          | "distribution_shift"
-          | "evaluation_awareness"
-        decision: "accept" | "reject" | "abstain"
-        failureProbability: number
-        evidence: Array<string>
-      }>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "auditorToken" },
-            { in: "body", key: "cases" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessJudgeRecordResponses, HarnessJudgeRecordErrors, ThrowOnError>({
-      url: "/harness/evaluators/qualifications",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected evaluator qualification
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      auditorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "auditorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessJudgeReceiptResponses, HarnessJudgeReceiptErrors, ThrowOnError>(
-      {
-        url: "/harness/evaluators/qualifications/{receiptID}",
-        ...options,
-        ...params,
-        headers: {
-          "Content-Type": "application/json",
-          ...options?.headers,
-          ...params.headers,
-        },
-      },
-    )
-  }
-}
-
-export class Replication extends HeyApiClient {
-  /**
-   * Record an evaluator-authenticated replicated evaluation
-   *
-   * Requires the complete frozen stratum-by-cluster grid, then recomputes a robust estimate, uncertainty interval, and conservative promotion verdict.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-      subject?: {
-        type: "run" | "candidate"
-        id: string
-      }
-      observations?: Array<{
-        stratumID: string
-        clusterID: string
-        stratumSHA256: string
-        clusterSHA256: string
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        outputSHA256: string
-        environmentSHA256: string
-        evidence: Array<string>
-        evaluatedAt: number
-      }>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "observations" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessReplicationRecordResponses,
-      HarnessReplicationRecordErrors,
-      ThrowOnError
-    >({
-      url: "/harness/replications/receipts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected replicated evaluation receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessReplicationReceiptResponses,
-      HarnessReplicationReceiptErrors,
-      ThrowOnError
-    >({
-      url: "/harness/replications/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Meta extends HeyApiClient {
-  /**
-   * Resolve the terminal meta-harness qualification subject
-   *
-   * Returns the backend-selected verified winner after search termination, isolated behind the independent meta-harness qualifier capability.
-   */
-  public selection<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      metaToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "metaToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessMetaSelectionResponses,
-      HarnessMetaSelectionErrors,
-      ThrowOnError
-    >({
-      url: "/harness/meta/selection",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Record a one-shot continual-harness qualification
-   *
-   * Freezes the complete refinement lineage, full trace archive, cross-model held-out matrix, activation/adherence diagnostics, and backend-derived promotion verdict.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      schemaVersion?: 1
-      sessionID?: string
-      metaToken?: string
-      selectionID?: string
-      candidateArtifactSHA256?: string
-      candidateManifestSHA256?: string
-      protectedManifestSHA256?: string
-      validatorSHA256?: string
-      archive?: {
-        uri: string
-        sha256: string
-        schemaSHA256: string
-        indexSHA256: string
-        contents: "full-source-scores-traces"
-        query: "filesystem"
-        complete: true
-        hiddenContent: "excluded"
-        evaluatorContent: "excluded"
-        entries: Array<{
-          candidateID: string
-          artifactSHA256: string
-          sourceSHA256: string
-          state: "evaluated" | "unevaluated"
-          scoresSHA256?: string
-          resultSHA256?: string
-          evaluationSHA256?: string
-          trace?: {
-            uri: string
-            sha256: string
-            schemaSHA256: string
-            complete: true
-            hiddenContent: "excluded"
-            evaluatorContent: "excluded"
-          }
-        }>
-      }
-      refinements?: Array<{
-        revision: number
-        scope: "session"
-        parentSnapshotSHA256: string
-        snapshotSHA256: string
-        trigger: string
-        diagnosis: {
-          kind: "implementation" | "fundamental" | "inconclusive"
-          rationale: string
-        }
-        rootCause: string
-        expectedOutcome: string
-        changes: Array<{
-          action: "create" | "update" | "delete" | "rollback"
-          component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
-          path: string
-          beforeSHA256?: string
-          afterSHA256?: string
-          reason: string
-        }>
-        evidence: Array<{
-          candidateID: string
-          traceSHA256: string
-          messageIndex: number
-          excerptSHA256: string
-        }>
-        predictions: Array<{
-          modelID: string
-          taskID: string
-          expected: "fail_to_pass" | "remain_pass"
-        }>
-      }>
-      cells?: Array<
-        | {
-            split: "search" | "held_out"
-            modelID: string
-            modelCommitment: string
-            taskID: string
-            taskCommitment: string
-            outcome: "completed" | "failed" | "inconclusive"
-            score?: number
-            passed?: boolean
-            contextTokens: number
-            outputSHA256: string
-            trace: {
-              uri: string
-              sha256: string
-              schemaSHA256: string
-              complete: true
-              hiddenContent: "excluded"
-              evaluatorContent: "excluded"
-            }
-            evidence: Array<string>
-            role: "baseline"
-          }
-        | {
-            split: "search" | "held_out"
-            modelID: string
-            modelCommitment: string
-            taskID: string
-            taskCommitment: string
-            outcome: "completed" | "failed" | "inconclusive"
-            score?: number
-            passed?: boolean
-            contextTokens: number
-            outputSHA256: string
-            trace: {
-              uri: string
-              sha256: string
-              schemaSHA256: string
-              complete: true
-              hiddenContent: "excluded"
-              evaluatorContent: "excluded"
-            }
-            evidence: Array<string>
-            role: "candidate"
-            loaded: boolean
-            phases: Array<{
-              followed: number
-              violatedCommission: number
-              violatedOmission: number
-              requiredUnobserved: number
-              notApplicable: number
-              insufficientEvidence: number
-              phase: "loaded" | "midpoint" | "pre_final" | "final_validation"
-            }>
-          }
-      >
-      evaluatedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "metaToken" },
-            { in: "body", key: "selectionID" },
-            { in: "body", key: "candidateArtifactSHA256" },
-            { in: "body", key: "candidateManifestSHA256" },
-            { in: "body", key: "protectedManifestSHA256" },
-            { in: "body", key: "validatorSHA256" },
-            { in: "body", key: "archive" },
-            { in: "body", key: "refinements" },
-            { in: "body", key: "cells" },
-            { in: "body", key: "evaluatedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessMetaRecordResponses, HarnessMetaRecordErrors, ThrowOnError>({
-      url: "/harness/meta/receipts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected meta-harness receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      metaToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "metaToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessMetaReceiptResponses, HarnessMetaReceiptErrors, ThrowOnError>({
-      url: "/harness/meta/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Confirmation extends HeyApiClient {
-  /**
-   * Resolve the sealed post-search confirmation subject
-   *
-   * Returns exactly one backend-selected verified winner only after adaptive search is terminal. The endpoint is isolated behind the claim evaluator capability.
-   */
-  public selection<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      confirmationToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "confirmationToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessConfirmationSelectionResponses,
-      HarnessConfirmationSelectionErrors,
-      ThrowOnError
-    >({
-      url: "/harness/confirmations/selection",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Record a one-shot sealed claim evaluation
-   *
-   * Freezes the claim result for the server-selected terminal winner without feeding the result into search, adaptive control, hindsight memory, or skill learning.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      schemaVersion?: 1
-      sessionID?: string
-      confirmationToken?: string
-      candidateSHA256?: string
-      manifestSHA256?: string
-      validatorSHA256?: string
-      environmentSHA256?: string
-      outcome?: "completed" | "failed" | "inconclusive"
-      score?: number
-      metrics?: {
-        [key: string]: number
-      }
-      checks?: Array<{
-        id: string
-        status: "passed" | "failed" | "inconclusive"
-        blocking: boolean
-        score?: number
-        evidence?: Array<string>
-        note?: string
-      }>
-      evidence?: Array<string>
-      usage?: {
-        wallTimeMs?: number
-        costUSD?: number
-      }
-      outputSHA256?: string
-      evaluatedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "confirmationToken" },
-            { in: "body", key: "candidateSHA256" },
-            { in: "body", key: "manifestSHA256" },
-            { in: "body", key: "validatorSHA256" },
-            { in: "body", key: "environmentSHA256" },
-            { in: "body", key: "outcome" },
-            { in: "body", key: "score" },
-            { in: "body", key: "metrics" },
-            { in: "body", key: "checks" },
-            { in: "body", key: "evidence" },
-            { in: "body", key: "usage" },
-            { in: "body", key: "outputSHA256" },
-            { in: "body", key: "evaluatedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessConfirmationRecordResponses,
-      HarnessConfirmationRecordErrors,
-      ThrowOnError
-    >({
-      url: "/harness/confirmations/receipts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected sealed confirmation receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      confirmationToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "confirmationToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessConfirmationReceiptResponses,
-      HarnessConfirmationReceiptErrors,
-      ThrowOnError
-    >({
-      url: "/harness/confirmations/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Semantic extends HeyApiClient {
-  /**
-   * Record an independent semantic audit
-   *
-   * Derives whether one bound result is meaningful, merely technically valid, ambiguous, or incorrect from independent evidence-backed reviews of frozen intent, shortcuts, and literature-relative novelty.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      reviewerToken?: string
-      subject?: {
-        type: "run" | "candidate"
-        id: string
-      }
-      reviews?: Array<{
-        actor: string
-        sessionID: string
-        correctness: "passed" | "failed" | "inconclusive"
-        alignment: "intended" | "reasonable_alternative" | "misinterpreted" | "ambiguous"
-        novelty: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
-        vacuous: boolean
-        confidence: number
-        criteria: Array<{
-          id: string
-          status: "passed" | "failed" | "inconclusive"
-          evidence: Array<string>
-        }>
-        shortcuts: Array<{
-          id: string
-          observed: boolean
-          evidence: Array<string>
-        }>
-        literatureRefs?: Array<string>
-        evidence: Array<string>
-        summary: string
-        reviewedAt: number
-      }>
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "reviewerToken" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "reviews" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessSemanticRecordResponses,
-      HarnessSemanticRecordErrors,
-      ThrowOnError
-    >({
-      url: "/harness/semantics/receipts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected semantic audit receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      reviewerToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "reviewerToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessSemanticReceiptResponses,
-      HarnessSemanticReceiptErrors,
-      ThrowOnError
-    >({
-      url: "/harness/semantics/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Synthesis extends HeyApiClient {
-  /**
-   * Record an evaluator-authenticated clean-room synthesis
-   *
-   * Binds a complete retrieval trace and hidden atomic-fact manifest, rejects clean-room policy drift, and derives factual precision, recall, contradiction penalty, and F1 without trusting caller-authored metrics.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-      subject?: {
-        type: "run" | "candidate"
-        id: string
-      }
-      conclusionSHA256?: string
-      evaluatorAuditReceiptID?: string
-      trace?: {
-        owner: "evaluator_runtime"
-        complete: true
-        schemaSHA256: string
-        filterPolicySHA256: string
-        events: Array<{
-          sequence: number
-          tool: "google_search" | "paper_search" | "web_browse"
-          requestSHA256: string
-          responseSHA256: string
-          sourceSHA256: string
-          publishedAt?: string
-          matches: {
-            forbiddenDomain: boolean
-            referenceTitle: boolean
-          }
-          decision: "allowed" | "blocked"
-          evidence: Array<string>
-        }>
-      }
-      decomposition?: {
-        status: "passed" | "failed"
-        outputSHA256?: string
-        evidence: Array<string>
-      }
-      generatedFacts?: Array<{
-        id: string
-        commitment: string
-        verdict: "supported" | "contradicted" | "unsupported" | "judge_error"
-        evidence: Array<string>
-      }>
-      referenceFacts?: Array<{
-        id: string
-        commitment: string
-        coverage: "covered" | "missed" | "judge_error"
-        evidence: Array<string>
-      }>
-      evaluatedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "conclusionSHA256" },
-            { in: "body", key: "evaluatorAuditReceiptID" },
-            { in: "body", key: "trace" },
-            { in: "body", key: "decomposition" },
-            { in: "body", key: "generatedFacts" },
-            { in: "body", key: "referenceFacts" },
-            { in: "body", key: "evaluatedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessSynthesisRecordResponses,
-      HarnessSynthesisRecordErrors,
-      ThrowOnError
-    >({
-      url: "/harness/syntheses/receipts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected scientific synthesis receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessSynthesisReceiptResponses,
-      HarnessSynthesisReceiptErrors,
-      ThrowOnError
-    >({
-      url: "/harness/syntheses/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Autonomy extends HeyApiClient {
-  /**
-   * Record an evaluator-authenticated human-AI autonomy trace
-   *
-   * Binds a complete interaction log to the exact run or candidate artifact and derives the Aletheia-inspired essentially-autonomous, collaborative, or primarily-human contribution level without trusting the caller's claim.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-      subject?: {
-        type: "run" | "candidate"
-        id: string
-      }
-      artifactSHA256?: string
-      trace?: {
-        owner: "evaluator_runtime"
-        complete: true
-        recorderArtifactSHA256: string
-        schemaSHA256: string
-        classificationPolicySHA256: string
-        rawLogSHA256: string
-        startedAt: number
-        endedAt: number
-        events: Array<{
-          sequence: number
-          at: number
-          actor: "benchmark" | "human" | "agent"
-          kind:
-            | "problem_statement"
-            | "clarification"
-            | "resource_provision"
-            | "strategy"
-            | "technical_correction"
-            | "artifact_edit"
-            | "candidate_selection"
-            | "evaluation_feedback"
-            | "exposition"
-            | "other"
-          contribution: "problem" | "auxiliary" | "essential" | "core" | "unclear"
-          contentSHA256: string
-          artifactBeforeSHA256?: string
-          artifactAfterSHA256?: string
-          evidence: Array<string>
-        }>
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "artifactSHA256" },
-            { in: "body", key: "trace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessAutonomyRecordResponses,
-      HarnessAutonomyRecordErrors,
-      ThrowOnError
-    >({
-      url: "/harness/autonomy/receipts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected human-AI autonomy receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessAutonomyReceiptResponses,
-      HarnessAutonomyReceiptErrors,
-      ThrowOnError
-    >({
-      url: "/harness/autonomy/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Blueprint extends HeyApiClient {
-  /**
-   * Initialize an evaluator-grounded formal proof blueprint
-   *
-   * Creates the content-addressed root of a bounded LEAP-inspired AND/OR proof graph without granting the graph final proof authority.
-   */
-  public initialize<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessBlueprintInitializeResponses,
-      HarnessBlueprintInitializeErrors,
-      ThrowOnError
-    >({
-      url: "/harness/proofs/blueprints",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read an evaluator-grounded formal proof blueprint
-   */
-  public status<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessBlueprintStatusResponses,
-      HarnessBlueprintStatusErrors,
-      ThrowOnError
-    >({
-      url: "/harness/proofs/blueprints/status",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Lease bounded ready goals from a formal proof blueprint
-   *
-   * Atomically expires stale work and leases distinct deepest-ready goals up to the frozen parallelism limit.
-   */
-  public lease<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-      count?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "count" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessBlueprintLeaseResponses,
-      HarnessBlueprintLeaseErrors,
-      ThrowOnError
-    >({
-      url: "/harness/proofs/blueprints/leases",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Record an evaluator-authenticated proof or decomposition attempt
-   *
-   * Consumes one active goal lease, retains failed verifier or reviewer outcomes, and admits only exact compiler-checked sketches into the monotone acyclic graph.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      body?:
-        | {
-            sessionID: string
-            evaluatorToken: string
-            kind: "direct"
-            leaseID: string
-            artifactSHA256: string
-            claim: "proof" | "refutation" | "failure"
-            verification: {
-              compilerArtifactSHA256: string
-              statementMatched: boolean
-              exitCode: number
-              warnings: number
-              transcriptSHA256: string
-              feedbackSHA256: string
-              startedAt: number
-              endedAt: number
-            }
-          }
-        | {
-            sessionID: string
-            evaluatorToken: string
-            kind: "decomposition"
-            leaseID: string
-            informalPlanSHA256: string
-            artifactSHA256: string
-            children: Array<{
-              statementSHA256: string
-              declaration: string
-              module: string
-            }>
-            verification: {
-              compilerArtifactSHA256: string
-              statementMatched: boolean
-              exitCode: number
-              warnings: number
-              transcriptSHA256: string
-              feedbackSHA256: string
-              startedAt: number
-              endedAt: number
-              validatorArtifactSHA256: string
-              placeholderDeclarations: Array<string>
-              validatorTranscriptSHA256: string
-            }
-            review: {
-              reviewerArtifactSHA256: string
-              promptSHA256: string
-              relevant: boolean
-              easier: boolean
-              plausible: boolean
-              transcriptSHA256: string
-            }
-          }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { key: "body", map: "body" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessBlueprintRecordResponses,
-      HarnessBlueprintRecordErrors,
-      ThrowOnError
-    >({
-      url: "/harness/proofs/blueprints/attempts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Formal extends HeyApiClient {
-  /**
-   * Record an evaluator-authenticated formal proof verification
-   *
-   * Binds a trusted Lean challenge, exact proof artifact, frozen environment, transitive axiom audit, and the contract's kernel, fresh-recheck, or external-crosscheck trust tier.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-      subject?: {
-        type: "run" | "candidate"
-        id: string
-      }
-      artifactSHA256?: string
-      relation?: "exact_proof" | "exact_refutation" | "repaired_proof"
-      challengeSHA256?: string
-      statementSHA256?: string
-      declaration?: string
-      module?: string
-      environment?: {
-        leanVersion: string
-        leanToolchainSHA256: string
-        lakeManifestSHA256: string
-        dependencyTreeSHA256: string
-      }
-      manifest?: {
-        complete: boolean
-        files: Array<{
-          path: string
-          role:
-            | "challenge"
-            | "statement"
-            | "proof"
-            | "lean_toolchain"
-            | "lake_manifest"
-            | "dependency_tree"
-            | "config"
-            | "support"
-          sha256: string
-        }>
-      }
-      verification?: {
-        startedAt: number
-        endedAt: number
-        build: {
-          verifierArtifactSHA256: string
-          exitCode: number
-          warnings: number
-          transcriptSHA256: string
-        }
-        source: {
-          verifierArtifactSHA256: string
-          complete: boolean
-          findings: Array<{
-            construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
-            path: string
-            line: number
-          }>
-          transcriptSHA256: string
-        }
-        axioms: {
-          verifierArtifactSHA256: string
-          complete: boolean
-          typesTraversed: boolean
-          observed: Array<string>
-          transcriptSHA256: string
-        }
-        fresh?: {
-          verifierArtifactSHA256: string
-          fresh: boolean
-          exitCode: number
-          transcriptSHA256: string
-        }
-        external?: {
-          comparatorArtifactSHA256: string
-          sandboxImageSHA256: string
-          sandboxed: boolean
-          challengeMatched: boolean
-          proofTermSHA256: string
-          transcriptSHA256: string
-          checks: [
-            {
-              role: "lean_kernel" | "external_checker"
-              verifierArtifactSHA256: string
-              accepted: boolean
-              transcriptSHA256: string
-            },
-            {
-              role: "lean_kernel" | "external_checker"
-              verifierArtifactSHA256: string
-              accepted: boolean
-              transcriptSHA256: string
-            },
-          ]
-        }
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "artifactSHA256" },
-            { in: "body", key: "relation" },
-            { in: "body", key: "challengeSHA256" },
-            { in: "body", key: "statementSHA256" },
-            { in: "body", key: "declaration" },
-            { in: "body", key: "module" },
-            { in: "body", key: "environment" },
-            { in: "body", key: "manifest" },
-            { in: "body", key: "verification" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessFormalRecordResponses, HarnessFormalRecordErrors, ThrowOnError>(
-      {
-        url: "/harness/proofs/receipts",
-        ...options,
-        ...params,
-        headers: {
-          "Content-Type": "application/json",
-          ...options?.headers,
-          ...params.headers,
-        },
-      },
-    )
-  }
-
-  /**
-   * Read a capability-protected formal proof receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessFormalReceiptResponses,
-      HarnessFormalReceiptErrors,
-      ThrowOnError
-    >({
-      url: "/harness/proofs/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Launch extends HeyApiClient {
-  /**
-   * Record evaluator-authenticated benchmark launch readiness
-   *
-   * Verifies the complete clean-checkout, environment, hidden-boundary, deterministic-replay, artifact, and baseline launch suite against a pinned official protocol.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      schemaVersion?: 1
-      runID?: string
-      sessionID?: string
-      evaluatorToken?: string
-      protocol?: {
-        protocolVersion: "benchmark-launch-v1"
-        runner: {
-          repository: string
-          revision: string
-          entrypoint: string
-          commandSHA256: string
-          environmentSHA256: string
-          recipeSHA256?: string
-          driverSHA256?: string
-        }
-        dataset: {
-          name: string
-          source: string
-          revision: string
-          manifestSHA256: string
-        }
-        taskManifestSHA256: string
-        evaluatorSHA256: string
-        validatorSHA256: string
-        baseline: {
-          name: string
-          artifactSHA256: string
-          expectedScore?: number
-          tolerance?: number
-        }
-      }
-      validator?: {
-        name: "verify-benchmark-launch"
-        version: "1"
-        scriptSHA256: string
-        manifestSHA256: string
-      }
-      checks?: [
-        {
-          id:
-            | "clean_checkout"
-            | "locked_environment"
-            | "task_manifest_load"
-            | "evaluator_load"
-            | "hidden_boundary"
-            | "deterministic_replay"
-            | "artifact_roundtrip"
-            | "baseline_replay"
-          status: "passed" | "failed"
-          evidence: Array<string>
-        },
-        {
-          id:
-            | "clean_checkout"
-            | "locked_environment"
-            | "task_manifest_load"
-            | "evaluator_load"
-            | "hidden_boundary"
-            | "deterministic_replay"
-            | "artifact_roundtrip"
-            | "baseline_replay"
-          status: "passed" | "failed"
-          evidence: Array<string>
-        },
-        {
-          id:
-            | "clean_checkout"
-            | "locked_environment"
-            | "task_manifest_load"
-            | "evaluator_load"
-            | "hidden_boundary"
-            | "deterministic_replay"
-            | "artifact_roundtrip"
-            | "baseline_replay"
-          status: "passed" | "failed"
-          evidence: Array<string>
-        },
-        {
-          id:
-            | "clean_checkout"
-            | "locked_environment"
-            | "task_manifest_load"
-            | "evaluator_load"
-            | "hidden_boundary"
-            | "deterministic_replay"
-            | "artifact_roundtrip"
-            | "baseline_replay"
-          status: "passed" | "failed"
-          evidence: Array<string>
-        },
-        {
-          id:
-            | "clean_checkout"
-            | "locked_environment"
-            | "task_manifest_load"
-            | "evaluator_load"
-            | "hidden_boundary"
-            | "deterministic_replay"
-            | "artifact_roundtrip"
-            | "baseline_replay"
-          status: "passed" | "failed"
-          evidence: Array<string>
-        },
-        {
-          id:
-            | "clean_checkout"
-            | "locked_environment"
-            | "task_manifest_load"
-            | "evaluator_load"
-            | "hidden_boundary"
-            | "deterministic_replay"
-            | "artifact_roundtrip"
-            | "baseline_replay"
-          status: "passed" | "failed"
-          evidence: Array<string>
-        },
-        {
-          id:
-            | "clean_checkout"
-            | "locked_environment"
-            | "task_manifest_load"
-            | "evaluator_load"
-            | "hidden_boundary"
-            | "deterministic_replay"
-            | "artifact_roundtrip"
-            | "baseline_replay"
-          status: "passed" | "failed"
-          evidence: Array<string>
-        },
-        {
-          id:
-            | "clean_checkout"
-            | "locked_environment"
-            | "task_manifest_load"
-            | "evaluator_load"
-            | "hidden_boundary"
-            | "deterministic_replay"
-            | "artifact_roundtrip"
-            | "baseline_replay"
-          status: "passed" | "failed"
-          evidence: Array<string>
-        },
-      ]
-      baselineScore?: number
-      evidence?: Array<string>
-      evaluatedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "runID" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "protocol" },
-            { in: "body", key: "validator" },
-            { in: "body", key: "checks" },
-            { in: "body", key: "baselineScore" },
-            { in: "body", key: "evidence" },
-            { in: "body", key: "evaluatedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessLaunchRecordResponses, HarnessLaunchRecordErrors, ThrowOnError>(
-      {
-        url: "/harness/launches/receipts",
-        ...options,
-        ...params,
-        headers: {
-          "Content-Type": "application/json",
-          ...options?.headers,
-          ...params.headers,
-        },
-      },
-    )
-  }
-
-  /**
-   * Read a capability-protected benchmark launch receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessLaunchReceiptResponses,
-      HarnessLaunchReceiptErrors,
-      ThrowOnError
-    >({
-      url: "/harness/launches/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Integrity extends HeyApiClient {
-  /**
-   * Record evaluator-authenticated runtime integrity
-   *
-   * Derives trace-completeness, model-identity, contamination, external-model, benchmark-lookup, and hidden-canary gates against an immutable protocol.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      schemaVersion?: 1
-      runID?: string
-      sessionID?: string
-      evaluatorToken?: string
-      protocol?: {
-        protocolVersion: "benchmark-integrity-v1"
-        validatorSHA256: string
-        traceSchemaSHA256: string
-        minEvents: number
-        minCoverage: number
-        assignedModel: {
-          name: string
-          baseArtifactSHA256: string
-          configSHA256: string
-        }
-        forbiddenModelArtifacts?: Array<string>
-        policy: {
-          testItemDerivation: "forbidden"
-          unapprovedExternalModels: "forbidden"
-          benchmarkLookup: "forbidden"
-        }
-        auditors: [
-          {
-            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-            name: string
-            version: string
-            promptSHA256: string
-          },
-          {
-            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-            name: string
-            version: string
-            promptSHA256: string
-          },
-          {
-            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-            name: string
-            version: string
-            promptSHA256: string
-          },
-        ]
-        hiddenCanaryManifestSHA256: string
-        minHiddenCanaries: number
-      }
-      subject?: {
-        type: "run" | "candidate"
-        id: string
-        artifact: {
-          uri: string
-          sha256: string
-        }
-      }
-      trace?: {
-        artifact: {
-          uri: string
-          sha256: string
-        }
-        schemaSHA256: string
-        events: number
-        dropped: number
-        startedAt: number
-        endedAt: number
-      }
-      model?: {
-        name: string
-        baseArtifactSHA256: string
-        configSHA256: string
-        outputArtifactSHA256: string
-        lineageVerified: boolean
-      }
-      audits?: [
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-          decision: "clean" | "flagged" | "abstain"
-          confidence: number
-          evidence: Array<string>
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-          decision: "clean" | "flagged" | "abstain"
-          confidence: number
-          evidence: Array<string>
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-          decision: "clean" | "flagged" | "abstain"
-          confidence: number
-          evidence: Array<string>
-        },
-      ]
-      activity?: {
-        unapprovedExternalModelCalls: number
-        benchmarkLookupEvents: number
-        hiddenCanaryManifestSHA256: string
-        hiddenCanariesTested: number
-        hiddenCanaryViolations: number
-      }
-      validator?: {
-        name: "verify-benchmark-integrity"
-        version: 1
-        scriptSHA256: string
-      }
-      evidence?: Array<string>
-      evaluatedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "runID" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "protocol" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "trace" },
-            { in: "body", key: "model" },
-            { in: "body", key: "audits" },
-            { in: "body", key: "activity" },
-            { in: "body", key: "validator" },
-            { in: "body", key: "evidence" },
-            { in: "body", key: "evaluatedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessIntegrityRecordResponses,
-      HarnessIntegrityRecordErrors,
-      ThrowOnError
-    >({
-      url: "/harness/integrity/receipts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected runtime integrity receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessIntegrityReceiptResponses,
-      HarnessIntegrityReceiptErrors,
-      ThrowOnError
-    >({
-      url: "/harness/integrity/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Evolution extends HeyApiClient {
-  /**
-   * Record evaluator-authenticated evolutionary provenance
-   *
-   * Binds a candidate snapshot and every parent delta to immutable search lineage, then derives replay and ancestral line-reintroduction diagnostics without changing fitness.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      schemaVersion?: 1
-      runID?: string
-      sessionID?: string
-      evaluatorToken?: string
-      protocol?: {
-        protocolVersion: "evolution-trace-v1"
-        validatorSHA256: string
-        manifestSchemaSHA256: string
-        lineAlgorithm: "sha256-exact-line-v1"
-        roots: Array<string>
-        extensions: Array<string>
-        exclude?: Array<string>
-        maxFiles: number
-        maxFileBytes: number
-        maxTotalBytes: number
-        maxSourceLines: number
-        maxChangedLines: number
-      }
-      subject?: {
-        type: "candidate"
-        id: string
-        artifact: {
-          uri: string
-          sha256: string
-        }
-      }
-      snapshot?: {
-        artifact: {
-          uri: string
-          sha256: string
-        }
-        schemaSHA256: string
-        files: Array<{
-          path: string
-          sha256: string
-          bytes: number
-          lineHashes: Array<string>
-        }>
-      }
-      parents?: Array<{
-        id: string
-        artifact: {
-          uri: string
-          sha256: string
-        }
-        receiptID: string
-        snapshotSHA256: string
-        delta: {
-          uri: string
-          sha256: string
-        }
-      }>
-      validator?: {
-        name: "trace-evolutionary-candidate"
-        version: 1
-        scriptSHA256: string
-      }
-      evidence?: Array<string>
-      evaluatedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "runID" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "protocol" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "snapshot" },
-            { in: "body", key: "parents" },
-            { in: "body", key: "validator" },
-            { in: "body", key: "evidence" },
-            { in: "body", key: "evaluatedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessEvolutionRecordResponses,
-      HarnessEvolutionRecordErrors,
-      ThrowOnError
-    >({
-      url: "/harness/evolution/receipts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected evolution trace receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessEvolutionReceiptResponses,
-      HarnessEvolutionReceiptErrors,
-      ThrowOnError
-    >({
-      url: "/harness/evolution/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Simulation extends HeyApiClient {
-  /**
-   * Record an evaluator-authenticated simulator validation
-   *
-   * Recomputes convergence, residual, invariant, and stress-test gates against the immutable simulator protocol and exact subject artifact.
-   */
-  public record<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      schemaVersion?: 1
-      runID?: string
-      sessionID?: string
-      evaluatorToken?: string
-      subject?: {
-        type: "run" | "candidate"
-        id: string
-        artifact: {
-          uri: string
-          sha256: string
-        }
-      }
-      engine?: {
-        name: string
-        version: string
-        commandSHA256: string
-        configSHA256: string
-      }
-      problemSHA256?: string
-      reference?: {
-        kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
-        identity: string
-        sha256: string
-      }
-      validationInputSHA256?: string
-      levels?: Array<{
-        label: string
-        h: number
-        error: number
-        residual: number
-        invariants: {
-          [key: string]: number
-        }
-      }>
-      stressTests?: Array<{
-        id:
-          | "timestep_sensitivity"
-          | "solver_tolerance_sensitivity"
-          | "reference_replay"
-          | "independent_implementation"
-          | "unit_convention"
-          | "boundary_sensitivity"
-          | "perturbation_stability"
-        status: "passed" | "failed" | "inconclusive"
-        evidence: Array<string>
-      }>
-      evidence?: Array<string>
-      evaluatedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "runID" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "subject" },
-            { in: "body", key: "engine" },
-            { in: "body", key: "problemSHA256" },
-            { in: "body", key: "reference" },
-            { in: "body", key: "validationInputSHA256" },
-            { in: "body", key: "levels" },
-            { in: "body", key: "stressTests" },
-            { in: "body", key: "evidence" },
-            { in: "body", key: "evaluatedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessSimulationRecordResponses,
-      HarnessSimulationRecordErrors,
-      ThrowOnError
-    >({
-      url: "/harness/simulations/receipts",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Read a capability-protected simulator validation receipt
-   */
-  public receipt<ThrowOnError extends boolean = false>(
-    parameters: {
-      receiptID: string
-      directory?: string
-      sessionID?: string
-      evaluatorToken?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "receiptID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessSimulationReceiptResponses,
-      HarnessSimulationReceiptErrors,
-      ThrowOnError
-    >({
-      url: "/harness/simulations/receipts/{receiptID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Orchestration extends HeyApiClient {
-  /**
-   * Read scientific orchestration state
-   */
-  public status<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<
-      HarnessOrchestrationStatusResponses,
-      HarnessOrchestrationStatusErrors,
-      ThrowOnError
-    >({
-      url: "/harness/runs/{sessionID}/orchestration",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Initialize contract-bound scientific orchestration
-   *
-   * Selects a bounded topology from immutable contract traits and creates a restart-safe provisional work DAG.
-   */
-  public start<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessOrchestrationStartResponses,
-      HarnessOrchestrationStartErrors,
-      ThrowOnError
-    >({
-      url: "/harness/runs/{sessionID}/orchestration",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Record an evaluator-authenticated orchestration utility checkpoint
-   *
-   * Gates the next evolution round and stops low-utility search without allowing worker self-scores to control budget.
-   */
-  public checkpoint<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-      evaluatorToken?: string
-      round?: number
-      utility?: number
-      uncertainty?: number
-      evidenceRefs?: Array<string>
-      evaluatedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "round" },
-            { in: "body", key: "utility" },
-            { in: "body", key: "uncertainty" },
-            { in: "body", key: "evidenceRefs" },
-            { in: "body", key: "evaluatedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      HarnessOrchestrationCheckpointResponses,
-      HarnessOrchestrationCheckpointErrors,
-      ThrowOnError
-    >({
-      url: "/harness/runs/{sessionID}/orchestration/checkpoints",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Skill extends HeyApiClient {
-  /**
-   * Create an inactive learned skill proposal
-   */
-  public propose<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      name?: string
-      description?: string
-      content?: string
-      origin?: "conversation" | "rsi"
-      sessionID?: string
-      runID?: string
-      createdAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "name" },
-            { in: "body", key: "description" },
-            { in: "body", key: "content" },
-            { in: "body", key: "origin" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "runID" },
-            { in: "body", key: "createdAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessSkillProposeResponses, HarnessSkillProposeErrors, ThrowOnError>(
-      {
-        url: "/harness/skills",
-        ...options,
-        ...params,
-        headers: {
-          "Content-Type": "application/json",
-          ...options?.headers,
-          ...params.headers,
-        },
-      },
-    )
-  }
-
-  /**
-   * Attach paired held-out skill evidence
-   *
-   * Requires both evaluator capabilities and accepts only otherwise-identical candidate/control contracts.
-   */
-  public attest<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      name?: string
-      candidate?: {
-        sessionID: string
-        evaluatorToken: string
-      }
-      control?: {
-        sessionID: string
-        evaluatorToken: string
-      }
-      trigger?: {
-        datasetSHA256: string
-        split: "held_out"
-        examples: number
-        truePositive: number
-        falsePositive: number
-        trueNegative: number
-        falseNegative: number
-      }
-      recordedAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "name" },
-            { in: "body", key: "candidate" },
-            { in: "body", key: "control" },
-            { in: "body", key: "trigger" },
-            { in: "body", key: "recordedAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessSkillAttestResponses, HarnessSkillAttestErrors, ThrowOnError>({
-      url: "/harness/skills/evidence",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Promote a qualified learned skill
-   *
-   * Copies only an unchanged proposal that has met every held-out qualification criterion.
-   */
-  public promote<ThrowOnError extends boolean = false>(
-    parameters: {
-      name: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "name" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessSkillPromoteResponses, HarnessSkillPromoteErrors, ThrowOnError>(
-      {
-        url: "/harness/skills/{name}/promotion",
-        ...options,
-        ...params,
-      },
-    )
-  }
-}
-
-export class Harness extends HeyApiClient {
-  /**
-   * List scientific benchmark adapters
-   *
-   * Lists version-agnostic adapter manifests, exact official source pins or subset limitations, and required verification packs.
-   */
-  public benchmarks<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
-    return (options?.client ?? this.client).get<HarnessBenchmarksResponses, unknown, ThrowOnError>({
-      url: "/harness/benchmarks",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Bind an immutable benchmark run
-   *
-   * Called by a benchmark orchestrator before agent execution. The evaluator capability is hashed and never returned.
-   */
-  public bind<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      schemaVersion?: 1
-      runID?: string
-      sessionID?: string
-      benchmark?: string
-      version?: string
-      taskID?: string
-      split?: "development" | "validation" | "held_out" | "release"
-      evaluator?: {
-        name: string
-        version: string
-        source: "benchmark" | "gate" | "external"
-        token: string
-      }
-      objective?: string
-      profile?: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
-      search?: "adaptive" | "static"
-      orchestration?: {
-        topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
-        traits?: {
-          decomposability: number
-          sequentiality: number
-          toolIntensity: number
-          uncertainty: number
-          verificationRisk: number
-          novelty: number
-          crossDomain: number
-        }
-        maxWorkers: number
-        maxRounds: number
-        roles?: Array<
-          | "generation"
-          | "proximity"
-          | "reflection"
-          | "ranking"
-          | "evolution"
-          | "revision"
-          | "verification"
-          | "investigation"
-          | "simulation"
-          | "synthesis"
-        >
-        minIndependentVerifiers: number
-        adaptive?: {
-          protocolVersion: "marginal-utility-v1"
-          minRounds: number
-          patience: number
-          minUtilityGain: number
-          maxUncertainty: number
-          targetUtility?: number
-        }
-        repair?: {
-          protocolVersion: "verifier-routed-v1"
-          minConfidence: number
-        }
-      }
-      audit?: {
-        mode: "performance" | "failure" | "hybrid"
-        budget: number
-        minSamples: number
-        noiseVariance?: number
-        lengthscale?: number
-        beta?: number
-        failureThreshold?: number
-        tolerance?: number
-        maxUncertainty?: number
-        estimationWeight?: number
-        diversityWeight?: number
-        coverageWeight?: number
-        targetFailures?: number
-        transfer?: {
-          protocolVersion: "score-history-prior-v1"
-          poolSHA256: string
-          sourceManifestSHA256: string
-          selectionSHA256: string
-          selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
-          sourceModels: Array<string>
-          calibrationSamples: number
-          maxCalibrationMAE: number
-        }
-        promotionRequired?: boolean
-      }
-      failureDiscovery?: {
-        protocolVersion: "topic-aware-failure-v1"
-        sourcePoolSHA256: string
-        topicModel: {
-          kind: "predefined" | "bertopic"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        }
-        topics: Array<{
-          id: string
-          commitment: string
-        }>
-        generator: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        validators: [
-          {
-            kind: "correctness" | "topic" | "novelty"
-            identity: {
-              name: string
-              version: string
-              promptSHA256: string
-              configSHA256: string
-            }
-          },
-          {
-            kind: "correctness" | "topic" | "novelty"
-            identity: {
-              name: string
-              version: string
-              promptSHA256: string
-              configSHA256: string
-            }
-          },
-          {
-            kind: "correctness" | "topic" | "novelty"
-            identity: {
-              name: string
-              version: string
-              promptSHA256: string
-              configSHA256: string
-            }
-          },
-        ]
-        embedding: {
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-          dimensions: number
-          regularization?: number
-        }
-        budget: number
-        anchorsPerAttempt: number
-        exploration?: number
-        failureThreshold: number
-        targetFailures?: number
-      }
-      launch?: {
-        protocolVersion: "benchmark-launch-v1"
-        runner: {
-          repository: string
-          revision: string
-          entrypoint: string
-          commandSHA256: string
-          environmentSHA256: string
-          recipeSHA256?: string
-          driverSHA256?: string
-        }
-        dataset: {
-          name: string
-          source: string
-          revision: string
-          manifestSHA256: string
-        }
-        taskManifestSHA256: string
-        evaluatorSHA256: string
-        validatorSHA256: string
-        baseline: {
-          name: string
-          artifactSHA256: string
-          expectedScore?: number
-          tolerance?: number
-        }
-      }
-      recipe?: {
-        recipeID: string
-        bindings: {
-          [key: string]: string
-        }
-      }
-      integrity?: {
-        protocolVersion: "benchmark-integrity-v1"
-        validatorSHA256: string
-        traceSchemaSHA256: string
-        minEvents: number
-        minCoverage: number
-        assignedModel: {
-          name: string
-          baseArtifactSHA256: string
-          configSHA256: string
-        }
-        forbiddenModelArtifacts?: Array<string>
-        policy: {
-          testItemDerivation: "forbidden"
-          unapprovedExternalModels: "forbidden"
-          benchmarkLookup: "forbidden"
-        }
-        auditors: [
-          {
-            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-            name: string
-            version: string
-            promptSHA256: string
-          },
-          {
-            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-            name: string
-            version: string
-            promptSHA256: string
-          },
-          {
-            kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-            name: string
-            version: string
-            promptSHA256: string
-          },
-        ]
-        hiddenCanaryManifestSHA256: string
-        minHiddenCanaries: number
-      }
-      evolution?: {
-        protocolVersion: "evolution-trace-v1"
-        validatorSHA256: string
-        manifestSchemaSHA256: string
-        lineAlgorithm: "sha256-exact-line-v1"
-        roots: Array<string>
-        extensions: Array<string>
-        exclude?: Array<string>
-        maxFiles: number
-        maxFileBytes: number
-        maxTotalBytes: number
-        maxSourceLines: number
-        maxChangedLines: number
-      }
-      metaHarness?: {
-        protocol: {
-          protocolVersion: "meta-harness-v1"
-          validatorSHA256: string
-          archiveSchemaSHA256: string
-          traceSchemaSHA256: string
-          baseline: {
-            artifactSHA256: string
-            manifestSHA256: string
-          }
-          mutable: Array<{
-            root: string
-            component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
-          }>
-          protected: {
-            manifestSHA256: string
-            roots: Array<string>
-          }
-          archive: {
-            contents: "full-source-scores-traces"
-            query: "filesystem"
-            summariesOnly: false
-            hiddenContent: "excluded"
-            evaluatorContent: "excluded"
-          }
-          updater: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-          judge: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-          search: {
-            models: Array<{
-              id: string
-              commitment: string
-            }>
-            tasks: Array<{
-              id: string
-              commitment: string
-              activationRequired: boolean
-            }>
-          }
-          heldout: {
-            models: Array<{
-              id: string
-              commitment: string
-            }>
-            tasks: Array<{
-              id: string
-              commitment: string
-              activationRequired: boolean
-            }>
-          }
-          thresholds: {
-            minSearchGain: number
-            minHeldoutGain: number
-            maxModelRegression: number
-            minActivationRate: number
-            minRequiredAdherence: number
-            minFinalAdherence: number
-            maxPhaseDrift: number
-            minPredictionPrecision: number
-            maxRiskRegressions: number
-            maxContextTokens: number
-            maxMeanContextIncrease: number
-          }
-          promotionRequired: true
-        }
-        token: string
-      }
-      interventions?: {
-        protocolVersion: "intervention-study-v1"
-        validatorSHA256: string
-        requiredForPromotion: boolean
-        minPairs: number
-        maxPairs: number
-        maxTotalPairs: number
-        confidence: 0.95
-        required: Array<
-          | "replay"
-          | "retune"
-          | "ablation"
-          | "repair"
-          | "model_transfer"
-          | "context_transfer"
-          | "evaluator_transfer"
-          | "split_transfer"
-        >
-        rules: Array<
-          | {
-              family: "replay"
-              mode: "max_absolute_effect"
-              threshold: number
-            }
-          | {
-              family: "retune" | "ablation" | "repair"
-              mode: "min_effect"
-              threshold: number
-            }
-          | {
-              family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
-              mode: "max_regression"
-              threshold: number
-            }
-        >
-      }
-      simulation?: {
-        kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
-        engine: {
-          name: string
-          version: string
-          commandSHA256: string
-          configSHA256: string
-        }
-        problemSHA256: string
-        reference: {
-          kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
-          identity: string
-          sha256: string
-        }
-        validation: {
-          errorNorm: string
-          minLevels: number
-          maxLevels?: number
-          expectedOrder: number
-          orderTolerance: number
-          maxResidual: number
-          invariantTolerances: {
-            [key: string]: number
-          }
-          requiredStressTests: Array<
-            | "timestep_sensitivity"
-            | "solver_tolerance_sensitivity"
-            | "reference_replay"
-            | "independent_implementation"
-            | "unit_convention"
-            | "boundary_sensitivity"
-            | "perturbation_stability"
-          >
-        }
-      }
-      evaluatorAudit?: {
-        protocol: {
-          protocolVersion: "evaluator-audit-v1"
-          auditor: {
-            name: string
-            version: string
-            source: "benchmark" | "gate" | "human" | "external"
-          }
-          suite: {
-            name: string
-            version: string
-            commitmentSHA256: string
-          }
-          minCleanCases: number
-          minCasesPerFault: number
-          requiredFaults: Array<
-            | "wrong_answer"
-            | "unsupported_claim"
-            | "missing_evidence"
-            | "data_leakage"
-            | "non_reproducible"
-            | "reward_hacking"
-            | "invalid_statistics"
-            | "invalid_simulation"
-            | "distribution_shift"
-            | "evaluation_awareness"
-          >
-          minSensitivity: number
-          minSpecificity: number
-          minBalancedAccuracy: number
-          minFaultRecall: number
-          maxBrierScore: number
-        }
-        token: string
-      }
-      semanticAudit?: {
-        protocol: {
-          protocolVersion: "semantic-audit-v1"
-          reviewer: {
-            name: string
-            version: string
-            source: "gate" | "human" | "external"
-          }
-          scope: {
-            objectiveSHA256: string
-            criteria: Array<{
-              id: string
-              requirement: string
-            }>
-            forbiddenShortcuts: Array<{
-              id: string
-              description: string
-            }>
-            literature: {
-              cutoff: string
-              corpusSHA256: string
-            }
-            noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
-          }
-          minReviewers: number
-          minConfidence: number
-        }
-        token: string
-      }
-      synthesis?: {
-        protocolVersion: "scientific-synthesis-v1"
-        querySHA256: string
-        referenceSHA256: string
-        referenceFactsSHA256: string
-        referenceFactCount: number
-        cutoff: string
-        tools: Array<"google_search" | "paper_search" | "web_browse">
-        traceSchemaSHA256: string
-        filterPolicySHA256: string
-        maxToolEvents: number
-        decomposer: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        judges: {
-          precision: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-          recall: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        }
-        minGeneratedFacts: number
-        minPrecision: number
-        minRecall: number
-        minF1: number
-        cleanRoomRequired: true
-        judgeFailurePolicy: "inconclusive"
-      }
-      autonomy?: {
-        protocolVersion: "human-ai-autonomy-v1"
-        claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
-        recorder: {
-          name: string
-          version: string
-          artifactSHA256: string
-          source: "evaluator_runtime"
-        }
-        traceSchemaSHA256: string
-        classificationPolicySHA256: string
-        maxEvents: number
-        rawRetention: "required"
-        disclosure: "evaluator_retained" | "public_essential_after_release"
-        completeTraceRequired: true
-        uncertaintyPolicy: "inconclusive"
-      }
-      formalProof?: {
-        protocolVersion: "formal-proof-v1"
-        language: "lean4"
-        tier: "kernel" | "fresh_recheck" | "external_crosscheck"
-        relation: "exact_proof" | "exact_refutation" | "repaired_proof"
-        challengeSHA256: string
-        statementSHA256: string
-        declaration: string
-        module: string
-        leanVersion: string
-        leanToolchainSHA256: string
-        lakeManifestSHA256: string
-        dependencyTreeSHA256: string
-        verifiers: Array<{
-          role:
-            | "lean_kernel"
-            | "source_auditor"
-            | "axiom_auditor"
-            | "fresh_rechecker"
-            | "sandbox_comparator"
-            | "external_checker"
-          name: string
-          version: string
-          artifactSHA256: string
-        }>
-        sandboxImageSHA256?: string
-        forbiddenConstructs: [
-          "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-          "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-          "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-          "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-        ]
-        allowedAxioms: Array<string>
-        maxFiles: number
-        completeManifestRequired: true
-        warningPolicy: "fail"
-        semanticPolicy: "formal_statement_only"
-        blueprint?: {
-          protocolVersion: "proof-blueprint-v1"
-          graphSchemaSHA256: string
-          compilerArtifactSHA256: string
-          sketchValidatorArtifactSHA256: string
-          reviewerArtifactSHA256: string
-          reviewerPromptSHA256: string
-          nodePolicy: "and-or-monotone-v1"
-          failurePolicy: "preserve-and-refine"
-          memoization: "goal-sha256"
-          finalAuthority: "formal-proof-v1"
-          directAttemptFirst: true
-          verifiedSketchRequired: true
-          completeFailureHistoryRequired: true
-          maxNodes: number
-          maxDepth: number
-          maxParallel: number
-          maxAttemptsPerGoal: number
-          maxRefinementsPerGoal: number
-          leaseDurationMs: number
-        }
-      }
-      replication?: {
-        protocolVersion: "replicated-evaluation-v1"
-        validatorSHA256: string
-        environmentSHA256: string
-        sampling: {
-          design: "crossed-stratified-cluster-v1"
-          stratumKind: string
-          clusterKind: string
-          strata: Array<{
-            id: string
-            commitmentSHA256: string
-          }>
-          clusters: Array<{
-            id: string
-            commitmentSHA256: string
-          }>
-        }
-        estimator: "mean" | "median" | "iqm" | "pass_rate"
-        interval:
-          | {
-              method: "stratified-bootstrap-percentile-v1"
-              confidence: 0.95
-              resamples: number
-              seed: number
-            }
-          | {
-              method: "wilson-score-v1"
-              confidence: 0.95
-            }
-        decision: {
-          rule: "conservative-bound-v1"
-          direction: "maximize" | "minimize" | "pass"
-          target: number
-          maxIntervalWidth?: number
-        }
-        failurePolicy: "fail-closed"
-      }
-      confirmation?: {
-        protocol: {
-          protocolVersion: "sealed-confirmation-v1"
-          optimization: {
-            split: "development" | "validation"
-            manifestSHA256: string
-          }
-          claim: {
-            taskID: string
-            split: "held_out" | "release"
-            manifestSHA256: string
-            validatorSHA256: string
-            environmentSHA256: string
-            evaluator: {
-              name: string
-              version: string
-              source: "benchmark" | "gate" | "external"
-            }
-            source?: {
-              repository: string
-              revision: string
-            }
-            metric: string
-            direction: "maximize" | "minimize"
-            target: number
-          }
-          selection: {
-            rule: "terminal-verified-best-v1"
-            subjects: 1
-          }
-          exposure: {
-            policy: "terminal-receipt-only"
-            searchFeedback: false
-            memoryCapture: false
-          }
-          failurePolicy: "fail-closed"
-        }
-        token: string
-      }
-      extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast" | "formal">
-      metric?: {
-        name?: string
-        direction: "maximize" | "minimize" | "pass"
-        target?: number
-      }
-      objectives?: Array<{
-        metric: string
-        direction: "maximize" | "minimize"
-      }>
-      objectiveAudit?: {
-        schemaVersion: 1
-        planSHA256: string
-        validatorSHA256: string
-        contractSHA256: string
-        guardIDs: Array<string>
-      }
-      fidelities?: Array<{
-        id: string
-        final: boolean
-        maxWallTimeMs?: number
-        maxCostUSD?: number
-      }>
-      model?: {
-        provider: string
-        name: string
-        effort?: string
-      }
-      tools?: Array<string>
-      skills?: Array<{
-        name: string
-        version?: string
-        sha256?: string
-      }>
-      budget?: {
-        wallTimeMs?: number
-        steps?: number
-        candidates?: number
-        tokens?: number
-        costUSD?: number
-        cpuHours?: number
-        gpuHours?: number
-      }
-      seed?: number
-      intervention?: "autonomous" | "human_reprompted"
-      contamination?: {
-        policy: string
-        hiddenTestsAccessible: false
-        publicDataCutoff?: string
-      }
-      createdAt?: number
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "runID" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "benchmark" },
-            { in: "body", key: "version" },
-            { in: "body", key: "taskID" },
-            { in: "body", key: "split" },
-            { in: "body", key: "evaluator" },
-            { in: "body", key: "objective" },
-            { in: "body", key: "profile" },
-            { in: "body", key: "search" },
-            { in: "body", key: "orchestration" },
-            { in: "body", key: "audit" },
-            { in: "body", key: "failureDiscovery" },
-            { in: "body", key: "launch" },
-            { in: "body", key: "recipe" },
-            { in: "body", key: "integrity" },
-            { in: "body", key: "evolution" },
-            { in: "body", key: "metaHarness" },
-            { in: "body", key: "interventions" },
-            { in: "body", key: "simulation" },
-            { in: "body", key: "evaluatorAudit" },
-            { in: "body", key: "semanticAudit" },
-            { in: "body", key: "synthesis" },
-            { in: "body", key: "autonomy" },
-            { in: "body", key: "formalProof" },
-            { in: "body", key: "replication" },
-            { in: "body", key: "confirmation" },
-            { in: "body", key: "extraPacks" },
-            { in: "body", key: "metric" },
-            { in: "body", key: "objectives" },
-            { in: "body", key: "objectiveAudit" },
-            { in: "body", key: "fidelities" },
-            { in: "body", key: "model" },
-            { in: "body", key: "tools" },
-            { in: "body", key: "skills" },
-            { in: "body", key: "budget" },
-            { in: "body", key: "seed" },
-            { in: "body", key: "intervention" },
-            { in: "body", key: "contamination" },
-            { in: "body", key: "createdAt" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessBindResponses, HarnessBindErrors, ThrowOnError>({
-      url: "/harness/runs",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Ingest an evaluator-authenticated result
-   *
-   * Records an immutable subject result, promotes a verified search candidate, and captures task-scoped hindsight.
-   */
-  public evaluate<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      schemaVersion?: 1
-      runID?: string
-      sessionID?: string
-      evaluatorToken?: string
-      candidateID?: string
-      stage?: string
-      simulationReceiptID?: string
-      launchReceiptID?: string
-      integrityReceiptID?: string
-      evolutionReceiptID?: string
-      interventionReceiptID?: string
-      evaluatorAuditReceiptID?: string
-      semanticReceiptID?: string
-      replicationReceiptID?: string
-      auditReceiptID?: string
-      failureDiscoveryReceiptID?: string
-      synthesisReceiptID?: string
-      autonomyReceiptID?: string
-      proofReceiptID?: string
-      status?: "passed" | "failed" | "inconclusive"
-      score?: number
-      metrics?: {
-        [key: string]: number
-      }
-      checks?: Array<{
-        id: string
-        status: "passed" | "failed" | "inconclusive"
-        blocking: boolean
-        score?: number
-        evidence?: Array<string>
-        note?: string
-      }>
-      evidence?: Array<string>
-      usage?: {
-        wallTimeMs?: number
-        costUSD?: number
-      }
-      evaluatedAt?: number
-      notes?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "schemaVersion" },
-            { in: "body", key: "runID" },
-            { in: "body", key: "sessionID" },
-            { in: "body", key: "evaluatorToken" },
-            { in: "body", key: "candidateID" },
-            { in: "body", key: "stage" },
-            { in: "body", key: "simulationReceiptID" },
-            { in: "body", key: "launchReceiptID" },
-            { in: "body", key: "integrityReceiptID" },
-            { in: "body", key: "evolutionReceiptID" },
-            { in: "body", key: "interventionReceiptID" },
-            { in: "body", key: "evaluatorAuditReceiptID" },
-            { in: "body", key: "semanticReceiptID" },
-            { in: "body", key: "replicationReceiptID" },
-            { in: "body", key: "auditReceiptID" },
-            { in: "body", key: "failureDiscoveryReceiptID" },
-            { in: "body", key: "synthesisReceiptID" },
-            { in: "body", key: "autonomyReceiptID" },
-            { in: "body", key: "proofReceiptID" },
-            { in: "body", key: "status" },
-            { in: "body", key: "score" },
-            { in: "body", key: "metrics" },
-            { in: "body", key: "checks" },
-            { in: "body", key: "evidence" },
-            { in: "body", key: "usage" },
-            { in: "body", key: "evaluatedAt" },
-            { in: "body", key: "notes" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessEvaluateResponses, HarnessEvaluateErrors, ThrowOnError>({
-      url: "/harness/evaluations",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Compare compatible benchmark runs
-   *
-   * Reports direction-aware deltas and the quality-cost Pareto frontier.
-   */
-  public compare<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      sessionIDs?: Array<string>
-      baselineRunID?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "sessionIDs" },
-            { in: "body", key: "baselineRunID" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<HarnessCompareResponses, HarnessCompareErrors, ThrowOnError>({
-      url: "/harness/compare",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * List quarantined learned skill proposals
-   */
-  public skills<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
-    return (options?.client ?? this.client).get<HarnessSkillsResponses, unknown, ThrowOnError>({
-      url: "/harness/skills",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Read a bound harness contract
-   */
-  public contract<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<HarnessContractResponses, HarnessContractErrors, ThrowOnError>({
-      url: "/harness/runs/{sessionID}/contract",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * List immutable harness evaluations
-   */
-  public evaluations<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<HarnessEvaluationsResponses, HarnessEvaluationsErrors, ThrowOnError>({
-      url: "/harness/runs/{sessionID}/evaluations",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Build a benchmark quality-cost report
-   */
-  public report<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "directory" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<HarnessReportResponses, HarnessReportErrors, ThrowOnError>({
-      url: "/harness/runs/{sessionID}/report",
-      ...options,
-      ...params,
-    })
-  }
-
-  private _benchmark?: Benchmark
-  get benchmark(): Benchmark {
-    return (this._benchmark ??= new Benchmark({ client: this.client }))
-  }
-
-  private _audit?: Audit
-  get audit(): Audit {
-    return (this._audit ??= new Audit({ client: this.client }))
-  }
-
-  private _failure?: Failure
-  get failure(): Failure {
-    return (this._failure ??= new Failure({ client: this.client }))
-  }
-
-  private _ablation?: Ablation
-  get ablation(): Ablation {
-    return (this._ablation ??= new Ablation({ client: this.client }))
-  }
-
-  private _intervention?: Intervention
-  get intervention(): Intervention {
-    return (this._intervention ??= new Intervention({ client: this.client }))
-  }
-
-  private _judge?: Judge
-  get judge(): Judge {
-    return (this._judge ??= new Judge({ client: this.client }))
-  }
-
-  private _replication?: Replication
-  get replication(): Replication {
-    return (this._replication ??= new Replication({ client: this.client }))
-  }
-
-  private _meta?: Meta
-  get meta(): Meta {
-    return (this._meta ??= new Meta({ client: this.client }))
-  }
-
-  private _confirmation?: Confirmation
-  get confirmation(): Confirmation {
-    return (this._confirmation ??= new Confirmation({ client: this.client }))
-  }
-
-  private _semantic?: Semantic
-  get semantic(): Semantic {
-    return (this._semantic ??= new Semantic({ client: this.client }))
-  }
-
-  private _synthesis?: Synthesis
-  get synthesis(): Synthesis {
-    return (this._synthesis ??= new Synthesis({ client: this.client }))
-  }
-
-  private _autonomy?: Autonomy
-  get autonomy(): Autonomy {
-    return (this._autonomy ??= new Autonomy({ client: this.client }))
-  }
-
-  private _blueprint?: Blueprint
-  get blueprint(): Blueprint {
-    return (this._blueprint ??= new Blueprint({ client: this.client }))
-  }
-
-  private _formal?: Formal
-  get formal(): Formal {
-    return (this._formal ??= new Formal({ client: this.client }))
-  }
-
-  private _launch?: Launch
-  get launch(): Launch {
-    return (this._launch ??= new Launch({ client: this.client }))
-  }
-
-  private _integrity?: Integrity
-  get integrity(): Integrity {
-    return (this._integrity ??= new Integrity({ client: this.client }))
-  }
-
-  private _evolution?: Evolution
-  get evolution(): Evolution {
-    return (this._evolution ??= new Evolution({ client: this.client }))
-  }
-
-  private _simulation?: Simulation
-  get simulation(): Simulation {
-    return (this._simulation ??= new Simulation({ client: this.client }))
-  }
-
-  private _orchestration?: Orchestration
-  get orchestration(): Orchestration {
-    return (this._orchestration ??= new Orchestration({ client: this.client }))
-  }
-
-  private _skill?: Skill
-  get skill(): Skill {
-    return (this._skill ??= new Skill({ client: this.client }))
-  }
-}
-
 export class Search extends HeyApiClient {
   /**
    * Search sessions, messages, and artifacts
@@ -9455,41 +5140,6 @@ export class File extends HeyApiClient {
   }
 
   /**
-   * Create a local scientific starter project
-   *
-   * Materialize a valid notebook, sample data, and README without external downloads.
-   */
-  public starter<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      template?: "single-cell" | "dose-response" | "protein-structure"
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "template" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<FileStarterResponses, unknown, ThrowOnError>({
-      url: "/file/starters",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
    * Inspect local publication export support
    *
    * Detect Pandoc and a PDF engine before offering report export formats.
@@ -9764,6 +5414,23 @@ export class Kernel extends HeyApiClient {
 }
 
 export class Notebook extends HeyApiClient {
+  /**
+   * Report host compute capacity
+   */
+  public compute<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<NotebookComputeResponses, unknown, ThrowOnError>({
+      url: "/notebook/compute",
+      ...options,
+      ...params,
+    })
+  }
+
   /**
    * List session kernel records
    */
@@ -10661,7 +6328,7 @@ export class Command extends HeyApiClient {
   }
 }
 
-export class Skill2 extends HeyApiClient {
+export class Skill extends HeyApiClient {
   /**
    * Delete user skill
    *
@@ -10812,9 +6479,9 @@ export class App extends HeyApiClient {
     })
   }
 
-  private _skill?: Skill2
-  get skill(): Skill2 {
-    return (this._skill ??= new Skill2({ client: this.client }))
+  private _skill?: Skill
+  get skill(): Skill {
+    return (this._skill ??= new Skill({ client: this.client }))
   }
 }
 
@@ -11073,11 +6740,6 @@ export class OpenScienceClient extends HeyApiClient {
   private _permission?: Permission
   get permission(): Permission {
     return (this._permission ??= new Permission({ client: this.client }))
-  }
-
-  private _harness?: Harness
-  get harness(): Harness {
-    return (this._harness ??= new Harness({ client: this.client }))
   }
 
   private _search?: Search

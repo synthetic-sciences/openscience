@@ -105,6 +105,7 @@ type PermissionReply = "once" | "session" | "project" | "always" | "reject"
 function PermissionActions(props: { respond: (response: PermissionReply) => void; metadata?: Record<string, any> }) {
   const i18n = useI18n()
   const [scopes, setScopes] = createSignal(false)
+  const compute = () => props.metadata?.compute
   const summary = () => {
     const filesystem = props.metadata?.filesystem
     if (filesystem?.path) {
@@ -116,42 +117,64 @@ function PermissionActions(props: { respond: (response: PermissionReply) => void
     return undefined
   }
   return (
-    <div data-component="permission-prompt">
-      <Show when={summary()}>
-        <div data-slot="permission-summary">{summary()}</div>
-      </Show>
-      <div data-slot="permission-actions">
-        <Show
-          when={scopes()}
-          fallback={
-            <>
-              <Button variant="ghost" size="small" onClick={() => props.respond("reject")}>
-                {i18n.t("ui.permission.deny")}
+    <Show
+      when={compute()?.provider === "modal" && compute()}
+      fallback={
+        <div data-component="permission-prompt">
+          <Show when={summary()}>
+            <div data-slot="permission-summary">{summary()}</div>
+          </Show>
+          <div data-slot="permission-actions">
+            <Show
+              when={scopes()}
+              fallback={
+                <>
+                  <Button variant="ghost" size="small" onClick={() => props.respond("reject")}>
+                    {i18n.t("ui.permission.deny")}
+                  </Button>
+                  <Button variant="secondary" size="small" onClick={() => setScopes(true)}>
+                    {i18n.t("ui.permission.allow")}
+                  </Button>
+                  <Button variant="primary" size="small" onClick={() => props.respond("once")}>
+                    {i18n.t("ui.permission.allowOnce")}
+                  </Button>
+                </>
+              }
+            >
+              <Button variant="ghost" size="small" onClick={() => setScopes(false)}>
+                {i18n.t("ui.common.cancel")}
               </Button>
-              <Button variant="secondary" size="small" onClick={() => setScopes(true)}>
-                {i18n.t("ui.permission.allow")}
+              <Button variant="secondary" size="small" onClick={() => props.respond("session")}>
+                {i18n.t("ui.permission.allowSession")}
               </Button>
-              <Button variant="primary" size="small" onClick={() => props.respond("once")}>
-                {i18n.t("ui.permission.allowOnce")}
+              <Button variant="secondary" size="small" onClick={() => props.respond("project")}>
+                {i18n.t("ui.permission.allowProject")}
               </Button>
-            </>
-          }
-        >
-          <Button variant="ghost" size="small" onClick={() => setScopes(false)}>
-            {i18n.t("ui.common.cancel")}
-          </Button>
-          <Button variant="secondary" size="small" onClick={() => props.respond("session")}>
-            {i18n.t("ui.permission.allowSession")}
-          </Button>
-          <Button variant="secondary" size="small" onClick={() => props.respond("project")}>
-            {i18n.t("ui.permission.allowProject")}
-          </Button>
-          <Button variant="secondary" size="small" onClick={() => props.respond("always")}>
-            {i18n.t("ui.permission.allowAlways")}
-          </Button>
-        </Show>
-      </div>
-    </div>
+              <Button variant="secondary" size="small" onClick={() => props.respond("always")}>
+                {i18n.t("ui.permission.allowAlways")}
+              </Button>
+            </Show>
+          </div>
+        </div>
+      }
+    >
+      {(plan) => (
+        <div data-component="permission-prompt">
+          <div data-slot="permission-summary">
+            Dispatch “{plan().name}” to Modal using {plan().gpu === "none" ? "CPU" : plan().gpu}, image {plan().image},
+            and a {plan().timeout_minutes}-minute limit. This may incur charges.
+          </div>
+          <div data-slot="permission-actions">
+            <Button variant="ghost" size="small" onClick={() => props.respond("reject")}>
+              {i18n.t("ui.permission.deny")}
+            </Button>
+            <Button variant="primary" size="small" onClick={() => props.respond("once")}>
+              Dispatch
+            </Button>
+          </div>
+        </div>
+      )}
+    </Show>
   )
 }
 
@@ -829,6 +852,39 @@ ToolRegistry.register({
     const name = skillName({ metadata: props.metadata, input: props.input, title: props.title })
     return (
       <BasicTool {...props} icon="mcp" trigger={{ title: i18n.t("ui.tool.skill", { name }) }}>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "modal",
+  render(props) {
+    const plan = () => props.metadata.compute
+    return (
+      <BasicTool
+        {...props}
+        icon="mcp"
+        trigger={{
+          title: props.title || (props.status === "pending" ? "Review Modal job" : "Modal job"),
+          subtitle: props.input.name,
+          args: [props.input.gpu || "none"],
+        }}
+      >
+        <Show when={plan()}>
+          {(value) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={`\`\`\`json\n${JSON.stringify(value(), null, 2)}\n\`\`\``} />
+            </div>
+          )}
+        </Show>
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>

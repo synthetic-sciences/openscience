@@ -1,0 +1,1052 @@
+.files-source {
+  position: relative;
+}
+
+.files-source__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 8px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.files-source__button:hover {
+  background: var(--color-surface);
+}
+.files-source__button:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 1px;
+}
+.files-source__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files-source__caret {
+  color: var(--color-text-faint);
+  font-size: 10px;
+}
+
+.files-menu-wrap {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+/* Fixed, not absolute: the wrap is only as big as the trigger, so an absolute
+   scrim caught clicks on the button alone and every click elsewhere in the pane
+   left the menu hanging open. */
+.files-menu__scrim {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.files-menu {
+  /* Never wider than the pane it opens inside: a docked pane is ~396px, and a
+     fixed-width menu plus a long path forces a horizontal scrollbar. */
+  position: absolute;
+  top: 40px;
+  left: 0;
+  width: min(300px, calc(100vw - 24px));
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 10px;
+  background: var(--color-surface-solid);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+.files-menu__group {
+  padding: 9px 8px 4px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+}
+/* Two sibling controls, one row: picking the source and revoking it are
+   separate actions, so neither may contain the other. */
+.files-menu__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.files-menu__row .files-menu__item {
+  flex: 1;
+  min-width: 0;
+}
+.files-menu__row:hover .files-menu__item {
+  background: var(--color-bg-subtle);
+}
+.files-menu__item {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.files-menu__item:hover {
+  background: var(--color-bg-subtle);
+}
+.files-menu__item:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: -2px;
+}
+/* A 1fr track still refuses to shrink below its content unless the child says it may. */
+.files-menu__item > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+}
+.files-menu__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Fixed box so every label starts at the same x, whatever the icon's width. */
+  width: 16px;
+  color: var(--color-text-faint);
+}
+.files-menu__label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files-menu__sub {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  color: var(--color-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Truncate from the left: the tail of a path is what distinguishes sources. */
+  direction: rtl;
+  text-align: left;
+}
+/* An RTL paragraph resolves the leading "/" of "/home/you/data" as a neutral at
+   the paragraph edge and renders it at the far right — "home/you/data/". A
+   zero-width LEFT-TO-RIGHT MARK ahead of it gives the slash an L neighbour on
+   both sides, so it stays put. `unicode-bidi: plaintext` fixes the same thing
+   but moves the ellipsis back to the right, which is the whole point of the
+   rule above. */
+.files-menu__sub::before {
+  content: "\200e";
+}
+.files-menu__tail {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-text-faint);
+  font-family: var(--font-code);
+  font-size: 11px;
+}
+.files-menu__badge {
+  padding: 1px 5px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 999px;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.files-menu__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+.files-menu__revoke {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.files-menu__revoke:hover {
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
+}
+.files-menu__revoke:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 1px;
+}
+.files-menu__sep {
+  height: 1px;
+  margin: 7px 8px;
+  background: var(--color-border-weak-base);
+}
+
+.files-table {
+  flex: 1;
+  overflow-y: auto;
+  border-top: 1px solid var(--color-border-weak-base);
+}
+
+.files-row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-weak-base);
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.files-row:hover {
+  background: var(--color-bg-subtle);
+}
+.files-row:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: -2px;
+}
+.files-row__glyph {
+  color: var(--color-text-faint);
+  font-size: 13px;
+}
+.files-row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files-row__size {
+  min-width: 52px;
+  text-align: right;
+  font-family: var(--font-code);
+  font-size: 11.5px;
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.files-row--up .files-row__name {
+  color: var(--color-text-muted);
+}
+.files-row--ignored .files-row__name {
+  color: var(--color-text-faint);
+}
+.files-empty {
+  padding: 30px 16px;
+  color: var(--color-text-faint);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.files-row--trash {
+  cursor: default;
+}
+.files-row--trash:hover {
+  background: none;
+}
+.files-trash__note {
+  margin: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border-weak-base);
+  color: var(--color-text-faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.files-restore {
+  padding: 4px 9px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 6px;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.files-restore:hover:not(:disabled) {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+.files-restore:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 1px;
+}
+.files-restore:disabled {
+  cursor: progress;
+  opacity: 0.5;
+}
+
+/* Hairline scrollbars: the thumb only earns contrast while its list is hovered. */
+.files-pane *,
+.files-pane {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.files-pane *:hover {
+  scrollbar-color: color-mix(in srgb, var(--color-text) 20%, transparent) transparent;
+}
+.files-pane ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.files-pane ::-webkit-scrollbar-track,
+.files-pane ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.files-pane ::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.files-pane ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  background-clip: content-box;
+  background-color: transparent;
+  border-radius: 999px;
+}
+.files-pane *:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--color-text) 18%, transparent);
+}
+.files-pane ::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--color-text) 32%, transparent);
+}
+
+.files-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.files-tabs::-webkit-scrollbar {
+  display: none;
+}
+.files-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 210px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.files-tab--home {
+  flex: 0 0 auto;
+}
+.files-tab--home:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+.files-tab--home[aria-selected="true"] {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.files-tab:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: -2px;
+}
+.files-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The pair carries the tab's chrome so its two controls read as one tab. */
+.files-tab-pair {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 210px;
+  padding-right: 5px;
+  border-radius: 7px;
+}
+.files-tab-pair:hover {
+  background: var(--color-bg-subtle);
+}
+.files-tab-pair:hover .files-tab {
+  color: var(--color-text);
+}
+.files-tab-pair--active {
+  background: var(--color-surface);
+}
+.files-tab-pair--active .files-tab {
+  color: var(--color-text);
+}
+.files-tab__close {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 4px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--color-text-faint);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.files-tab__close:hover {
+  color: var(--color-text);
+}
+.files-tab__close:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 1px;
+}
+
+.files-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+.files-source-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+.files-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 10px;
+}
+.files-search {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 11px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 8px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12.5px;
+}
+.files-search::placeholder {
+  color: var(--color-text-faint);
+}
+.files-search:focus {
+  outline: none;
+  border-color: var(--color-text-muted);
+}
+.files-connect {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 12px 10px;
+  padding: 10px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 8px;
+  background: var(--color-bg-subtle);
+}
+.files-connect__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.files-connect__row--end {
+  justify-content: flex-end;
+}
+.files-connect__field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--color-text-faint);
+  font-size: 11px;
+}
+.files-connect__field select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+}
+.files-connect__note {
+  margin: 0;
+  color: var(--color-text-faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.files-connect__note--blocked {
+  padding-left: 8px;
+  border-left: 2px solid var(--color-border-weak-base);
+  color: var(--color-text-muted);
+}
+.files-connect__browse,
+.files-connect__cancel,
+.files-connect__submit {
+  padding: 7px 11px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 7px;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.files-connect__submit {
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
+}
+.files-connect__browse:hover,
+.files-connect__cancel:hover,
+.files-connect__submit:hover:not(:disabled) {
+  background: var(--color-surface);
+}
+.files-connect__submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.files-connect button:focus-visible,
+.files-connect select:focus-visible,
+.files-connect input:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 1px;
+}
+
+.files-notice {
+  margin: 0 12px 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--color-border-weak-base);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------- artifacts */
+
+.artifact-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  /* The same gutter .files-search-row uses, so the count, the group headers and
+     the cards line up with the search box instead of hugging the pane edge. */
+  padding: 0 12px 12px;
+  overflow-y: auto;
+}
+
+.artifact-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.artifact-toolbar__count {
+  margin-right: auto;
+  color: var(--color-text-faint);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.artifact-toolbar__sort,
+.artifact-toolbar__layout button,
+.artifact-toolbar__prefs {
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 7px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.artifact-toolbar__sort {
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.artifact-toolbar__layout {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 7px;
+}
+.artifact-toolbar__layout button {
+  border: 0;
+  border-radius: 0;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--color-text-faint);
+  line-height: 1.35;
+}
+.artifact-toolbar__layout button[aria-pressed="true"] {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.artifact-toolbar__prefs {
+  padding: 4px 7px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-faint);
+  line-height: 1.3;
+}
+.artifact-toolbar__sort:hover,
+.artifact-toolbar__prefs:hover {
+  background: var(--color-surface);
+}
+.artifact-toolbar__sort:focus-visible,
+.artifact-toolbar__layout button:focus-visible,
+.artifact-toolbar__prefs:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 1px;
+}
+
+.artifact-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+.artifact-group__name {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artifact-group__meta {
+  margin-left: auto;
+  color: var(--color-text-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* auto-fill, so a wider pane gains columns instead of stretching cards. */
+.artifact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+}
+.artifact-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.artifact-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.artifact-card[data-layout="grid"] {
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 10px;
+  background: var(--color-bg-subtle);
+}
+.artifact-card[data-layout="grid"]:hover {
+  border-color: var(--color-border-base);
+}
+.artifact-card__open {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.artifact-card[data-layout="grid"] .artifact-card__open {
+  flex-direction: column;
+}
+.artifact-card[data-layout="list"] {
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+.artifact-card[data-layout="list"]:hover {
+  background: var(--color-bg-subtle);
+}
+.artifact-card[data-layout="list"] .artifact-card__open {
+  align-items: center;
+  gap: 10px;
+}
+.artifact-card__open:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: -1px;
+}
+
+.artifact-card__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.artifact-card[data-layout="grid"] .artifact-card__label {
+  padding: 8px 10px 10px;
+}
+.artifact-card[data-layout="list"] .artifact-card__label {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.artifact-card__name {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artifact-card[data-layout="list"] .artifact-card__name {
+  flex: 1;
+}
+.artifact-card__sub {
+  color: var(--color-text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.artifact-thumb {
+  display: flex;
+  overflow: hidden;
+  background: var(--color-bg-subtle);
+}
+.artifact-card[data-layout="grid"] .artifact-thumb {
+  height: 94px;
+  border-bottom: 1px solid var(--color-border-weak-base);
+}
+.artifact-card[data-layout="list"] .artifact-thumb {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 6px;
+}
+.artifact-thumb--image {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  object-fit: contain;
+}
+.artifact-card[data-layout="list"] .artifact-thumb--image {
+  object-fit: cover;
+}
+/* Ten lines of real source, faded out rather than clipped mid-glyph. */
+.artifact-thumb--text {
+  width: 100%;
+  margin: 0;
+  padding: 8px 9px;
+  overflow: hidden;
+  color: var(--color-text-weak);
+  font-family: var(--font-code);
+  font-size: 7.4px;
+  line-height: 1.55;
+  white-space: pre;
+  mask-image: linear-gradient(180deg, #000 56%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 56%, transparent 100%);
+}
+.artifact-card[data-layout="list"] .artifact-thumb--text {
+  padding: 3px;
+  font-size: 3.6px;
+  line-height: 1.5;
+}
+.artifact-thumb--binary {
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+.artifact-thumb--binary span {
+  padding: 4px 9px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 6px;
+  color: var(--color-text-faint);
+  font-family: var(--font-code);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.artifact-card[data-layout="list"] .artifact-thumb--binary span {
+  padding: 0;
+  border: 0;
+  font-size: 6px;
+  letter-spacing: 0;
+}
+
+/* Revealed on hover AND on focus: a control reachable only by pointer is not
+   reachable at all for a keyboard. */
+.artifact-card__actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 6px;
+  opacity: 0;
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: opacity 90ms ease;
+}
+.artifact-card[data-layout="list"] .artifact-card__actions {
+  position: static;
+  flex: none;
+  border-color: transparent;
+  background: transparent;
+}
+.artifact-card:hover .artifact-card__actions,
+.artifact-card__actions:focus-visible,
+.artifact-card__actions[aria-expanded="true"] {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .artifact-card__actions {
+    transition: none;
+  }
+}
+
+/* Fixed, not absolute: an absolute scrim covers only its own trigger, which is
+   how the source menu once stayed open over the content it obscured. */
+.artifact-menu__scrim {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+/* Fixed and placed in script: the menu is wider than a grid cell, so anchoring
+   it inside the card put the first column's menu at left: -16px, where the
+   pane's overflow: hidden cut it off entirely. */
+.artifact-menu {
+  position: fixed;
+  visibility: hidden;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--color-border-base);
+  border-radius: 9px;
+  background: var(--color-surface-solid);
+  box-shadow: 0 12px 30px -12px rgb(0 0 0 / 0.55);
+}
+/* The toolbar spans the pane, so anchoring this one to its right edge keeps it
+   inside without measurement. */
+.artifact-menu--prefs {
+  position: absolute;
+  top: 30px;
+  right: 0;
+  visibility: visible;
+}
+.artifact-menu button,
+.artifact-menu a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.artifact-menu button:hover,
+.artifact-menu a:hover {
+  background: var(--color-bg-subtle);
+}
+.artifact-menu button:focus-visible,
+.artifact-menu a:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: -1px;
+}
+.artifact-menu button.artifact-menu__danger {
+  /* Compound, because `.artifact-menu button` above outranks a lone class and
+     was painting this in the ordinary text colour. --syntax-critical is the
+     only destructive colour this theme defines, and it varies by scheme. */
+  color: var(--syntax-critical);
+}
+.artifact-menu__check {
+  flex: none;
+  width: 12px;
+  font-size: 11px;
+}
+
+/* ------------------------------------------------------------ remote viewer */
+
+.remote-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.remote-view__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-weak-base);
+}
+.remote-view__title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-right: auto;
+  min-width: 0;
+}
+.remote-view__name {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.remote-view__sub {
+  color: var(--color-text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.remote-view__action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border-weak-base);
+  border-radius: 7px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.remote-view__action:hover {
+  background: var(--color-surface);
+}
+.remote-view__action:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 1px;
+}
+.remote-view__action--icon {
+  padding: 4px 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-faint);
+}
+
+.remote-view__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.remote-view__text {
+  margin: 0;
+  padding: 12px;
+  color: var(--color-text);
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 1.55;
+  /* Wrap rather than scroll sideways: a docked pane is ~400px and a long line
+     otherwise takes the whole body with it. */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.remote-view__image {
+  display: block;
+  max-width: 100%;
+  margin: 12px auto;
+  background: #fff;
+}
+.remote-view__frame {
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  border: 0;
+}
+.remote-view__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 30px 16px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+.remote-view__empty p {
+  margin: 0;
+}
+.remote-view__hint {
+  color: var(--color-text-faint);
+  font-size: 12px;
+}
+
+.files-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 8px;
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+}
+.files-loading__spark {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+  animation: files-pulse 1s ease-in-out infinite;
+}
+@keyframes files-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .files-loading__spark {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* Shown but not actionable: the rows describe the folder being left. */
+.files-table--busy .files-row {
+  opacity: 0.5;
+  cursor: default;
+}

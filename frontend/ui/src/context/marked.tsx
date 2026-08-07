@@ -475,6 +475,23 @@ async function highlightCodeBlocks(html: string): Promise<string> {
   return result
 }
 
+/**
+ * Highlight a short snippet with the shared highlighter and the registered
+ * OpenScience theme. `structure: "inline"` omits the <pre><code> wrapper so the
+ * caller controls the container -- a thumbnail sizes and masks its own.
+ */
+export async function highlightSnippet(code: string, lang: string): Promise<string> {
+  const [highlighter, bundled] = await Promise.all([
+    getSharedHighlighter({ themes: ["OpenScience"], langs: [] }),
+    loadLangs(),
+  ])
+  const language = lang in bundled ? lang : "text"
+  if (!highlighter.getLoadedLanguages().includes(language)) {
+    await highlighter.loadLanguage(language as BundledLanguage)
+  }
+  return highlighter.codeToHtml(code, { lang: language, theme: "OpenScience", tabindex: false, structure: "inline" })
+}
+
 export type NativeMarkdownParser = (markdown: string) => Promise<string>
 
 // The pure-JS marked pipeline (katex + shiki extensions) — built lazily on first

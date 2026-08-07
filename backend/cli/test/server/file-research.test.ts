@@ -27,24 +27,6 @@ describe("/file research routes", () => {
     })
   })
 
-  test("creates a starter project through the local file API", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const response = await FileRoutes().request("/file/starters", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ template: "protein-structure" }),
-        })
-        expect(response.status).toBe(200)
-        const result = (await response.json()) as { notebook: string; files: string[] }
-        expect(result.notebook).toBe("openscience-starters/protein-structure/analysis.ipynb")
-        expect(result.files).toContain("openscience-starters/protein-structure/data/alanine.pdb")
-      },
-    })
-  })
-
   test("exports a Markdown report through the publication API", async () => {
     await using tmp = await tmpdir({
       init: async (directory) => {

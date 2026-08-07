@@ -19,11 +19,12 @@ On Linux, the bundled runtime requires kernel 5.1 or newer. Glibc binaries requi
 ```bash
 openscience                     # open the workspace in your browser
 openscience ~/code/project      # open it in a specific directory
-openscience connect login       # sign in to Atlas (optional; BYOK works without an account)
+openscience connect             # connect a ChatGPT / Codex subscription locally
+openscience login               # sign in to Atlas (optional; BYOK works without an account)
 openscience run "..."           # run a one-shot task
 ```
 
-Configuration lives in `~/.config/openscience/openscience.json`. Provider keys can be set in the workspace (bring your own key) or synced from Atlas.
+Configuration lives in `~/.config/openscience/openscience.json`. Provider keys can be set in the workspace (bring your own key) or synced from Atlas. Default, learned, installed, and project skills are all local and work without Atlas.
 
 ## Docs
 

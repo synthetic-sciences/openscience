@@ -10,6 +10,8 @@ export const MODEL_PROVIDERS = [
   { id: "fireworks-ai", atlas: "fireworks", label: "Fireworks AI", placeholder: "fw_…" },
   { id: "mistral", atlas: "mistral", label: "Mistral", placeholder: "…" },
   { id: "deepseek", atlas: "deepseek", label: "DeepSeek", placeholder: "sk-…" },
+  { id: "moonshotai", atlas: "moonshot", label: "Moonshot AI (Kimi)", placeholder: "sk-…" },
+  { id: "zai", atlas: "zai", label: "Z.AI (GLM)", placeholder: "…" },
   { id: "cerebras", atlas: "cerebras", label: "Cerebras", placeholder: "csk-…" },
   { id: "perplexity", atlas: "perplexity", label: "Perplexity", placeholder: "pplx-…" },
 ] as const

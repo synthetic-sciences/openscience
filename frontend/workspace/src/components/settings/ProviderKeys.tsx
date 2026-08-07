@@ -1,13 +1,14 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { Button } from "@synsci/ui/button"
+import { Select } from "@synsci/ui/select"
 import type { Provider } from "@synsci/sdk/v2/client"
-import { StatusDot } from "@/atlas/shared/StatusDot"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useProviders } from "@/hooks/use-providers"
 import { isUserProviderConnection } from "@/context/model-catalog"
 import { MODEL_PROVIDERS, MODEL_PROVIDER_LABELS, modelProvider } from "./model-providers"
 import { credentialChange } from "./credential-change"
+import { ProviderLogo } from "./ProviderLogo"
 
 /**
  * `note` says where a key that this panel cannot delete actually lives, so the
@@ -122,13 +123,38 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
       >
         <label class="flex flex-col gap-1.5">
           <span class="text-12-medium text-text-weak">Provider</span>
-          <select
-            value={provider()}
-            onChange={(event) => setProvider(event.currentTarget.value)}
-            class="h-8 rounded-[4px] border border-border-weak-base bg-surface-base px-2.5 text-13-regular text-text-strong outline-none focus:border-border-strong-base"
-          >
-            <For each={MODEL_PROVIDERS}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
-          </select>
+          <div class="relative">
+            <span class="pointer-events-none absolute left-1 top-1/2 z-[1] -translate-y-1/2">
+              <ProviderLogo id={provider()} label={modelProvider(provider()).label} size="small" />
+            </span>
+            <Select
+              aria-label="Model provider"
+              options={[...MODEL_PROVIDERS]}
+              current={modelProvider(provider())}
+              value={(item) => item.id}
+              label={(item) => item.label}
+              onSelect={(item) => item && setProvider(item.id)}
+              variant="secondary"
+              size="small"
+              triggerStyle={{
+                width: "100%",
+                height: "32px",
+                "justify-content": "space-between",
+                "padding-left": "36px",
+              }}
+            >
+              {(item) => (
+                <Show when={item}>
+                  {(entry) => (
+                    <span class="flex items-center gap-2.5">
+                      <ProviderLogo id={entry().id} label={entry().label} size="small" />
+                      <span>{entry().label}</span>
+                    </span>
+                  )}
+                </Show>
+              )}
+            </Select>
+          </div>
         </label>
         <label class="flex min-w-0 flex-col gap-1.5">
           <span class="text-12-medium text-text-weak">API key</span>
@@ -143,7 +169,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
           />
         </label>
         <Button type="submit" size="small" variant="primary" disabled={saving() || !key().trim()}>
-          {saving() ? "saving…" : "save key"}
+          {saving() ? "Saving…" : "Save key"}
         </Button>
       </form>
 
@@ -153,7 +179,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
             {(item) => (
               <div class="flex items-center justify-between gap-3 border-b border-border-weak-base px-4 py-3 last:border-none">
                 <div class="flex min-w-0 items-center gap-2.5">
-                  <StatusDot status="active" />
+                  <ProviderLogo id={item.id} label={MODEL_PROVIDER_LABELS[item.id] ?? item.id} connected />
                   <span class="truncate text-13-medium text-text-strong">
                     {MODEL_PROVIDER_LABELS[item.id] ?? item.id}
                   </span>
@@ -173,7 +199,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
                   }
                 >
                   <Button size="small" variant="secondary" onClick={() => void remove(item.id)}>
-                    remove
+                    Remove
                   </Button>
                 </Show>
               </div>

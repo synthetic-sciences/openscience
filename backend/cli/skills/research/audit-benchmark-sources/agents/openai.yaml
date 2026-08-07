@@ -1,4 +1,0 @@
-interface:
-  display_name: "Audit Benchmark Sources"
-  short_description: "Verify official pins and surface upstream drift"
-  default_prompt: "Use $audit-benchmark-sources to verify every official benchmark source pin and report upstream drift without changing trusted revisions."

@@ -8,6 +8,13 @@
   background: var(--color-surface-solid);
   color: var(--color-text);
   font-family: var(--font-sans);
+  /* The narrow-layout rules below were written as viewport media queries, back
+     when this view only ever filled the window. The Files pane now mounts it in
+     a ~390px column of a wide window, where those queries never fire and the
+     toolbar overflows a container that clips it — putting Download out of
+     reach. Naming a container lets the same rules key on the width that
+     actually applies. */
+  container: atlas-file-view / inline-size;
 }
 
 .atlas-file-toolbar {
@@ -549,6 +556,73 @@
 }
 
 @media (max-width: 520px) {
+  .atlas-file-meta-separator,
+  .atlas-file-location {
+    display: none;
+  }
+
+  .atlas-file-mode,
+  .atlas-file-button,
+  .atlas-file-action {
+    min-height: 34px;
+  }
+
+  .atlas-file-action span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .atlas-file-action {
+    width: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .atlas-file-document {
+    padding-inline: 18px;
+  }
+}
+
+/* Same two breakpoints, measured against the view's own width so they hold
+   inside the Files pane as well as in a narrow window. */
+@container atlas-file-view (max-width: 760px) {
+  .atlas-file-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .atlas-file-identity {
+    width: 100%;
+    padding-right: 38px;
+  }
+
+  .atlas-file-controls {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 1px;
+  }
+
+  .atlas-file-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+  }
+
+  .atlas-file-document {
+    padding: 28px 20px 52px;
+  }
+}
+
+@container atlas-file-view (max-width: 520px) {
   .atlas-file-meta-separator,
   .atlas-file-location {
     display: none;

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Active Failure Audit"
-  short_description: "Build blinded probes for active evaluation"
-  default_prompt: "Use $active-failure-audit to prepare an opaque committed probe pool and an uncertainty-aware audit protocol."

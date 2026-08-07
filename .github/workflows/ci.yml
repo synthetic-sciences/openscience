@@ -32,6 +32,28 @@ jobs:
       - uses: ./.github/actions/setup-bun
       - run: bun run format:check
 
+  # The data-directory import runs at boot on every user's machine and moves
+  # their credentials and history between two roots. It is also the one piece
+  # of the CLI built almost entirely out of filesystem primitives that differ
+  # per platform — hardlinks, exclusive create, chmod, path separators — so
+  # the Linux-only `test` job below is not evidence it works. This leg is
+  # deliberately narrow: one suite, three operating systems, no sandbox or web
+  # assets to build.
+  migration:
+    name: Migration (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - run: bun test test/global/data-dir.test.ts
+        shell: bash
+        working-directory: backend/cli
+
   test:
     name: Test
     runs-on: ubuntu-latest

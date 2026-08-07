@@ -2812,6 +2812,7 @@ export type SettingsCredentialsListResponses = {
       id: string
       label: string
       description: string
+      category: "compute" | "integration"
       custom: boolean
       fields: Array<{
         name: string
@@ -2847,6 +2848,7 @@ export type SettingsCredentialsRemoveResponses = {
       id: string
       label: string
       description: string
+      category: "compute" | "integration"
       custom: boolean
       fields: Array<{
         name: string
@@ -2888,6 +2890,7 @@ export type SettingsCredentialsSetResponses = {
       id: string
       label: string
       description: string
+      category: "compute" | "integration"
       custom: boolean
       fields: Array<{
         name: string
@@ -2994,6 +2997,8 @@ export type SettingsComputeGetResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3006,6 +3011,17 @@ export type SettingsComputeGetResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3032,6 +3048,8 @@ export type SettingsComputeProviderDisconnectResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3044,6 +3062,17 @@ export type SettingsComputeProviderDisconnectResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3083,6 +3112,8 @@ export type SettingsComputeProviderConnectResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3095,11 +3126,337 @@ export type SettingsComputeProviderConnectResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
 export type SettingsComputeProviderConnectResponse =
   SettingsComputeProviderConnectResponses[keyof SettingsComputeProviderConnectResponses]
+
+export type SettingsComputeProviderEnabledData = {
+  body?: {
+    enabled: boolean
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/settings/compute/provider/{id}/enabled"
+}
+
+export type SettingsComputeProviderEnabledErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeProviderEnabledError =
+  SettingsComputeProviderEnabledErrors[keyof SettingsComputeProviderEnabledErrors]
+
+export type SettingsComputeProviderEnabledResponses = {
+  /**
+   * Updated
+   */
+  200: {
+    providers?: Array<{
+      id: string
+      name: string
+      verified: boolean
+      placeholder: string
+      hint: string
+      connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
+      connected_at: string | null
+      last_used: string | null
+    }>
+    ssh_hosts?: Array<{
+      id: string
+      label: string
+      host: string
+      user?: string
+      port?: number
+      scheduler?: "none" | "slurm" | "pbs"
+      workdir?: string
+    }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
+  }
+}
+
+export type SettingsComputeProviderEnabledResponse =
+  SettingsComputeProviderEnabledResponses[keyof SettingsComputeProviderEnabledResponses]
+
+export type SettingsComputeModalUpdateData = {
+  body?: {
+    app?: string
+    image?: string
+    network?: "unrestricted" | "none"
+    timeout_minutes?: number
+    concurrency?: number
+  }
+  path?: never
+  query?: never
+  url: "/settings/compute/modal"
+}
+
+export type SettingsComputeModalUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalUpdateError = SettingsComputeModalUpdateErrors[keyof SettingsComputeModalUpdateErrors]
+
+export type SettingsComputeModalUpdateResponses = {
+  /**
+   * Updated
+   */
+  200: {
+    providers?: Array<{
+      id: string
+      name: string
+      verified: boolean
+      placeholder: string
+      hint: string
+      connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
+      connected_at: string | null
+      last_used: string | null
+    }>
+    ssh_hosts?: Array<{
+      id: string
+      label: string
+      host: string
+      user?: string
+      port?: number
+      scheduler?: "none" | "slurm" | "pbs"
+      workdir?: string
+    }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
+  }
+}
+
+export type SettingsComputeModalUpdateResponse =
+  SettingsComputeModalUpdateResponses[keyof SettingsComputeModalUpdateResponses]
+
+export type SettingsComputeModalVolumesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/compute/modal/volumes"
+}
+
+export type SettingsComputeModalVolumesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalVolumesError =
+  SettingsComputeModalVolumesErrors[keyof SettingsComputeModalVolumesErrors]
+
+export type SettingsComputeModalVolumesResponses = {
+  /**
+   * Modal Volumes
+   */
+  200: Array<{
+    name: string
+  }>
+}
+
+export type SettingsComputeModalVolumesResponse =
+  SettingsComputeModalVolumesResponses[keyof SettingsComputeModalVolumesResponses]
+
+export type SettingsComputeModalVolumeFilesData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    path?: string
+  }
+  url: "/settings/compute/modal/volumes/{name}/files"
+}
+
+export type SettingsComputeModalVolumeFilesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalVolumeFilesError =
+  SettingsComputeModalVolumeFilesErrors[keyof SettingsComputeModalVolumeFilesErrors]
+
+export type SettingsComputeModalVolumeFilesResponses = {
+  /**
+   * Modal Volume files
+   */
+  200: Array<{
+    path: string
+    type: string
+    size: number
+    mtime?: number
+  }>
+}
+
+export type SettingsComputeModalVolumeFilesResponse =
+  SettingsComputeModalVolumeFilesResponses[keyof SettingsComputeModalVolumeFilesResponses]
+
+export type SettingsComputeModalVolumeFileData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query: {
+    path: string
+  }
+  url: "/settings/compute/modal/volumes/{name}/file"
+}
+
+export type SettingsComputeModalVolumeFileErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SettingsComputeModalVolumeFileError =
+  SettingsComputeModalVolumeFileErrors[keyof SettingsComputeModalVolumeFileErrors]
+
+export type SettingsComputeModalVolumeFileResponses = {
+  /**
+   * Modal Volume file
+   */
+  200: unknown
+}
+
+export type SettingsComputeModalConfigureData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/compute/modal/configure"
+}
+
+export type SettingsComputeModalConfigureErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalConfigureError =
+  SettingsComputeModalConfigureErrors[keyof SettingsComputeModalConfigureErrors]
+
+export type SettingsComputeModalConfigureResponses = {
+  /**
+   * Configured
+   */
+  200: {
+    providers?: Array<{
+      id: string
+      name: string
+      verified: boolean
+      placeholder: string
+      hint: string
+      connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
+      connected_at: string | null
+      last_used: string | null
+    }>
+    ssh_hosts?: Array<{
+      id: string
+      label: string
+      host: string
+      user?: string
+      port?: number
+      scheduler?: "none" | "slurm" | "pbs"
+      workdir?: string
+    }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
+  }
+}
+
+export type SettingsComputeModalConfigureResponse =
+  SettingsComputeModalConfigureResponses[keyof SettingsComputeModalConfigureResponses]
+
+export type SettingsComputeModalCheckData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/compute/modal/check"
+}
+
+export type SettingsComputeModalCheckErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeModalCheckError = SettingsComputeModalCheckErrors[keyof SettingsComputeModalCheckErrors]
+
+export type SettingsComputeModalCheckResponses = {
+  /**
+   * Connection result
+   */
+  200: {
+    ok: true
+    sdk: string
+  }
+}
+
+export type SettingsComputeModalCheckResponse =
+  SettingsComputeModalCheckResponses[keyof SettingsComputeModalCheckResponses]
 
 export type SettingsComputeSshAddData = {
   body?: {
@@ -3136,6 +3493,8 @@ export type SettingsComputeSshAddResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3148,6 +3507,17 @@ export type SettingsComputeSshAddResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3211,6 +3581,8 @@ export type SettingsComputeSshRemoveResponses = {
       placeholder: string
       hint: string
       connected: boolean
+      enabled: boolean
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3223,6 +3595,17 @@ export type SettingsComputeSshRemoveResponses = {
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
     }>
+    modal?: {
+      app?: string
+      image?: string
+      network?: "unrestricted" | "none"
+      timeout_minutes?: number
+      concurrency?: number
+    }
+    modal_file: {
+      found: boolean
+      ready: boolean
+    }
   }
 }
 
@@ -3254,6 +3637,9 @@ export type SettingsComputeJobsListResponses = {
       | {
           kind: "ssh"
           host_id: string
+        }
+      | {
+          kind: "modal"
         }
     target_label: string
     scheduler: "none" | "slurm" | "pbs"
@@ -3725,6 +4111,9 @@ export type SettingsComputeJobsListResponses = {
       }
     }
     capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
     session_id?: string
     authority?: {
       allowed: boolean
@@ -3780,6 +4169,56 @@ export type SettingsComputeJobsListResponses = {
       network: "allow" | "deny"
       warning?: string
     }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+      volume?: string
+    }
   }>
 }
 
@@ -3798,6 +4237,9 @@ export type SettingsComputeJobsStartData = {
           kind: "ssh"
           host_id: string
         }
+      | {
+          kind: "modal"
+        }
     resources?: {
       cpus?: number
       gpus?: number
@@ -3809,6 +4251,11 @@ export type SettingsComputeJobsStartData = {
     container?: string
     artifacts?: Array<string>
     checkpoint?: string
+    uploads?: Array<string>
+    packages?: Array<string>
+    image?: string
+    gpu?: string
+    approval?: string
     sessionID: string
   }
   path?: never
@@ -3844,6 +4291,9 @@ export type SettingsComputeJobsStartResponses = {
           kind: "ssh"
           host_id: string
         }
+      | {
+          kind: "modal"
+        }
     target_label: string
     scheduler: "none" | "slurm" | "pbs"
     status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
@@ -4314,6 +4764,9 @@ export type SettingsComputeJobsStartResponses = {
       }
     }
     capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
     session_id?: string
     authority?: {
       allowed: boolean
@@ -4369,11 +4822,145 @@ export type SettingsComputeJobsStartResponses = {
       network: "allow" | "deny"
       warning?: string
     }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+      volume?: string
+    }
   }
 }
 
 export type SettingsComputeJobsStartResponse =
   SettingsComputeJobsStartResponses[keyof SettingsComputeJobsStartResponses]
+
+export type SettingsComputeJobsPlanData = {
+  body?: {
+    name: string
+    command: string
+    cwd?: string
+    target:
+      | {
+          kind: "local"
+        }
+      | {
+          kind: "ssh"
+          host_id: string
+        }
+      | {
+          kind: "modal"
+        }
+    resources?: {
+      cpus?: number
+      gpus?: number
+      memory_gb?: number
+      time_minutes?: number
+      partition?: string
+    }
+    modules?: Array<string>
+    container?: string
+    artifacts?: Array<string>
+    checkpoint?: string
+    uploads?: Array<string>
+    packages?: Array<string>
+    image?: string
+    gpu?: string
+    approval?: string
+    sessionID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/settings/compute/jobs/plan"
+}
+
+export type SettingsComputeJobsPlanErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeJobsPlanError = SettingsComputeJobsPlanErrors[keyof SettingsComputeJobsPlanErrors]
+
+export type SettingsComputeJobsPlanResponses = {
+  /**
+   * Modal run plan
+   */
+  200: {
+    digest: string
+    provider: "modal"
+    app: string
+    environment?: string
+    image: string
+    packages: Array<string>
+    gpu: string
+    resources?: {
+      cpus?: number
+      gpus?: number
+      memory_gb?: number
+    }
+    timeout_minutes: number
+    network: "unrestricted" | "none"
+    command: string
+    cwd: string
+    uploads: Array<{
+      path: string
+      size: number
+      sha256: string
+    }>
+    upload_bytes: number
+    outputs: Array<string>
+    warning: string
+  }
+}
+
+export type SettingsComputeJobsPlanResponse = SettingsComputeJobsPlanResponses[keyof SettingsComputeJobsPlanResponses]
 
 export type SettingsComputeJobsClearData = {
   body?: never
@@ -4427,7 +5014,7 @@ export type SettingsComputeJobsLogResponses = {
 
 export type SettingsComputeJobsLogResponse = SettingsComputeJobsLogResponses[keyof SettingsComputeJobsLogResponses]
 
-export type SettingsComputeJobsCancelData = {
+export type SettingsComputeJobsEventsData = {
   body?: never
   path: {
     id: string
@@ -4435,21 +5022,57 @@ export type SettingsComputeJobsCancelData = {
   query?: {
     directory?: string
   }
-  url: "/settings/compute/jobs/{id}/cancel"
+  url: "/settings/compute/jobs/{id}/events"
 }
 
-export type SettingsComputeJobsCancelErrors = {
+export type SettingsComputeJobsEventsErrors = {
   /**
    * Not found
    */
   404: NotFoundError
 }
 
-export type SettingsComputeJobsCancelError = SettingsComputeJobsCancelErrors[keyof SettingsComputeJobsCancelErrors]
+export type SettingsComputeJobsEventsError = SettingsComputeJobsEventsErrors[keyof SettingsComputeJobsEventsErrors]
 
-export type SettingsComputeJobsCancelResponses = {
+export type SettingsComputeJobsEventsResponses = {
   /**
-   * Cancelled job
+   * Provider lifecycle logs
+   */
+  200: {
+    events: string
+  }
+}
+
+export type SettingsComputeJobsEventsResponse =
+  SettingsComputeJobsEventsResponses[keyof SettingsComputeJobsEventsResponses]
+
+export type SettingsComputeJobsRetryData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/settings/compute/jobs/{id}/retry"
+}
+
+export type SettingsComputeJobsRetryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SettingsComputeJobsRetryError = SettingsComputeJobsRetryErrors[keyof SettingsComputeJobsRetryErrors]
+
+export type SettingsComputeJobsRetryResponses = {
+  /**
+   * Recovery started
    */
   200: {
     id: string
@@ -4463,6 +5086,9 @@ export type SettingsComputeJobsCancelResponses = {
       | {
           kind: "ssh"
           host_id: string
+        }
+      | {
+          kind: "modal"
         }
     target_label: string
     scheduler: "none" | "slurm" | "pbs"
@@ -4934,6 +5560,9 @@ export type SettingsComputeJobsCancelResponses = {
       }
     }
     capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
     session_id?: string
     authority?: {
       allowed: boolean
@@ -4988,6 +5617,680 @@ export type SettingsComputeJobsCancelResponses = {
       backend: "seatbelt" | "bubblewrap" | "none"
       network: "allow" | "deny"
       warning?: string
+    }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+      volume?: string
+    }
+  }
+}
+
+export type SettingsComputeJobsRetryResponse =
+  SettingsComputeJobsRetryResponses[keyof SettingsComputeJobsRetryResponses]
+
+export type SettingsComputeJobsCancelData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/settings/compute/jobs/{id}/cancel"
+}
+
+export type SettingsComputeJobsCancelErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SettingsComputeJobsCancelError = SettingsComputeJobsCancelErrors[keyof SettingsComputeJobsCancelErrors]
+
+export type SettingsComputeJobsCancelResponses = {
+  /**
+   * Cancelled job
+   */
+  200: {
+    id: string
+    name: string
+    command: string
+    cwd?: string
+    target:
+      | {
+          kind: "local"
+        }
+      | {
+          kind: "ssh"
+          host_id: string
+        }
+      | {
+          kind: "modal"
+        }
+    target_label: string
+    scheduler: "none" | "slurm" | "pbs"
+    status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted"
+    created_at: string
+    started_at?: string
+    completed_at?: string
+    exit_code?: number | null
+    pid?: number
+    error?: string
+    resources?: {
+      cpus?: number
+      gpus?: number
+      memory_gb?: number
+      time_minutes?: number
+      partition?: string
+    }
+    modules?: Array<string>
+    container?: string
+    artifact_patterns?: Array<string>
+    artifacts?: Array<{
+      path: string
+      size: number
+      sha256: string
+      modified_at: string
+    }>
+    checkpoint_path?: string
+    checkpoint?: {
+      path: string
+      size: number
+      sha256: string
+      modified_at: string
+    }
+    reproducibility?: {
+      captured_at: string
+      command: string
+      cwd: string
+      platform: string
+      arch: string
+      bun: string
+      node: string
+      python?: string
+      git?: {
+        repository?: string
+        branch?: string
+        commit?: string
+        dirty: boolean
+      }
+      lockfiles: Array<{
+        path: string
+        size: number
+        sha256: string
+        modified_at: string
+      }>
+      resources?: {
+        cpus?: number
+        gpus?: number
+        memory_gb?: number
+        time_minutes?: number
+        partition?: string
+      }
+    }
+    provenance?: {
+      format: "openscience.provenance.v1"
+      kind: "kernel" | "local_compute" | "remote_compute" | "artifact_version"
+      identity: {
+        project_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        session_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        run_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      input: {
+        code:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        cwd:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        code_state:
+          | {
+              status: "available"
+              value: {
+                repository:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                branch:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                commit:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                dirty:
+                  | {
+                      status: "available"
+                      value: boolean
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+              }
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      environment: {
+        host:
+          | {
+              status: "available"
+              value: {
+                platform: string
+                arch: string
+                runtimes: {
+                  [key: string]: string
+                }
+              }
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        kernel:
+          | {
+              status: "available"
+              value: {
+                id: string
+                language: string
+                incarnation:
+                  | {
+                      status: "available"
+                      value: number
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                process_id:
+                  | {
+                      status: "available"
+                      value: number
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+                process_started_at:
+                  | {
+                      status: "available"
+                      value: string
+                    }
+                  | {
+                      status: "unavailable"
+                      reason:
+                        | "not_applicable"
+                        | "not_captured"
+                        | "not_implemented"
+                        | "not_published"
+                        | "not_versioned"
+                        | "remote_unverified"
+                    }
+              }
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      outputs: {
+        status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted" | "inconclusive"
+        items: Array<{
+          kind: "stream" | "display" | "result" | "error" | "artifact" | "checkpoint"
+          label: string
+          artifact_id:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          path:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          sha256: string
+          size: number
+          version_id:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          version:
+            | {
+                status: "available"
+                value: number
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+          created_at:
+            | {
+                status: "available"
+                value: string
+              }
+            | {
+                status: "unavailable"
+                reason:
+                  | "not_applicable"
+                  | "not_captured"
+                  | "not_implemented"
+                  | "not_published"
+                  | "not_versioned"
+                  | "remote_unverified"
+              }
+        }>
+      }
+      timestamps: {
+        created_at:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        started_at:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        completed_at:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+      handoff: {
+        atlas_compute_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+        atlas_run_id:
+          | {
+              status: "available"
+              value: string
+            }
+          | {
+              status: "unavailable"
+              reason:
+                | "not_applicable"
+                | "not_captured"
+                | "not_implemented"
+                | "not_published"
+                | "not_versioned"
+                | "remote_unverified"
+            }
+      }
+    }
+    capture_error?: string
+    cleanup_error?: string
+    recovery_attempts?: number
+    recovery_retry_at?: string
+    session_id?: string
+    authority?: {
+      allowed: boolean
+      reason: "allowed" | "project_untrusted" | "sandbox_unavailable"
+      capability:
+        | "terminal"
+        | "kernel"
+        | "shell"
+        | "local_job"
+        | "remote_job"
+        | "package_install"
+        | "project_plugin"
+        | "project_mcp"
+        | "project_formatter"
+        | "project_lsp"
+        | "provider_token_command"
+      mode: "read_only" | "sandboxed" | "host"
+      projectID: string
+      sessionID: string
+      trustRevision: number
+      grantRevision: number
+      generation: string
+      workspace: string
+      writable: Array<string>
+      sandbox: {
+        enabled: boolean
+        network: "allow" | "deny"
+        allowWrite: Array<string>
+        onUnavailable: "warn" | "error" | "allow"
+        backend: "seatbelt" | "bubblewrap" | "none"
+        available: boolean
+        enforced: boolean
+      }
+      remediation?: {
+        code: "trust_project_required"
+        message: string
+        method: "PUT"
+        path: string
+        body: {
+          trusted: true
+          root: string
+        }
+      }
+    }
+    scope?: {
+      directory: string
+      key: string
+    }
+    sandbox?: {
+      requested: boolean
+      enforced: boolean
+      backend: "seatbelt" | "bubblewrap" | "none"
+      network: "allow" | "deny"
+      warning?: string
+    }
+    lifecycle?: {
+      execution:
+        | "planned"
+        | "awaiting_approval"
+        | "queued"
+        | "starting"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "timed_out"
+        | "cancelled"
+        | "interrupted"
+      delivery: "none" | "pending" | "complete" | "rejected" | "failed"
+      resource: "none" | "starting" | "active" | "closed" | "unknown"
+      recoverable: boolean
+      error_kind?:
+        | "provider_disabled"
+        | "image_build_failed"
+        | "unauthorized"
+        | "quota_exhausted"
+        | "rate_limited"
+        | "ownership_mismatch"
+        | "result_rejected"
+        | "harvest_failed"
+        | "input_changed"
+        | "session_concurrency_full"
+        | "invalid_request"
+        | "not_found"
+      system_hint?: string
+      deadline_fired?: boolean
+    }
+    remote_id?: string
+    modal?: {
+      app: string
+      environment?: string
+      image: string
+      packages?: Array<string>
+      gpu: string
+      network: "unrestricted" | "none"
+      timeout_minutes: number
+      uploads: Array<{
+        path: string
+        size: number
+        sha256: string
+      }>
+      upload_bytes: number
+      approval: string
+      sdk: string
+      volume?: string
     }
   }
 }
@@ -6517,14 +7820,6 @@ export type SessionTraceResponses = {
       delayMs: number
       createdAt: number
     }>
-    profiles: Array<{
-      messageID: string
-      id: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
-      source: "contract" | "heuristic" | "control"
-      confidence: number
-      reasons: Array<string>
-      selectedAt: number
-    }>
     privacy: {
       local: true
       atlasRequired: false
@@ -7467,10803 +8762,6 @@ export type PermissionRespondResponses = {
 }
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
-
-export type HarnessBenchmarksData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/benchmarks"
-}
-
-export type HarnessBenchmarksResponses = {
-  /**
-   * Benchmark adapter manifests
-   */
-  200: Array<{
-    id:
-      | "statistics"
-      | "bixbench"
-      | "lifescience"
-      | "genebench"
-      | "biomni"
-      | "physics"
-      | "pde"
-      | "chembench"
-      | "matscibench"
-      | "mle"
-      | "posttrain"
-      | "ale"
-      | "weather"
-      | "researchclaw"
-      | "sciconbench"
-      | "astabench"
-      | "paperbench"
-      | "corebench"
-      | "scienceagentbench"
-      | "discoverybench"
-      | "scicode"
-      | "labbench"
-      | "sciagentarena"
-      | "ainsteinbench"
-      | "critpt"
-    title: string
-    family: "data" | "biology" | "physics" | "chemistry" | "ml" | "generalist"
-    aliases: Array<string>
-    profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
-    profiles: Array<"react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast">
-    packs: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast" | "formal">
-    execution: "external_runner_required"
-    source:
-      | {
-          status: "official_open"
-          repository: string
-          revision: string
-          homepage: string
-          requiredPaths: Array<string>
-          dataset?: string
-          checkedAt: string
-        }
-      | {
-          status: "official_subset"
-          repository: string
-          revision: string
-          homepage: string
-          dataset: string
-          requiredPaths: Array<string>
-          publicTasks: number
-          totalTasks: number
-          scope: string
-          checkedAt: string
-        }
-      | {
-          status: "methodology_only"
-          reason: string
-        }
-    recipe:
-      | {
-          status: "source_verified"
-          id: string
-          schemaVersion: 2
-          checkedAt: string
-        }
-      | {
-          status: "pending_source_verification"
-          reason: string
-        }
-      | {
-          status: "blocked_upstream"
-          reason: string
-          anchor: string
-          checkedAt: string
-        }
-      | {
-          status: "not_applicable"
-          reason: string
-        }
-    task: string
-  }>
-}
-
-export type HarnessBenchmarksResponse = HarnessBenchmarksResponses[keyof HarnessBenchmarksResponses]
-
-export type HarnessBenchmarkRecipeData = {
-  body?: {
-    recipeID: string
-    bindings: {
-      [key: string]: string
-    }
-  }
-  path: {
-    benchmark: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/benchmarks/{benchmark}/recipe"
-}
-
-export type HarnessBenchmarkRecipeErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessBenchmarkRecipeError = HarnessBenchmarkRecipeErrors[keyof HarnessBenchmarkRecipeErrors]
-
-export type HarnessBenchmarkRecipeResponses = {
-  /**
-   * Immutable source-verified benchmark recipe
-   */
-  200: {
-    schemaVersion: 2
-    recipeID: string
-    benchmark:
-      | "statistics"
-      | "bixbench"
-      | "lifescience"
-      | "genebench"
-      | "biomni"
-      | "physics"
-      | "pde"
-      | "chembench"
-      | "matscibench"
-      | "mle"
-      | "posttrain"
-      | "ale"
-      | "weather"
-      | "researchclaw"
-      | "sciconbench"
-      | "astabench"
-      | "paperbench"
-      | "corebench"
-      | "scienceagentbench"
-      | "discoverybench"
-      | "scicode"
-      | "labbench"
-      | "sciagentarena"
-      | "ainsteinbench"
-      | "critpt"
-    recipeSHA256: string
-    bindingsSHA256: string
-    driverSHA256: string
-    entrypoint: string
-    bindings: {
-      [key: string]: string
-    }
-    environment: {
-      manager: "uv" | "pip" | "hatch" | "setuptools" | "conda"
-      python: string
-      files: Array<string>
-    }
-    anchors: Array<string>
-    runtime: Array<{
-      name: string
-      kind: "json" | "python_object" | "callable"
-      owner: "runner" | "evaluator"
-      description: string
-    }>
-    stages: Array<{
-      id: string
-      role: "prepare" | "execute" | "evaluate" | "aggregate"
-      driver:
-        | {
-            kind: "argv"
-            entrypoint: string
-            cwd: string | "."
-            argv: Array<string>
-          }
-        | {
-            kind: "python_api"
-            entrypoint: string
-            module: string
-            symbol: string
-            receiver?: string
-            kwargs: {
-              [key: string]: string | number | boolean
-            }
-            arguments: {
-              [key: string]: string
-            }
-          }
-      inputs: Array<string>
-      outputs: Array<string>
-      environment: Array<string>
-      produces?: string
-    }>
-    launchStage: string
-    artifacts: Array<
-      | {
-          id: string
-          producedBy: string
-          owner: "runner" | "evaluator"
-          kind: "file"
-          path: string
-          format: "json" | "jsonl" | "csv" | "text" | "pickle" | "directory"
-          cardinality: {
-            minimum: number
-            maximum: number
-          }
-        }
-      | {
-          id: string
-          producedBy: string
-          owner: "runner" | "evaluator"
-          kind: "return"
-          format: "json"
-          value: string
-        }
-    >
-    metrics: Array<{
-      name: string
-      artifact: string
-      selector:
-        | {
-            kind: "jsonpath"
-            path: string
-          }
-        | {
-            kind: "jsonlpath"
-            path: string
-          }
-        | {
-            kind: "column"
-            name: string
-          }
-        | {
-            kind: "tuple"
-            index: number
-          }
-        | {
-            kind: "ratio_line"
-            prefix: string
-          }
-      direction: "maximize" | "minimize" | "pass"
-      aggregation: "identity" | "mean" | "sum" | "count"
-    }>
-    limitations: Array<string>
-  }
-}
-
-export type HarnessBenchmarkRecipeResponse = HarnessBenchmarkRecipeResponses[keyof HarnessBenchmarkRecipeResponses]
-
-export type HarnessAuditInitializeData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifactSHA256: string
-    }
-    probes: Array<
-      | {
-          id: string
-          commitment: string
-          features: Array<number>
-          stratum: string
-          weight?: number
-          priorLoss?: number
-        }
-      | {
-          id: string
-          commitment: string
-          sourceLosses: Array<number>
-          stratum: string
-          weight?: number
-        }
-    >
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/audits"
-}
-
-export type HarnessAuditInitializeErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessAuditInitializeError = HarnessAuditInitializeErrors[keyof HarnessAuditInitializeErrors]
-
-export type HarnessAuditInitializeResponses = {
-  /**
-   * Active audit state
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "active-audit-v1" | "proactive-audit-v2"
-    auditID: string
-    runID: string
-    sessionID: string
-    evaluator: string
-    contractFingerprint: string
-    poolFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifactSHA256: string
-    }
-    config: {
-      mode: "performance" | "failure" | "hybrid"
-      budget: number
-      minSamples: number
-      noiseVariance?: number
-      lengthscale?: number
-      beta?: number
-      failureThreshold?: number
-      tolerance?: number
-      maxUncertainty?: number
-      estimationWeight?: number
-      diversityWeight?: number
-      coverageWeight?: number
-      targetFailures?: number
-      transfer?: {
-        protocolVersion: "score-history-prior-v1"
-        poolSHA256: string
-        sourceManifestSHA256: string
-        selectionSHA256: string
-        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
-        sourceModels: Array<string>
-        calibrationSamples: number
-        maxCalibrationMAE: number
-      }
-      promotionRequired?: boolean
-    }
-    status: "active" | "completed"
-    stopReason?: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
-    pool: {
-      [key: string]: {
-        id: string
-        commitment: string
-        features: Array<number>
-        stratum: string
-        weight?: number
-        priorLoss?: number
-        sourceLosses?: Array<number>
-        selection?: {
-          round: number
-          selectedAt: number
-          phase?: "calibration" | "adaptive" | "fallback"
-          acquisition: {
-            posteriorLoss: number
-            posteriorStd: number
-            failureUCB: number
-            varianceReduction: number
-            diversity: number
-            coverage: number
-            score: number
-          }
-        }
-        observation?: {
-          loss: number
-          failure: boolean
-          evidence: Array<string>
-          note?: string
-          evaluatedAt: number
-        }
-      }
-    }
-    order: Array<string>
-    estimate: {
-      observed: number
-      failures: number
-      meanLoss: number
-      standardDeviation: number
-      lower95: number
-      upper95: number
-      abstain: boolean
-      effectivePoolSize: number
-      stratumCoverage: number
-      transfer?: {
-        status: "not_configured" | "calibrating" | "accepted" | "rejected"
-        observed: number
-        required: number
-        meanAbsoluteError?: number
-        threshold?: number
-      }
-    }
-    revision: number
-    createdAt: number
-    updatedAt: number
-  }
-}
-
-export type HarnessAuditInitializeResponse = HarnessAuditInitializeResponses[keyof HarnessAuditInitializeResponses]
-
-export type HarnessAuditStatusData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    auditID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/audits/{auditID}/status"
-}
-
-export type HarnessAuditStatusErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessAuditStatusError = HarnessAuditStatusErrors[keyof HarnessAuditStatusErrors]
-
-export type HarnessAuditStatusResponses = {
-  /**
-   * Active audit state
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "active-audit-v1" | "proactive-audit-v2"
-    auditID: string
-    runID: string
-    sessionID: string
-    evaluator: string
-    contractFingerprint: string
-    poolFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifactSHA256: string
-    }
-    config: {
-      mode: "performance" | "failure" | "hybrid"
-      budget: number
-      minSamples: number
-      noiseVariance?: number
-      lengthscale?: number
-      beta?: number
-      failureThreshold?: number
-      tolerance?: number
-      maxUncertainty?: number
-      estimationWeight?: number
-      diversityWeight?: number
-      coverageWeight?: number
-      targetFailures?: number
-      transfer?: {
-        protocolVersion: "score-history-prior-v1"
-        poolSHA256: string
-        sourceManifestSHA256: string
-        selectionSHA256: string
-        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
-        sourceModels: Array<string>
-        calibrationSamples: number
-        maxCalibrationMAE: number
-      }
-      promotionRequired?: boolean
-    }
-    status: "active" | "completed"
-    stopReason?: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
-    pool: {
-      [key: string]: {
-        id: string
-        commitment: string
-        features: Array<number>
-        stratum: string
-        weight?: number
-        priorLoss?: number
-        sourceLosses?: Array<number>
-        selection?: {
-          round: number
-          selectedAt: number
-          phase?: "calibration" | "adaptive" | "fallback"
-          acquisition: {
-            posteriorLoss: number
-            posteriorStd: number
-            failureUCB: number
-            varianceReduction: number
-            diversity: number
-            coverage: number
-            score: number
-          }
-        }
-        observation?: {
-          loss: number
-          failure: boolean
-          evidence: Array<string>
-          note?: string
-          evaluatedAt: number
-        }
-      }
-    }
-    order: Array<string>
-    estimate: {
-      observed: number
-      failures: number
-      meanLoss: number
-      standardDeviation: number
-      lower95: number
-      upper95: number
-      abstain: boolean
-      effectivePoolSize: number
-      stratumCoverage: number
-      transfer?: {
-        status: "not_configured" | "calibrating" | "accepted" | "rejected"
-        observed: number
-        required: number
-        meanAbsoluteError?: number
-        threshold?: number
-      }
-    }
-    revision: number
-    createdAt: number
-    updatedAt: number
-  }
-}
-
-export type HarnessAuditStatusResponse = HarnessAuditStatusResponses[keyof HarnessAuditStatusResponses]
-
-export type HarnessAuditSelectData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    auditID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/audits/{auditID}/selection"
-}
-
-export type HarnessAuditSelectErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessAuditSelectError = HarnessAuditSelectErrors[keyof HarnessAuditSelectErrors]
-
-export type HarnessAuditSelectResponses = {
-  /**
-   * Selected opaque probe commitment
-   */
-  200: unknown
-}
-
-export type HarnessAuditObserveData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-    probeID: string
-    loss: number
-    failure: boolean
-    evidence: Array<string>
-    note?: string
-  }
-  path: {
-    auditID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/audits/{auditID}/observations"
-}
-
-export type HarnessAuditObserveErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessAuditObserveError = HarnessAuditObserveErrors[keyof HarnessAuditObserveErrors]
-
-export type HarnessAuditObserveResponses = {
-  /**
-   * Updated active audit state
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "active-audit-v1" | "proactive-audit-v2"
-    auditID: string
-    runID: string
-    sessionID: string
-    evaluator: string
-    contractFingerprint: string
-    poolFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifactSHA256: string
-    }
-    config: {
-      mode: "performance" | "failure" | "hybrid"
-      budget: number
-      minSamples: number
-      noiseVariance?: number
-      lengthscale?: number
-      beta?: number
-      failureThreshold?: number
-      tolerance?: number
-      maxUncertainty?: number
-      estimationWeight?: number
-      diversityWeight?: number
-      coverageWeight?: number
-      targetFailures?: number
-      transfer?: {
-        protocolVersion: "score-history-prior-v1"
-        poolSHA256: string
-        sourceManifestSHA256: string
-        selectionSHA256: string
-        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
-        sourceModels: Array<string>
-        calibrationSamples: number
-        maxCalibrationMAE: number
-      }
-      promotionRequired?: boolean
-    }
-    status: "active" | "completed"
-    stopReason?: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
-    pool: {
-      [key: string]: {
-        id: string
-        commitment: string
-        features: Array<number>
-        stratum: string
-        weight?: number
-        priorLoss?: number
-        sourceLosses?: Array<number>
-        selection?: {
-          round: number
-          selectedAt: number
-          phase?: "calibration" | "adaptive" | "fallback"
-          acquisition: {
-            posteriorLoss: number
-            posteriorStd: number
-            failureUCB: number
-            varianceReduction: number
-            diversity: number
-            coverage: number
-            score: number
-          }
-        }
-        observation?: {
-          loss: number
-          failure: boolean
-          evidence: Array<string>
-          note?: string
-          evaluatedAt: number
-        }
-      }
-    }
-    order: Array<string>
-    estimate: {
-      observed: number
-      failures: number
-      meanLoss: number
-      standardDeviation: number
-      lower95: number
-      upper95: number
-      abstain: boolean
-      effectivePoolSize: number
-      stratumCoverage: number
-      transfer?: {
-        status: "not_configured" | "calibrating" | "accepted" | "rejected"
-        observed: number
-        required: number
-        meanAbsoluteError?: number
-        threshold?: number
-      }
-    }
-    revision: number
-    createdAt: number
-    updatedAt: number
-  }
-}
-
-export type HarnessAuditObserveResponse = HarnessAuditObserveResponses[keyof HarnessAuditObserveResponses]
-
-export type HarnessAuditSealData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    auditID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/audits/{auditID}/receipt"
-}
-
-export type HarnessAuditSealErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessAuditSealError = HarnessAuditSealErrors[keyof HarnessAuditSealErrors]
-
-export type HarnessAuditSealResponses = {
-  /**
-   * Immutable active-audit receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "proactive-audit-receipt-v1"
-    receiptID: string
-    auditID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    poolFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifactSHA256: string
-    }
-    config: {
-      mode: "performance" | "failure" | "hybrid"
-      budget: number
-      minSamples: number
-      noiseVariance?: number
-      lengthscale?: number
-      beta?: number
-      failureThreshold?: number
-      tolerance?: number
-      maxUncertainty?: number
-      estimationWeight?: number
-      diversityWeight?: number
-      coverageWeight?: number
-      targetFailures?: number
-      transfer?: {
-        protocolVersion: "score-history-prior-v1"
-        poolSHA256: string
-        sourceManifestSHA256: string
-        selectionSHA256: string
-        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
-        sourceModels: Array<string>
-        calibrationSamples: number
-        maxCalibrationMAE: number
-      }
-      promotionRequired?: boolean
-    }
-    stopReason: "budget_exhausted" | "precision_reached" | "failure_target_reached" | "pool_exhausted"
-    estimate: {
-      observed: number
-      failures: number
-      meanLoss: number
-      standardDeviation: number
-      lower95: number
-      upper95: number
-      abstain: boolean
-      effectivePoolSize: number
-      stratumCoverage: number
-      transfer?: {
-        status: "not_configured" | "calibrating" | "accepted" | "rejected"
-        observed: number
-        required: number
-        meanAbsoluteError?: number
-        threshold?: number
-      }
-    }
-    revision: number
-    qualified: boolean
-    completedAt: number
-    sealedAt: number
-  }
-}
-
-export type HarnessAuditSealResponse = HarnessAuditSealResponses[keyof HarnessAuditSealResponses]
-
-export type HarnessFailureInitializeData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifactSHA256: string
-    }
-    auditReceiptID: string
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/failure-streams"
-}
-
-export type HarnessFailureInitializeErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessFailureInitializeError = HarnessFailureInitializeErrors[keyof HarnessFailureInitializeErrors]
-
-export type HarnessFailureInitializeResponses = {
-  /**
-   * Topic-aware failure discovery state
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "topic-aware-failure-v1"
-    streamID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifactSHA256: string
-    }
-    auditReceiptID: string
-    sourcePoolSHA256: string
-    anchors: Array<{
-      id: string
-      commitment: string
-      loss: number
-    }>
-    config: {
-      protocolVersion: "topic-aware-failure-v1"
-      sourcePoolSHA256: string
-      topicModel: {
-        kind: "predefined" | "bertopic"
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-      }
-      topics: Array<{
-        id: string
-        commitment: string
-      }>
-      generator: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      validators: [
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-      ]
-      embedding: {
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        dimensions: number
-        regularization?: number
-      }
-      budget: number
-      anchorsPerAttempt: number
-      exploration?: number
-      failureThreshold: number
-      targetFailures?: number
-    }
-    status: "active" | "completed"
-    stopReason?: "budget_exhausted" | "failure_target_reached"
-    pending?: {
-      selectionID: string
-      round: number
-      topic: {
-        id: string
-        commitment: string
-      }
-      anchors: Array<{
-        id: string
-        commitment: string
-        loss: number
-      }>
-      allocation: {
-        phase: "initialization" | "ucb1"
-        pulls: number
-        rewards: number
-        score: number
-      }
-      selectedAt: number
-    }
-    attempts: Array<{
-      attemptID: string
-      selection: {
-        selectionID: string
-        round: number
-        topic: {
-          id: string
-          commitment: string
-        }
-        anchors: Array<{
-          id: string
-          commitment: string
-          loss: number
-        }>
-        allocation: {
-          phase: "initialization" | "ucb1"
-          pulls: number
-          rewards: number
-          score: number
-        }
-        selectedAt: number
-      }
-      generation:
-        | {
-            status: "failed"
-            mode: "generator_error" | "timeout" | "invalid_output" | "other"
-            outputSHA256?: string
-            evidence: Array<string>
-          }
-        | {
-            status: "generated"
-            caseSHA256: string
-            outputSHA256: string
-            embedding: Array<number>
-            evidence: Array<string>
-          }
-      validations: Array<{
-        kind: "correctness" | "topic" | "novelty"
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        evidence: Array<string>
-        note?: string
-      }>
-      outcome?: {
-        loss: number
-        failure: boolean
-        outputSHA256: string
-        evidence: Array<string>
-      }
-      admissible: boolean
-      reward: 0 | 1
-      evaluatedAt: number
-      recordedAt: number
-    }>
-    statistics: {
-      attempts: number
-      generated: number
-      admissible: number
-      failures: number
-      invalid: number
-      samplesToFirstFailure?: number
-      failureRate: number
-      topicEntropy: number
-      embeddingLogDet: number
-      topics: {
-        [key: string]: {
-          pulls: number
-          rewards: number
-          rate: number
-        }
-      }
-    }
-    revision: number
-    createdAt: number
-    updatedAt: number
-  }
-}
-
-export type HarnessFailureInitializeResponse =
-  HarnessFailureInitializeResponses[keyof HarnessFailureInitializeResponses]
-
-export type HarnessFailureStatusData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    streamID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/failure-streams/{streamID}/status"
-}
-
-export type HarnessFailureStatusErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessFailureStatusError = HarnessFailureStatusErrors[keyof HarnessFailureStatusErrors]
-
-export type HarnessFailureStatusResponses = {
-  /**
-   * Topic-aware failure discovery state
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "topic-aware-failure-v1"
-    streamID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifactSHA256: string
-    }
-    auditReceiptID: string
-    sourcePoolSHA256: string
-    anchors: Array<{
-      id: string
-      commitment: string
-      loss: number
-    }>
-    config: {
-      protocolVersion: "topic-aware-failure-v1"
-      sourcePoolSHA256: string
-      topicModel: {
-        kind: "predefined" | "bertopic"
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-      }
-      topics: Array<{
-        id: string
-        commitment: string
-      }>
-      generator: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      validators: [
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-      ]
-      embedding: {
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        dimensions: number
-        regularization?: number
-      }
-      budget: number
-      anchorsPerAttempt: number
-      exploration?: number
-      failureThreshold: number
-      targetFailures?: number
-    }
-    status: "active" | "completed"
-    stopReason?: "budget_exhausted" | "failure_target_reached"
-    pending?: {
-      selectionID: string
-      round: number
-      topic: {
-        id: string
-        commitment: string
-      }
-      anchors: Array<{
-        id: string
-        commitment: string
-        loss: number
-      }>
-      allocation: {
-        phase: "initialization" | "ucb1"
-        pulls: number
-        rewards: number
-        score: number
-      }
-      selectedAt: number
-    }
-    attempts: Array<{
-      attemptID: string
-      selection: {
-        selectionID: string
-        round: number
-        topic: {
-          id: string
-          commitment: string
-        }
-        anchors: Array<{
-          id: string
-          commitment: string
-          loss: number
-        }>
-        allocation: {
-          phase: "initialization" | "ucb1"
-          pulls: number
-          rewards: number
-          score: number
-        }
-        selectedAt: number
-      }
-      generation:
-        | {
-            status: "failed"
-            mode: "generator_error" | "timeout" | "invalid_output" | "other"
-            outputSHA256?: string
-            evidence: Array<string>
-          }
-        | {
-            status: "generated"
-            caseSHA256: string
-            outputSHA256: string
-            embedding: Array<number>
-            evidence: Array<string>
-          }
-      validations: Array<{
-        kind: "correctness" | "topic" | "novelty"
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        evidence: Array<string>
-        note?: string
-      }>
-      outcome?: {
-        loss: number
-        failure: boolean
-        outputSHA256: string
-        evidence: Array<string>
-      }
-      admissible: boolean
-      reward: 0 | 1
-      evaluatedAt: number
-      recordedAt: number
-    }>
-    statistics: {
-      attempts: number
-      generated: number
-      admissible: number
-      failures: number
-      invalid: number
-      samplesToFirstFailure?: number
-      failureRate: number
-      topicEntropy: number
-      embeddingLogDet: number
-      topics: {
-        [key: string]: {
-          pulls: number
-          rewards: number
-          rate: number
-        }
-      }
-    }
-    revision: number
-    createdAt: number
-    updatedAt: number
-  }
-}
-
-export type HarnessFailureStatusResponse = HarnessFailureStatusResponses[keyof HarnessFailureStatusResponses]
-
-export type HarnessFailureSelectData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    streamID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/failure-streams/{streamID}/selection"
-}
-
-export type HarnessFailureSelectErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessFailureSelectError = HarnessFailureSelectErrors[keyof HarnessFailureSelectErrors]
-
-export type HarnessFailureSelectResponses = {
-  /**
-   * Server-selected topic, anchors, and allocation evidence
-   */
-  200: {
-    selectionID: string
-    round: number
-    topic: {
-      id: string
-      commitment: string
-    }
-    anchors: Array<{
-      id: string
-      commitment: string
-      loss: number
-    }>
-    allocation: {
-      phase: "initialization" | "ucb1"
-      pulls: number
-      rewards: number
-      score: number
-    }
-    selectedAt: number
-  }
-}
-
-export type HarnessFailureSelectResponse = HarnessFailureSelectResponses[keyof HarnessFailureSelectResponses]
-
-export type HarnessFailureObserveData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-    selectionID: string
-    generation:
-      | {
-          status: "failed"
-          mode: "generator_error" | "timeout" | "invalid_output" | "other"
-          outputSHA256?: string
-          evidence: Array<string>
-        }
-      | {
-          status: "generated"
-          caseSHA256: string
-          outputSHA256: string
-          embedding: Array<number>
-          evidence: Array<string>
-        }
-    validations: Array<{
-      kind: "correctness" | "topic" | "novelty"
-      status: "passed" | "failed" | "inconclusive"
-      score?: number
-      evidence: Array<string>
-      note?: string
-    }>
-    outcome?: {
-      loss: number
-      failure: boolean
-      outputSHA256: string
-      evidence: Array<string>
-    }
-    evaluatedAt: number
-  }
-  path: {
-    streamID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/failure-streams/{streamID}/attempts"
-}
-
-export type HarnessFailureObserveErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessFailureObserveError = HarnessFailureObserveErrors[keyof HarnessFailureObserveErrors]
-
-export type HarnessFailureObserveResponses = {
-  /**
-   * Updated topic-aware failure discovery state
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "topic-aware-failure-v1"
-    streamID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifactSHA256: string
-    }
-    auditReceiptID: string
-    sourcePoolSHA256: string
-    anchors: Array<{
-      id: string
-      commitment: string
-      loss: number
-    }>
-    config: {
-      protocolVersion: "topic-aware-failure-v1"
-      sourcePoolSHA256: string
-      topicModel: {
-        kind: "predefined" | "bertopic"
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-      }
-      topics: Array<{
-        id: string
-        commitment: string
-      }>
-      generator: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      validators: [
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-      ]
-      embedding: {
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        dimensions: number
-        regularization?: number
-      }
-      budget: number
-      anchorsPerAttempt: number
-      exploration?: number
-      failureThreshold: number
-      targetFailures?: number
-    }
-    status: "active" | "completed"
-    stopReason?: "budget_exhausted" | "failure_target_reached"
-    pending?: {
-      selectionID: string
-      round: number
-      topic: {
-        id: string
-        commitment: string
-      }
-      anchors: Array<{
-        id: string
-        commitment: string
-        loss: number
-      }>
-      allocation: {
-        phase: "initialization" | "ucb1"
-        pulls: number
-        rewards: number
-        score: number
-      }
-      selectedAt: number
-    }
-    attempts: Array<{
-      attemptID: string
-      selection: {
-        selectionID: string
-        round: number
-        topic: {
-          id: string
-          commitment: string
-        }
-        anchors: Array<{
-          id: string
-          commitment: string
-          loss: number
-        }>
-        allocation: {
-          phase: "initialization" | "ucb1"
-          pulls: number
-          rewards: number
-          score: number
-        }
-        selectedAt: number
-      }
-      generation:
-        | {
-            status: "failed"
-            mode: "generator_error" | "timeout" | "invalid_output" | "other"
-            outputSHA256?: string
-            evidence: Array<string>
-          }
-        | {
-            status: "generated"
-            caseSHA256: string
-            outputSHA256: string
-            embedding: Array<number>
-            evidence: Array<string>
-          }
-      validations: Array<{
-        kind: "correctness" | "topic" | "novelty"
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        evidence: Array<string>
-        note?: string
-      }>
-      outcome?: {
-        loss: number
-        failure: boolean
-        outputSHA256: string
-        evidence: Array<string>
-      }
-      admissible: boolean
-      reward: 0 | 1
-      evaluatedAt: number
-      recordedAt: number
-    }>
-    statistics: {
-      attempts: number
-      generated: number
-      admissible: number
-      failures: number
-      invalid: number
-      samplesToFirstFailure?: number
-      failureRate: number
-      topicEntropy: number
-      embeddingLogDet: number
-      topics: {
-        [key: string]: {
-          pulls: number
-          rewards: number
-          rate: number
-        }
-      }
-    }
-    revision: number
-    createdAt: number
-    updatedAt: number
-  }
-}
-
-export type HarnessFailureObserveResponse = HarnessFailureObserveResponses[keyof HarnessFailureObserveResponses]
-
-export type HarnessFailureSealData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    streamID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/failure-streams/{streamID}/receipt"
-}
-
-export type HarnessFailureSealErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessFailureSealError = HarnessFailureSealErrors[keyof HarnessFailureSealErrors]
-
-export type HarnessFailureSealResponses = {
-  /**
-   * Immutable topic-aware failure discovery receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "topic-aware-failure-receipt-v1"
-    receiptID: string
-    streamID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifactSHA256: string
-    }
-    auditReceiptID: string
-    sourcePoolSHA256: string
-    config: {
-      protocolVersion: "topic-aware-failure-v1"
-      sourcePoolSHA256: string
-      topicModel: {
-        kind: "predefined" | "bertopic"
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-      }
-      topics: Array<{
-        id: string
-        commitment: string
-      }>
-      generator: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      validators: [
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-      ]
-      embedding: {
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        dimensions: number
-        regularization?: number
-      }
-      budget: number
-      anchorsPerAttempt: number
-      exploration?: number
-      failureThreshold: number
-      targetFailures?: number
-    }
-    attemptIDs: Array<string>
-    statistics: {
-      attempts: number
-      generated: number
-      admissible: number
-      failures: number
-      invalid: number
-      samplesToFirstFailure?: number
-      failureRate: number
-      topicEntropy: number
-      embeddingLogDet: number
-      topics: {
-        [key: string]: {
-          pulls: number
-          rewards: number
-          rate: number
-        }
-      }
-    }
-    stopReason: "budget_exhausted" | "failure_target_reached"
-    revision: number
-    completedAt: number
-    sealedAt: number
-  }
-}
-
-export type HarnessFailureSealResponse = HarnessFailureSealResponses[keyof HarnessFailureSealResponses]
-
-export type HarnessAblationInitializeData = {
-  body?: {
-    schemaVersion: 1
-    studyID: string
-    factor: {
-      kind:
-        | "profile"
-        | "orchestration"
-        | "search"
-        | "audit"
-        | "simulation"
-        | "evaluator_audit"
-        | "semantic_audit"
-        | "synthesis"
-        | "autonomy"
-        | "formal_proof"
-        | "replication"
-        | "fidelities"
-        | "skill"
-        | "tool"
-      name?: string
-    }
-    minEffect: number
-    maxPairRegression?: number
-    pairs: Array<{
-      baseline: {
-        sessionID: string
-        evaluatorToken: string
-      }
-      arm: {
-        sessionID: string
-        evaluatorToken: string
-      }
-    }>
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/ablations"
-}
-
-export type HarnessAblationInitializeErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessAblationInitializeError = HarnessAblationInitializeErrors[keyof HarnessAblationInitializeErrors]
-
-export type HarnessAblationInitializeResponses = {
-  /**
-   * Immutable matched ablation plan
-   */
-  200: {
-    schemaVersion: 1
-    plan: {
-      schemaVersion: 1
-      planID: string
-      studyID: string
-      factor: {
-        kind:
-          | "profile"
-          | "orchestration"
-          | "search"
-          | "audit"
-          | "simulation"
-          | "evaluator_audit"
-          | "semantic_audit"
-          | "synthesis"
-          | "autonomy"
-          | "formal_proof"
-          | "replication"
-          | "fidelities"
-          | "skill"
-          | "tool"
-        name?: string
-      }
-      baselineValueSHA256: string
-      armValueSHA256: string
-      contextSHA256: string
-      benchmark: {
-        name: string
-        version: string
-        taskID: string
-        split: "held_out" | "release"
-        evaluator: string
-        evaluatorVersion: string
-        metric: string
-        direction: "maximize" | "minimize"
-      }
-      minEffect: number
-      maxPairRegression: number
-      pairs: Array<{
-        seed: number
-        baseline: {
-          sessionID: string
-          runID: string
-          contractFingerprint: string
-        }
-        arm: {
-          sessionID: string
-          runID: string
-          contractFingerprint: string
-        }
-      }>
-      createdAt: number
-    }
-    receipt?: {
-      schemaVersion: 1
-      receiptID: string
-      planID: string
-      studyID: string
-      factor: {
-        kind:
-          | "profile"
-          | "orchestration"
-          | "search"
-          | "audit"
-          | "simulation"
-          | "evaluator_audit"
-          | "semantic_audit"
-          | "synthesis"
-          | "autonomy"
-          | "formal_proof"
-          | "replication"
-          | "fidelities"
-          | "skill"
-          | "tool"
-        name?: string
-      }
-      pairs: Array<{
-        seed: number
-        baseline: {
-          sessionID: string
-          runID: string
-          status: "passed" | "failed" | "inconclusive"
-          score?: number
-          evaluationSHA256: string
-          evaluatedAt: number
-          recordedAt: number
-        }
-        arm: {
-          sessionID: string
-          runID: string
-          status: "passed" | "failed" | "inconclusive"
-          score?: number
-          evaluationSHA256: string
-          evaluatedAt: number
-          recordedAt: number
-        }
-        effect?: number
-      }>
-      statistics: {
-        pairs: number
-        validPairs: number
-        meanEffect?: number
-        standardDeviation?: number
-        standardError?: number
-        confidence95?: [number, number]
-        regressions: number
-        minEffect: number
-        maxPairRegression: number
-      }
-      verdict: "supported" | "rejected" | "inconclusive"
-      assessedAt: number
-    }
-  }
-}
-
-export type HarnessAblationInitializeResponse =
-  HarnessAblationInitializeResponses[keyof HarnessAblationInitializeResponses]
-
-export type HarnessAblationAssessData = {
-  body?: {
-    runs: Array<{
-      sessionID: string
-      evaluatorToken: string
-    }>
-  }
-  path: {
-    planID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/ablations/{planID}/assessment"
-}
-
-export type HarnessAblationAssessErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessAblationAssessError = HarnessAblationAssessErrors[keyof HarnessAblationAssessErrors]
-
-export type HarnessAblationAssessResponses = {
-  /**
-   * Immutable matched ablation assessment
-   */
-  200: {
-    schemaVersion: 1
-    plan: {
-      schemaVersion: 1
-      planID: string
-      studyID: string
-      factor: {
-        kind:
-          | "profile"
-          | "orchestration"
-          | "search"
-          | "audit"
-          | "simulation"
-          | "evaluator_audit"
-          | "semantic_audit"
-          | "synthesis"
-          | "autonomy"
-          | "formal_proof"
-          | "replication"
-          | "fidelities"
-          | "skill"
-          | "tool"
-        name?: string
-      }
-      baselineValueSHA256: string
-      armValueSHA256: string
-      contextSHA256: string
-      benchmark: {
-        name: string
-        version: string
-        taskID: string
-        split: "held_out" | "release"
-        evaluator: string
-        evaluatorVersion: string
-        metric: string
-        direction: "maximize" | "minimize"
-      }
-      minEffect: number
-      maxPairRegression: number
-      pairs: Array<{
-        seed: number
-        baseline: {
-          sessionID: string
-          runID: string
-          contractFingerprint: string
-        }
-        arm: {
-          sessionID: string
-          runID: string
-          contractFingerprint: string
-        }
-      }>
-      createdAt: number
-    }
-    receipt?: {
-      schemaVersion: 1
-      receiptID: string
-      planID: string
-      studyID: string
-      factor: {
-        kind:
-          | "profile"
-          | "orchestration"
-          | "search"
-          | "audit"
-          | "simulation"
-          | "evaluator_audit"
-          | "semantic_audit"
-          | "synthesis"
-          | "autonomy"
-          | "formal_proof"
-          | "replication"
-          | "fidelities"
-          | "skill"
-          | "tool"
-        name?: string
-      }
-      pairs: Array<{
-        seed: number
-        baseline: {
-          sessionID: string
-          runID: string
-          status: "passed" | "failed" | "inconclusive"
-          score?: number
-          evaluationSHA256: string
-          evaluatedAt: number
-          recordedAt: number
-        }
-        arm: {
-          sessionID: string
-          runID: string
-          status: "passed" | "failed" | "inconclusive"
-          score?: number
-          evaluationSHA256: string
-          evaluatedAt: number
-          recordedAt: number
-        }
-        effect?: number
-      }>
-      statistics: {
-        pairs: number
-        validPairs: number
-        meanEffect?: number
-        standardDeviation?: number
-        standardError?: number
-        confidence95?: [number, number]
-        regressions: number
-        minEffect: number
-        maxPairRegression: number
-      }
-      verdict: "supported" | "rejected" | "inconclusive"
-      assessedAt: number
-    }
-  }
-}
-
-export type HarnessAblationAssessResponse = HarnessAblationAssessResponses[keyof HarnessAblationAssessResponses]
-
-export type HarnessInterventionInitializeData = {
-  body?: {
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    evaluatorToken: string
-    subject: {
-      type: "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    evolutionReceiptID: string
-    validator: {
-      name: "design-replay-interventions"
-      version: 1
-      scriptSHA256: string
-    }
-    pairs: Array<{
-      family:
-        | "replay"
-        | "retune"
-        | "ablation"
-        | "repair"
-        | "model_transfer"
-        | "context_transfer"
-        | "evaluator_transfer"
-        | "split_transfer"
-      index: number
-      control: {
-        artifact: {
-          uri: string
-          sha256: string
-        }
-        condition: {
-          seed: number
-          model: {
-            provider: string
-            name: string
-            version: string
-          }
-          context: {
-            uri: string
-            sha256: string
-          }
-          evaluator: {
-            name: string
-            version: string
-            source: "benchmark" | "gate" | "external"
-          }
-          split: {
-            name: string
-            manifest: {
-              uri: string
-              sha256: string
-            }
-          }
-          environment: {
-            uri: string
-            sha256: string
-          }
-          budget: {
-            uri: string
-            sha256: string
-          }
-        }
-      }
-      arm: {
-        artifact: {
-          uri: string
-          sha256: string
-        }
-        condition: {
-          seed: number
-          model: {
-            provider: string
-            name: string
-            version: string
-          }
-          context: {
-            uri: string
-            sha256: string
-          }
-          evaluator: {
-            name: string
-            version: string
-            source: "benchmark" | "gate" | "external"
-          }
-          split: {
-            name: string
-            manifest: {
-              uri: string
-              sha256: string
-            }
-          }
-          environment: {
-            uri: string
-            sha256: string
-          }
-          budget: {
-            uri: string
-            sha256: string
-          }
-        }
-      }
-      change: {
-        uri: string
-        sha256: string
-      }
-    }>
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/interventions"
-}
-
-export type HarnessInterventionInitializeErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessInterventionInitializeError =
-  HarnessInterventionInitializeErrors[keyof HarnessInterventionInitializeErrors]
-
-export type HarnessInterventionInitializeResponses = {
-  /**
-   * Immutable controlled intervention plan
-   */
-  200: {
-    schemaVersion: 1
-    plan: {
-      schemaVersion: 1
-      planID: string
-      runID: string
-      sessionID: string
-      contractFingerprint: string
-      protocol: {
-        protocolVersion: "intervention-study-v1"
-        validatorSHA256: string
-        requiredForPromotion: boolean
-        minPairs: number
-        maxPairs: number
-        maxTotalPairs: number
-        confidence: 0.95
-        required: Array<
-          | "replay"
-          | "retune"
-          | "ablation"
-          | "repair"
-          | "model_transfer"
-          | "context_transfer"
-          | "evaluator_transfer"
-          | "split_transfer"
-        >
-        rules: Array<
-          | {
-              family: "replay"
-              mode: "max_absolute_effect"
-              threshold: number
-            }
-          | {
-              family: "retune" | "ablation" | "repair"
-              mode: "min_effect"
-              threshold: number
-            }
-          | {
-              family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
-              mode: "max_regression"
-              threshold: number
-            }
-        >
-      }
-      benchmark: {
-        name: string
-        version: string
-        taskID: string
-        metric: string
-        direction: "maximize" | "minimize"
-      }
-      subject: {
-        type: "candidate"
-        id: string
-        artifact: {
-          uri: string
-          sha256: string
-        }
-      }
-      evolutionReceiptID: string
-      validator: {
-        name: "design-replay-interventions"
-        version: 1
-        scriptSHA256: string
-      }
-      pairs: Array<{
-        family:
-          | "replay"
-          | "retune"
-          | "ablation"
-          | "repair"
-          | "model_transfer"
-          | "context_transfer"
-          | "evaluator_transfer"
-          | "split_transfer"
-        index: number
-        control: {
-          artifact: {
-            uri: string
-            sha256: string
-          }
-          condition: {
-            seed: number
-            model: {
-              provider: string
-              name: string
-              version: string
-            }
-            context: {
-              uri: string
-              sha256: string
-            }
-            evaluator: {
-              name: string
-              version: string
-              source: "benchmark" | "gate" | "external"
-            }
-            split: {
-              name: string
-              manifest: {
-                uri: string
-                sha256: string
-              }
-            }
-            environment: {
-              uri: string
-              sha256: string
-            }
-            budget: {
-              uri: string
-              sha256: string
-            }
-          }
-        }
-        arm: {
-          artifact: {
-            uri: string
-            sha256: string
-          }
-          condition: {
-            seed: number
-            model: {
-              provider: string
-              name: string
-              version: string
-            }
-            context: {
-              uri: string
-              sha256: string
-            }
-            evaluator: {
-              name: string
-              version: string
-              source: "benchmark" | "gate" | "external"
-            }
-            split: {
-              name: string
-              manifest: {
-                uri: string
-                sha256: string
-              }
-            }
-            environment: {
-              uri: string
-              sha256: string
-            }
-            budget: {
-              uri: string
-              sha256: string
-            }
-          }
-        }
-        change: {
-          uri: string
-          sha256: string
-        }
-        pairID: string
-      }>
-      createdAt: number
-    }
-    outcomes: {
-      [key: string]: {
-        schemaVersion: 1
-        outcomeID: string
-        submissionID: string
-        pairID: string
-        role: "control" | "arm"
-        targetSHA256: string
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        evidence: Array<string>
-        evaluatedAt: number
-        recordedAt: number
-      }
-    }
-    order: Array<string>
-    receipt?: {
-      schemaVersion: 1
-      receiptID: string
-      planID: string
-      runID: string
-      sessionID: string
-      contractFingerprint: string
-      subject: {
-        type: "candidate"
-        id: string
-        artifact: {
-          uri: string
-          sha256: string
-        }
-      }
-      evolutionReceiptID: string
-      families: Array<{
-        family:
-          | "replay"
-          | "retune"
-          | "ablation"
-          | "repair"
-          | "model_transfer"
-          | "context_transfer"
-          | "evaluator_transfer"
-          | "split_transfer"
-        mode: "max_absolute_effect" | "min_effect" | "max_regression"
-        threshold: number
-        pairs: number
-        validPairs: number
-        meanEffect?: number
-        standardDeviation?: number
-        standardError?: number
-        confidence95?: [number, number]
-        maxAbsoluteEffect?: number
-        regressions: number
-        verdict: "passed" | "failed" | "inconclusive"
-      }>
-      status: "passed" | "failed" | "inconclusive"
-      observedAt: number
-      assessedAt: number
-    }
-  }
-}
-
-export type HarnessInterventionInitializeResponse =
-  HarnessInterventionInitializeResponses[keyof HarnessInterventionInitializeResponses]
-
-export type HarnessInterventionObserveData = {
-  body?: {
-    schemaVersion: 1
-    sessionID: string
-    evaluatorToken: string
-    pairID: string
-    role: "control" | "arm"
-    targetSHA256: string
-    status: "passed" | "failed" | "inconclusive"
-    score?: number
-    evidence: Array<string>
-    evaluatedAt: number
-  }
-  path: {
-    candidateID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/interventions/{candidateID}/observations"
-}
-
-export type HarnessInterventionObserveErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessInterventionObserveError = HarnessInterventionObserveErrors[keyof HarnessInterventionObserveErrors]
-
-export type HarnessInterventionObserveResponses = {
-  /**
-   * Immutable intervention outcome
-   */
-  200: {
-    schemaVersion: 1
-    outcomeID: string
-    submissionID: string
-    pairID: string
-    role: "control" | "arm"
-    targetSHA256: string
-    status: "passed" | "failed" | "inconclusive"
-    score?: number
-    evidence: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessInterventionObserveResponse =
-  HarnessInterventionObserveResponses[keyof HarnessInterventionObserveResponses]
-
-export type HarnessInterventionAssessData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    candidateID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/interventions/{candidateID}/assessment"
-}
-
-export type HarnessInterventionAssessErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessInterventionAssessError = HarnessInterventionAssessErrors[keyof HarnessInterventionAssessErrors]
-
-export type HarnessInterventionAssessResponses = {
-  /**
-   * Immutable controlled intervention receipt
-   */
-  200: {
-    schemaVersion: 1
-    receiptID: string
-    planID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    evolutionReceiptID: string
-    families: Array<{
-      family:
-        | "replay"
-        | "retune"
-        | "ablation"
-        | "repair"
-        | "model_transfer"
-        | "context_transfer"
-        | "evaluator_transfer"
-        | "split_transfer"
-      mode: "max_absolute_effect" | "min_effect" | "max_regression"
-      threshold: number
-      pairs: number
-      validPairs: number
-      meanEffect?: number
-      standardDeviation?: number
-      standardError?: number
-      confidence95?: [number, number]
-      maxAbsoluteEffect?: number
-      regressions: number
-      verdict: "passed" | "failed" | "inconclusive"
-    }>
-    status: "passed" | "failed" | "inconclusive"
-    observedAt: number
-    assessedAt: number
-  }
-}
-
-export type HarnessInterventionAssessResponse =
-  HarnessInterventionAssessResponses[keyof HarnessInterventionAssessResponses]
-
-export type HarnessInterventionStatusData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    candidateID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/interventions/{candidateID}/status"
-}
-
-export type HarnessInterventionStatusErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessInterventionStatusError = HarnessInterventionStatusErrors[keyof HarnessInterventionStatusErrors]
-
-export type HarnessInterventionStatusResponses = {
-  /**
-   * Controlled intervention state
-   */
-  200: {
-    schemaVersion: 1
-    plan: {
-      schemaVersion: 1
-      planID: string
-      runID: string
-      sessionID: string
-      contractFingerprint: string
-      protocol: {
-        protocolVersion: "intervention-study-v1"
-        validatorSHA256: string
-        requiredForPromotion: boolean
-        minPairs: number
-        maxPairs: number
-        maxTotalPairs: number
-        confidence: 0.95
-        required: Array<
-          | "replay"
-          | "retune"
-          | "ablation"
-          | "repair"
-          | "model_transfer"
-          | "context_transfer"
-          | "evaluator_transfer"
-          | "split_transfer"
-        >
-        rules: Array<
-          | {
-              family: "replay"
-              mode: "max_absolute_effect"
-              threshold: number
-            }
-          | {
-              family: "retune" | "ablation" | "repair"
-              mode: "min_effect"
-              threshold: number
-            }
-          | {
-              family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
-              mode: "max_regression"
-              threshold: number
-            }
-        >
-      }
-      benchmark: {
-        name: string
-        version: string
-        taskID: string
-        metric: string
-        direction: "maximize" | "minimize"
-      }
-      subject: {
-        type: "candidate"
-        id: string
-        artifact: {
-          uri: string
-          sha256: string
-        }
-      }
-      evolutionReceiptID: string
-      validator: {
-        name: "design-replay-interventions"
-        version: 1
-        scriptSHA256: string
-      }
-      pairs: Array<{
-        family:
-          | "replay"
-          | "retune"
-          | "ablation"
-          | "repair"
-          | "model_transfer"
-          | "context_transfer"
-          | "evaluator_transfer"
-          | "split_transfer"
-        index: number
-        control: {
-          artifact: {
-            uri: string
-            sha256: string
-          }
-          condition: {
-            seed: number
-            model: {
-              provider: string
-              name: string
-              version: string
-            }
-            context: {
-              uri: string
-              sha256: string
-            }
-            evaluator: {
-              name: string
-              version: string
-              source: "benchmark" | "gate" | "external"
-            }
-            split: {
-              name: string
-              manifest: {
-                uri: string
-                sha256: string
-              }
-            }
-            environment: {
-              uri: string
-              sha256: string
-            }
-            budget: {
-              uri: string
-              sha256: string
-            }
-          }
-        }
-        arm: {
-          artifact: {
-            uri: string
-            sha256: string
-          }
-          condition: {
-            seed: number
-            model: {
-              provider: string
-              name: string
-              version: string
-            }
-            context: {
-              uri: string
-              sha256: string
-            }
-            evaluator: {
-              name: string
-              version: string
-              source: "benchmark" | "gate" | "external"
-            }
-            split: {
-              name: string
-              manifest: {
-                uri: string
-                sha256: string
-              }
-            }
-            environment: {
-              uri: string
-              sha256: string
-            }
-            budget: {
-              uri: string
-              sha256: string
-            }
-          }
-        }
-        change: {
-          uri: string
-          sha256: string
-        }
-        pairID: string
-      }>
-      createdAt: number
-    }
-    outcomes: {
-      [key: string]: {
-        schemaVersion: 1
-        outcomeID: string
-        submissionID: string
-        pairID: string
-        role: "control" | "arm"
-        targetSHA256: string
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        evidence: Array<string>
-        evaluatedAt: number
-        recordedAt: number
-      }
-    }
-    order: Array<string>
-    receipt?: {
-      schemaVersion: 1
-      receiptID: string
-      planID: string
-      runID: string
-      sessionID: string
-      contractFingerprint: string
-      subject: {
-        type: "candidate"
-        id: string
-        artifact: {
-          uri: string
-          sha256: string
-        }
-      }
-      evolutionReceiptID: string
-      families: Array<{
-        family:
-          | "replay"
-          | "retune"
-          | "ablation"
-          | "repair"
-          | "model_transfer"
-          | "context_transfer"
-          | "evaluator_transfer"
-          | "split_transfer"
-        mode: "max_absolute_effect" | "min_effect" | "max_regression"
-        threshold: number
-        pairs: number
-        validPairs: number
-        meanEffect?: number
-        standardDeviation?: number
-        standardError?: number
-        confidence95?: [number, number]
-        maxAbsoluteEffect?: number
-        regressions: number
-        verdict: "passed" | "failed" | "inconclusive"
-      }>
-      status: "passed" | "failed" | "inconclusive"
-      observedAt: number
-      assessedAt: number
-    }
-  } | null
-}
-
-export type HarnessInterventionStatusResponse =
-  HarnessInterventionStatusResponses[keyof HarnessInterventionStatusResponses]
-
-export type HarnessJudgeRecordData = {
-  body?: {
-    sessionID: string
-    auditorToken: string
-    cases: Array<{
-      id: string
-      commitment: string
-      kind: "clean" | "fault"
-      fault?:
-        | "wrong_answer"
-        | "unsupported_claim"
-        | "missing_evidence"
-        | "data_leakage"
-        | "non_reproducible"
-        | "reward_hacking"
-        | "invalid_statistics"
-        | "invalid_simulation"
-        | "distribution_shift"
-        | "evaluation_awareness"
-      decision: "accept" | "reject" | "abstain"
-      failureProbability: number
-      evidence: Array<string>
-    }>
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/evaluators/qualifications"
-}
-
-export type HarnessJudgeRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessJudgeRecordError = HarnessJudgeRecordErrors[keyof HarnessJudgeRecordErrors]
-
-export type HarnessJudgeRecordResponses = {
-  /**
-   * Immutable evaluator audit receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "evaluator-audit-receipt-v1"
-    receiptID: string
-    protocolSHA256: string
-    sourceSessionID: string
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "human" | "external"
-    }
-    auditor: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "human" | "external"
-    }
-    suite: {
-      name: string
-      version: string
-      commitmentSHA256: string
-    }
-    cases: Array<{
-      id: string
-      commitment: string
-      kind: "clean" | "fault"
-      fault?:
-        | "wrong_answer"
-        | "unsupported_claim"
-        | "missing_evidence"
-        | "data_leakage"
-        | "non_reproducible"
-        | "reward_hacking"
-        | "invalid_statistics"
-        | "invalid_simulation"
-        | "distribution_shift"
-        | "evaluation_awareness"
-      decision: "accept" | "reject" | "abstain"
-      failureProbability: number
-      evidence: Array<string>
-    }>
-    metrics: {
-      cases: number
-      cleanCases: number
-      faultCases: number
-      truePositive: number
-      falseNegative: number
-      trueNegative: number
-      falsePositive: number
-      sensitivity: number
-      specificity: number
-      balancedAccuracy: number
-      brierScore: number
-      perFault: {
-        [key: string]: {
-          cases: number
-          detected: number
-          recall: number
-        }
-      }
-    }
-    status: "passed" | "failed"
-    failures: Array<string>
-    recordedAt: number
-  }
-}
-
-export type HarnessJudgeRecordResponse = HarnessJudgeRecordResponses[keyof HarnessJudgeRecordResponses]
-
-export type HarnessJudgeReceiptData = {
-  body?: {
-    sessionID: string
-    auditorToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/evaluators/qualifications/{receiptID}"
-}
-
-export type HarnessJudgeReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessJudgeReceiptError = HarnessJudgeReceiptErrors[keyof HarnessJudgeReceiptErrors]
-
-export type HarnessJudgeReceiptResponses = {
-  /**
-   * Evaluator audit receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "evaluator-audit-receipt-v1"
-    receiptID: string
-    protocolSHA256: string
-    sourceSessionID: string
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "human" | "external"
-    }
-    auditor: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "human" | "external"
-    }
-    suite: {
-      name: string
-      version: string
-      commitmentSHA256: string
-    }
-    cases: Array<{
-      id: string
-      commitment: string
-      kind: "clean" | "fault"
-      fault?:
-        | "wrong_answer"
-        | "unsupported_claim"
-        | "missing_evidence"
-        | "data_leakage"
-        | "non_reproducible"
-        | "reward_hacking"
-        | "invalid_statistics"
-        | "invalid_simulation"
-        | "distribution_shift"
-        | "evaluation_awareness"
-      decision: "accept" | "reject" | "abstain"
-      failureProbability: number
-      evidence: Array<string>
-    }>
-    metrics: {
-      cases: number
-      cleanCases: number
-      faultCases: number
-      truePositive: number
-      falseNegative: number
-      trueNegative: number
-      falsePositive: number
-      sensitivity: number
-      specificity: number
-      balancedAccuracy: number
-      brierScore: number
-      perFault: {
-        [key: string]: {
-          cases: number
-          detected: number
-          recall: number
-        }
-      }
-    }
-    status: "passed" | "failed"
-    failures: Array<string>
-    recordedAt: number
-  }
-}
-
-export type HarnessJudgeReceiptResponse = HarnessJudgeReceiptResponses[keyof HarnessJudgeReceiptResponses]
-
-export type HarnessReplicationRecordData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    observations: Array<{
-      stratumID: string
-      clusterID: string
-      stratumSHA256: string
-      clusterSHA256: string
-      status: "passed" | "failed" | "inconclusive"
-      score?: number
-      outputSHA256: string
-      environmentSHA256: string
-      evidence: Array<string>
-      evaluatedAt: number
-    }>
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/replications/receipts"
-}
-
-export type HarnessReplicationRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessReplicationRecordError = HarnessReplicationRecordErrors[keyof HarnessReplicationRecordErrors]
-
-export type HarnessReplicationRecordResponses = {
-  /**
-   * Immutable replicated evaluation receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "replicated-evaluation-receipt-v1"
-    receiptID: string
-    protocolSHA256: string
-    contractSHA256: string
-    sourceSessionID: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    metric: string
-    protocol: {
-      protocolVersion: "replicated-evaluation-v1"
-      validatorSHA256: string
-      environmentSHA256: string
-      sampling: {
-        design: "crossed-stratified-cluster-v1"
-        stratumKind: string
-        clusterKind: string
-        strata: Array<{
-          id: string
-          commitmentSHA256: string
-        }>
-        clusters: Array<{
-          id: string
-          commitmentSHA256: string
-        }>
-      }
-      estimator: "mean" | "median" | "iqm" | "pass_rate"
-      interval:
-        | {
-            method: "stratified-bootstrap-percentile-v1"
-            confidence: 0.95
-            resamples: number
-            seed: number
-          }
-        | {
-            method: "wilson-score-v1"
-            confidence: 0.95
-          }
-      decision: {
-        rule: "conservative-bound-v1"
-        direction: "maximize" | "minimize" | "pass"
-        target: number
-        maxIntervalWidth?: number
-      }
-      failurePolicy: "fail-closed"
-    }
-    observations: Array<{
-      stratumID: string
-      clusterID: string
-      stratumSHA256: string
-      clusterSHA256: string
-      status: "passed" | "failed" | "inconclusive"
-      score?: number
-      outputSHA256: string
-      environmentSHA256: string
-      evidence: Array<string>
-      evaluatedAt: number
-    }>
-    statistics: {
-      units: number
-      passed: number
-      failed: number
-      inconclusive: number
-      estimator: "mean" | "median" | "iqm" | "pass_rate"
-      estimate?: number
-      confidence: 0.95
-      interval?: [number, number]
-      intervalWidth?: number
-      conservativeBound?: number
-      method: "stratified-bootstrap-percentile-v1" | "wilson-score-v1"
-      resamples?: number
-    }
-    status: "passed" | "failed" | "inconclusive"
-    failures: Array<string>
-    evidence: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessReplicationRecordResponse =
-  HarnessReplicationRecordResponses[keyof HarnessReplicationRecordResponses]
-
-export type HarnessReplicationReceiptData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/replications/receipts/{receiptID}"
-}
-
-export type HarnessReplicationReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessReplicationReceiptError = HarnessReplicationReceiptErrors[keyof HarnessReplicationReceiptErrors]
-
-export type HarnessReplicationReceiptResponses = {
-  /**
-   * Replicated evaluation receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "replicated-evaluation-receipt-v1"
-    receiptID: string
-    protocolSHA256: string
-    contractSHA256: string
-    sourceSessionID: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    metric: string
-    protocol: {
-      protocolVersion: "replicated-evaluation-v1"
-      validatorSHA256: string
-      environmentSHA256: string
-      sampling: {
-        design: "crossed-stratified-cluster-v1"
-        stratumKind: string
-        clusterKind: string
-        strata: Array<{
-          id: string
-          commitmentSHA256: string
-        }>
-        clusters: Array<{
-          id: string
-          commitmentSHA256: string
-        }>
-      }
-      estimator: "mean" | "median" | "iqm" | "pass_rate"
-      interval:
-        | {
-            method: "stratified-bootstrap-percentile-v1"
-            confidence: 0.95
-            resamples: number
-            seed: number
-          }
-        | {
-            method: "wilson-score-v1"
-            confidence: 0.95
-          }
-      decision: {
-        rule: "conservative-bound-v1"
-        direction: "maximize" | "minimize" | "pass"
-        target: number
-        maxIntervalWidth?: number
-      }
-      failurePolicy: "fail-closed"
-    }
-    observations: Array<{
-      stratumID: string
-      clusterID: string
-      stratumSHA256: string
-      clusterSHA256: string
-      status: "passed" | "failed" | "inconclusive"
-      score?: number
-      outputSHA256: string
-      environmentSHA256: string
-      evidence: Array<string>
-      evaluatedAt: number
-    }>
-    statistics: {
-      units: number
-      passed: number
-      failed: number
-      inconclusive: number
-      estimator: "mean" | "median" | "iqm" | "pass_rate"
-      estimate?: number
-      confidence: 0.95
-      interval?: [number, number]
-      intervalWidth?: number
-      conservativeBound?: number
-      method: "stratified-bootstrap-percentile-v1" | "wilson-score-v1"
-      resamples?: number
-    }
-    status: "passed" | "failed" | "inconclusive"
-    failures: Array<string>
-    evidence: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessReplicationReceiptResponse =
-  HarnessReplicationReceiptResponses[keyof HarnessReplicationReceiptResponses]
-
-export type HarnessMetaSelectionData = {
-  body?: {
-    sessionID: string
-    metaToken: string
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/meta/selection"
-}
-
-export type HarnessMetaSelectionErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessMetaSelectionError = HarnessMetaSelectionErrors[keyof HarnessMetaSelectionErrors]
-
-export type HarnessMetaSelectionResponses = {
-  /**
-   * Content-addressed terminal meta-harness selection
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "meta-harness-selection-v1"
-    selectionID: string
-    contractSHA256: string
-    protocolSHA256: string
-    sourceSessionID: string
-    runID: string
-    searchRevision: number
-    stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
-    candidateID: string
-    candidateArtifact: {
-      uri: string
-      sha256: string
-    }
-    optimizationResultSHA256: string
-    optimizationEvaluationSHA256: string
-    selectedAt: number
-  }
-}
-
-export type HarnessMetaSelectionResponse = HarnessMetaSelectionResponses[keyof HarnessMetaSelectionResponses]
-
-export type HarnessMetaRecordData = {
-  body?: {
-    schemaVersion: 1
-    sessionID: string
-    metaToken: string
-    selectionID: string
-    candidateArtifactSHA256: string
-    candidateManifestSHA256: string
-    protectedManifestSHA256: string
-    validatorSHA256: string
-    archive: {
-      uri: string
-      sha256: string
-      schemaSHA256: string
-      indexSHA256: string
-      contents: "full-source-scores-traces"
-      query: "filesystem"
-      complete: true
-      hiddenContent: "excluded"
-      evaluatorContent: "excluded"
-      entries: Array<{
-        candidateID: string
-        artifactSHA256: string
-        sourceSHA256: string
-        state: "evaluated" | "unevaluated"
-        scoresSHA256?: string
-        resultSHA256?: string
-        evaluationSHA256?: string
-        trace?: {
-          uri: string
-          sha256: string
-          schemaSHA256: string
-          complete: true
-          hiddenContent: "excluded"
-          evaluatorContent: "excluded"
-        }
-      }>
-    }
-    refinements: Array<{
-      revision: number
-      scope: "session"
-      parentSnapshotSHA256: string
-      snapshotSHA256: string
-      trigger: string
-      diagnosis: {
-        kind: "implementation" | "fundamental" | "inconclusive"
-        rationale: string
-      }
-      rootCause: string
-      expectedOutcome: string
-      changes: Array<{
-        action: "create" | "update" | "delete" | "rollback"
-        component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
-        path: string
-        beforeSHA256?: string
-        afterSHA256?: string
-        reason: string
-      }>
-      evidence: Array<{
-        candidateID: string
-        traceSHA256: string
-        messageIndex: number
-        excerptSHA256: string
-      }>
-      predictions: Array<{
-        modelID: string
-        taskID: string
-        expected: "fail_to_pass" | "remain_pass"
-      }>
-    }>
-    cells: Array<
-      | {
-          split: "search" | "held_out"
-          modelID: string
-          modelCommitment: string
-          taskID: string
-          taskCommitment: string
-          outcome: "completed" | "failed" | "inconclusive"
-          score?: number
-          passed?: boolean
-          contextTokens: number
-          outputSHA256: string
-          trace: {
-            uri: string
-            sha256: string
-            schemaSHA256: string
-            complete: true
-            hiddenContent: "excluded"
-            evaluatorContent: "excluded"
-          }
-          evidence: Array<string>
-          role: "baseline"
-        }
-      | {
-          split: "search" | "held_out"
-          modelID: string
-          modelCommitment: string
-          taskID: string
-          taskCommitment: string
-          outcome: "completed" | "failed" | "inconclusive"
-          score?: number
-          passed?: boolean
-          contextTokens: number
-          outputSHA256: string
-          trace: {
-            uri: string
-            sha256: string
-            schemaSHA256: string
-            complete: true
-            hiddenContent: "excluded"
-            evaluatorContent: "excluded"
-          }
-          evidence: Array<string>
-          role: "candidate"
-          loaded: boolean
-          phases: Array<{
-            followed: number
-            violatedCommission: number
-            violatedOmission: number
-            requiredUnobserved: number
-            notApplicable: number
-            insufficientEvidence: number
-            phase: "loaded" | "midpoint" | "pre_final" | "final_validation"
-          }>
-        }
-    >
-    evaluatedAt: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/meta/receipts"
-}
-
-export type HarnessMetaRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessMetaRecordError = HarnessMetaRecordErrors[keyof HarnessMetaRecordErrors]
-
-export type HarnessMetaRecordResponses = {
-  /**
-   * Immutable meta-harness qualification receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "meta-harness-receipt-v1"
-    receiptID: string
-    contractSHA256: string
-    protocolSHA256: string
-    sourceSessionID: string
-    runID: string
-    selection: {
-      schemaVersion: 1
-      protocolVersion: "meta-harness-selection-v1"
-      selectionID: string
-      contractSHA256: string
-      protocolSHA256: string
-      sourceSessionID: string
-      runID: string
-      searchRevision: number
-      stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
-      candidateID: string
-      candidateArtifact: {
-        uri: string
-        sha256: string
-      }
-      optimizationResultSHA256: string
-      optimizationEvaluationSHA256: string
-      selectedAt: number
-    }
-    candidateManifestSHA256: string
-    protectedManifestSHA256: string
-    validatorSHA256: string
-    archive: {
-      uri: string
-      sha256: string
-      schemaSHA256: string
-      indexSHA256: string
-      contents: "full-source-scores-traces"
-      query: "filesystem"
-      complete: true
-      hiddenContent: "excluded"
-      evaluatorContent: "excluded"
-      entries: Array<{
-        candidateID: string
-        artifactSHA256: string
-        sourceSHA256: string
-        state: "evaluated" | "unevaluated"
-        scoresSHA256?: string
-        resultSHA256?: string
-        evaluationSHA256?: string
-        trace?: {
-          uri: string
-          sha256: string
-          schemaSHA256: string
-          complete: true
-          hiddenContent: "excluded"
-          evaluatorContent: "excluded"
-        }
-      }>
-    }
-    refinements: Array<{
-      revision: number
-      scope: "session"
-      parentSnapshotSHA256: string
-      snapshotSHA256: string
-      trigger: string
-      diagnosis: {
-        kind: "implementation" | "fundamental" | "inconclusive"
-        rationale: string
-      }
-      rootCause: string
-      expectedOutcome: string
-      changes: Array<{
-        action: "create" | "update" | "delete" | "rollback"
-        component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
-        path: string
-        beforeSHA256?: string
-        afterSHA256?: string
-        reason: string
-      }>
-      evidence: Array<{
-        candidateID: string
-        traceSHA256: string
-        messageIndex: number
-        excerptSHA256: string
-      }>
-      predictions: Array<{
-        modelID: string
-        taskID: string
-        expected: "fail_to_pass" | "remain_pass"
-      }>
-    }>
-    cells: Array<
-      | {
-          split: "search" | "held_out"
-          modelID: string
-          modelCommitment: string
-          taskID: string
-          taskCommitment: string
-          outcome: "completed" | "failed" | "inconclusive"
-          score?: number
-          passed?: boolean
-          contextTokens: number
-          outputSHA256: string
-          trace: {
-            uri: string
-            sha256: string
-            schemaSHA256: string
-            complete: true
-            hiddenContent: "excluded"
-            evaluatorContent: "excluded"
-          }
-          evidence: Array<string>
-          role: "baseline"
-        }
-      | {
-          split: "search" | "held_out"
-          modelID: string
-          modelCommitment: string
-          taskID: string
-          taskCommitment: string
-          outcome: "completed" | "failed" | "inconclusive"
-          score?: number
-          passed?: boolean
-          contextTokens: number
-          outputSHA256: string
-          trace: {
-            uri: string
-            sha256: string
-            schemaSHA256: string
-            complete: true
-            hiddenContent: "excluded"
-            evaluatorContent: "excluded"
-          }
-          evidence: Array<string>
-          role: "candidate"
-          loaded: boolean
-          phases: Array<{
-            followed: number
-            violatedCommission: number
-            violatedOmission: number
-            requiredUnobserved: number
-            notApplicable: number
-            insufficientEvidence: number
-            phase: "loaded" | "midpoint" | "pre_final" | "final_validation"
-          }>
-        }
-    >
-    diagnostics: {
-      updaterGain?: number
-      beneficiaryGain?: number
-      worstHeldoutModelGain?: number
-      activationRate: number
-      requiredAdherence?: number
-      finalAdherence?: number
-      maxPhaseDrift?: number
-      predictionPrecision: number
-      riskRegressions: number
-      maxContextTokens: number
-      meanContextIncrease: number
-      loadedBenefit?: number
-      searchPairs: number
-      heldoutPairs: number
-    }
-    status: "passed" | "failed" | "inconclusive"
-    failures: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessMetaRecordResponse = HarnessMetaRecordResponses[keyof HarnessMetaRecordResponses]
-
-export type HarnessMetaReceiptData = {
-  body?: {
-    sessionID: string
-    metaToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/meta/receipts/{receiptID}"
-}
-
-export type HarnessMetaReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessMetaReceiptError = HarnessMetaReceiptErrors[keyof HarnessMetaReceiptErrors]
-
-export type HarnessMetaReceiptResponses = {
-  /**
-   * Canonical meta-harness qualification receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "meta-harness-receipt-v1"
-    receiptID: string
-    contractSHA256: string
-    protocolSHA256: string
-    sourceSessionID: string
-    runID: string
-    selection: {
-      schemaVersion: 1
-      protocolVersion: "meta-harness-selection-v1"
-      selectionID: string
-      contractSHA256: string
-      protocolSHA256: string
-      sourceSessionID: string
-      runID: string
-      searchRevision: number
-      stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
-      candidateID: string
-      candidateArtifact: {
-        uri: string
-        sha256: string
-      }
-      optimizationResultSHA256: string
-      optimizationEvaluationSHA256: string
-      selectedAt: number
-    }
-    candidateManifestSHA256: string
-    protectedManifestSHA256: string
-    validatorSHA256: string
-    archive: {
-      uri: string
-      sha256: string
-      schemaSHA256: string
-      indexSHA256: string
-      contents: "full-source-scores-traces"
-      query: "filesystem"
-      complete: true
-      hiddenContent: "excluded"
-      evaluatorContent: "excluded"
-      entries: Array<{
-        candidateID: string
-        artifactSHA256: string
-        sourceSHA256: string
-        state: "evaluated" | "unevaluated"
-        scoresSHA256?: string
-        resultSHA256?: string
-        evaluationSHA256?: string
-        trace?: {
-          uri: string
-          sha256: string
-          schemaSHA256: string
-          complete: true
-          hiddenContent: "excluded"
-          evaluatorContent: "excluded"
-        }
-      }>
-    }
-    refinements: Array<{
-      revision: number
-      scope: "session"
-      parentSnapshotSHA256: string
-      snapshotSHA256: string
-      trigger: string
-      diagnosis: {
-        kind: "implementation" | "fundamental" | "inconclusive"
-        rationale: string
-      }
-      rootCause: string
-      expectedOutcome: string
-      changes: Array<{
-        action: "create" | "update" | "delete" | "rollback"
-        component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
-        path: string
-        beforeSHA256?: string
-        afterSHA256?: string
-        reason: string
-      }>
-      evidence: Array<{
-        candidateID: string
-        traceSHA256: string
-        messageIndex: number
-        excerptSHA256: string
-      }>
-      predictions: Array<{
-        modelID: string
-        taskID: string
-        expected: "fail_to_pass" | "remain_pass"
-      }>
-    }>
-    cells: Array<
-      | {
-          split: "search" | "held_out"
-          modelID: string
-          modelCommitment: string
-          taskID: string
-          taskCommitment: string
-          outcome: "completed" | "failed" | "inconclusive"
-          score?: number
-          passed?: boolean
-          contextTokens: number
-          outputSHA256: string
-          trace: {
-            uri: string
-            sha256: string
-            schemaSHA256: string
-            complete: true
-            hiddenContent: "excluded"
-            evaluatorContent: "excluded"
-          }
-          evidence: Array<string>
-          role: "baseline"
-        }
-      | {
-          split: "search" | "held_out"
-          modelID: string
-          modelCommitment: string
-          taskID: string
-          taskCommitment: string
-          outcome: "completed" | "failed" | "inconclusive"
-          score?: number
-          passed?: boolean
-          contextTokens: number
-          outputSHA256: string
-          trace: {
-            uri: string
-            sha256: string
-            schemaSHA256: string
-            complete: true
-            hiddenContent: "excluded"
-            evaluatorContent: "excluded"
-          }
-          evidence: Array<string>
-          role: "candidate"
-          loaded: boolean
-          phases: Array<{
-            followed: number
-            violatedCommission: number
-            violatedOmission: number
-            requiredUnobserved: number
-            notApplicable: number
-            insufficientEvidence: number
-            phase: "loaded" | "midpoint" | "pre_final" | "final_validation"
-          }>
-        }
-    >
-    diagnostics: {
-      updaterGain?: number
-      beneficiaryGain?: number
-      worstHeldoutModelGain?: number
-      activationRate: number
-      requiredAdherence?: number
-      finalAdherence?: number
-      maxPhaseDrift?: number
-      predictionPrecision: number
-      riskRegressions: number
-      maxContextTokens: number
-      meanContextIncrease: number
-      loadedBenefit?: number
-      searchPairs: number
-      heldoutPairs: number
-    }
-    status: "passed" | "failed" | "inconclusive"
-    failures: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessMetaReceiptResponse = HarnessMetaReceiptResponses[keyof HarnessMetaReceiptResponses]
-
-export type HarnessConfirmationSelectionData = {
-  body?: {
-    sessionID: string
-    confirmationToken: string
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/confirmations/selection"
-}
-
-export type HarnessConfirmationSelectionErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessConfirmationSelectionError =
-  HarnessConfirmationSelectionErrors[keyof HarnessConfirmationSelectionErrors]
-
-export type HarnessConfirmationSelectionResponses = {
-  /**
-   * Immutable terminal winner selection
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "terminal-verified-best-selection-v1"
-    selectionID: string
-    contractSHA256: string
-    protocolSHA256: string
-    sourceSessionID: string
-    runID: string
-    searchRevision: number
-    stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
-    candidateID: string
-    candidateArtifact: {
-      uri: string
-      sha256: string
-    }
-    candidateCreatedAt: number
-    optimizationResultSHA256: string
-    optimizationEvaluationSHA256: string
-    selectedAt: number
-  }
-}
-
-export type HarnessConfirmationSelectionResponse =
-  HarnessConfirmationSelectionResponses[keyof HarnessConfirmationSelectionResponses]
-
-export type HarnessConfirmationRecordData = {
-  body?: {
-    schemaVersion: 1
-    sessionID: string
-    confirmationToken: string
-    candidateSHA256: string
-    manifestSHA256: string
-    validatorSHA256: string
-    environmentSHA256: string
-    outcome: "completed" | "failed" | "inconclusive"
-    score?: number
-    metrics?: {
-      [key: string]: number
-    }
-    checks: Array<{
-      id: string
-      status: "passed" | "failed" | "inconclusive"
-      blocking: boolean
-      score?: number
-      evidence?: Array<string>
-      note?: string
-    }>
-    evidence: Array<string>
-    usage?: {
-      wallTimeMs?: number
-      costUSD?: number
-    }
-    outputSHA256: string
-    evaluatedAt: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/confirmations/receipts"
-}
-
-export type HarnessConfirmationRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessConfirmationRecordError = HarnessConfirmationRecordErrors[keyof HarnessConfirmationRecordErrors]
-
-export type HarnessConfirmationRecordResponses = {
-  /**
-   * Immutable sealed confirmation receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "sealed-confirmation-receipt-v1"
-    receiptID: string
-    contractSHA256: string
-    protocolSHA256: string
-    sourceSessionID: string
-    runID: string
-    selection: {
-      schemaVersion: 1
-      protocolVersion: "terminal-verified-best-selection-v1"
-      selectionID: string
-      contractSHA256: string
-      protocolSHA256: string
-      sourceSessionID: string
-      runID: string
-      searchRevision: number
-      stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
-      candidateID: string
-      candidateArtifact: {
-        uri: string
-        sha256: string
-      }
-      candidateCreatedAt: number
-      optimizationResultSHA256: string
-      optimizationEvaluationSHA256: string
-      selectedAt: number
-    }
-    claim: {
-      taskID: string
-      split: "held_out" | "release"
-      manifestSHA256: string
-      validatorSHA256: string
-      environmentSHA256: string
-      evaluator: {
-        name: string
-        version: string
-        source: "benchmark" | "gate" | "external"
-      }
-      source?: {
-        repository: string
-        revision: string
-      }
-      metric: string
-      direction: "maximize" | "minimize"
-      target: number
-    }
-    outcome: "completed" | "failed" | "inconclusive"
-    status: "passed" | "failed" | "inconclusive"
-    score?: number
-    metrics: {
-      [key: string]: number
-    }
-    checks: Array<{
-      id: string
-      status: "passed" | "failed" | "inconclusive"
-      blocking: boolean
-      score?: number
-      evidence?: Array<string>
-      note?: string
-    }>
-    failures: Array<string>
-    evidence: Array<string>
-    usage?: {
-      wallTimeMs?: number
-      costUSD?: number
-    }
-    outputSHA256: string
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessConfirmationRecordResponse =
-  HarnessConfirmationRecordResponses[keyof HarnessConfirmationRecordResponses]
-
-export type HarnessConfirmationReceiptData = {
-  body?: {
-    sessionID: string
-    confirmationToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/confirmations/receipts/{receiptID}"
-}
-
-export type HarnessConfirmationReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessConfirmationReceiptError = HarnessConfirmationReceiptErrors[keyof HarnessConfirmationReceiptErrors]
-
-export type HarnessConfirmationReceiptResponses = {
-  /**
-   * Canonical sealed confirmation receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "sealed-confirmation-receipt-v1"
-    receiptID: string
-    contractSHA256: string
-    protocolSHA256: string
-    sourceSessionID: string
-    runID: string
-    selection: {
-      schemaVersion: 1
-      protocolVersion: "terminal-verified-best-selection-v1"
-      selectionID: string
-      contractSHA256: string
-      protocolSHA256: string
-      sourceSessionID: string
-      runID: string
-      searchRevision: number
-      stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
-      candidateID: string
-      candidateArtifact: {
-        uri: string
-        sha256: string
-      }
-      candidateCreatedAt: number
-      optimizationResultSHA256: string
-      optimizationEvaluationSHA256: string
-      selectedAt: number
-    }
-    claim: {
-      taskID: string
-      split: "held_out" | "release"
-      manifestSHA256: string
-      validatorSHA256: string
-      environmentSHA256: string
-      evaluator: {
-        name: string
-        version: string
-        source: "benchmark" | "gate" | "external"
-      }
-      source?: {
-        repository: string
-        revision: string
-      }
-      metric: string
-      direction: "maximize" | "minimize"
-      target: number
-    }
-    outcome: "completed" | "failed" | "inconclusive"
-    status: "passed" | "failed" | "inconclusive"
-    score?: number
-    metrics: {
-      [key: string]: number
-    }
-    checks: Array<{
-      id: string
-      status: "passed" | "failed" | "inconclusive"
-      blocking: boolean
-      score?: number
-      evidence?: Array<string>
-      note?: string
-    }>
-    failures: Array<string>
-    evidence: Array<string>
-    usage?: {
-      wallTimeMs?: number
-      costUSD?: number
-    }
-    outputSHA256: string
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessConfirmationReceiptResponse =
-  HarnessConfirmationReceiptResponses[keyof HarnessConfirmationReceiptResponses]
-
-export type HarnessSemanticRecordData = {
-  body?: {
-    sessionID: string
-    reviewerToken: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    reviews: Array<{
-      actor: string
-      sessionID: string
-      correctness: "passed" | "failed" | "inconclusive"
-      alignment: "intended" | "reasonable_alternative" | "misinterpreted" | "ambiguous"
-      novelty: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
-      vacuous: boolean
-      confidence: number
-      criteria: Array<{
-        id: string
-        status: "passed" | "failed" | "inconclusive"
-        evidence: Array<string>
-      }>
-      shortcuts: Array<{
-        id: string
-        observed: boolean
-        evidence: Array<string>
-      }>
-      literatureRefs?: Array<string>
-      evidence: Array<string>
-      summary: string
-      reviewedAt: number
-    }>
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/semantics/receipts"
-}
-
-export type HarnessSemanticRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessSemanticRecordError = HarnessSemanticRecordErrors[keyof HarnessSemanticRecordErrors]
-
-export type HarnessSemanticRecordResponses = {
-  /**
-   * Immutable semantic audit receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "semantic-audit-receipt-v1"
-    receiptID: string
-    protocolSHA256: string
-    sourceSessionID: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    reviewer: {
-      name: string
-      version: string
-      source: "gate" | "human" | "external"
-    }
-    scope: {
-      objectiveSHA256: string
-      criteria: Array<{
-        id: string
-        requirement: string
-      }>
-      forbiddenShortcuts: Array<{
-        id: string
-        description: string
-      }>
-      literature: {
-        cutoff: string
-        corpusSHA256: string
-      }
-      noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
-    }
-    reviews: Array<{
-      actor: string
-      sessionID: string
-      correctness: "passed" | "failed" | "inconclusive"
-      alignment: "intended" | "reasonable_alternative" | "misinterpreted" | "ambiguous"
-      novelty: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
-      vacuous: boolean
-      confidence: number
-      criteria: Array<{
-        id: string
-        status: "passed" | "failed" | "inconclusive"
-        evidence: Array<string>
-      }>
-      shortcuts: Array<{
-        id: string
-        observed: boolean
-        evidence: Array<string>
-      }>
-      literatureRefs?: Array<string>
-      evidence: Array<string>
-      summary: string
-      reviewedAt: number
-    }>
-    status: "meaningful" | "technical_only" | "ambiguous" | "failed"
-    failures: Array<string>
-    evidence: Array<string>
-    reviewedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessSemanticRecordResponse = HarnessSemanticRecordResponses[keyof HarnessSemanticRecordResponses]
-
-export type HarnessSemanticReceiptData = {
-  body?: {
-    sessionID: string
-    reviewerToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/semantics/receipts/{receiptID}"
-}
-
-export type HarnessSemanticReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessSemanticReceiptError = HarnessSemanticReceiptErrors[keyof HarnessSemanticReceiptErrors]
-
-export type HarnessSemanticReceiptResponses = {
-  /**
-   * Semantic audit receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "semantic-audit-receipt-v1"
-    receiptID: string
-    protocolSHA256: string
-    sourceSessionID: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    reviewer: {
-      name: string
-      version: string
-      source: "gate" | "human" | "external"
-    }
-    scope: {
-      objectiveSHA256: string
-      criteria: Array<{
-        id: string
-        requirement: string
-      }>
-      forbiddenShortcuts: Array<{
-        id: string
-        description: string
-      }>
-      literature: {
-        cutoff: string
-        corpusSHA256: string
-      }
-      noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
-    }
-    reviews: Array<{
-      actor: string
-      sessionID: string
-      correctness: "passed" | "failed" | "inconclusive"
-      alignment: "intended" | "reasonable_alternative" | "misinterpreted" | "ambiguous"
-      novelty: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
-      vacuous: boolean
-      confidence: number
-      criteria: Array<{
-        id: string
-        status: "passed" | "failed" | "inconclusive"
-        evidence: Array<string>
-      }>
-      shortcuts: Array<{
-        id: string
-        observed: boolean
-        evidence: Array<string>
-      }>
-      literatureRefs?: Array<string>
-      evidence: Array<string>
-      summary: string
-      reviewedAt: number
-    }>
-    status: "meaningful" | "technical_only" | "ambiguous" | "failed"
-    failures: Array<string>
-    evidence: Array<string>
-    reviewedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessSemanticReceiptResponse = HarnessSemanticReceiptResponses[keyof HarnessSemanticReceiptResponses]
-
-export type HarnessSynthesisRecordData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    conclusionSHA256: string
-    evaluatorAuditReceiptID: string
-    trace: {
-      owner: "evaluator_runtime"
-      complete: true
-      schemaSHA256: string
-      filterPolicySHA256: string
-      events: Array<{
-        sequence: number
-        tool: "google_search" | "paper_search" | "web_browse"
-        requestSHA256: string
-        responseSHA256: string
-        sourceSHA256: string
-        publishedAt?: string
-        matches: {
-          forbiddenDomain: boolean
-          referenceTitle: boolean
-        }
-        decision: "allowed" | "blocked"
-        evidence: Array<string>
-      }>
-    }
-    decomposition: {
-      status: "passed" | "failed"
-      outputSHA256?: string
-      evidence: Array<string>
-    }
-    generatedFacts: Array<{
-      id: string
-      commitment: string
-      verdict: "supported" | "contradicted" | "unsupported" | "judge_error"
-      evidence: Array<string>
-    }>
-    referenceFacts: Array<{
-      id: string
-      commitment: string
-      coverage: "covered" | "missed" | "judge_error"
-      evidence: Array<string>
-    }>
-    evaluatedAt: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/syntheses/receipts"
-}
-
-export type HarnessSynthesisRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessSynthesisRecordError = HarnessSynthesisRecordErrors[keyof HarnessSynthesisRecordErrors]
-
-export type HarnessSynthesisRecordResponses = {
-  /**
-   * Immutable scientific synthesis receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "scientific-synthesis-receipt-v1"
-    receiptID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    protocolSHA256: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    conclusionSHA256: string
-    evaluatorAuditReceiptID: string
-    traceSHA256: string
-    events: Array<{
-      sequence: number
-      tool: "google_search" | "paper_search" | "web_browse"
-      requestSHA256: string
-      responseSHA256: string
-      sourceSHA256: string
-      publishedAt?: string
-      matches: {
-        forbiddenDomain: boolean
-        referenceTitle: boolean
-      }
-      decision: "allowed" | "blocked"
-      evidence: Array<string>
-      eventID: string
-      violations: Array<"forbidden_domain" | "reference_title" | "post_cutoff" | "unknown_date" | "duplicate_output">
-    }>
-    decomposition: {
-      status: "passed" | "failed"
-      outputSHA256?: string
-      evidence: Array<string>
-    }
-    generatedFacts: Array<{
-      id: string
-      commitment: string
-      verdict: "supported" | "contradicted" | "unsupported" | "judge_error"
-      evidence: Array<string>
-    }>
-    referenceFacts: Array<{
-      id: string
-      commitment: string
-      coverage: "covered" | "missed" | "judge_error"
-      evidence: Array<string>
-    }>
-    metrics: {
-      toolEvents: number
-      allowedSources: number
-      blockedSources: number
-      violations: {
-        [key: string]: number
-      }
-      generatedFacts: number
-      supported: number
-      contradicted: number
-      unsupported: number
-      precisionJudgeErrors: number
-      referenceFacts: number
-      covered: number
-      missed: number
-      recallJudgeErrors: number
-      precision?: number
-      recall?: number
-      f1?: number
-    }
-    status: "passed" | "failed" | "inconclusive"
-    failures: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessSynthesisRecordResponse = HarnessSynthesisRecordResponses[keyof HarnessSynthesisRecordResponses]
-
-export type HarnessSynthesisReceiptData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/syntheses/receipts/{receiptID}"
-}
-
-export type HarnessSynthesisReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessSynthesisReceiptError = HarnessSynthesisReceiptErrors[keyof HarnessSynthesisReceiptErrors]
-
-export type HarnessSynthesisReceiptResponses = {
-  /**
-   * Canonical scientific synthesis receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "scientific-synthesis-receipt-v1"
-    receiptID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    protocolSHA256: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    conclusionSHA256: string
-    evaluatorAuditReceiptID: string
-    traceSHA256: string
-    events: Array<{
-      sequence: number
-      tool: "google_search" | "paper_search" | "web_browse"
-      requestSHA256: string
-      responseSHA256: string
-      sourceSHA256: string
-      publishedAt?: string
-      matches: {
-        forbiddenDomain: boolean
-        referenceTitle: boolean
-      }
-      decision: "allowed" | "blocked"
-      evidence: Array<string>
-      eventID: string
-      violations: Array<"forbidden_domain" | "reference_title" | "post_cutoff" | "unknown_date" | "duplicate_output">
-    }>
-    decomposition: {
-      status: "passed" | "failed"
-      outputSHA256?: string
-      evidence: Array<string>
-    }
-    generatedFacts: Array<{
-      id: string
-      commitment: string
-      verdict: "supported" | "contradicted" | "unsupported" | "judge_error"
-      evidence: Array<string>
-    }>
-    referenceFacts: Array<{
-      id: string
-      commitment: string
-      coverage: "covered" | "missed" | "judge_error"
-      evidence: Array<string>
-    }>
-    metrics: {
-      toolEvents: number
-      allowedSources: number
-      blockedSources: number
-      violations: {
-        [key: string]: number
-      }
-      generatedFacts: number
-      supported: number
-      contradicted: number
-      unsupported: number
-      precisionJudgeErrors: number
-      referenceFacts: number
-      covered: number
-      missed: number
-      recallJudgeErrors: number
-      precision?: number
-      recall?: number
-      f1?: number
-    }
-    status: "passed" | "failed" | "inconclusive"
-    failures: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessSynthesisReceiptResponse = HarnessSynthesisReceiptResponses[keyof HarnessSynthesisReceiptResponses]
-
-export type HarnessAutonomyRecordData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    artifactSHA256: string
-    trace: {
-      owner: "evaluator_runtime"
-      complete: true
-      recorderArtifactSHA256: string
-      schemaSHA256: string
-      classificationPolicySHA256: string
-      rawLogSHA256: string
-      startedAt: number
-      endedAt: number
-      events: Array<{
-        sequence: number
-        at: number
-        actor: "benchmark" | "human" | "agent"
-        kind:
-          | "problem_statement"
-          | "clarification"
-          | "resource_provision"
-          | "strategy"
-          | "technical_correction"
-          | "artifact_edit"
-          | "candidate_selection"
-          | "evaluation_feedback"
-          | "exposition"
-          | "other"
-        contribution: "problem" | "auxiliary" | "essential" | "core" | "unclear"
-        contentSHA256: string
-        artifactBeforeSHA256?: string
-        artifactAfterSHA256?: string
-        evidence: Array<string>
-      }>
-    }
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/autonomy/receipts"
-}
-
-export type HarnessAutonomyRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessAutonomyRecordError = HarnessAutonomyRecordErrors[keyof HarnessAutonomyRecordErrors]
-
-export type HarnessAutonomyRecordResponses = {
-  /**
-   * Immutable backend-derived human-AI autonomy receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "human-ai-autonomy-receipt-v1"
-    receiptID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    protocolSHA256: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    artifactSHA256: string
-    traceSHA256: string
-    recorderArtifactSHA256: string
-    rawLogSHA256: string
-    startedAt: number
-    endedAt: number
-    events: Array<{
-      sequence: number
-      at: number
-      actor: "benchmark" | "human" | "agent"
-      kind:
-        | "problem_statement"
-        | "clarification"
-        | "resource_provision"
-        | "strategy"
-        | "technical_correction"
-        | "artifact_edit"
-        | "candidate_selection"
-        | "evaluation_feedback"
-        | "exposition"
-        | "other"
-      contribution: "problem" | "auxiliary" | "essential" | "core" | "unclear"
-      contentSHA256: string
-      artifactBeforeSHA256?: string
-      artifactAfterSHA256?: string
-      evidence: Array<string>
-      priorEventID: string | null
-      eventID: string
-    }>
-    claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
-    derivedLevel?: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
-    metrics: {
-      events: number
-      counts: {
-        [key: string]: {
-          [key: string]: number
-        }
-      }
-      problemEvents: number
-      humanSubstantiveEvents: number
-      agentSubstantiveEvents: number
-      unclearEvents: number
-      linkedArtifactEvents: number
-      artifactTransitions: number
-      finalArtifactLinked: boolean
-    }
-    status: "passed" | "failed" | "inconclusive"
-    failures: Array<string>
-    recordedAt: number
-  }
-}
-
-export type HarnessAutonomyRecordResponse = HarnessAutonomyRecordResponses[keyof HarnessAutonomyRecordResponses]
-
-export type HarnessAutonomyReceiptData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/autonomy/receipts/{receiptID}"
-}
-
-export type HarnessAutonomyReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessAutonomyReceiptError = HarnessAutonomyReceiptErrors[keyof HarnessAutonomyReceiptErrors]
-
-export type HarnessAutonomyReceiptResponses = {
-  /**
-   * Canonical human-AI autonomy receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "human-ai-autonomy-receipt-v1"
-    receiptID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    protocolSHA256: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    artifactSHA256: string
-    traceSHA256: string
-    recorderArtifactSHA256: string
-    rawLogSHA256: string
-    startedAt: number
-    endedAt: number
-    events: Array<{
-      sequence: number
-      at: number
-      actor: "benchmark" | "human" | "agent"
-      kind:
-        | "problem_statement"
-        | "clarification"
-        | "resource_provision"
-        | "strategy"
-        | "technical_correction"
-        | "artifact_edit"
-        | "candidate_selection"
-        | "evaluation_feedback"
-        | "exposition"
-        | "other"
-      contribution: "problem" | "auxiliary" | "essential" | "core" | "unclear"
-      contentSHA256: string
-      artifactBeforeSHA256?: string
-      artifactAfterSHA256?: string
-      evidence: Array<string>
-      priorEventID: string | null
-      eventID: string
-    }>
-    claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
-    derivedLevel?: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
-    metrics: {
-      events: number
-      counts: {
-        [key: string]: {
-          [key: string]: number
-        }
-      }
-      problemEvents: number
-      humanSubstantiveEvents: number
-      agentSubstantiveEvents: number
-      unclearEvents: number
-      linkedArtifactEvents: number
-      artifactTransitions: number
-      finalArtifactLinked: boolean
-    }
-    status: "passed" | "failed" | "inconclusive"
-    failures: Array<string>
-    recordedAt: number
-  }
-}
-
-export type HarnessAutonomyReceiptResponse = HarnessAutonomyReceiptResponses[keyof HarnessAutonomyReceiptResponses]
-
-export type HarnessBlueprintInitializeData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/proofs/blueprints"
-}
-
-export type HarnessBlueprintInitializeErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessBlueprintInitializeError = HarnessBlueprintInitializeErrors[keyof HarnessBlueprintInitializeErrors]
-
-export type HarnessBlueprintInitializeResponses = {
-  /**
-   * Canonical proof blueprint view
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "proof-blueprint-view-v1"
-    runID: string
-    sessionID: string
-    rootGoalID: string
-    summary: {
-      blueprintID: string
-      status: "open" | "proved" | "refuted" | "exhausted"
-      goals: number
-      proved: number
-      refuted: number
-      exhausted: number
-      decompositions: number
-      attempts: number
-      rejected: number
-      refinements: number
-      openLeases: number
-      revision: number
-    }
-    goals: Array<{
-      statementSHA256: string
-      declaration: string
-      module: string
-      id: string
-      createdAt: number
-      status: "open" | "proved" | "refuted" | "exhausted"
-      ready: boolean
-    }>
-    decompositions: Array<{
-      id: string
-      parentID: string
-      childIDs: Array<string>
-      informalPlanSHA256: string
-      sketchArtifactSHA256: string
-      sketchTranscriptSHA256: string
-      reviewerTranscriptSHA256: string
-      attemptID: string
-      createdAt: number
-      status: "open" | "closed" | "blocked"
-    }>
-    attempts: Array<{
-      id: string
-      ordinal: number
-      goalID: string
-      leaseID: string
-      kind: "direct" | "decomposition"
-      artifactSHA256: string
-      result: "proved" | "refuted" | "failed" | "accepted" | "rejected"
-      claim?: "proof" | "refutation" | "failure"
-      decompositionID?: string
-      transcriptSHA256: string
-      feedbackSHA256: string
-      failures: Array<string>
-      startedAt: number
-      endedAt: number
-      recordedAt: number
-    }>
-    leases: Array<{
-      id: string
-      goalID: string
-      revision: number
-      ordinal: number
-      status: "open" | "consumed" | "expired"
-      issuedAt: number
-      expiresAt: number
-      consumedAt?: number
-    }>
-  }
-}
-
-export type HarnessBlueprintInitializeResponse =
-  HarnessBlueprintInitializeResponses[keyof HarnessBlueprintInitializeResponses]
-
-export type HarnessBlueprintStatusData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/proofs/blueprints/status"
-}
-
-export type HarnessBlueprintStatusErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessBlueprintStatusError = HarnessBlueprintStatusErrors[keyof HarnessBlueprintStatusErrors]
-
-export type HarnessBlueprintStatusResponses = {
-  /**
-   * Backend-derived goal, decomposition, attempt, and lease state
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "proof-blueprint-view-v1"
-    runID: string
-    sessionID: string
-    rootGoalID: string
-    summary: {
-      blueprintID: string
-      status: "open" | "proved" | "refuted" | "exhausted"
-      goals: number
-      proved: number
-      refuted: number
-      exhausted: number
-      decompositions: number
-      attempts: number
-      rejected: number
-      refinements: number
-      openLeases: number
-      revision: number
-    }
-    goals: Array<{
-      statementSHA256: string
-      declaration: string
-      module: string
-      id: string
-      createdAt: number
-      status: "open" | "proved" | "refuted" | "exhausted"
-      ready: boolean
-    }>
-    decompositions: Array<{
-      id: string
-      parentID: string
-      childIDs: Array<string>
-      informalPlanSHA256: string
-      sketchArtifactSHA256: string
-      sketchTranscriptSHA256: string
-      reviewerTranscriptSHA256: string
-      attemptID: string
-      createdAt: number
-      status: "open" | "closed" | "blocked"
-    }>
-    attempts: Array<{
-      id: string
-      ordinal: number
-      goalID: string
-      leaseID: string
-      kind: "direct" | "decomposition"
-      artifactSHA256: string
-      result: "proved" | "refuted" | "failed" | "accepted" | "rejected"
-      claim?: "proof" | "refutation" | "failure"
-      decompositionID?: string
-      transcriptSHA256: string
-      feedbackSHA256: string
-      failures: Array<string>
-      startedAt: number
-      endedAt: number
-      recordedAt: number
-    }>
-    leases: Array<{
-      id: string
-      goalID: string
-      revision: number
-      ordinal: number
-      status: "open" | "consumed" | "expired"
-      issuedAt: number
-      expiresAt: number
-      consumedAt?: number
-    }>
-  }
-}
-
-export type HarnessBlueprintStatusResponse = HarnessBlueprintStatusResponses[keyof HarnessBlueprintStatusResponses]
-
-export type HarnessBlueprintLeaseData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-    count: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/proofs/blueprints/leases"
-}
-
-export type HarnessBlueprintLeaseErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessBlueprintLeaseError = HarnessBlueprintLeaseErrors[keyof HarnessBlueprintLeaseErrors]
-
-export type HarnessBlueprintLeaseResponses = {
-  /**
-   * Issued leases and updated proof blueprint
-   */
-  200: {
-    leases: Array<{
-      id: string
-      goalID: string
-      revision: number
-      ordinal: number
-      status: "open" | "consumed" | "expired"
-      issuedAt: number
-      expiresAt: number
-      consumedAt?: number
-    }>
-    state: {
-      schemaVersion: 1
-      protocolVersion: "proof-blueprint-view-v1"
-      runID: string
-      sessionID: string
-      rootGoalID: string
-      summary: {
-        blueprintID: string
-        status: "open" | "proved" | "refuted" | "exhausted"
-        goals: number
-        proved: number
-        refuted: number
-        exhausted: number
-        decompositions: number
-        attempts: number
-        rejected: number
-        refinements: number
-        openLeases: number
-        revision: number
-      }
-      goals: Array<{
-        statementSHA256: string
-        declaration: string
-        module: string
-        id: string
-        createdAt: number
-        status: "open" | "proved" | "refuted" | "exhausted"
-        ready: boolean
-      }>
-      decompositions: Array<{
-        id: string
-        parentID: string
-        childIDs: Array<string>
-        informalPlanSHA256: string
-        sketchArtifactSHA256: string
-        sketchTranscriptSHA256: string
-        reviewerTranscriptSHA256: string
-        attemptID: string
-        createdAt: number
-        status: "open" | "closed" | "blocked"
-      }>
-      attempts: Array<{
-        id: string
-        ordinal: number
-        goalID: string
-        leaseID: string
-        kind: "direct" | "decomposition"
-        artifactSHA256: string
-        result: "proved" | "refuted" | "failed" | "accepted" | "rejected"
-        claim?: "proof" | "refutation" | "failure"
-        decompositionID?: string
-        transcriptSHA256: string
-        feedbackSHA256: string
-        failures: Array<string>
-        startedAt: number
-        endedAt: number
-        recordedAt: number
-      }>
-      leases: Array<{
-        id: string
-        goalID: string
-        revision: number
-        ordinal: number
-        status: "open" | "consumed" | "expired"
-        issuedAt: number
-        expiresAt: number
-        consumedAt?: number
-      }>
-    }
-  }
-}
-
-export type HarnessBlueprintLeaseResponse = HarnessBlueprintLeaseResponses[keyof HarnessBlueprintLeaseResponses]
-
-export type HarnessBlueprintRecordData = {
-  body?:
-    | {
-        sessionID: string
-        evaluatorToken: string
-        kind: "direct"
-        leaseID: string
-        artifactSHA256: string
-        claim: "proof" | "refutation" | "failure"
-        verification: {
-          compilerArtifactSHA256: string
-          statementMatched: boolean
-          exitCode: number
-          warnings: number
-          transcriptSHA256: string
-          feedbackSHA256: string
-          startedAt: number
-          endedAt: number
-        }
-      }
-    | {
-        sessionID: string
-        evaluatorToken: string
-        kind: "decomposition"
-        leaseID: string
-        informalPlanSHA256: string
-        artifactSHA256: string
-        children: Array<{
-          statementSHA256: string
-          declaration: string
-          module: string
-        }>
-        verification: {
-          compilerArtifactSHA256: string
-          statementMatched: boolean
-          exitCode: number
-          warnings: number
-          transcriptSHA256: string
-          feedbackSHA256: string
-          startedAt: number
-          endedAt: number
-          validatorArtifactSHA256: string
-          placeholderDeclarations: Array<string>
-          validatorTranscriptSHA256: string
-        }
-        review: {
-          reviewerArtifactSHA256: string
-          promptSHA256: string
-          relevant: boolean
-          easier: boolean
-          plausible: boolean
-          transcriptSHA256: string
-        }
-      }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/proofs/blueprints/attempts"
-}
-
-export type HarnessBlueprintRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessBlueprintRecordError = HarnessBlueprintRecordErrors[keyof HarnessBlueprintRecordErrors]
-
-export type HarnessBlueprintRecordResponses = {
-  /**
-   * Recorded attempt and updated proof blueprint
-   */
-  200: {
-    attemptID?: string
-    decompositionID?: string
-    state: {
-      schemaVersion: 1
-      protocolVersion: "proof-blueprint-view-v1"
-      runID: string
-      sessionID: string
-      rootGoalID: string
-      summary: {
-        blueprintID: string
-        status: "open" | "proved" | "refuted" | "exhausted"
-        goals: number
-        proved: number
-        refuted: number
-        exhausted: number
-        decompositions: number
-        attempts: number
-        rejected: number
-        refinements: number
-        openLeases: number
-        revision: number
-      }
-      goals: Array<{
-        statementSHA256: string
-        declaration: string
-        module: string
-        id: string
-        createdAt: number
-        status: "open" | "proved" | "refuted" | "exhausted"
-        ready: boolean
-      }>
-      decompositions: Array<{
-        id: string
-        parentID: string
-        childIDs: Array<string>
-        informalPlanSHA256: string
-        sketchArtifactSHA256: string
-        sketchTranscriptSHA256: string
-        reviewerTranscriptSHA256: string
-        attemptID: string
-        createdAt: number
-        status: "open" | "closed" | "blocked"
-      }>
-      attempts: Array<{
-        id: string
-        ordinal: number
-        goalID: string
-        leaseID: string
-        kind: "direct" | "decomposition"
-        artifactSHA256: string
-        result: "proved" | "refuted" | "failed" | "accepted" | "rejected"
-        claim?: "proof" | "refutation" | "failure"
-        decompositionID?: string
-        transcriptSHA256: string
-        feedbackSHA256: string
-        failures: Array<string>
-        startedAt: number
-        endedAt: number
-        recordedAt: number
-      }>
-      leases: Array<{
-        id: string
-        goalID: string
-        revision: number
-        ordinal: number
-        status: "open" | "consumed" | "expired"
-        issuedAt: number
-        expiresAt: number
-        consumedAt?: number
-      }>
-    }
-  }
-}
-
-export type HarnessBlueprintRecordResponse = HarnessBlueprintRecordResponses[keyof HarnessBlueprintRecordResponses]
-
-export type HarnessFormalRecordData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    artifactSHA256: string
-    relation: "exact_proof" | "exact_refutation" | "repaired_proof"
-    challengeSHA256: string
-    statementSHA256: string
-    declaration: string
-    module: string
-    environment: {
-      leanVersion: string
-      leanToolchainSHA256: string
-      lakeManifestSHA256: string
-      dependencyTreeSHA256: string
-    }
-    manifest: {
-      complete: boolean
-      files: Array<{
-        path: string
-        role:
-          | "challenge"
-          | "statement"
-          | "proof"
-          | "lean_toolchain"
-          | "lake_manifest"
-          | "dependency_tree"
-          | "config"
-          | "support"
-        sha256: string
-      }>
-    }
-    verification: {
-      startedAt: number
-      endedAt: number
-      build: {
-        verifierArtifactSHA256: string
-        exitCode: number
-        warnings: number
-        transcriptSHA256: string
-      }
-      source: {
-        verifierArtifactSHA256: string
-        complete: boolean
-        findings: Array<{
-          construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
-          path: string
-          line: number
-        }>
-        transcriptSHA256: string
-      }
-      axioms: {
-        verifierArtifactSHA256: string
-        complete: boolean
-        typesTraversed: boolean
-        observed: Array<string>
-        transcriptSHA256: string
-      }
-      fresh?: {
-        verifierArtifactSHA256: string
-        fresh: boolean
-        exitCode: number
-        transcriptSHA256: string
-      }
-      external?: {
-        comparatorArtifactSHA256: string
-        sandboxImageSHA256: string
-        sandboxed: boolean
-        challengeMatched: boolean
-        proofTermSHA256: string
-        transcriptSHA256: string
-        checks: [
-          {
-            role: "lean_kernel" | "external_checker"
-            verifierArtifactSHA256: string
-            accepted: boolean
-            transcriptSHA256: string
-          },
-          {
-            role: "lean_kernel" | "external_checker"
-            verifierArtifactSHA256: string
-            accepted: boolean
-            transcriptSHA256: string
-          },
-        ]
-      }
-    }
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/proofs/receipts"
-}
-
-export type HarnessFormalRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessFormalRecordError = HarnessFormalRecordErrors[keyof HarnessFormalRecordErrors]
-
-export type HarnessFormalRecordResponses = {
-  /**
-   * Immutable backend-derived formal proof receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "formal-proof-receipt-v1"
-    receiptID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    protocolSHA256: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    artifactSHA256: string
-    relation: "exact_proof" | "exact_refutation" | "repaired_proof"
-    challengeSHA256: string
-    statementSHA256: string
-    declaration: string
-    module: string
-    environment: {
-      leanVersion: string
-      leanToolchainSHA256: string
-      lakeManifestSHA256: string
-      dependencyTreeSHA256: string
-    }
-    manifestSHA256: string
-    files: Array<{
-      path: string
-      role:
-        | "challenge"
-        | "statement"
-        | "proof"
-        | "lean_toolchain"
-        | "lake_manifest"
-        | "dependency_tree"
-        | "config"
-        | "support"
-      sha256: string
-    }>
-    verification: {
-      startedAt: number
-      endedAt: number
-      build: {
-        verifierArtifactSHA256: string
-        exitCode: number
-        warnings: number
-        transcriptSHA256: string
-      }
-      source: {
-        verifierArtifactSHA256: string
-        complete: boolean
-        findings: Array<{
-          construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
-          path: string
-          line: number
-        }>
-        transcriptSHA256: string
-      }
-      axioms: {
-        verifierArtifactSHA256: string
-        complete: boolean
-        typesTraversed: boolean
-        observed: Array<string>
-        transcriptSHA256: string
-      }
-      fresh?: {
-        verifierArtifactSHA256: string
-        fresh: boolean
-        exitCode: number
-        transcriptSHA256: string
-      }
-      external?: {
-        comparatorArtifactSHA256: string
-        sandboxImageSHA256: string
-        sandboxed: boolean
-        challengeMatched: boolean
-        proofTermSHA256: string
-        transcriptSHA256: string
-        checks: [
-          {
-            role: "lean_kernel" | "external_checker"
-            verifierArtifactSHA256: string
-            accepted: boolean
-            transcriptSHA256: string
-          },
-          {
-            role: "lean_kernel" | "external_checker"
-            verifierArtifactSHA256: string
-            accepted: boolean
-            transcriptSHA256: string
-          },
-        ]
-      }
-    }
-    tier: "kernel" | "fresh_recheck" | "external_crosscheck"
-    metrics: {
-      files: number
-      warnings: number
-      observedAxioms: number
-      disallowedAxioms: Array<string>
-      manifestComplete: boolean
-      buildAccepted: boolean
-      sourceAuditAccepted: boolean
-      forbiddenFindings: Array<{
-        construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
-        path: string
-        line: number
-      }>
-      axiomAuditAccepted: boolean
-      freshRecheckAccepted: boolean
-      externalCrosscheckAccepted: boolean
-      statementMatched: boolean
-    }
-    status: "passed" | "failed"
-    failures: Array<string>
-    recordedAt: number
-  }
-}
-
-export type HarnessFormalRecordResponse = HarnessFormalRecordResponses[keyof HarnessFormalRecordResponses]
-
-export type HarnessFormalReceiptData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/proofs/receipts/{receiptID}"
-}
-
-export type HarnessFormalReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessFormalReceiptError = HarnessFormalReceiptErrors[keyof HarnessFormalReceiptErrors]
-
-export type HarnessFormalReceiptResponses = {
-  /**
-   * Canonical formal proof receipt
-   */
-  200: {
-    schemaVersion: 1
-    protocolVersion: "formal-proof-receipt-v1"
-    receiptID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    protocolSHA256: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-    }
-    artifactSHA256: string
-    relation: "exact_proof" | "exact_refutation" | "repaired_proof"
-    challengeSHA256: string
-    statementSHA256: string
-    declaration: string
-    module: string
-    environment: {
-      leanVersion: string
-      leanToolchainSHA256: string
-      lakeManifestSHA256: string
-      dependencyTreeSHA256: string
-    }
-    manifestSHA256: string
-    files: Array<{
-      path: string
-      role:
-        | "challenge"
-        | "statement"
-        | "proof"
-        | "lean_toolchain"
-        | "lake_manifest"
-        | "dependency_tree"
-        | "config"
-        | "support"
-      sha256: string
-    }>
-    verification: {
-      startedAt: number
-      endedAt: number
-      build: {
-        verifierArtifactSHA256: string
-        exitCode: number
-        warnings: number
-        transcriptSHA256: string
-      }
-      source: {
-        verifierArtifactSHA256: string
-        complete: boolean
-        findings: Array<{
-          construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
-          path: string
-          line: number
-        }>
-        transcriptSHA256: string
-      }
-      axioms: {
-        verifierArtifactSHA256: string
-        complete: boolean
-        typesTraversed: boolean
-        observed: Array<string>
-        transcriptSHA256: string
-      }
-      fresh?: {
-        verifierArtifactSHA256: string
-        fresh: boolean
-        exitCode: number
-        transcriptSHA256: string
-      }
-      external?: {
-        comparatorArtifactSHA256: string
-        sandboxImageSHA256: string
-        sandboxed: boolean
-        challengeMatched: boolean
-        proofTermSHA256: string
-        transcriptSHA256: string
-        checks: [
-          {
-            role: "lean_kernel" | "external_checker"
-            verifierArtifactSHA256: string
-            accepted: boolean
-            transcriptSHA256: string
-          },
-          {
-            role: "lean_kernel" | "external_checker"
-            verifierArtifactSHA256: string
-            accepted: boolean
-            transcriptSHA256: string
-          },
-        ]
-      }
-    }
-    tier: "kernel" | "fresh_recheck" | "external_crosscheck"
-    metrics: {
-      files: number
-      warnings: number
-      observedAxioms: number
-      disallowedAxioms: Array<string>
-      manifestComplete: boolean
-      buildAccepted: boolean
-      sourceAuditAccepted: boolean
-      forbiddenFindings: Array<{
-        construct: "sorry" | "admit" | "debug.skipKernelTC" | "native_decide"
-        path: string
-        line: number
-      }>
-      axiomAuditAccepted: boolean
-      freshRecheckAccepted: boolean
-      externalCrosscheckAccepted: boolean
-      statementMatched: boolean
-    }
-    status: "passed" | "failed"
-    failures: Array<string>
-    recordedAt: number
-  }
-}
-
-export type HarnessFormalReceiptResponse = HarnessFormalReceiptResponses[keyof HarnessFormalReceiptResponses]
-
-export type HarnessLaunchRecordData = {
-  body?: {
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    evaluatorToken: string
-    protocol: {
-      protocolVersion: "benchmark-launch-v1"
-      runner: {
-        repository: string
-        revision: string
-        entrypoint: string
-        commandSHA256: string
-        environmentSHA256: string
-        recipeSHA256?: string
-        driverSHA256?: string
-      }
-      dataset: {
-        name: string
-        source: string
-        revision: string
-        manifestSHA256: string
-      }
-      taskManifestSHA256: string
-      evaluatorSHA256: string
-      validatorSHA256: string
-      baseline: {
-        name: string
-        artifactSHA256: string
-        expectedScore?: number
-        tolerance?: number
-      }
-    }
-    validator: {
-      name: "verify-benchmark-launch"
-      version: "1"
-      scriptSHA256: string
-      manifestSHA256: string
-    }
-    checks: [
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-    ]
-    baselineScore?: number
-    evidence: Array<string>
-    evaluatedAt: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/launches/receipts"
-}
-
-export type HarnessLaunchRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessLaunchRecordError = HarnessLaunchRecordErrors[keyof HarnessLaunchRecordErrors]
-
-export type HarnessLaunchRecordResponses = {
-  /**
-   * Immutable benchmark launch receipt
-   */
-  200: {
-    schemaVersion: 1
-    receiptID: string
-    submissionID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "external"
-    }
-    protocol: {
-      protocolVersion: "benchmark-launch-v1"
-      runner: {
-        repository: string
-        revision: string
-        entrypoint: string
-        commandSHA256: string
-        environmentSHA256: string
-        recipeSHA256?: string
-        driverSHA256?: string
-      }
-      dataset: {
-        name: string
-        source: string
-        revision: string
-        manifestSHA256: string
-      }
-      taskManifestSHA256: string
-      evaluatorSHA256: string
-      validatorSHA256: string
-      baseline: {
-        name: string
-        artifactSHA256: string
-        expectedScore?: number
-        tolerance?: number
-      }
-    }
-    validator: {
-      name: "verify-benchmark-launch"
-      version: "1"
-      scriptSHA256: string
-      manifestSHA256: string
-    }
-    checks: [
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-    ]
-    baselineScore?: number
-    baselineDelta?: number
-    status: "passed" | "failed"
-    failures: Array<string>
-    evidence: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessLaunchRecordResponse = HarnessLaunchRecordResponses[keyof HarnessLaunchRecordResponses]
-
-export type HarnessLaunchReceiptData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/launches/receipts/{receiptID}"
-}
-
-export type HarnessLaunchReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessLaunchReceiptError = HarnessLaunchReceiptErrors[keyof HarnessLaunchReceiptErrors]
-
-export type HarnessLaunchReceiptResponses = {
-  /**
-   * Benchmark launch receipt
-   */
-  200: {
-    schemaVersion: 1
-    receiptID: string
-    submissionID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "external"
-    }
-    protocol: {
-      protocolVersion: "benchmark-launch-v1"
-      runner: {
-        repository: string
-        revision: string
-        entrypoint: string
-        commandSHA256: string
-        environmentSHA256: string
-        recipeSHA256?: string
-        driverSHA256?: string
-      }
-      dataset: {
-        name: string
-        source: string
-        revision: string
-        manifestSHA256: string
-      }
-      taskManifestSHA256: string
-      evaluatorSHA256: string
-      validatorSHA256: string
-      baseline: {
-        name: string
-        artifactSHA256: string
-        expectedScore?: number
-        tolerance?: number
-      }
-    }
-    validator: {
-      name: "verify-benchmark-launch"
-      version: "1"
-      scriptSHA256: string
-      manifestSHA256: string
-    }
-    checks: [
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-      {
-        id:
-          | "clean_checkout"
-          | "locked_environment"
-          | "task_manifest_load"
-          | "evaluator_load"
-          | "hidden_boundary"
-          | "deterministic_replay"
-          | "artifact_roundtrip"
-          | "baseline_replay"
-        status: "passed" | "failed"
-        evidence: Array<string>
-      },
-    ]
-    baselineScore?: number
-    baselineDelta?: number
-    status: "passed" | "failed"
-    failures: Array<string>
-    evidence: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  } | null
-}
-
-export type HarnessLaunchReceiptResponse = HarnessLaunchReceiptResponses[keyof HarnessLaunchReceiptResponses]
-
-export type HarnessIntegrityRecordData = {
-  body?: {
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    evaluatorToken: string
-    protocol: {
-      protocolVersion: "benchmark-integrity-v1"
-      validatorSHA256: string
-      traceSchemaSHA256: string
-      minEvents: number
-      minCoverage: number
-      assignedModel: {
-        name: string
-        baseArtifactSHA256: string
-        configSHA256: string
-      }
-      forbiddenModelArtifacts?: Array<string>
-      policy: {
-        testItemDerivation: "forbidden"
-        unapprovedExternalModels: "forbidden"
-        benchmarkLookup: "forbidden"
-      }
-      auditors: [
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-      ]
-      hiddenCanaryManifestSHA256: string
-      minHiddenCanaries: number
-    }
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    trace: {
-      artifact: {
-        uri: string
-        sha256: string
-      }
-      schemaSHA256: string
-      events: number
-      dropped: number
-      startedAt: number
-      endedAt: number
-    }
-    model: {
-      name: string
-      baseArtifactSHA256: string
-      configSHA256: string
-      outputArtifactSHA256: string
-      lineageVerified: boolean
-    }
-    audits: [
-      {
-        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-        name: string
-        version: string
-        promptSHA256: string
-        decision: "clean" | "flagged" | "abstain"
-        confidence: number
-        evidence: Array<string>
-      },
-      {
-        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-        name: string
-        version: string
-        promptSHA256: string
-        decision: "clean" | "flagged" | "abstain"
-        confidence: number
-        evidence: Array<string>
-      },
-      {
-        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-        name: string
-        version: string
-        promptSHA256: string
-        decision: "clean" | "flagged" | "abstain"
-        confidence: number
-        evidence: Array<string>
-      },
-    ]
-    activity: {
-      unapprovedExternalModelCalls: number
-      benchmarkLookupEvents: number
-      hiddenCanaryManifestSHA256: string
-      hiddenCanariesTested: number
-      hiddenCanaryViolations: number
-    }
-    validator: {
-      name: "verify-benchmark-integrity"
-      version: 1
-      scriptSHA256: string
-    }
-    evidence: Array<string>
-    evaluatedAt: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/integrity/receipts"
-}
-
-export type HarnessIntegrityRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessIntegrityRecordError = HarnessIntegrityRecordErrors[keyof HarnessIntegrityRecordErrors]
-
-export type HarnessIntegrityRecordResponses = {
-  /**
-   * Immutable runtime integrity receipt
-   */
-  200: {
-    schemaVersion: 1
-    receiptID: string
-    submissionID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "external"
-    }
-    protocol: {
-      protocolVersion: "benchmark-integrity-v1"
-      validatorSHA256: string
-      traceSchemaSHA256: string
-      minEvents: number
-      minCoverage: number
-      assignedModel: {
-        name: string
-        baseArtifactSHA256: string
-        configSHA256: string
-      }
-      forbiddenModelArtifacts?: Array<string>
-      policy: {
-        testItemDerivation: "forbidden"
-        unapprovedExternalModels: "forbidden"
-        benchmarkLookup: "forbidden"
-      }
-      auditors: [
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-      ]
-      hiddenCanaryManifestSHA256: string
-      minHiddenCanaries: number
-    }
-    trace: {
-      artifact: {
-        uri: string
-        sha256: string
-      }
-      schemaSHA256: string
-      events: number
-      dropped: number
-      startedAt: number
-      endedAt: number
-    }
-    traceCoverage: number
-    model: {
-      name: string
-      baseArtifactSHA256: string
-      configSHA256: string
-      outputArtifactSHA256: string
-      lineageVerified: boolean
-    }
-    audits: [
-      {
-        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-        name: string
-        version: string
-        promptSHA256: string
-        decision: "clean" | "flagged" | "abstain"
-        confidence: number
-        evidence: Array<string>
-      },
-      {
-        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-        name: string
-        version: string
-        promptSHA256: string
-        decision: "clean" | "flagged" | "abstain"
-        confidence: number
-        evidence: Array<string>
-      },
-      {
-        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-        name: string
-        version: string
-        promptSHA256: string
-        decision: "clean" | "flagged" | "abstain"
-        confidence: number
-        evidence: Array<string>
-      },
-    ]
-    activity: {
-      unapprovedExternalModelCalls: number
-      benchmarkLookupEvents: number
-      hiddenCanaryManifestSHA256: string
-      hiddenCanariesTested: number
-      hiddenCanaryViolations: number
-    }
-    validator: {
-      name: "verify-benchmark-integrity"
-      version: 1
-      scriptSHA256: string
-    }
-    checks: {
-      traceCompleteness: boolean
-      modelIdentity: boolean
-      testItemContamination: boolean
-      externalModelUse: boolean
-      benchmarkLookup: boolean
-      hiddenCanary: boolean
-    }
-    status: "passed" | "failed"
-    failures: Array<
-      | "trace_schema"
-      | "trace_event_floor"
-      | "trace_coverage"
-      | "model_name"
-      | "model_base_artifact"
-      | "model_config"
-      | "model_lineage"
-      | "forbidden_model_artifact"
-      | "test_item_contamination"
-      | "external_model_use"
-      | "benchmark_lookup"
-      | "hidden_canary_manifest"
-      | "hidden_canary_coverage"
-      | "hidden_canary_violation"
-    >
-    evidence: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessIntegrityRecordResponse = HarnessIntegrityRecordResponses[keyof HarnessIntegrityRecordResponses]
-
-export type HarnessIntegrityReceiptData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/integrity/receipts/{receiptID}"
-}
-
-export type HarnessIntegrityReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessIntegrityReceiptError = HarnessIntegrityReceiptErrors[keyof HarnessIntegrityReceiptErrors]
-
-export type HarnessIntegrityReceiptResponses = {
-  /**
-   * Runtime integrity receipt
-   */
-  200: {
-    schemaVersion: 1
-    receiptID: string
-    submissionID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "external"
-    }
-    protocol: {
-      protocolVersion: "benchmark-integrity-v1"
-      validatorSHA256: string
-      traceSchemaSHA256: string
-      minEvents: number
-      minCoverage: number
-      assignedModel: {
-        name: string
-        baseArtifactSHA256: string
-        configSHA256: string
-      }
-      forbiddenModelArtifacts?: Array<string>
-      policy: {
-        testItemDerivation: "forbidden"
-        unapprovedExternalModels: "forbidden"
-        benchmarkLookup: "forbidden"
-      }
-      auditors: [
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-      ]
-      hiddenCanaryManifestSHA256: string
-      minHiddenCanaries: number
-    }
-    trace: {
-      artifact: {
-        uri: string
-        sha256: string
-      }
-      schemaSHA256: string
-      events: number
-      dropped: number
-      startedAt: number
-      endedAt: number
-    }
-    traceCoverage: number
-    model: {
-      name: string
-      baseArtifactSHA256: string
-      configSHA256: string
-      outputArtifactSHA256: string
-      lineageVerified: boolean
-    }
-    audits: [
-      {
-        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-        name: string
-        version: string
-        promptSHA256: string
-        decision: "clean" | "flagged" | "abstain"
-        confidence: number
-        evidence: Array<string>
-      },
-      {
-        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-        name: string
-        version: string
-        promptSHA256: string
-        decision: "clean" | "flagged" | "abstain"
-        confidence: number
-        evidence: Array<string>
-      },
-      {
-        kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-        name: string
-        version: string
-        promptSHA256: string
-        decision: "clean" | "flagged" | "abstain"
-        confidence: number
-        evidence: Array<string>
-      },
-    ]
-    activity: {
-      unapprovedExternalModelCalls: number
-      benchmarkLookupEvents: number
-      hiddenCanaryManifestSHA256: string
-      hiddenCanariesTested: number
-      hiddenCanaryViolations: number
-    }
-    validator: {
-      name: "verify-benchmark-integrity"
-      version: 1
-      scriptSHA256: string
-    }
-    checks: {
-      traceCompleteness: boolean
-      modelIdentity: boolean
-      testItemContamination: boolean
-      externalModelUse: boolean
-      benchmarkLookup: boolean
-      hiddenCanary: boolean
-    }
-    status: "passed" | "failed"
-    failures: Array<
-      | "trace_schema"
-      | "trace_event_floor"
-      | "trace_coverage"
-      | "model_name"
-      | "model_base_artifact"
-      | "model_config"
-      | "model_lineage"
-      | "forbidden_model_artifact"
-      | "test_item_contamination"
-      | "external_model_use"
-      | "benchmark_lookup"
-      | "hidden_canary_manifest"
-      | "hidden_canary_coverage"
-      | "hidden_canary_violation"
-    >
-    evidence: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  } | null
-}
-
-export type HarnessIntegrityReceiptResponse = HarnessIntegrityReceiptResponses[keyof HarnessIntegrityReceiptResponses]
-
-export type HarnessEvolutionRecordData = {
-  body?: {
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    evaluatorToken: string
-    protocol: {
-      protocolVersion: "evolution-trace-v1"
-      validatorSHA256: string
-      manifestSchemaSHA256: string
-      lineAlgorithm: "sha256-exact-line-v1"
-      roots: Array<string>
-      extensions: Array<string>
-      exclude?: Array<string>
-      maxFiles: number
-      maxFileBytes: number
-      maxTotalBytes: number
-      maxSourceLines: number
-      maxChangedLines: number
-    }
-    subject: {
-      type: "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    snapshot: {
-      artifact: {
-        uri: string
-        sha256: string
-      }
-      schemaSHA256: string
-      files: Array<{
-        path: string
-        sha256: string
-        bytes: number
-        lineHashes: Array<string>
-      }>
-    }
-    parents: Array<{
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-      receiptID: string
-      snapshotSHA256: string
-      delta: {
-        uri: string
-        sha256: string
-      }
-    }>
-    validator: {
-      name: "trace-evolutionary-candidate"
-      version: 1
-      scriptSHA256: string
-    }
-    evidence: Array<string>
-    evaluatedAt: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/evolution/receipts"
-}
-
-export type HarnessEvolutionRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessEvolutionRecordError = HarnessEvolutionRecordErrors[keyof HarnessEvolutionRecordErrors]
-
-export type HarnessEvolutionRecordResponses = {
-  /**
-   * Immutable evolution trace receipt
-   */
-  200: {
-    schemaVersion: 1
-    receiptID: string
-    submissionID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "external"
-    }
-    protocol: {
-      protocolVersion: "evolution-trace-v1"
-      validatorSHA256: string
-      manifestSchemaSHA256: string
-      lineAlgorithm: "sha256-exact-line-v1"
-      roots: Array<string>
-      extensions: Array<string>
-      exclude?: Array<string>
-      maxFiles: number
-      maxFileBytes: number
-      maxTotalBytes: number
-      maxSourceLines: number
-      maxChangedLines: number
-    }
-    snapshot: {
-      artifact: {
-        uri: string
-        sha256: string
-      }
-      schemaSHA256: string
-      files: Array<{
-        path: string
-        sha256: string
-        bytes: number
-        lineHashes: Array<string>
-      }>
-    }
-    parents: Array<{
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-      receiptID: string
-      snapshotSHA256: string
-      delta: {
-        uri: string
-        sha256: string
-      }
-    }>
-    validator: {
-      name: "trace-evolutionary-candidate"
-      version: 1
-      scriptSHA256: string
-    }
-    diagnostics: {
-      files: number
-      bytes: number
-      sourceLines: number
-      depth: number
-      ancestors: number
-      addedLines: number
-      deletedLines: number
-      ancestralDeletedLines: number
-      reintroducedLines: number
-      reintroducedHashes: number
-      reintroducedFraction: number
-      novelLines: number
-      sourceChanged: boolean
-      cycleDetected: boolean
-      parents: Array<{
-        id: string
-        receiptID: string
-        filesChanged: number
-        addedLines: number
-        deletedLines: number
-      }>
-    }
-    evidence: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  }
-}
-
-export type HarnessEvolutionRecordResponse = HarnessEvolutionRecordResponses[keyof HarnessEvolutionRecordResponses]
-
-export type HarnessEvolutionReceiptData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/evolution/receipts/{receiptID}"
-}
-
-export type HarnessEvolutionReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessEvolutionReceiptError = HarnessEvolutionReceiptErrors[keyof HarnessEvolutionReceiptErrors]
-
-export type HarnessEvolutionReceiptResponses = {
-  /**
-   * Evolution trace receipt
-   */
-  200: {
-    schemaVersion: 1
-    receiptID: string
-    submissionID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "external"
-    }
-    protocol: {
-      protocolVersion: "evolution-trace-v1"
-      validatorSHA256: string
-      manifestSchemaSHA256: string
-      lineAlgorithm: "sha256-exact-line-v1"
-      roots: Array<string>
-      extensions: Array<string>
-      exclude?: Array<string>
-      maxFiles: number
-      maxFileBytes: number
-      maxTotalBytes: number
-      maxSourceLines: number
-      maxChangedLines: number
-    }
-    snapshot: {
-      artifact: {
-        uri: string
-        sha256: string
-      }
-      schemaSHA256: string
-      files: Array<{
-        path: string
-        sha256: string
-        bytes: number
-        lineHashes: Array<string>
-      }>
-    }
-    parents: Array<{
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-      receiptID: string
-      snapshotSHA256: string
-      delta: {
-        uri: string
-        sha256: string
-      }
-    }>
-    validator: {
-      name: "trace-evolutionary-candidate"
-      version: 1
-      scriptSHA256: string
-    }
-    diagnostics: {
-      files: number
-      bytes: number
-      sourceLines: number
-      depth: number
-      ancestors: number
-      addedLines: number
-      deletedLines: number
-      ancestralDeletedLines: number
-      reintroducedLines: number
-      reintroducedHashes: number
-      reintroducedFraction: number
-      novelLines: number
-      sourceChanged: boolean
-      cycleDetected: boolean
-      parents: Array<{
-        id: string
-        receiptID: string
-        filesChanged: number
-        addedLines: number
-        deletedLines: number
-      }>
-    }
-    evidence: Array<string>
-    evaluatedAt: number
-    recordedAt: number
-  } | null
-}
-
-export type HarnessEvolutionReceiptResponse = HarnessEvolutionReceiptResponses[keyof HarnessEvolutionReceiptResponses]
-
-export type HarnessSimulationRecordData = {
-  body?: {
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    evaluatorToken: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    engine: {
-      name: string
-      version: string
-      commandSHA256: string
-      configSHA256: string
-    }
-    problemSHA256: string
-    reference: {
-      kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
-      identity: string
-      sha256: string
-    }
-    validationInputSHA256: string
-    levels: Array<{
-      label: string
-      h: number
-      error: number
-      residual: number
-      invariants: {
-        [key: string]: number
-      }
-    }>
-    stressTests: Array<{
-      id:
-        | "timestep_sensitivity"
-        | "solver_tolerance_sensitivity"
-        | "reference_replay"
-        | "independent_implementation"
-        | "unit_convention"
-        | "boundary_sensitivity"
-        | "perturbation_stability"
-      status: "passed" | "failed" | "inconclusive"
-      evidence: Array<string>
-    }>
-    evidence: Array<string>
-    evaluatedAt: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/simulations/receipts"
-}
-
-export type HarnessSimulationRecordErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessSimulationRecordError = HarnessSimulationRecordErrors[keyof HarnessSimulationRecordErrors]
-
-export type HarnessSimulationRecordResponses = {
-  /**
-   * Immutable simulator validation receipt
-   */
-  200: {
-    schemaVersion: 1
-    receiptID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "external"
-    }
-    engine: {
-      name: string
-      version: string
-      commandSHA256: string
-      configSHA256: string
-    }
-    problemSHA256: string
-    reference: {
-      kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
-      identity: string
-      sha256: string
-    }
-    validationInputSHA256: string
-    levels: Array<{
-      label: string
-      h: number
-      error: number
-      residual: number
-      invariants: {
-        [key: string]: number
-      }
-    }>
-    observedOrders: Array<number>
-    medianObservedOrder: number
-    stressTests: Array<{
-      id:
-        | "timestep_sensitivity"
-        | "solver_tolerance_sensitivity"
-        | "reference_replay"
-        | "independent_implementation"
-        | "unit_convention"
-        | "boundary_sensitivity"
-        | "perturbation_stability"
-      status: "passed" | "failed" | "inconclusive"
-      evidence: Array<string>
-    }>
-    checks: {
-      enoughLevels: boolean
-      resolutionDecreases: boolean
-      errorDecreases: boolean
-      observedOrder: boolean
-      residualBound: boolean
-      invariants: {
-        [key: string]: boolean
-      }
-      stressTests: {
-        [key: string]: boolean
-      }
-    }
-    status: "passed" | "failed"
-    evidence: Array<string>
-    evaluatedAt: number
-  }
-}
-
-export type HarnessSimulationRecordResponse = HarnessSimulationRecordResponses[keyof HarnessSimulationRecordResponses]
-
-export type HarnessSimulationReceiptData = {
-  body?: {
-    sessionID: string
-    evaluatorToken: string
-  }
-  path: {
-    receiptID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/simulations/receipts/{receiptID}"
-}
-
-export type HarnessSimulationReceiptErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessSimulationReceiptError = HarnessSimulationReceiptErrors[keyof HarnessSimulationReceiptErrors]
-
-export type HarnessSimulationReceiptResponses = {
-  /**
-   * Simulator validation receipt
-   */
-  200: {
-    schemaVersion: 1
-    receiptID: string
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    subject: {
-      type: "run" | "candidate"
-      id: string
-      artifact: {
-        uri: string
-        sha256: string
-      }
-    }
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "external"
-    }
-    engine: {
-      name: string
-      version: string
-      commandSHA256: string
-      configSHA256: string
-    }
-    problemSHA256: string
-    reference: {
-      kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
-      identity: string
-      sha256: string
-    }
-    validationInputSHA256: string
-    levels: Array<{
-      label: string
-      h: number
-      error: number
-      residual: number
-      invariants: {
-        [key: string]: number
-      }
-    }>
-    observedOrders: Array<number>
-    medianObservedOrder: number
-    stressTests: Array<{
-      id:
-        | "timestep_sensitivity"
-        | "solver_tolerance_sensitivity"
-        | "reference_replay"
-        | "independent_implementation"
-        | "unit_convention"
-        | "boundary_sensitivity"
-        | "perturbation_stability"
-      status: "passed" | "failed" | "inconclusive"
-      evidence: Array<string>
-    }>
-    checks: {
-      enoughLevels: boolean
-      resolutionDecreases: boolean
-      errorDecreases: boolean
-      observedOrder: boolean
-      residualBound: boolean
-      invariants: {
-        [key: string]: boolean
-      }
-      stressTests: {
-        [key: string]: boolean
-      }
-    }
-    status: "passed" | "failed"
-    evidence: Array<string>
-    evaluatedAt: number
-  } | null
-}
-
-export type HarnessSimulationReceiptResponse =
-  HarnessSimulationReceiptResponses[keyof HarnessSimulationReceiptResponses]
-
-export type HarnessOrchestrationStatusData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/runs/{sessionID}/orchestration"
-}
-
-export type HarnessOrchestrationStatusErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessOrchestrationStatusError = HarnessOrchestrationStatusErrors[keyof HarnessOrchestrationStatusErrors]
-
-export type HarnessOrchestrationStatusResponses = {
-  /**
-   * Scientific orchestration state
-   */
-  200: {
-    schemaVersion: 3
-    protocolVersion: "coalition-v1" | "coalition-v2" | "coalition-v3"
-    sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
-    workerPolicy: "claimed-v1" | "task-attested-v1"
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    objective: string
-    selection: {
-      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
-      source: "contract" | "policy"
-      reasons: Array<string>
-      traits: {
-        decomposability: number
-        sequentiality: number
-        toolIntensity: number
-        uncertainty: number
-        verificationRisk: number
-        novelty: number
-        crossDomain: number
-      }
-    }
-    maxWorkers: number
-    maxRounds: number
-    minIndependentVerifiers: number
-    status: "active" | "awaiting_checkpoint" | "completed"
-    adaptive?: {
-      protocolVersion: "marginal-utility-v1"
-      minRounds: number
-      patience: number
-      minUtilityGain: number
-      maxUncertainty: number
-      targetUtility?: number
-      checkpoints: Array<{
-        round: number
-        utility: number
-        uncertainty: number
-        evidenceRefs: Array<string>
-        evaluatedAt: number
-        id: string
-        gain: number | null
-        qualified: boolean
-        recordedAt: number
-      }>
-      stalled: number
-      phase: "searching" | "finalizing"
-      stopReason?: "target_reached" | "marginal_utility_exhausted" | "max_rounds"
-    }
-    repair?: {
-      protocolVersion: "verifier-routed-v1"
-      minConfidence: number
-      phase: "producing" | "verifying" | "investigating" | "completed"
-      candidateID: string
-      verifierIDs: Array<string>
-      evidenceID?: string
-      routes: Array<{
-        id: string
-        attempt: number
-        candidateID: string
-        actionID?: string
-        verifierIDs: Array<string>
-        decision: "accept" | "revise" | "restart" | "investigate"
-        confidence: number
-        evidenceRefs: Array<string>
-        recordedAt: number
-      }>
-      stopReason?: "accepted" | "attempt_limit" | "work_failed"
-    }
-    consensus?: {
-      status: "supported" | "rejected" | "disputed" | "insufficient"
-      verifierCount: number
-      support: number
-      reject: number
-      abstain: number
-      confidence: number
-      evidenceRefs: Array<string>
-      provisional: true
-      derivedAt: number
-    }
-    work: {
-      [key: string]: {
-        id: string
-        role:
-          | "generation"
-          | "proximity"
-          | "reflection"
-          | "ranking"
-          | "evolution"
-          | "revision"
-          | "verification"
-          | "investigation"
-          | "simulation"
-          | "synthesis"
-        label: string
-        round: number
-        agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
-        dependencies: Array<string>
-        prompt: string
-        allocation: {
-          steps?: number
-          tokens?: number
-          costUSD?: number
-          wallTimeMs?: number
-        }
-        lane?: "producer-a" | "producer-b"
-        status: "pending" | "executed" | "completed" | "failed" | "cancelled"
-        workerSessionID?: string
-        workerReceipt?: {
-          id: string
-          workID: string
-          workerSessionID: string
-          turnID: string
-          agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
-          workPromptSHA256: string
-          taskPromptSHA256: string
-          outcome: "completed" | "failed"
-          usage: {
-            steps?: number
-            tokens?: number
-            costUSD?: number
-            wallTimeMs?: number
-          }
-          toolCalls: number
-          failedToolCalls: number
-          startedAt: number
-          completedAt: number
-          provisional: true
-        }
-        result?: {
-          summary: string
-          artifactRefs?: Array<string>
-          evidenceRefs?: Array<string>
-          usage?: {
-            steps?: number
-            tokens?: number
-            costUSD?: number
-            wallTimeMs?: number
-          }
-          verdict?: {
-            decision: "support" | "reject" | "abstain"
-            severity?: "none" | "minor" | "critical" | "unknown"
-            confidence: number
-            checks: Array<{
-              id: string
-              status: "passed" | "failed" | "inconclusive"
-              evidenceRefs: Array<string>
-            }>
-          }
-          completedAt: number
-        }
-        failure?: string
-      }
-    }
-    order: Array<string>
-    revision: number
-    createdAt: number
-    updatedAt: number
-  }
-}
-
-export type HarnessOrchestrationStatusResponse =
-  HarnessOrchestrationStatusResponses[keyof HarnessOrchestrationStatusResponses]
-
-export type HarnessOrchestrationStartData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/runs/{sessionID}/orchestration"
-}
-
-export type HarnessOrchestrationStartErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessOrchestrationStartError = HarnessOrchestrationStartErrors[keyof HarnessOrchestrationStartErrors]
-
-export type HarnessOrchestrationStartResponses = {
-  /**
-   * Scientific orchestration state
-   */
-  200: {
-    schemaVersion: 3
-    protocolVersion: "coalition-v1" | "coalition-v2" | "coalition-v3"
-    sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
-    workerPolicy: "claimed-v1" | "task-attested-v1"
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    objective: string
-    selection: {
-      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
-      source: "contract" | "policy"
-      reasons: Array<string>
-      traits: {
-        decomposability: number
-        sequentiality: number
-        toolIntensity: number
-        uncertainty: number
-        verificationRisk: number
-        novelty: number
-        crossDomain: number
-      }
-    }
-    maxWorkers: number
-    maxRounds: number
-    minIndependentVerifiers: number
-    status: "active" | "awaiting_checkpoint" | "completed"
-    adaptive?: {
-      protocolVersion: "marginal-utility-v1"
-      minRounds: number
-      patience: number
-      minUtilityGain: number
-      maxUncertainty: number
-      targetUtility?: number
-      checkpoints: Array<{
-        round: number
-        utility: number
-        uncertainty: number
-        evidenceRefs: Array<string>
-        evaluatedAt: number
-        id: string
-        gain: number | null
-        qualified: boolean
-        recordedAt: number
-      }>
-      stalled: number
-      phase: "searching" | "finalizing"
-      stopReason?: "target_reached" | "marginal_utility_exhausted" | "max_rounds"
-    }
-    repair?: {
-      protocolVersion: "verifier-routed-v1"
-      minConfidence: number
-      phase: "producing" | "verifying" | "investigating" | "completed"
-      candidateID: string
-      verifierIDs: Array<string>
-      evidenceID?: string
-      routes: Array<{
-        id: string
-        attempt: number
-        candidateID: string
-        actionID?: string
-        verifierIDs: Array<string>
-        decision: "accept" | "revise" | "restart" | "investigate"
-        confidence: number
-        evidenceRefs: Array<string>
-        recordedAt: number
-      }>
-      stopReason?: "accepted" | "attempt_limit" | "work_failed"
-    }
-    consensus?: {
-      status: "supported" | "rejected" | "disputed" | "insufficient"
-      verifierCount: number
-      support: number
-      reject: number
-      abstain: number
-      confidence: number
-      evidenceRefs: Array<string>
-      provisional: true
-      derivedAt: number
-    }
-    work: {
-      [key: string]: {
-        id: string
-        role:
-          | "generation"
-          | "proximity"
-          | "reflection"
-          | "ranking"
-          | "evolution"
-          | "revision"
-          | "verification"
-          | "investigation"
-          | "simulation"
-          | "synthesis"
-        label: string
-        round: number
-        agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
-        dependencies: Array<string>
-        prompt: string
-        allocation: {
-          steps?: number
-          tokens?: number
-          costUSD?: number
-          wallTimeMs?: number
-        }
-        lane?: "producer-a" | "producer-b"
-        status: "pending" | "executed" | "completed" | "failed" | "cancelled"
-        workerSessionID?: string
-        workerReceipt?: {
-          id: string
-          workID: string
-          workerSessionID: string
-          turnID: string
-          agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
-          workPromptSHA256: string
-          taskPromptSHA256: string
-          outcome: "completed" | "failed"
-          usage: {
-            steps?: number
-            tokens?: number
-            costUSD?: number
-            wallTimeMs?: number
-          }
-          toolCalls: number
-          failedToolCalls: number
-          startedAt: number
-          completedAt: number
-          provisional: true
-        }
-        result?: {
-          summary: string
-          artifactRefs?: Array<string>
-          evidenceRefs?: Array<string>
-          usage?: {
-            steps?: number
-            tokens?: number
-            costUSD?: number
-            wallTimeMs?: number
-          }
-          verdict?: {
-            decision: "support" | "reject" | "abstain"
-            severity?: "none" | "minor" | "critical" | "unknown"
-            confidence: number
-            checks: Array<{
-              id: string
-              status: "passed" | "failed" | "inconclusive"
-              evidenceRefs: Array<string>
-            }>
-          }
-          completedAt: number
-        }
-        failure?: string
-      }
-    }
-    order: Array<string>
-    revision: number
-    createdAt: number
-    updatedAt: number
-  }
-}
-
-export type HarnessOrchestrationStartResponse =
-  HarnessOrchestrationStartResponses[keyof HarnessOrchestrationStartResponses]
-
-export type HarnessOrchestrationCheckpointData = {
-  body?: {
-    evaluatorToken: string
-    round: number
-    utility: number
-    uncertainty: number
-    evidenceRefs: Array<string>
-    evaluatedAt: number
-  }
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/runs/{sessionID}/orchestration/checkpoints"
-}
-
-export type HarnessOrchestrationCheckpointErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessOrchestrationCheckpointError =
-  HarnessOrchestrationCheckpointErrors[keyof HarnessOrchestrationCheckpointErrors]
-
-export type HarnessOrchestrationCheckpointResponses = {
-  /**
-   * Scientific orchestration state
-   */
-  200: {
-    schemaVersion: 3
-    protocolVersion: "coalition-v1" | "coalition-v2" | "coalition-v3"
-    sessionPolicy: "legacy-v1" | "fresh-v1" | "producer-lanes-v1"
-    workerPolicy: "claimed-v1" | "task-attested-v1"
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    objective: string
-    selection: {
-      topology: "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
-      source: "contract" | "policy"
-      reasons: Array<string>
-      traits: {
-        decomposability: number
-        sequentiality: number
-        toolIntensity: number
-        uncertainty: number
-        verificationRisk: number
-        novelty: number
-        crossDomain: number
-      }
-    }
-    maxWorkers: number
-    maxRounds: number
-    minIndependentVerifiers: number
-    status: "active" | "awaiting_checkpoint" | "completed"
-    adaptive?: {
-      protocolVersion: "marginal-utility-v1"
-      minRounds: number
-      patience: number
-      minUtilityGain: number
-      maxUncertainty: number
-      targetUtility?: number
-      checkpoints: Array<{
-        round: number
-        utility: number
-        uncertainty: number
-        evidenceRefs: Array<string>
-        evaluatedAt: number
-        id: string
-        gain: number | null
-        qualified: boolean
-        recordedAt: number
-      }>
-      stalled: number
-      phase: "searching" | "finalizing"
-      stopReason?: "target_reached" | "marginal_utility_exhausted" | "max_rounds"
-    }
-    repair?: {
-      protocolVersion: "verifier-routed-v1"
-      minConfidence: number
-      phase: "producing" | "verifying" | "investigating" | "completed"
-      candidateID: string
-      verifierIDs: Array<string>
-      evidenceID?: string
-      routes: Array<{
-        id: string
-        attempt: number
-        candidateID: string
-        actionID?: string
-        verifierIDs: Array<string>
-        decision: "accept" | "revise" | "restart" | "investigate"
-        confidence: number
-        evidenceRefs: Array<string>
-        recordedAt: number
-      }>
-      stopReason?: "accepted" | "attempt_limit" | "work_failed"
-    }
-    consensus?: {
-      status: "supported" | "rejected" | "disputed" | "insufficient"
-      verifierCount: number
-      support: number
-      reject: number
-      abstain: number
-      confidence: number
-      evidenceRefs: Array<string>
-      provisional: true
-      derivedAt: number
-    }
-    work: {
-      [key: string]: {
-        id: string
-        role:
-          | "generation"
-          | "proximity"
-          | "reflection"
-          | "ranking"
-          | "evolution"
-          | "revision"
-          | "verification"
-          | "investigation"
-          | "simulation"
-          | "synthesis"
-        label: string
-        round: number
-        agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
-        dependencies: Array<string>
-        prompt: string
-        allocation: {
-          steps?: number
-          tokens?: number
-          costUSD?: number
-          wallTimeMs?: number
-        }
-        lane?: "producer-a" | "producer-b"
-        status: "pending" | "executed" | "completed" | "failed" | "cancelled"
-        workerSessionID?: string
-        workerReceipt?: {
-          id: string
-          workID: string
-          workerSessionID: string
-          turnID: string
-          agent: "task" | "biology" | "physics" | "ml" | "critique" | "physics-critique" | "reviewer"
-          workPromptSHA256: string
-          taskPromptSHA256: string
-          outcome: "completed" | "failed"
-          usage: {
-            steps?: number
-            tokens?: number
-            costUSD?: number
-            wallTimeMs?: number
-          }
-          toolCalls: number
-          failedToolCalls: number
-          startedAt: number
-          completedAt: number
-          provisional: true
-        }
-        result?: {
-          summary: string
-          artifactRefs?: Array<string>
-          evidenceRefs?: Array<string>
-          usage?: {
-            steps?: number
-            tokens?: number
-            costUSD?: number
-            wallTimeMs?: number
-          }
-          verdict?: {
-            decision: "support" | "reject" | "abstain"
-            severity?: "none" | "minor" | "critical" | "unknown"
-            confidence: number
-            checks: Array<{
-              id: string
-              status: "passed" | "failed" | "inconclusive"
-              evidenceRefs: Array<string>
-            }>
-          }
-          completedAt: number
-        }
-        failure?: string
-      }
-    }
-    order: Array<string>
-    revision: number
-    createdAt: number
-    updatedAt: number
-  }
-}
-
-export type HarnessOrchestrationCheckpointResponse =
-  HarnessOrchestrationCheckpointResponses[keyof HarnessOrchestrationCheckpointResponses]
-
-export type HarnessBindData = {
-  body?: {
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    benchmark: string
-    version: string
-    taskID: string
-    split: "development" | "validation" | "held_out" | "release"
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "external"
-      token: string
-    }
-    objective: string
-    profile?: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
-    search?: "adaptive" | "static"
-    orchestration?: {
-      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
-      traits?: {
-        decomposability: number
-        sequentiality: number
-        toolIntensity: number
-        uncertainty: number
-        verificationRisk: number
-        novelty: number
-        crossDomain: number
-      }
-      maxWorkers: number
-      maxRounds: number
-      roles?: Array<
-        | "generation"
-        | "proximity"
-        | "reflection"
-        | "ranking"
-        | "evolution"
-        | "revision"
-        | "verification"
-        | "investigation"
-        | "simulation"
-        | "synthesis"
-      >
-      minIndependentVerifiers: number
-      adaptive?: {
-        protocolVersion: "marginal-utility-v1"
-        minRounds: number
-        patience: number
-        minUtilityGain: number
-        maxUncertainty: number
-        targetUtility?: number
-      }
-      repair?: {
-        protocolVersion: "verifier-routed-v1"
-        minConfidence: number
-      }
-    }
-    audit?: {
-      mode: "performance" | "failure" | "hybrid"
-      budget: number
-      minSamples: number
-      noiseVariance?: number
-      lengthscale?: number
-      beta?: number
-      failureThreshold?: number
-      tolerance?: number
-      maxUncertainty?: number
-      estimationWeight?: number
-      diversityWeight?: number
-      coverageWeight?: number
-      targetFailures?: number
-      transfer?: {
-        protocolVersion: "score-history-prior-v1"
-        poolSHA256: string
-        sourceManifestSHA256: string
-        selectionSHA256: string
-        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
-        sourceModels: Array<string>
-        calibrationSamples: number
-        maxCalibrationMAE: number
-      }
-      promotionRequired?: boolean
-    }
-    failureDiscovery?: {
-      protocolVersion: "topic-aware-failure-v1"
-      sourcePoolSHA256: string
-      topicModel: {
-        kind: "predefined" | "bertopic"
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-      }
-      topics: Array<{
-        id: string
-        commitment: string
-      }>
-      generator: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      validators: [
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-      ]
-      embedding: {
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        dimensions: number
-        regularization?: number
-      }
-      budget: number
-      anchorsPerAttempt: number
-      exploration?: number
-      failureThreshold: number
-      targetFailures?: number
-    }
-    launch?: {
-      protocolVersion: "benchmark-launch-v1"
-      runner: {
-        repository: string
-        revision: string
-        entrypoint: string
-        commandSHA256: string
-        environmentSHA256: string
-        recipeSHA256?: string
-        driverSHA256?: string
-      }
-      dataset: {
-        name: string
-        source: string
-        revision: string
-        manifestSHA256: string
-      }
-      taskManifestSHA256: string
-      evaluatorSHA256: string
-      validatorSHA256: string
-      baseline: {
-        name: string
-        artifactSHA256: string
-        expectedScore?: number
-        tolerance?: number
-      }
-    }
-    recipe?: {
-      recipeID: string
-      bindings: {
-        [key: string]: string
-      }
-    }
-    integrity?: {
-      protocolVersion: "benchmark-integrity-v1"
-      validatorSHA256: string
-      traceSchemaSHA256: string
-      minEvents: number
-      minCoverage: number
-      assignedModel: {
-        name: string
-        baseArtifactSHA256: string
-        configSHA256: string
-      }
-      forbiddenModelArtifacts?: Array<string>
-      policy: {
-        testItemDerivation: "forbidden"
-        unapprovedExternalModels: "forbidden"
-        benchmarkLookup: "forbidden"
-      }
-      auditors: [
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-      ]
-      hiddenCanaryManifestSHA256: string
-      minHiddenCanaries: number
-    }
-    evolution?: {
-      protocolVersion: "evolution-trace-v1"
-      validatorSHA256: string
-      manifestSchemaSHA256: string
-      lineAlgorithm: "sha256-exact-line-v1"
-      roots: Array<string>
-      extensions: Array<string>
-      exclude?: Array<string>
-      maxFiles: number
-      maxFileBytes: number
-      maxTotalBytes: number
-      maxSourceLines: number
-      maxChangedLines: number
-    }
-    metaHarness?: {
-      protocol: {
-        protocolVersion: "meta-harness-v1"
-        validatorSHA256: string
-        archiveSchemaSHA256: string
-        traceSchemaSHA256: string
-        baseline: {
-          artifactSHA256: string
-          manifestSHA256: string
-        }
-        mutable: Array<{
-          root: string
-          component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
-        }>
-        protected: {
-          manifestSHA256: string
-          roots: Array<string>
-        }
-        archive: {
-          contents: "full-source-scores-traces"
-          query: "filesystem"
-          summariesOnly: false
-          hiddenContent: "excluded"
-          evaluatorContent: "excluded"
-        }
-        updater: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        judge: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        search: {
-          models: Array<{
-            id: string
-            commitment: string
-          }>
-          tasks: Array<{
-            id: string
-            commitment: string
-            activationRequired: boolean
-          }>
-        }
-        heldout: {
-          models: Array<{
-            id: string
-            commitment: string
-          }>
-          tasks: Array<{
-            id: string
-            commitment: string
-            activationRequired: boolean
-          }>
-        }
-        thresholds: {
-          minSearchGain: number
-          minHeldoutGain: number
-          maxModelRegression: number
-          minActivationRate: number
-          minRequiredAdherence: number
-          minFinalAdherence: number
-          maxPhaseDrift: number
-          minPredictionPrecision: number
-          maxRiskRegressions: number
-          maxContextTokens: number
-          maxMeanContextIncrease: number
-        }
-        promotionRequired: true
-      }
-      token: string
-    }
-    interventions?: {
-      protocolVersion: "intervention-study-v1"
-      validatorSHA256: string
-      requiredForPromotion: boolean
-      minPairs: number
-      maxPairs: number
-      maxTotalPairs: number
-      confidence: 0.95
-      required: Array<
-        | "replay"
-        | "retune"
-        | "ablation"
-        | "repair"
-        | "model_transfer"
-        | "context_transfer"
-        | "evaluator_transfer"
-        | "split_transfer"
-      >
-      rules: Array<
-        | {
-            family: "replay"
-            mode: "max_absolute_effect"
-            threshold: number
-          }
-        | {
-            family: "retune" | "ablation" | "repair"
-            mode: "min_effect"
-            threshold: number
-          }
-        | {
-            family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
-            mode: "max_regression"
-            threshold: number
-          }
-      >
-    }
-    simulation?: {
-      kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
-      engine: {
-        name: string
-        version: string
-        commandSHA256: string
-        configSHA256: string
-      }
-      problemSHA256: string
-      reference: {
-        kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
-        identity: string
-        sha256: string
-      }
-      validation: {
-        errorNorm: string
-        minLevels: number
-        maxLevels?: number
-        expectedOrder: number
-        orderTolerance: number
-        maxResidual: number
-        invariantTolerances: {
-          [key: string]: number
-        }
-        requiredStressTests: Array<
-          | "timestep_sensitivity"
-          | "solver_tolerance_sensitivity"
-          | "reference_replay"
-          | "independent_implementation"
-          | "unit_convention"
-          | "boundary_sensitivity"
-          | "perturbation_stability"
-        >
-      }
-    }
-    evaluatorAudit?: {
-      protocol: {
-        protocolVersion: "evaluator-audit-v1"
-        auditor: {
-          name: string
-          version: string
-          source: "benchmark" | "gate" | "human" | "external"
-        }
-        suite: {
-          name: string
-          version: string
-          commitmentSHA256: string
-        }
-        minCleanCases: number
-        minCasesPerFault: number
-        requiredFaults: Array<
-          | "wrong_answer"
-          | "unsupported_claim"
-          | "missing_evidence"
-          | "data_leakage"
-          | "non_reproducible"
-          | "reward_hacking"
-          | "invalid_statistics"
-          | "invalid_simulation"
-          | "distribution_shift"
-          | "evaluation_awareness"
-        >
-        minSensitivity: number
-        minSpecificity: number
-        minBalancedAccuracy: number
-        minFaultRecall: number
-        maxBrierScore: number
-      }
-      token: string
-    }
-    semanticAudit?: {
-      protocol: {
-        protocolVersion: "semantic-audit-v1"
-        reviewer: {
-          name: string
-          version: string
-          source: "gate" | "human" | "external"
-        }
-        scope: {
-          objectiveSHA256: string
-          criteria: Array<{
-            id: string
-            requirement: string
-          }>
-          forbiddenShortcuts: Array<{
-            id: string
-            description: string
-          }>
-          literature: {
-            cutoff: string
-            corpusSHA256: string
-          }
-          noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
-        }
-        minReviewers: number
-        minConfidence: number
-      }
-      token: string
-    }
-    synthesis?: {
-      protocolVersion: "scientific-synthesis-v1"
-      querySHA256: string
-      referenceSHA256: string
-      referenceFactsSHA256: string
-      referenceFactCount: number
-      cutoff: string
-      tools: Array<"google_search" | "paper_search" | "web_browse">
-      traceSchemaSHA256: string
-      filterPolicySHA256: string
-      maxToolEvents: number
-      decomposer: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      judges: {
-        precision: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        recall: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-      }
-      minGeneratedFacts: number
-      minPrecision: number
-      minRecall: number
-      minF1: number
-      cleanRoomRequired: true
-      judgeFailurePolicy: "inconclusive"
-    }
-    autonomy?: {
-      protocolVersion: "human-ai-autonomy-v1"
-      claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
-      recorder: {
-        name: string
-        version: string
-        artifactSHA256: string
-        source: "evaluator_runtime"
-      }
-      traceSchemaSHA256: string
-      classificationPolicySHA256: string
-      maxEvents: number
-      rawRetention: "required"
-      disclosure: "evaluator_retained" | "public_essential_after_release"
-      completeTraceRequired: true
-      uncertaintyPolicy: "inconclusive"
-    }
-    formalProof?: {
-      protocolVersion: "formal-proof-v1"
-      language: "lean4"
-      tier: "kernel" | "fresh_recheck" | "external_crosscheck"
-      relation: "exact_proof" | "exact_refutation" | "repaired_proof"
-      challengeSHA256: string
-      statementSHA256: string
-      declaration: string
-      module: string
-      leanVersion: string
-      leanToolchainSHA256: string
-      lakeManifestSHA256: string
-      dependencyTreeSHA256: string
-      verifiers: Array<{
-        role:
-          | "lean_kernel"
-          | "source_auditor"
-          | "axiom_auditor"
-          | "fresh_rechecker"
-          | "sandbox_comparator"
-          | "external_checker"
-        name: string
-        version: string
-        artifactSHA256: string
-      }>
-      sandboxImageSHA256?: string
-      forbiddenConstructs: [
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-      ]
-      allowedAxioms: Array<string>
-      maxFiles: number
-      completeManifestRequired: true
-      warningPolicy: "fail"
-      semanticPolicy: "formal_statement_only"
-      blueprint?: {
-        protocolVersion: "proof-blueprint-v1"
-        graphSchemaSHA256: string
-        compilerArtifactSHA256: string
-        sketchValidatorArtifactSHA256: string
-        reviewerArtifactSHA256: string
-        reviewerPromptSHA256: string
-        nodePolicy: "and-or-monotone-v1"
-        failurePolicy: "preserve-and-refine"
-        memoization: "goal-sha256"
-        finalAuthority: "formal-proof-v1"
-        directAttemptFirst: true
-        verifiedSketchRequired: true
-        completeFailureHistoryRequired: true
-        maxNodes: number
-        maxDepth: number
-        maxParallel: number
-        maxAttemptsPerGoal: number
-        maxRefinementsPerGoal: number
-        leaseDurationMs: number
-      }
-    }
-    replication?: {
-      protocolVersion: "replicated-evaluation-v1"
-      validatorSHA256: string
-      environmentSHA256: string
-      sampling: {
-        design: "crossed-stratified-cluster-v1"
-        stratumKind: string
-        clusterKind: string
-        strata: Array<{
-          id: string
-          commitmentSHA256: string
-        }>
-        clusters: Array<{
-          id: string
-          commitmentSHA256: string
-        }>
-      }
-      estimator: "mean" | "median" | "iqm" | "pass_rate"
-      interval:
-        | {
-            method: "stratified-bootstrap-percentile-v1"
-            confidence: 0.95
-            resamples: number
-            seed: number
-          }
-        | {
-            method: "wilson-score-v1"
-            confidence: 0.95
-          }
-      decision: {
-        rule: "conservative-bound-v1"
-        direction: "maximize" | "minimize" | "pass"
-        target: number
-        maxIntervalWidth?: number
-      }
-      failurePolicy: "fail-closed"
-    }
-    confirmation?: {
-      protocol: {
-        protocolVersion: "sealed-confirmation-v1"
-        optimization: {
-          split: "development" | "validation"
-          manifestSHA256: string
-        }
-        claim: {
-          taskID: string
-          split: "held_out" | "release"
-          manifestSHA256: string
-          validatorSHA256: string
-          environmentSHA256: string
-          evaluator: {
-            name: string
-            version: string
-            source: "benchmark" | "gate" | "external"
-          }
-          source?: {
-            repository: string
-            revision: string
-          }
-          metric: string
-          direction: "maximize" | "minimize"
-          target: number
-        }
-        selection: {
-          rule: "terminal-verified-best-v1"
-          subjects: 1
-        }
-        exposure: {
-          policy: "terminal-receipt-only"
-          searchFeedback: false
-          memoryCapture: false
-        }
-        failurePolicy: "fail-closed"
-      }
-      token: string
-    }
-    extraPacks?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast" | "formal">
-    metric?: {
-      name?: string
-      direction: "maximize" | "minimize" | "pass"
-      target?: number
-    }
-    objectives?: Array<{
-      metric: string
-      direction: "maximize" | "minimize"
-    }>
-    objectiveAudit?: {
-      schemaVersion: 1
-      planSHA256: string
-      validatorSHA256: string
-      contractSHA256: string
-      guardIDs: Array<string>
-    }
-    fidelities?: Array<{
-      id: string
-      final: boolean
-      maxWallTimeMs?: number
-      maxCostUSD?: number
-    }>
-    model: {
-      provider: string
-      name: string
-      effort?: string
-    }
-    tools?: Array<string>
-    skills?: Array<{
-      name: string
-      version?: string
-      sha256?: string
-    }>
-    budget: {
-      wallTimeMs?: number
-      steps?: number
-      candidates?: number
-      tokens?: number
-      costUSD?: number
-      cpuHours?: number
-      gpuHours?: number
-    }
-    seed: number
-    intervention: "autonomous" | "human_reprompted"
-    contamination: {
-      policy: string
-      hiddenTestsAccessible: false
-      publicDataCutoff?: string
-    }
-    createdAt: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/runs"
-}
-
-export type HarnessBindErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessBindError = HarnessBindErrors[keyof HarnessBindErrors]
-
-export type HarnessBindResponses = {
-  /**
-   * Bound harness contract
-   */
-  200: {
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    objective: string
-    benchmark: {
-      name: string
-      version: string
-      taskID: string
-      split: "development" | "validation" | "held_out" | "release"
-      evaluator: string
-      evaluatorVersion?: string
-      evaluatorSource?: "benchmark" | "gate" | "human" | "external"
-      fidelities?: Array<{
-        id: string
-        final: boolean
-        maxWallTimeMs?: number
-        maxCostUSD?: number
-      }>
-      metric?: string
-      direction?: "maximize" | "minimize" | "pass"
-      target?: number
-      objectives?: Array<{
-        metric: string
-        direction: "maximize" | "minimize"
-      }>
-      objectiveAudit?: {
-        schemaVersion: 1
-        planSHA256: string
-        validatorSHA256: string
-        contractSHA256: string
-        guardIDs: Array<string>
-      }
-    }
-    profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
-    orchestration?: {
-      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
-      traits?: {
-        decomposability: number
-        sequentiality: number
-        toolIntensity: number
-        uncertainty: number
-        verificationRisk: number
-        novelty: number
-        crossDomain: number
-      }
-      maxWorkers: number
-      maxRounds: number
-      roles?: Array<
-        | "generation"
-        | "proximity"
-        | "reflection"
-        | "ranking"
-        | "evolution"
-        | "revision"
-        | "verification"
-        | "investigation"
-        | "simulation"
-        | "synthesis"
-      >
-      minIndependentVerifiers: number
-      adaptive?: {
-        protocolVersion: "marginal-utility-v1"
-        minRounds: number
-        patience: number
-        minUtilityGain: number
-        maxUncertainty: number
-        targetUtility?: number
-      }
-      repair?: {
-        protocolVersion: "verifier-routed-v1"
-        minConfidence: number
-      }
-    }
-    search?: {
-      protocolVersion: "adaptive-search-v1"
-      signal: {
-        source: "verified-final-evaluations"
-        decay: 0.9
-        epsilon: 1e-8
-      }
-      local: {
-        minIntensity: 0.15
-        maxIntensity: 0.5
-      }
-      global: {
-        exploration: 1.4142135623730951
-        minVisits: 2
-      }
-      stagnation: {
-        patience: 5
-        maxSignal: 0.02
-      }
-    }
-    audit?: {
-      mode: "performance" | "failure" | "hybrid"
-      budget: number
-      minSamples: number
-      noiseVariance?: number
-      lengthscale?: number
-      beta?: number
-      failureThreshold?: number
-      tolerance?: number
-      maxUncertainty?: number
-      estimationWeight?: number
-      diversityWeight?: number
-      coverageWeight?: number
-      targetFailures?: number
-      transfer?: {
-        protocolVersion: "score-history-prior-v1"
-        poolSHA256: string
-        sourceManifestSHA256: string
-        selectionSHA256: string
-        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
-        sourceModels: Array<string>
-        calibrationSamples: number
-        maxCalibrationMAE: number
-      }
-      promotionRequired?: boolean
-    }
-    failureDiscovery?: {
-      protocolVersion: "topic-aware-failure-v1"
-      sourcePoolSHA256: string
-      topicModel: {
-        kind: "predefined" | "bertopic"
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-      }
-      topics: Array<{
-        id: string
-        commitment: string
-      }>
-      generator: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      validators: [
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-      ]
-      embedding: {
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        dimensions: number
-        regularization?: number
-      }
-      budget: number
-      anchorsPerAttempt: number
-      exploration?: number
-      failureThreshold: number
-      targetFailures?: number
-    }
-    launch?: {
-      protocolVersion: "benchmark-launch-v1"
-      runner: {
-        repository: string
-        revision: string
-        entrypoint: string
-        commandSHA256: string
-        environmentSHA256: string
-        recipeSHA256?: string
-        driverSHA256?: string
-      }
-      dataset: {
-        name: string
-        source: string
-        revision: string
-        manifestSHA256: string
-      }
-      taskManifestSHA256: string
-      evaluatorSHA256: string
-      validatorSHA256: string
-      baseline: {
-        name: string
-        artifactSHA256: string
-        expectedScore?: number
-        tolerance?: number
-      }
-    }
-    recipe?: {
-      schemaVersion: 2
-      recipeID: string
-      benchmark:
-        | "statistics"
-        | "bixbench"
-        | "lifescience"
-        | "genebench"
-        | "biomni"
-        | "physics"
-        | "pde"
-        | "chembench"
-        | "matscibench"
-        | "mle"
-        | "posttrain"
-        | "ale"
-        | "weather"
-        | "researchclaw"
-        | "sciconbench"
-        | "astabench"
-        | "paperbench"
-        | "corebench"
-        | "scienceagentbench"
-        | "discoverybench"
-        | "scicode"
-        | "labbench"
-        | "sciagentarena"
-        | "ainsteinbench"
-        | "critpt"
-      recipeSHA256: string
-      bindingsSHA256: string
-      driverSHA256: string
-      entrypoint: string
-      bindings: {
-        [key: string]: string
-      }
-      environment: {
-        manager: "uv" | "pip" | "hatch" | "setuptools" | "conda"
-        python: string
-        files: Array<string>
-      }
-      anchors: Array<string>
-      runtime: Array<{
-        name: string
-        kind: "json" | "python_object" | "callable"
-        owner: "runner" | "evaluator"
-        description: string
-      }>
-      stages: Array<{
-        id: string
-        role: "prepare" | "execute" | "evaluate" | "aggregate"
-        driver:
-          | {
-              kind: "argv"
-              entrypoint: string
-              cwd: string | "."
-              argv: Array<string>
-            }
-          | {
-              kind: "python_api"
-              entrypoint: string
-              module: string
-              symbol: string
-              receiver?: string
-              kwargs: {
-                [key: string]: string | number | boolean
-              }
-              arguments: {
-                [key: string]: string
-              }
-            }
-        inputs: Array<string>
-        outputs: Array<string>
-        environment: Array<string>
-        produces?: string
-      }>
-      launchStage: string
-      artifacts: Array<
-        | {
-            id: string
-            producedBy: string
-            owner: "runner" | "evaluator"
-            kind: "file"
-            path: string
-            format: "json" | "jsonl" | "csv" | "text" | "pickle" | "directory"
-            cardinality: {
-              minimum: number
-              maximum: number
-            }
-          }
-        | {
-            id: string
-            producedBy: string
-            owner: "runner" | "evaluator"
-            kind: "return"
-            format: "json"
-            value: string
-          }
-      >
-      metrics: Array<{
-        name: string
-        artifact: string
-        selector:
-          | {
-              kind: "jsonpath"
-              path: string
-            }
-          | {
-              kind: "jsonlpath"
-              path: string
-            }
-          | {
-              kind: "column"
-              name: string
-            }
-          | {
-              kind: "tuple"
-              index: number
-            }
-          | {
-              kind: "ratio_line"
-              prefix: string
-            }
-        direction: "maximize" | "minimize" | "pass"
-        aggregation: "identity" | "mean" | "sum" | "count"
-      }>
-      limitations: Array<string>
-    }
-    integrity?: {
-      protocolVersion: "benchmark-integrity-v1"
-      validatorSHA256: string
-      traceSchemaSHA256: string
-      minEvents: number
-      minCoverage: number
-      assignedModel: {
-        name: string
-        baseArtifactSHA256: string
-        configSHA256: string
-      }
-      forbiddenModelArtifacts?: Array<string>
-      policy: {
-        testItemDerivation: "forbidden"
-        unapprovedExternalModels: "forbidden"
-        benchmarkLookup: "forbidden"
-      }
-      auditors: [
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-      ]
-      hiddenCanaryManifestSHA256: string
-      minHiddenCanaries: number
-    }
-    evolution?: {
-      protocolVersion: "evolution-trace-v1"
-      validatorSHA256: string
-      manifestSchemaSHA256: string
-      lineAlgorithm: "sha256-exact-line-v1"
-      roots: Array<string>
-      extensions: Array<string>
-      exclude?: Array<string>
-      maxFiles: number
-      maxFileBytes: number
-      maxTotalBytes: number
-      maxSourceLines: number
-      maxChangedLines: number
-    }
-    metaHarness?: {
-      protocolVersion: "meta-harness-v1"
-      validatorSHA256: string
-      archiveSchemaSHA256: string
-      traceSchemaSHA256: string
-      baseline: {
-        artifactSHA256: string
-        manifestSHA256: string
-      }
-      mutable: Array<{
-        root: string
-        component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
-      }>
-      protected: {
-        manifestSHA256: string
-        roots: Array<string>
-      }
-      archive: {
-        contents: "full-source-scores-traces"
-        query: "filesystem"
-        summariesOnly: false
-        hiddenContent: "excluded"
-        evaluatorContent: "excluded"
-      }
-      updater: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      judge: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      search: {
-        models: Array<{
-          id: string
-          commitment: string
-        }>
-        tasks: Array<{
-          id: string
-          commitment: string
-          activationRequired: boolean
-        }>
-      }
-      heldout: {
-        models: Array<{
-          id: string
-          commitment: string
-        }>
-        tasks: Array<{
-          id: string
-          commitment: string
-          activationRequired: boolean
-        }>
-      }
-      thresholds: {
-        minSearchGain: number
-        minHeldoutGain: number
-        maxModelRegression: number
-        minActivationRate: number
-        minRequiredAdherence: number
-        minFinalAdherence: number
-        maxPhaseDrift: number
-        minPredictionPrecision: number
-        maxRiskRegressions: number
-        maxContextTokens: number
-        maxMeanContextIncrease: number
-      }
-      promotionRequired: true
-    }
-    interventions?: {
-      protocolVersion: "intervention-study-v1"
-      validatorSHA256: string
-      requiredForPromotion: boolean
-      minPairs: number
-      maxPairs: number
-      maxTotalPairs: number
-      confidence: 0.95
-      required: Array<
-        | "replay"
-        | "retune"
-        | "ablation"
-        | "repair"
-        | "model_transfer"
-        | "context_transfer"
-        | "evaluator_transfer"
-        | "split_transfer"
-      >
-      rules: Array<
-        | {
-            family: "replay"
-            mode: "max_absolute_effect"
-            threshold: number
-          }
-        | {
-            family: "retune" | "ablation" | "repair"
-            mode: "min_effect"
-            threshold: number
-          }
-        | {
-            family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
-            mode: "max_regression"
-            threshold: number
-          }
-      >
-    }
-    simulation?: {
-      kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
-      engine: {
-        name: string
-        version: string
-        commandSHA256: string
-        configSHA256: string
-      }
-      problemSHA256: string
-      reference: {
-        kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
-        identity: string
-        sha256: string
-      }
-      validation: {
-        errorNorm: string
-        minLevels: number
-        maxLevels?: number
-        expectedOrder: number
-        orderTolerance: number
-        maxResidual: number
-        invariantTolerances: {
-          [key: string]: number
-        }
-        requiredStressTests: Array<
-          | "timestep_sensitivity"
-          | "solver_tolerance_sensitivity"
-          | "reference_replay"
-          | "independent_implementation"
-          | "unit_convention"
-          | "boundary_sensitivity"
-          | "perturbation_stability"
-        >
-      }
-    }
-    evaluatorAudit?: {
-      protocolVersion: "evaluator-audit-v1"
-      auditor: {
-        name: string
-        version: string
-        source: "benchmark" | "gate" | "human" | "external"
-      }
-      suite: {
-        name: string
-        version: string
-        commitmentSHA256: string
-      }
-      minCleanCases: number
-      minCasesPerFault: number
-      requiredFaults: Array<
-        | "wrong_answer"
-        | "unsupported_claim"
-        | "missing_evidence"
-        | "data_leakage"
-        | "non_reproducible"
-        | "reward_hacking"
-        | "invalid_statistics"
-        | "invalid_simulation"
-        | "distribution_shift"
-        | "evaluation_awareness"
-      >
-      minSensitivity: number
-      minSpecificity: number
-      minBalancedAccuracy: number
-      minFaultRecall: number
-      maxBrierScore: number
-    }
-    semanticAudit?: {
-      protocolVersion: "semantic-audit-v1"
-      reviewer: {
-        name: string
-        version: string
-        source: "gate" | "human" | "external"
-      }
-      scope: {
-        objectiveSHA256: string
-        criteria: Array<{
-          id: string
-          requirement: string
-        }>
-        forbiddenShortcuts: Array<{
-          id: string
-          description: string
-        }>
-        literature: {
-          cutoff: string
-          corpusSHA256: string
-        }
-        noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
-      }
-      minReviewers: number
-      minConfidence: number
-    }
-    synthesis?: {
-      protocolVersion: "scientific-synthesis-v1"
-      querySHA256: string
-      referenceSHA256: string
-      referenceFactsSHA256: string
-      referenceFactCount: number
-      cutoff: string
-      tools: Array<"google_search" | "paper_search" | "web_browse">
-      traceSchemaSHA256: string
-      filterPolicySHA256: string
-      maxToolEvents: number
-      decomposer: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      judges: {
-        precision: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        recall: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-      }
-      minGeneratedFacts: number
-      minPrecision: number
-      minRecall: number
-      minF1: number
-      cleanRoomRequired: true
-      judgeFailurePolicy: "inconclusive"
-    }
-    autonomy?: {
-      protocolVersion: "human-ai-autonomy-v1"
-      claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
-      recorder: {
-        name: string
-        version: string
-        artifactSHA256: string
-        source: "evaluator_runtime"
-      }
-      traceSchemaSHA256: string
-      classificationPolicySHA256: string
-      maxEvents: number
-      rawRetention: "required"
-      disclosure: "evaluator_retained" | "public_essential_after_release"
-      completeTraceRequired: true
-      uncertaintyPolicy: "inconclusive"
-    }
-    formalProof?: {
-      protocolVersion: "formal-proof-v1"
-      language: "lean4"
-      tier: "kernel" | "fresh_recheck" | "external_crosscheck"
-      relation: "exact_proof" | "exact_refutation" | "repaired_proof"
-      challengeSHA256: string
-      statementSHA256: string
-      declaration: string
-      module: string
-      leanVersion: string
-      leanToolchainSHA256: string
-      lakeManifestSHA256: string
-      dependencyTreeSHA256: string
-      verifiers: Array<{
-        role:
-          | "lean_kernel"
-          | "source_auditor"
-          | "axiom_auditor"
-          | "fresh_rechecker"
-          | "sandbox_comparator"
-          | "external_checker"
-        name: string
-        version: string
-        artifactSHA256: string
-      }>
-      sandboxImageSHA256?: string
-      forbiddenConstructs: [
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-      ]
-      allowedAxioms: Array<string>
-      maxFiles: number
-      completeManifestRequired: true
-      warningPolicy: "fail"
-      semanticPolicy: "formal_statement_only"
-      blueprint?: {
-        protocolVersion: "proof-blueprint-v1"
-        graphSchemaSHA256: string
-        compilerArtifactSHA256: string
-        sketchValidatorArtifactSHA256: string
-        reviewerArtifactSHA256: string
-        reviewerPromptSHA256: string
-        nodePolicy: "and-or-monotone-v1"
-        failurePolicy: "preserve-and-refine"
-        memoization: "goal-sha256"
-        finalAuthority: "formal-proof-v1"
-        directAttemptFirst: true
-        verifiedSketchRequired: true
-        completeFailureHistoryRequired: true
-        maxNodes: number
-        maxDepth: number
-        maxParallel: number
-        maxAttemptsPerGoal: number
-        maxRefinementsPerGoal: number
-        leaseDurationMs: number
-      }
-    }
-    replication?: {
-      protocolVersion: "replicated-evaluation-v1"
-      validatorSHA256: string
-      environmentSHA256: string
-      sampling: {
-        design: "crossed-stratified-cluster-v1"
-        stratumKind: string
-        clusterKind: string
-        strata: Array<{
-          id: string
-          commitmentSHA256: string
-        }>
-        clusters: Array<{
-          id: string
-          commitmentSHA256: string
-        }>
-      }
-      estimator: "mean" | "median" | "iqm" | "pass_rate"
-      interval:
-        | {
-            method: "stratified-bootstrap-percentile-v1"
-            confidence: 0.95
-            resamples: number
-            seed: number
-          }
-        | {
-            method: "wilson-score-v1"
-            confidence: 0.95
-          }
-      decision: {
-        rule: "conservative-bound-v1"
-        direction: "maximize" | "minimize" | "pass"
-        target: number
-        maxIntervalWidth?: number
-      }
-      failurePolicy: "fail-closed"
-    }
-    confirmation?: {
-      protocolVersion: "sealed-confirmation-v1"
-      optimization: {
-        split: "development" | "validation"
-        manifestSHA256: string
-      }
-      claim: {
-        taskID: string
-        split: "held_out" | "release"
-        manifestSHA256: string
-        validatorSHA256: string
-        environmentSHA256: string
-        evaluator: {
-          name: string
-          version: string
-          source: "benchmark" | "gate" | "external"
-        }
-        source?: {
-          repository: string
-          revision: string
-        }
-        metric: string
-        direction: "maximize" | "minimize"
-        target: number
-      }
-      selection: {
-        rule: "terminal-verified-best-v1"
-        subjects: 1
-      }
-      exposure: {
-        policy: "terminal-receipt-only"
-        searchFeedback: false
-        memoryCapture: false
-      }
-      failurePolicy: "fail-closed"
-    }
-    packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast" | "formal">
-    model: {
-      provider: string
-      name: string
-      effort?: string
-    }
-    tools?: Array<string>
-    skills?: Array<{
-      name: string
-      version?: string
-      sha256?: string
-    }>
-    budget: {
-      wallTimeMs?: number
-      steps?: number
-      candidates?: number
-      tokens?: number
-      costUSD?: number
-      cpuHours?: number
-      gpuHours?: number
-    }
-    seed: number
-    intervention: "autonomous" | "human_reprompted"
-    contamination: {
-      policy: string
-      hiddenTestsAccessible: false
-      publicDataCutoff?: string
-    }
-    createdAt: number
-  }
-}
-
-export type HarnessBindResponse = HarnessBindResponses[keyof HarnessBindResponses]
-
-export type HarnessEvaluateData = {
-  body?: {
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    evaluatorToken: string
-    candidateID?: string
-    stage?: string
-    simulationReceiptID?: string
-    launchReceiptID?: string
-    integrityReceiptID?: string
-    evolutionReceiptID?: string
-    interventionReceiptID?: string
-    evaluatorAuditReceiptID?: string
-    semanticReceiptID?: string
-    replicationReceiptID?: string
-    auditReceiptID?: string
-    failureDiscoveryReceiptID?: string
-    synthesisReceiptID?: string
-    autonomyReceiptID?: string
-    proofReceiptID?: string
-    status: "passed" | "failed" | "inconclusive"
-    score?: number
-    metrics?: {
-      [key: string]: number
-    }
-    checks: Array<{
-      id: string
-      status: "passed" | "failed" | "inconclusive"
-      blocking: boolean
-      score?: number
-      evidence?: Array<string>
-      note?: string
-    }>
-    evidence: Array<string>
-    usage?: {
-      wallTimeMs?: number
-      costUSD?: number
-    }
-    evaluatedAt: number
-    notes?: string
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/evaluations"
-}
-
-export type HarnessEvaluateErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessEvaluateError = HarnessEvaluateErrors[keyof HarnessEvaluateErrors]
-
-export type HarnessEvaluateResponses = {
-  /**
-   * Recorded external evaluation
-   */
-  200: unknown
-}
-
-export type HarnessCompareData = {
-  body?: {
-    sessionIDs: Array<string>
-    baselineRunID: string
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/compare"
-}
-
-export type HarnessCompareErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessCompareError = HarnessCompareErrors[keyof HarnessCompareErrors]
-
-export type HarnessCompareResponses = {
-  /**
-   * Comparable run deltas
-   */
-  200: unknown
-}
-
-export type HarnessSkillsData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/skills"
-}
-
-export type HarnessSkillsResponses = {
-  /**
-   * Learned skill qualification manifests
-   */
-  200: Array<{
-    schemaVersion: 1
-    name: string
-    description: string
-    contentSHA256: string
-    origin: "conversation" | "rsi"
-    source: {
-      sessionID?: string
-      runID?: string
-    }
-    status: "pending" | "qualified" | "promoted" | "rejected"
-    evidence: Array<{
-      id: string
-      proposalSHA256: string
-      benchmark: {
-        name: string
-        version: string
-        taskID: string
-        split: "held_out" | "release"
-        metric?: string
-        direction: "maximize" | "minimize" | "pass"
-      }
-      candidate: {
-        sessionID: string
-        runID: string
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        evaluationSHA256: string
-      }
-      control: {
-        sessionID: string
-        runID: string
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        evaluationSHA256: string
-      }
-      nonregressing: boolean
-      improved: boolean
-      trigger: {
-        datasetSHA256: string
-        split: "held_out"
-        examples: number
-        truePositive: number
-        falsePositive: number
-        trueNegative: number
-        falseNegative: number
-        precision: number
-        recall: number
-      }
-      evaluator: {
-        name: string
-        version: string
-      }
-      recordedAt: number
-    }>
-    criteria: {
-      tasks: 3
-      improvements: 2
-      triggerPrecision: 0.8
-      triggerRecall: 0.8
-    }
-    createdAt: number
-    updatedAt: number
-    promotedAt?: number
-  }>
-}
-
-export type HarnessSkillsResponse = HarnessSkillsResponses[keyof HarnessSkillsResponses]
-
-export type HarnessSkillProposeData = {
-  body?: {
-    name: string
-    description: string
-    content: string
-    origin: "conversation" | "rsi"
-    sessionID?: string
-    runID?: string
-    createdAt?: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/skills"
-}
-
-export type HarnessSkillProposeErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessSkillProposeError = HarnessSkillProposeErrors[keyof HarnessSkillProposeErrors]
-
-export type HarnessSkillProposeResponses = {
-  /**
-   * Quarantined proposal
-   */
-  200: {
-    schemaVersion: 1
-    name: string
-    description: string
-    contentSHA256: string
-    origin: "conversation" | "rsi"
-    source: {
-      sessionID?: string
-      runID?: string
-    }
-    status: "pending" | "qualified" | "promoted" | "rejected"
-    evidence: Array<{
-      id: string
-      proposalSHA256: string
-      benchmark: {
-        name: string
-        version: string
-        taskID: string
-        split: "held_out" | "release"
-        metric?: string
-        direction: "maximize" | "minimize" | "pass"
-      }
-      candidate: {
-        sessionID: string
-        runID: string
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        evaluationSHA256: string
-      }
-      control: {
-        sessionID: string
-        runID: string
-        status: "passed" | "failed" | "inconclusive"
-        score?: number
-        evaluationSHA256: string
-      }
-      nonregressing: boolean
-      improved: boolean
-      trigger: {
-        datasetSHA256: string
-        split: "held_out"
-        examples: number
-        truePositive: number
-        falsePositive: number
-        trueNegative: number
-        falseNegative: number
-        precision: number
-        recall: number
-      }
-      evaluator: {
-        name: string
-        version: string
-      }
-      recordedAt: number
-    }>
-    criteria: {
-      tasks: 3
-      improvements: 2
-      triggerPrecision: 0.8
-      triggerRecall: 0.8
-    }
-    createdAt: number
-    updatedAt: number
-    promotedAt?: number
-  } | null
-}
-
-export type HarnessSkillProposeResponse = HarnessSkillProposeResponses[keyof HarnessSkillProposeResponses]
-
-export type HarnessSkillAttestData = {
-  body?: {
-    name: string
-    candidate: {
-      sessionID: string
-      evaluatorToken: string
-    }
-    control: {
-      sessionID: string
-      evaluatorToken: string
-    }
-    trigger: {
-      datasetSHA256: string
-      split: "held_out"
-      examples: number
-      truePositive: number
-      falsePositive: number
-      trueNegative: number
-      falseNegative: number
-    }
-    recordedAt?: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/harness/skills/evidence"
-}
-
-export type HarnessSkillAttestErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessSkillAttestError = HarnessSkillAttestErrors[keyof HarnessSkillAttestErrors]
-
-export type HarnessSkillAttestResponses = {
-  /**
-   * Updated qualification state
-   */
-  200: unknown
-}
-
-export type HarnessSkillPromoteData = {
-  body?: never
-  path: {
-    name: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/skills/{name}/promotion"
-}
-
-export type HarnessSkillPromoteErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessSkillPromoteError = HarnessSkillPromoteErrors[keyof HarnessSkillPromoteErrors]
-
-export type HarnessSkillPromoteResponses = {
-  /**
-   * Promoted skill
-   */
-  200: unknown
-}
-
-export type HarnessContractData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/runs/{sessionID}/contract"
-}
-
-export type HarnessContractErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessContractError = HarnessContractErrors[keyof HarnessContractErrors]
-
-export type HarnessContractResponses = {
-  /**
-   * Harness contract
-   */
-  200: {
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    objective: string
-    benchmark: {
-      name: string
-      version: string
-      taskID: string
-      split: "development" | "validation" | "held_out" | "release"
-      evaluator: string
-      evaluatorVersion?: string
-      evaluatorSource?: "benchmark" | "gate" | "human" | "external"
-      fidelities?: Array<{
-        id: string
-        final: boolean
-        maxWallTimeMs?: number
-        maxCostUSD?: number
-      }>
-      metric?: string
-      direction?: "maximize" | "minimize" | "pass"
-      target?: number
-      objectives?: Array<{
-        metric: string
-        direction: "maximize" | "minimize"
-      }>
-      objectiveAudit?: {
-        schemaVersion: 1
-        planSHA256: string
-        validatorSHA256: string
-        contractSHA256: string
-        guardIDs: Array<string>
-      }
-    }
-    profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
-    orchestration?: {
-      topology: "auto" | "solo" | "centralized" | "fork_join" | "tournament" | "evolution" | "verifier_loop"
-      traits?: {
-        decomposability: number
-        sequentiality: number
-        toolIntensity: number
-        uncertainty: number
-        verificationRisk: number
-        novelty: number
-        crossDomain: number
-      }
-      maxWorkers: number
-      maxRounds: number
-      roles?: Array<
-        | "generation"
-        | "proximity"
-        | "reflection"
-        | "ranking"
-        | "evolution"
-        | "revision"
-        | "verification"
-        | "investigation"
-        | "simulation"
-        | "synthesis"
-      >
-      minIndependentVerifiers: number
-      adaptive?: {
-        protocolVersion: "marginal-utility-v1"
-        minRounds: number
-        patience: number
-        minUtilityGain: number
-        maxUncertainty: number
-        targetUtility?: number
-      }
-      repair?: {
-        protocolVersion: "verifier-routed-v1"
-        minConfidence: number
-      }
-    }
-    search?: {
-      protocolVersion: "adaptive-search-v1"
-      signal: {
-        source: "verified-final-evaluations"
-        decay: 0.9
-        epsilon: 1e-8
-      }
-      local: {
-        minIntensity: 0.15
-        maxIntensity: 0.5
-      }
-      global: {
-        exploration: 1.4142135623730951
-        minVisits: 2
-      }
-      stagnation: {
-        patience: 5
-        maxSignal: 0.02
-      }
-    }
-    audit?: {
-      mode: "performance" | "failure" | "hybrid"
-      budget: number
-      minSamples: number
-      noiseVariance?: number
-      lengthscale?: number
-      beta?: number
-      failureThreshold?: number
-      tolerance?: number
-      maxUncertainty?: number
-      estimationWeight?: number
-      diversityWeight?: number
-      coverageWeight?: number
-      targetFailures?: number
-      transfer?: {
-        protocolVersion: "score-history-prior-v1"
-        poolSHA256: string
-        sourceManifestSHA256: string
-        selectionSHA256: string
-        selectionMethod: "pca-gmm-profile-v1" | "holdout-embedding-gmm-v1"
-        sourceModels: Array<string>
-        calibrationSamples: number
-        maxCalibrationMAE: number
-      }
-      promotionRequired?: boolean
-    }
-    failureDiscovery?: {
-      protocolVersion: "topic-aware-failure-v1"
-      sourcePoolSHA256: string
-      topicModel: {
-        kind: "predefined" | "bertopic"
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-      }
-      topics: Array<{
-        id: string
-        commitment: string
-      }>
-      generator: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      validators: [
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-        {
-          kind: "correctness" | "topic" | "novelty"
-          identity: {
-            name: string
-            version: string
-            promptSHA256: string
-            configSHA256: string
-          }
-        },
-      ]
-      embedding: {
-        identity: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        dimensions: number
-        regularization?: number
-      }
-      budget: number
-      anchorsPerAttempt: number
-      exploration?: number
-      failureThreshold: number
-      targetFailures?: number
-    }
-    launch?: {
-      protocolVersion: "benchmark-launch-v1"
-      runner: {
-        repository: string
-        revision: string
-        entrypoint: string
-        commandSHA256: string
-        environmentSHA256: string
-        recipeSHA256?: string
-        driverSHA256?: string
-      }
-      dataset: {
-        name: string
-        source: string
-        revision: string
-        manifestSHA256: string
-      }
-      taskManifestSHA256: string
-      evaluatorSHA256: string
-      validatorSHA256: string
-      baseline: {
-        name: string
-        artifactSHA256: string
-        expectedScore?: number
-        tolerance?: number
-      }
-    }
-    recipe?: {
-      schemaVersion: 2
-      recipeID: string
-      benchmark:
-        | "statistics"
-        | "bixbench"
-        | "lifescience"
-        | "genebench"
-        | "biomni"
-        | "physics"
-        | "pde"
-        | "chembench"
-        | "matscibench"
-        | "mle"
-        | "posttrain"
-        | "ale"
-        | "weather"
-        | "researchclaw"
-        | "sciconbench"
-        | "astabench"
-        | "paperbench"
-        | "corebench"
-        | "scienceagentbench"
-        | "discoverybench"
-        | "scicode"
-        | "labbench"
-        | "sciagentarena"
-        | "ainsteinbench"
-        | "critpt"
-      recipeSHA256: string
-      bindingsSHA256: string
-      driverSHA256: string
-      entrypoint: string
-      bindings: {
-        [key: string]: string
-      }
-      environment: {
-        manager: "uv" | "pip" | "hatch" | "setuptools" | "conda"
-        python: string
-        files: Array<string>
-      }
-      anchors: Array<string>
-      runtime: Array<{
-        name: string
-        kind: "json" | "python_object" | "callable"
-        owner: "runner" | "evaluator"
-        description: string
-      }>
-      stages: Array<{
-        id: string
-        role: "prepare" | "execute" | "evaluate" | "aggregate"
-        driver:
-          | {
-              kind: "argv"
-              entrypoint: string
-              cwd: string | "."
-              argv: Array<string>
-            }
-          | {
-              kind: "python_api"
-              entrypoint: string
-              module: string
-              symbol: string
-              receiver?: string
-              kwargs: {
-                [key: string]: string | number | boolean
-              }
-              arguments: {
-                [key: string]: string
-              }
-            }
-        inputs: Array<string>
-        outputs: Array<string>
-        environment: Array<string>
-        produces?: string
-      }>
-      launchStage: string
-      artifacts: Array<
-        | {
-            id: string
-            producedBy: string
-            owner: "runner" | "evaluator"
-            kind: "file"
-            path: string
-            format: "json" | "jsonl" | "csv" | "text" | "pickle" | "directory"
-            cardinality: {
-              minimum: number
-              maximum: number
-            }
-          }
-        | {
-            id: string
-            producedBy: string
-            owner: "runner" | "evaluator"
-            kind: "return"
-            format: "json"
-            value: string
-          }
-      >
-      metrics: Array<{
-        name: string
-        artifact: string
-        selector:
-          | {
-              kind: "jsonpath"
-              path: string
-            }
-          | {
-              kind: "jsonlpath"
-              path: string
-            }
-          | {
-              kind: "column"
-              name: string
-            }
-          | {
-              kind: "tuple"
-              index: number
-            }
-          | {
-              kind: "ratio_line"
-              prefix: string
-            }
-        direction: "maximize" | "minimize" | "pass"
-        aggregation: "identity" | "mean" | "sum" | "count"
-      }>
-      limitations: Array<string>
-    }
-    integrity?: {
-      protocolVersion: "benchmark-integrity-v1"
-      validatorSHA256: string
-      traceSchemaSHA256: string
-      minEvents: number
-      minCoverage: number
-      assignedModel: {
-        name: string
-        baseArtifactSHA256: string
-        configSHA256: string
-      }
-      forbiddenModelArtifacts?: Array<string>
-      policy: {
-        testItemDerivation: "forbidden"
-        unapprovedExternalModels: "forbidden"
-        benchmarkLookup: "forbidden"
-      }
-      auditors: [
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-        {
-          kind: "test_item_contamination" | "external_model_use" | "benchmark_lookup"
-          name: string
-          version: string
-          promptSHA256: string
-        },
-      ]
-      hiddenCanaryManifestSHA256: string
-      minHiddenCanaries: number
-    }
-    evolution?: {
-      protocolVersion: "evolution-trace-v1"
-      validatorSHA256: string
-      manifestSchemaSHA256: string
-      lineAlgorithm: "sha256-exact-line-v1"
-      roots: Array<string>
-      extensions: Array<string>
-      exclude?: Array<string>
-      maxFiles: number
-      maxFileBytes: number
-      maxTotalBytes: number
-      maxSourceLines: number
-      maxChangedLines: number
-    }
-    metaHarness?: {
-      protocolVersion: "meta-harness-v1"
-      validatorSHA256: string
-      archiveSchemaSHA256: string
-      traceSchemaSHA256: string
-      baseline: {
-        artifactSHA256: string
-        manifestSHA256: string
-      }
-      mutable: Array<{
-        root: string
-        component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
-      }>
-      protected: {
-        manifestSHA256: string
-        roots: Array<string>
-      }
-      archive: {
-        contents: "full-source-scores-traces"
-        query: "filesystem"
-        summariesOnly: false
-        hiddenContent: "excluded"
-        evaluatorContent: "excluded"
-      }
-      updater: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      judge: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      search: {
-        models: Array<{
-          id: string
-          commitment: string
-        }>
-        tasks: Array<{
-          id: string
-          commitment: string
-          activationRequired: boolean
-        }>
-      }
-      heldout: {
-        models: Array<{
-          id: string
-          commitment: string
-        }>
-        tasks: Array<{
-          id: string
-          commitment: string
-          activationRequired: boolean
-        }>
-      }
-      thresholds: {
-        minSearchGain: number
-        minHeldoutGain: number
-        maxModelRegression: number
-        minActivationRate: number
-        minRequiredAdherence: number
-        minFinalAdherence: number
-        maxPhaseDrift: number
-        minPredictionPrecision: number
-        maxRiskRegressions: number
-        maxContextTokens: number
-        maxMeanContextIncrease: number
-      }
-      promotionRequired: true
-    }
-    interventions?: {
-      protocolVersion: "intervention-study-v1"
-      validatorSHA256: string
-      requiredForPromotion: boolean
-      minPairs: number
-      maxPairs: number
-      maxTotalPairs: number
-      confidence: 0.95
-      required: Array<
-        | "replay"
-        | "retune"
-        | "ablation"
-        | "repair"
-        | "model_transfer"
-        | "context_transfer"
-        | "evaluator_transfer"
-        | "split_transfer"
-      >
-      rules: Array<
-        | {
-            family: "replay"
-            mode: "max_absolute_effect"
-            threshold: number
-          }
-        | {
-            family: "retune" | "ablation" | "repair"
-            mode: "min_effect"
-            threshold: number
-          }
-        | {
-            family: "model_transfer" | "context_transfer" | "evaluator_transfer" | "split_transfer"
-            mode: "max_regression"
-            threshold: number
-          }
-      >
-    }
-    simulation?: {
-      kind: "ode" | "pde" | "cfd" | "materials" | "molecular" | "agentic"
-      engine: {
-        name: string
-        version: string
-        commandSHA256: string
-        configSHA256: string
-      }
-      problemSHA256: string
-      reference: {
-        kind: "analytic" | "manufactured" | "benchmark" | "independent_solver" | "limiting_case"
-        identity: string
-        sha256: string
-      }
-      validation: {
-        errorNorm: string
-        minLevels: number
-        maxLevels?: number
-        expectedOrder: number
-        orderTolerance: number
-        maxResidual: number
-        invariantTolerances: {
-          [key: string]: number
-        }
-        requiredStressTests: Array<
-          | "timestep_sensitivity"
-          | "solver_tolerance_sensitivity"
-          | "reference_replay"
-          | "independent_implementation"
-          | "unit_convention"
-          | "boundary_sensitivity"
-          | "perturbation_stability"
-        >
-      }
-    }
-    evaluatorAudit?: {
-      protocolVersion: "evaluator-audit-v1"
-      auditor: {
-        name: string
-        version: string
-        source: "benchmark" | "gate" | "human" | "external"
-      }
-      suite: {
-        name: string
-        version: string
-        commitmentSHA256: string
-      }
-      minCleanCases: number
-      minCasesPerFault: number
-      requiredFaults: Array<
-        | "wrong_answer"
-        | "unsupported_claim"
-        | "missing_evidence"
-        | "data_leakage"
-        | "non_reproducible"
-        | "reward_hacking"
-        | "invalid_statistics"
-        | "invalid_simulation"
-        | "distribution_shift"
-        | "evaluation_awareness"
-      >
-      minSensitivity: number
-      minSpecificity: number
-      minBalancedAccuracy: number
-      minFaultRecall: number
-      maxBrierScore: number
-    }
-    semanticAudit?: {
-      protocolVersion: "semantic-audit-v1"
-      reviewer: {
-        name: string
-        version: string
-        source: "gate" | "human" | "external"
-      }
-      scope: {
-        objectiveSHA256: string
-        criteria: Array<{
-          id: string
-          requirement: string
-        }>
-        forbiddenShortcuts: Array<{
-          id: string
-          description: string
-        }>
-        literature: {
-          cutoff: string
-          corpusSHA256: string
-        }
-        noveltyFloor: "not_required" | "known" | "rediscovery" | "minor" | "publication" | "major"
-      }
-      minReviewers: number
-      minConfidence: number
-    }
-    synthesis?: {
-      protocolVersion: "scientific-synthesis-v1"
-      querySHA256: string
-      referenceSHA256: string
-      referenceFactsSHA256: string
-      referenceFactCount: number
-      cutoff: string
-      tools: Array<"google_search" | "paper_search" | "web_browse">
-      traceSchemaSHA256: string
-      filterPolicySHA256: string
-      maxToolEvents: number
-      decomposer: {
-        name: string
-        version: string
-        promptSHA256: string
-        configSHA256: string
-      }
-      judges: {
-        precision: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-        recall: {
-          name: string
-          version: string
-          promptSHA256: string
-          configSHA256: string
-        }
-      }
-      minGeneratedFacts: number
-      minPrecision: number
-      minRecall: number
-      minF1: number
-      cleanRoomRequired: true
-      judgeFailurePolicy: "inconclusive"
-    }
-    autonomy?: {
-      protocolVersion: "human-ai-autonomy-v1"
-      claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
-      recorder: {
-        name: string
-        version: string
-        artifactSHA256: string
-        source: "evaluator_runtime"
-      }
-      traceSchemaSHA256: string
-      classificationPolicySHA256: string
-      maxEvents: number
-      rawRetention: "required"
-      disclosure: "evaluator_retained" | "public_essential_after_release"
-      completeTraceRequired: true
-      uncertaintyPolicy: "inconclusive"
-    }
-    formalProof?: {
-      protocolVersion: "formal-proof-v1"
-      language: "lean4"
-      tier: "kernel" | "fresh_recheck" | "external_crosscheck"
-      relation: "exact_proof" | "exact_refutation" | "repaired_proof"
-      challengeSHA256: string
-      statementSHA256: string
-      declaration: string
-      module: string
-      leanVersion: string
-      leanToolchainSHA256: string
-      lakeManifestSHA256: string
-      dependencyTreeSHA256: string
-      verifiers: Array<{
-        role:
-          | "lean_kernel"
-          | "source_auditor"
-          | "axiom_auditor"
-          | "fresh_rechecker"
-          | "sandbox_comparator"
-          | "external_checker"
-        name: string
-        version: string
-        artifactSHA256: string
-      }>
-      sandboxImageSHA256?: string
-      forbiddenConstructs: [
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-        "sorry" | "admit" | "debug.skipKernelTC" | "native_decide",
-      ]
-      allowedAxioms: Array<string>
-      maxFiles: number
-      completeManifestRequired: true
-      warningPolicy: "fail"
-      semanticPolicy: "formal_statement_only"
-      blueprint?: {
-        protocolVersion: "proof-blueprint-v1"
-        graphSchemaSHA256: string
-        compilerArtifactSHA256: string
-        sketchValidatorArtifactSHA256: string
-        reviewerArtifactSHA256: string
-        reviewerPromptSHA256: string
-        nodePolicy: "and-or-monotone-v1"
-        failurePolicy: "preserve-and-refine"
-        memoization: "goal-sha256"
-        finalAuthority: "formal-proof-v1"
-        directAttemptFirst: true
-        verifiedSketchRequired: true
-        completeFailureHistoryRequired: true
-        maxNodes: number
-        maxDepth: number
-        maxParallel: number
-        maxAttemptsPerGoal: number
-        maxRefinementsPerGoal: number
-        leaseDurationMs: number
-      }
-    }
-    replication?: {
-      protocolVersion: "replicated-evaluation-v1"
-      validatorSHA256: string
-      environmentSHA256: string
-      sampling: {
-        design: "crossed-stratified-cluster-v1"
-        stratumKind: string
-        clusterKind: string
-        strata: Array<{
-          id: string
-          commitmentSHA256: string
-        }>
-        clusters: Array<{
-          id: string
-          commitmentSHA256: string
-        }>
-      }
-      estimator: "mean" | "median" | "iqm" | "pass_rate"
-      interval:
-        | {
-            method: "stratified-bootstrap-percentile-v1"
-            confidence: 0.95
-            resamples: number
-            seed: number
-          }
-        | {
-            method: "wilson-score-v1"
-            confidence: 0.95
-          }
-      decision: {
-        rule: "conservative-bound-v1"
-        direction: "maximize" | "minimize" | "pass"
-        target: number
-        maxIntervalWidth?: number
-      }
-      failurePolicy: "fail-closed"
-    }
-    confirmation?: {
-      protocolVersion: "sealed-confirmation-v1"
-      optimization: {
-        split: "development" | "validation"
-        manifestSHA256: string
-      }
-      claim: {
-        taskID: string
-        split: "held_out" | "release"
-        manifestSHA256: string
-        validatorSHA256: string
-        environmentSHA256: string
-        evaluator: {
-          name: string
-          version: string
-          source: "benchmark" | "gate" | "external"
-        }
-        source?: {
-          repository: string
-          revision: string
-        }
-        metric: string
-        direction: "maximize" | "minimize"
-        target: number
-      }
-      selection: {
-        rule: "terminal-verified-best-v1"
-        subjects: 1
-      }
-      exposure: {
-        policy: "terminal-receipt-only"
-        searchFeedback: false
-        memoryCapture: false
-      }
-      failurePolicy: "fail-closed"
-    }
-    packs?: Array<"statistics" | "biology" | "physics" | "pde" | "chemistry" | "ml" | "forecast" | "formal">
-    model: {
-      provider: string
-      name: string
-      effort?: string
-    }
-    tools?: Array<string>
-    skills?: Array<{
-      name: string
-      version?: string
-      sha256?: string
-    }>
-    budget: {
-      wallTimeMs?: number
-      steps?: number
-      candidates?: number
-      tokens?: number
-      costUSD?: number
-      cpuHours?: number
-      gpuHours?: number
-    }
-    seed: number
-    intervention: "autonomous" | "human_reprompted"
-    contamination: {
-      policy: string
-      hiddenTestsAccessible: false
-      publicDataCutoff?: string
-    }
-    createdAt: number
-  } | null
-}
-
-export type HarnessContractResponse = HarnessContractResponses[keyof HarnessContractResponses]
-
-export type HarnessEvaluationsData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/runs/{sessionID}/evaluations"
-}
-
-export type HarnessEvaluationsErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type HarnessEvaluationsError = HarnessEvaluationsErrors[keyof HarnessEvaluationsErrors]
-
-export type HarnessEvaluationsResponses = {
-  /**
-   * Evaluation journal
-   */
-  200: Array<{
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    subject?: {
-      type: "run" | "candidate"
-      id: string
-    }
-    fidelity?: {
-      stage: string
-      final: boolean
-    }
-    simulationReceiptID?: string
-    launchReceiptID?: string
-    integrityReceiptID?: string
-    evolutionReceiptID?: string
-    interventionReceiptID?: string
-    evaluatorAuditReceiptID?: string
-    semanticReceiptID?: string
-    replicationReceiptID?: string
-    auditReceiptID?: string
-    failureDiscoveryReceiptID?: string
-    synthesisReceiptID?: string
-    autonomyReceiptID?: string
-    proofReceiptID?: string
-    evaluator: {
-      name: string
-      version: string
-      source: "benchmark" | "gate" | "human" | "external"
-    }
-    status: "passed" | "failed" | "inconclusive"
-    score?: number
-    metrics?: {
-      [key: string]: number
-    }
-    checks: Array<{
-      id: string
-      status: "passed" | "failed" | "inconclusive"
-      blocking: boolean
-      score?: number
-      evidence?: Array<string>
-      note?: string
-    }>
-    evidence: Array<string>
-    usage?: {
-      wallTimeMs?: number
-      costUSD?: number
-    }
-    evaluatedAt: number
-    recordedAt?: number
-    notes?: string
-  }>
-}
-
-export type HarnessEvaluationsResponse = HarnessEvaluationsResponses[keyof HarnessEvaluationsResponses]
-
-export type HarnessReportData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-  }
-  url: "/harness/runs/{sessionID}/report"
-}
-
-export type HarnessReportErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type HarnessReportError = HarnessReportErrors[keyof HarnessReportErrors]
-
-export type HarnessReportResponses = {
-  /**
-   * Quality-cost report
-   */
-  200: {
-    schemaVersion: 1
-    runID: string
-    sessionID: string
-    contractFingerprint: string
-    comparisonKey: string
-    benchmark: {
-      id:
-        | "statistics"
-        | "bixbench"
-        | "lifescience"
-        | "genebench"
-        | "biomni"
-        | "physics"
-        | "pde"
-        | "chembench"
-        | "matscibench"
-        | "mle"
-        | "posttrain"
-        | "ale"
-        | "weather"
-        | "researchclaw"
-        | "sciconbench"
-        | "astabench"
-        | "paperbench"
-        | "corebench"
-        | "scienceagentbench"
-        | "discoverybench"
-        | "scicode"
-        | "labbench"
-        | "sciagentarena"
-        | "ainsteinbench"
-        | "critpt"
-      title: string
-      family: "data" | "biology" | "physics" | "chemistry" | "ml" | "generalist"
-      version: string
-      taskID: string
-      split: "development" | "validation" | "held_out" | "release"
-    }
-    execution: {
-      profile: "react" | "optimize" | "reproduce" | "theory" | "numerical" | "training" | "forecast"
-      packs: Array<string>
-      provider: string
-      model: string
-      effort?: string
-      intervention: "autonomous" | "human_reprompted"
-      autonomy?: {
-        claimedLevel: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
-        derivedLevel?: "essentially_autonomous" | "human_ai_collaboration" | "primarily_human"
-        status?: "passed" | "failed" | "inconclusive"
-      }
-      formal?: {
-        tier: "kernel" | "fresh_recheck" | "external_crosscheck"
-        relation: "exact_proof" | "exact_refutation" | "repaired_proof"
-        status?: "passed" | "failed"
-        blueprint?: {
-          blueprintID: string
-          status: "open" | "proved" | "refuted" | "exhausted"
-          goals: number
-          proved: number
-          refuted: number
-          exhausted: number
-          decompositions: number
-          attempts: number
-          rejected: number
-          refinements: number
-          openLeases: number
-          revision: number
-        }
-      }
-      seed: number
-    }
-    quality: {
-      source: "optimization" | "sealed_confirmation"
-      provisional: boolean
-      status?: "passed" | "failed" | "inconclusive"
-      metric?: string
-      direction: "maximize" | "minimize" | "pass"
-      score?: number
-      target?: number
-      targetReached: boolean
-      evaluator: string
-      evaluatorVersion?: string
-      simulationReceiptID?: string
-      launchReceiptID?: string
-      integrityReceiptID?: string
-      evolutionReceiptID?: string
-      interventionReceiptID?: string
-      evaluatorAuditReceiptID?: string
-      semanticReceiptID?: string
-      replicationReceiptID?: string
-      auditReceiptID?: string
-      failureDiscoveryReceiptID?: string
-      synthesisReceiptID?: string
-      autonomyReceiptID?: string
-      proofReceiptID?: string
-      metaReceiptID?: string
-      confirmationReceiptID?: string
-      evaluations: number
-    }
-    efficiency: {
-      costUSD?: number
-      evaluatorCostUSD?: number
-      tokens?: {
-        input: number
-        output: number
-        reasoning: number
-        cacheRead: number
-        cacheWrite: number
-        total: number
-      }
-      wallTimeMs?: number
-      evaluatorWallTimeMs?: number
-      toolCalls?: number
-      searches?: number
-      dedupeHits?: number
-      retries?: number
-      failures?: number
-      candidates?: number
-    }
-    search?: {
-      status: "active" | "completed"
-      stopReason?: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
-      bestID?: string
-      candidates: number
-      verified: number
-      generations: number
-      stalled: number
-      proposalPolicy: "advisory-v2" | "leased-v3" | "adaptive-v4"
-      controller?: {
-        protocolVersion: "adaptive-search-v1"
-        signal: {
-          source: "verified-final-evaluations"
-          decay: 0.9
-          epsilon: 1e-8
-        }
-        local: {
-          minIntensity: 0.15
-          maxIntensity: 0.5
-        }
-        global: {
-          exploration: 1.4142135623730951
-          minVisits: 2
-        }
-        stagnation: {
-          patience: 5
-          maxSignal: 0.02
-        }
-      }
-      adaptation?: {
-        protocolVersion: "adaptive-search-v1"
-        policySHA256: string
-        events: number
-        stalled: number
-        selectedIsland?: number
-        globalStagnation: boolean
-        islands: Array<{
-          island: number
-          visits: number
-          decayedVisits: number
-          improvements: number
-          accumulatedImprovement: number
-          decayedReward: number
-          rewardMean: number
-          intensity: number
-          ucb: number
-          bestID?: string
-          bestFitness?: number
-        }>
-      }
-      objectives: Array<{
-        metric: string
-        direction: "maximize" | "minimize"
-      }>
-      objectiveAudit?: {
-        schemaVersion: 1
-        planSHA256: string
-        validatorSHA256: string
-        contractSHA256: string
-        guardIDs: Array<string>
-      }
-      archive: number
-    }
-    metaHarness?: {
-      status: "passed" | "failed" | "inconclusive"
-      selectionID: string
-      diagnostics: {
-        updaterGain?: number
-        beneficiaryGain?: number
-        worstHeldoutModelGain?: number
-        activationRate: number
-        requiredAdherence?: number
-        finalAdherence?: number
-        maxPhaseDrift?: number
-        predictionPrecision: number
-        riskRegressions: number
-        maxContextTokens: number
-        meanContextIncrease: number
-        loadedBenefit?: number
-        searchPairs: number
-        heldoutPairs: number
-      }
-      failures: Array<string>
-    }
-    generatedAt: number
-  }
-}
-
-export type HarnessReportResponse = HarnessReportResponses[keyof HarnessReportResponses]
 
 export type SearchQueryData = {
   body?: never
@@ -19764,32 +10262,6 @@ export type FileManifestResponses = {
 
 export type FileManifestResponse = FileManifestResponses[keyof FileManifestResponses]
 
-export type FileStarterData = {
-  body?: {
-    template: "single-cell" | "dose-response" | "protein-structure"
-  }
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/file/starters"
-}
-
-export type FileStarterResponses = {
-  /**
-   * Created starter files
-   */
-  200: {
-    template: "single-cell" | "dose-response" | "protein-structure"
-    directory: string
-    files: Array<string>
-    notebook: string
-    readme: string
-  }
-}
-
-export type FileStarterResponse = FileStarterResponses[keyof FileStarterResponses]
-
 export type FilePublicationCapabilitiesData = {
   body?: never
   path?: never
@@ -20251,6 +10723,22 @@ export type FileStatusResponses = {
 }
 
 export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses]
+
+export type NotebookComputeData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/notebook/compute"
+}
+
+export type NotebookComputeResponses = {
+  /**
+   * Machine capacity and the share kernels hold
+   */
+  200: unknown
+}
 
 export type NotebookKernelsData = {
   body?: never
@@ -21777,10 +12265,6 @@ export type SettingsSkillsInstallData = {
      * Public git repository URL containing one or more SKILL.md skills
      */
     url: string
-    /**
-     * Bypass the server-side Layer-3 classifier review
-     */
-    skipClassifier?: boolean
   }
   path?: never
   query?: {
@@ -21820,128 +12304,6 @@ export type SettingsSkillsInstallResponses = {
 }
 
 export type SettingsSkillsInstallResponse = SettingsSkillsInstallResponses[keyof SettingsSkillsInstallResponses]
-
-export type SettingsMemoryGetData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    scope?: "global" | "project"
-  }
-  url: "/settings/memory"
-}
-
-export type SettingsMemoryGetResponses = {
-  /**
-   * Memory document
-   */
-  200: {
-    enabled: boolean
-    categories: Array<{
-      id: string
-      name: string
-      notes: Array<{
-        id: string
-        text: string
-        createdAt: number
-        updatedAt?: number
-        source?: "user" | "agent"
-      }>
-    }>
-    budget?: number
-    capacity: {
-      used: number
-      max: number
-      gauge: string
-    }
-  }
-}
-
-export type SettingsMemoryGetResponse = SettingsMemoryGetResponses[keyof SettingsMemoryGetResponses]
-
-export type SettingsMemorySetData = {
-  body?: {
-    enabled: boolean
-    categories: Array<{
-      id: string
-      name: string
-      notes: Array<{
-        id: string
-        text: string
-        createdAt: number
-        updatedAt?: number
-        source?: "user" | "agent"
-      }>
-    }>
-    budget?: number
-  }
-  path?: never
-  query?: {
-    directory?: string
-    scope?: "global" | "project"
-  }
-  url: "/settings/memory"
-}
-
-export type SettingsMemorySetResponses = {
-  /**
-   * Updated memory document
-   */
-  200: {
-    enabled: boolean
-    categories: Array<{
-      id: string
-      name: string
-      notes: Array<{
-        id: string
-        text: string
-        createdAt: number
-        updatedAt?: number
-        source?: "user" | "agent"
-      }>
-    }>
-    budget?: number
-    capacity: {
-      used: number
-      max: number
-      gauge: string
-    }
-  }
-}
-
-export type SettingsMemorySetResponse = SettingsMemorySetResponses[keyof SettingsMemorySetResponses]
-
-export type SettingsMemorySearchData = {
-  body?: never
-  path?: never
-  query: {
-    directory?: string
-    q: string
-    limit?: number
-  }
-  url: "/settings/memory/search"
-}
-
-export type SettingsMemorySearchResponses = {
-  /**
-   * Full-text search hits
-   */
-  200: {
-    results: Array<{
-      kind: "note" | "session"
-      text: string
-      score: number
-      created: number
-      scope?: "global" | "project"
-      category?: string
-      sessionID?: string
-      messageID?: string
-      role?: string
-    }>
-  }
-}
-
-export type SettingsMemorySearchResponse = SettingsMemorySearchResponses[keyof SettingsMemorySearchResponses]
 
 export type SettingsNetworkGetData = {
   body?: never
@@ -22212,6 +12574,7 @@ export type AppSkillsResponses = {
     location: string
     category?: string
     tags?: Array<string>
+    origin: "default" | "installed" | "learned" | "user" | "project"
     entry?: boolean
   }>
 }
@@ -22261,6 +12624,7 @@ export type AppSkillWriteResponses = {
     location: string
     category?: string
     tags?: Array<string>
+    origin: "default" | "installed" | "learned" | "user" | "project"
     entry?: boolean
   }
 }

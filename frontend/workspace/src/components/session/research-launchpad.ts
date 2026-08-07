@@ -18,38 +18,6 @@ export type ResearchWorkflow = {
     | "network"
 }
 
-export type ResearchStarter = {
-  id: "single-cell" | "dose-response" | "protein-structure"
-  title: string
-  description: string
-  files: string[]
-  accent: string
-}
-
-export const researchStarters: ResearchStarter[] = [
-  {
-    id: "single-cell",
-    title: "Single-cell expression",
-    description: "QC, marker summaries, and a valid Python notebook over a local sample matrix.",
-    files: ["analysis.ipynb", "cells.csv", "README.md"],
-    accent: "#2f8f83",
-  },
-  {
-    id: "dose-response",
-    title: "Dose-response assay",
-    description: "Replicate aggregation, assay QC, and a half-max response analysis.",
-    files: ["analysis.ipynb", "dose_response.csv", "README.md"],
-    accent: "#825dc7",
-  },
-  {
-    id: "protein-structure",
-    title: "Protein structure",
-    description: "A native 3D PDB view plus dependency-free geometry inspection.",
-    files: ["analysis.ipynb", "alanine.pdb", "README.md"],
-    accent: "#2786b8",
-  },
-]
-
 export const researchWorkflows: ResearchWorkflow[] = [
   {
     id: "analyze-data",

@@ -115,8 +115,8 @@ export default function Network() {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-        <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
+      <div class="settings-page-header">
+        <div class="settings-page-header__inner">
           <h2 class="text-16-medium text-text-strong">Network</h2>
           <p class="text-13-regular text-text-weak">
             Control which domains the agent may reach. Enable curated science-connector groups or add your own domains.
@@ -124,7 +124,7 @@ export default function Network() {
         </div>
       </div>
 
-      <div class="flex flex-col gap-5 px-4 pb-10 sm:px-8 max-w-[760px]">
+      <div class="settings-page-body">
         <Show when={error()}>
           <div class="rounded-xs border border-border-weak-base bg-surface-base/40 px-3 py-2 text-12-regular text-text-danger">
             {error()}
@@ -204,7 +204,7 @@ export default function Network() {
                   onClick={clearCustom}
                   aria-label="Clear allowed domains"
                 >
-                  clear
+                  Clear
                 </button>
               </Show>
             </div>
@@ -232,7 +232,7 @@ export default function Network() {
                 <input
                   type="text"
                   aria-label="Add allowed domain"
-                  placeholder="add a domain, e.g. example.org"
+                  placeholder="Add a domain, e.g. example.org"
                   value={customDomain()}
                   disabled={saving()}
                   class="flex-1 h-9 px-3 rounded-xs border border-border-weak-base bg-surface-raised-base/40 text-13-regular text-text-strong placeholder:text-text-weak/60 outline-none focus:border-border-base font-mono"
@@ -246,7 +246,7 @@ export default function Network() {
                   onClick={addCustom}
                 >
                   <Icon name="plus" size="small" />
-                  add
+                  Add
                 </button>
               </div>
             </div>

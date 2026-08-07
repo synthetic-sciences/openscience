@@ -5,15 +5,20 @@ import { fileURLToPath } from "node:url"
 const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8")
 
 describe("session-scoped file requests", () => {
-  test("threads the active session through explorer, preview, save, and download requests", () => {
+  test("threads the active session through listing, explorer, preview, save, and download requests", () => {
     const explorer = read("./FileExplorer.tsx")
+    const pane = read("./FilesPane.tsx")
     const preview = read("./FilePreview.tsx")
 
     expect(explorer).toContain('const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)')
     expect(explorer).toContain("readAccess(sdk.request, current)")
-    expect(explorer).toContain("grantAccess(sdk.request, current, input)")
-    expect(explorer).toContain("revokeAccess(sdk.request, current, grant.id)")
-    expect(explorer).toContain("const input = { path, sessionID: session }")
+    expect(explorer).toContain("grantAccess(sdk.request, current, {")
+    // The Files pane owns the listing now: without this the server lists the
+    // project root instead of the session workspace (File.list falls back to
+    // Instance.directory when no sessionID is supplied).
+    expect(pane).toContain('params.id && params.id !== "new" ? params.id : undefined')
+    expect(pane).toContain("if (session) query.sessionID = session")
+    expect(pane).toContain('transport("/file", undefined, query)')
     expect(preview).toContain('const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)')
     expect(preview).toContain("sdk.client.file.read({ path, sessionID: sessionID() })")
     expect(preview).toContain("body: JSON.stringify({ path, content, sessionID: session })")

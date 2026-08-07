@@ -13,15 +13,14 @@ interface FetchPinnedParams {
   destDir: string
 }
 
-/** Sync-time git fetch: clone the pinned SHA, copy one skill's tree into
+/** Legacy-import git fetch: clone the pinned SHA, copy one skill's tree into
  *  destDir, run Layers 1 & 2 regex as paranoid defense-in-depth (the SHA
  *  is content-addressed so contents are immutable, but if they ever match
  *  a Tier-1 pattern we want to refuse — could mean the original install's
  *  Layer-3 was bypassed somehow).
  *
- *  Skips Layer 3 — the first install's classifier verdict is authoritative.
- *  Server-side `archived_at` is the kill-switch: an archived row simply
- *  doesn't appear in fetchInstalledSkills, so sync never even tries.
+ *  The old server-side verdict is metadata only; the deterministic local
+ *  checks below are authoritative during migration.
  */
 export async function gitFetchPinned(params: FetchPinnedParams): Promise<void> {
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), "openscience-skill-sync-"))

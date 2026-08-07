@@ -97,7 +97,10 @@ html[data-color-scheme="dark"]
 }
 
 [data-model-settings-popover] {
-  width: min(286px, calc(100vw - 24px)) !important;
+  box-sizing: border-box;
+  width: min(320px, calc(100vw - 24px)) !important;
+  max-height: min(72dvh, 440px);
+  overflow: hidden;
   padding: 6px !important;
   border: 1px solid var(--model-control-border-strong) !important;
   border-radius: 12px !important;
@@ -140,6 +143,15 @@ html[data-color-scheme="dark"]
   flex-direction: column;
 }
 
+.model-settings-heading {
+  padding: 6px 10px 4px;
+  color: var(--model-control-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 [data-model-settings-popover] [data-model-quick] {
   min-height: 50px;
 }
@@ -176,6 +188,90 @@ html[data-color-scheme="dark"]
 .model-settings-more {
   min-height: 40px !important;
   color: var(--model-control-text) !important;
+}
+
+.model-settings-browser {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-model-settings-view="models"] {
+  height: min(72dvh, 440px);
+  display: flex;
+  flex-direction: column;
+}
+
+[data-model-settings-view="models"] .mobile-model-settings__body {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.model-settings-search {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 2px 6px 5px;
+  padding: 0 9px;
+  border: 1px solid var(--model-control-border);
+  border-radius: 8px;
+  background: var(--model-control-raised);
+  color: var(--model-control-faint);
+}
+
+.model-settings-search:focus-within {
+  border-color: var(--model-control-border-strong);
+  color: var(--model-control-muted);
+}
+
+.model-settings-search input {
+  all: unset;
+  min-width: 0;
+  flex: 1;
+  color: var(--model-control-text);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.model-settings-search input::placeholder {
+  color: var(--model-control-faint);
+}
+
+.model-settings-catalog {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--model-control-border-strong) transparent;
+}
+
+.model-settings-group + .model-settings-group {
+  margin-top: 2px;
+}
+
+[data-model-settings-popover] [data-model-catalog-item] {
+  min-height: 46px;
+}
+
+.model-settings-empty {
+  margin: 0;
+  padding: 24px 14px;
+  color: var(--model-control-faint);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.model-settings-manage {
+  min-height: 38px !important;
+  flex: 0 0 38px;
+  background: var(--model-control-surface);
 }
 
 [data-model-menu-value] {
@@ -281,6 +377,20 @@ html[data-color-scheme="dark"]
     scrollbar-width: none;
   }
 
+  .model-settings-catalog {
+    max-height: min(56dvh, 430px);
+  }
+
+  .model-settings-search {
+    min-height: 42px;
+    margin: 8px 14px;
+    padding-inline: 12px;
+  }
+
+  [data-model-settings-popover] [data-model-catalog-item] {
+    min-height: 58px;
+  }
+
   .mobile-model-settings__body::-webkit-scrollbar {
     display: none;
   }
@@ -290,6 +400,11 @@ html[data-color-scheme="dark"]
     padding-inline: 20px;
     border-radius: 0;
     font-size: 14px;
+  }
+
+  .model-settings-heading {
+    padding: 10px 20px 5px;
+    font-size: 11px;
   }
 
   [data-model-settings-popover] details {

@@ -31,7 +31,6 @@ import { ApplyPatchTool } from "./apply_patch"
 import { BiologyTools, BIOLOGY_TOOL_IDS } from "./biology"
 import { ArtifactTool } from "./artifact"
 import { LearnTool } from "./learn"
-import { MemoryTool } from "./memory"
 import { ScienceTools } from "./science"
 import { ProvenanceTools } from "./provenance"
 import { NotebookTool } from "./notebook"
@@ -39,8 +38,8 @@ import { RKernelTool } from "./rkernel"
 import { AtlasTool } from "./atlas"
 import { AtlasRecordTool } from "./atlas-record"
 import { ArtifactSnapshotTool } from "./artifact-snapshot"
-import { HarnessTool } from "./harness"
-import { ClaimTool } from "./claim"
+import { ModalTool } from "./modal"
+import { ComputeJobTool } from "./compute-job"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -142,23 +141,16 @@ export namespace ToolRegistry {
       RKernelTool,
       ArtifactTool,
       LearnTool,
-      MemoryTool,
-      HarnessTool,
-      ClaimTool,
+      ModalTool,
+      ComputeJobTool,
       ...custom,
     ]
   }
 
   const ARTIFACT_TOOL_ID = "artifact"
-  const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml"]
+  const ARTIFACT_AGENTS = ["research", "biology", "ml"]
 
-  // Memory tool: only user-facing primary agents may read/write persistent
-  // memory; subagents (title, compaction, explore, ...) cannot. Plan mode is
-  // excluded because PlanMode.enforce blocks all mutating tools there anyway.
-  const MEMORY_TOOL_ID = "memory"
-  const MEMORY_AGENTS = ["research", "biology", "physics", "ml"]
-  const HARNESS_TOOL_ID = "harness"
-  const CLAIM_TOOL_ID = "claim"
+  const MODAL_AGENTS = ["research", "biology", "physics", "ml"]
 
   export async function ids() {
     return all().then((x) => x.map((t) => t.id))
@@ -185,16 +177,8 @@ export namespace ToolRegistry {
             return !!agent?.name && ARTIFACT_AGENTS.includes(agent.name)
           }
 
-          if (t.id === MEMORY_TOOL_ID) {
-            return !!agent?.name && MEMORY_AGENTS.includes(agent.name)
-          }
-
-          if (t.id === HARNESS_TOOL_ID) {
-            return !!agent?.name && MEMORY_AGENTS.includes(agent.name)
-          }
-
-          if (t.id === CLAIM_TOOL_ID) {
-            return !!agent?.name && MEMORY_AGENTS.includes(agent.name)
+          if (t.id === "modal" || t.id === "compute_job") {
+            return !!agent?.name && MODAL_AGENTS.includes(agent.name)
           }
 
           // Enable websearch/codesearch for zen users OR via enable flag

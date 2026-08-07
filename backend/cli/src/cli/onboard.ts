@@ -1,5 +1,7 @@
 import * as prompts from "@clack/prompts"
 import path from "path"
+import fs from "fs/promises"
+import type { Argv } from "yargs"
 import { cmd } from "./cmd/cmd"
 import { UI } from "./ui"
 import { OpenScience } from "../openscience"
@@ -202,10 +204,129 @@ export const InitCommand = cmd({
   },
 })
 
+/**
+ * Measure the pre-2.0.2 data directory, and optionally remove it.
+ *
+ * The import copies rather than moves, deliberately: the previous root is the
+ * only thing standing between a bad import and a user's history. The cost is
+ * that it survives forever, silently, as a full duplicate — and because
+ * nothing mentions it, the disk it holds is never reclaimed. So: name it,
+ * measure it, and delete it only when asked.
+ *
+ * Removal is gated on the import having actually finished. While files are
+ * still outstanding, that directory is the only copy of them.
+ */
+async function reportLegacyRoot(prune: boolean) {
+  const legacy = Global.LegacyData
+  if (!legacy) return
+  const found = await measure(legacy)
+  if (!found) return
+
+  const size = found.bytes > 1024 * 1024 ? `${(found.bytes / 1024 / 1024).toFixed(0)} MB` : `${found.bytes} bytes`
+  prompts.log.info(`Previous data directory: ${legacy} (${found.files} files, ${size})`)
+
+  // The marker in the current data root is the only record that an import
+  // actually ran, and that is what this has to be sure of before offering to
+  // delete anything. Asking `DataMigration.migrated` instead answered a
+  // different question: it is undefined whenever no import was attempted at
+  // all — an explicit OPENSCIENCE_DATA_DIR, a settings ▸ Storage relocation
+  // pointer, or an import that threw — and reading that as "nothing left to
+  // do" would have offered to recursively delete a directory whose contents
+  // were never copied anywhere.
+  const record = await Bun.file(path.join(Global.Path.data, ".xdg-data-migration-v2.json"))
+    .json()
+    .then((value) => (value && typeof value === "object" ? (value as { pending?: unknown }) : undefined))
+    .catch(() => undefined)
+  const outstanding = Array.isArray(record?.pending) ? record.pending.length : 0
+
+  if (Global.DataMigration.error) {
+    prompts.log.warn(
+      `The last import did not complete (${Global.DataMigration.error}), so this directory may still hold the ` +
+        `only copy of some data. Leaving it alone.`,
+    )
+    return
+  }
+  if (!record) {
+    prompts.log.warn(
+      `Nothing has been imported out of it into ${Global.Path.data} — this data root was chosen explicitly ` +
+        `(OPENSCIENCE_DATA_DIR or a storage location setting) rather than by the upgrade. Leaving it alone.`,
+    )
+    return
+  }
+  if (outstanding > 0) {
+    prompts.log.warn(
+      `${outstanding} file(s) have not been imported out of it yet, so it is still the only copy of those. ` +
+        `Re-run once they are readable before removing it.`,
+    )
+    return
+  }
+  if (!prune) {
+    prompts.log.info(`Everything importable has been copied into ${Global.Path.data}.`)
+    prompts.log.info("Remove it with: openscience doctor --prune-legacy")
+    return
+  }
+  // Refuse anything that is not plausibly the old data root, so a stray
+  // OPENSCIENCE_DATA_DIR or a symlinked home cannot turn this into rm -rf.
+  if (legacy === Global.Path.data || legacy === Global.Path.home || path.dirname(legacy) === legacy) {
+    prompts.log.error(`Refusing to remove ${legacy}: it is the directory OpenScience is currently using.`)
+    return
+  }
+  // Interactively, deleting a directory full of the user's history deserves a
+  // second look. Non-interactively there is nobody to ask, and blocking on a
+  // prompt nobody can answer would hang a scripted run forever — the flag was
+  // typed on purpose, so let it stand as the answer.
+  const confirmed = process.stdin.isTTY
+    ? await prompts.confirm({ message: `Delete ${legacy} and its ${found.files} files?` })
+    : true
+  if (prompts.isCancel(confirmed) || !confirmed) {
+    prompts.log.info("Left in place.")
+    return
+  }
+  const failure = await fs
+    .rm(legacy, { recursive: true, force: true })
+    .then(() => undefined)
+    .catch((error: unknown) => (error instanceof Error ? error.message : String(error)))
+  if (failure) prompts.log.error(`Could not remove ${legacy}: ${failure}`)
+  if (!failure) prompts.log.success(`Removed ${legacy}, reclaiming ${size}.`)
+}
+
+async function measure(root: string) {
+  const stack = [root]
+  let files = 0
+  let bytes = 0
+  let seen = false
+  while (stack.length) {
+    const dir = stack.pop()
+    if (!dir) continue
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => undefined)
+    if (!entries) continue
+    seen = true
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(full)
+        continue
+      }
+      const stat = await fs.stat(full).catch(() => undefined)
+      if (!stat) continue
+      files += 1
+      bytes += stat.size
+    }
+  }
+  return seen ? { files, bytes } : undefined
+}
+
 export const DoctorCommand = cmd({
   command: "doctor",
   describe: "check what's configured and what's missing",
-  async handler() {
+  builder: (yargs: Argv) =>
+    yargs.option("prune-legacy", {
+      type: "boolean",
+      describe: "delete the pre-2.0.2 data directory once its contents have been imported",
+      default: false,
+    }),
+  async handler(args) {
     UI.empty()
     prompts.intro("openscience doctor")
 
@@ -231,13 +352,26 @@ export const DoctorCommand = cmd({
     prompts.log.info(`State root: ${Global.Path.state}`)
 
     if (Global.DataMigration.migrated) {
+      const done = Global.DataMigration.migrated
+      // Each count is a distinct kind of import, so name them separately
+      // rather than folding them into one "files" total that matches none of
+      // them. `deferred` is the one a user can act on: those files are still
+      // in the previous directory and the next launch will try again.
       prompts.log.success(
-        `Data copied to ~/.openscience and verified (${Global.DataMigration.migrated.files} files). The previous XDG directory remains as a safety copy.`,
+        `Legacy data imported into ~/.openscience and verified: ${done.files} file(s) copied, ` +
+          `${done.merged} credential store(s) merged, ${done.artifacts} artifact record(s) restored, ` +
+          `${done.skipped} already present. Existing OpenScience data was kept, and ${done.source} ` +
+          `remains as a safety copy.`,
       )
+      if (done.deferred > 0)
+        prompts.log.warn(`${done.deferred} file(s) could not be read this run; the next launch will retry them.`)
+    }
+    if (Global.DataMigration.warning) {
+      prompts.log.warn(Global.DataMigration.warning)
     }
     if (Global.DataMigration.error) {
       prompts.log.warn(
-        `Data migration to ~/.openscience did not complete; OpenScience is still using the previous directory. ${Global.DataMigration.error}`,
+        `Data migration to ~/.openscience did not complete; OpenScience is using ${Global.DataMigration.path}. ${Global.DataMigration.error}`,
       )
     }
 
@@ -246,6 +380,8 @@ export const DoctorCommand = cmd({
         `Legacy data directories are ignored because current directories exist: ${Global.LegacyConflicts.map((item) => item.legacy).join(", ")}. Merge or remove them.`,
       )
     }
+
+    await reportLegacyRoot(args.pruneLegacy === true)
 
     const session = await OpenScience.getSession()
     if (session) {

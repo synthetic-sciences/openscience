@@ -782,7 +782,49 @@ test("ask - spend permissions ignore wildcard allows", async () => {
       await PermissionNext.reply({ requestID: "permission_spend1", reply: "reject" })
       await expect(paid).rejects.toBeInstanceOf(PermissionNext.RejectedError)
 
-      // An explicit rule naming the permission still allows it.
+      const modal = PermissionNext.ask({
+        id: "permission_spend_modal",
+        sessionID: "session_modal",
+        permission: "modal",
+        patterns: ["approved-plan-digest"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      expect(modal).toBeInstanceOf(Promise)
+      await PermissionNext.reply({ requestID: "permission_spend_modal", reply: "reject" })
+      await expect(modal).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+
+      for (const [index, permission] of ["**", "?*", "mod*"].entries()) {
+        const requestID = `permission_spend_glob_${index}`
+        const shaped = PermissionNext.ask({
+          id: requestID,
+          sessionID: "session_modal_glob",
+          permission: "modal",
+          patterns: ["approved-plan-digest"],
+          metadata: {},
+          always: [],
+          ruleset: [{ permission, pattern: "*", action: "allow" }],
+        })
+        expect(shaped).toBeInstanceOf(Promise)
+        await PermissionNext.reply({ requestID, reply: "reject" })
+        await expect(shaped).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+      }
+
+      const exactModal = PermissionNext.ask({
+        id: "permission_spend_modal_exact",
+        sessionID: "session_modal_exact",
+        permission: "modal",
+        patterns: ["approved-plan-digest"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "modal", pattern: "*", action: "allow" }],
+      })
+      expect(exactModal).toBeInstanceOf(Promise)
+      await PermissionNext.reply({ requestID: "permission_spend_modal_exact", reply: "reject" })
+      await expect(exactModal).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+
+      // Other spend permissions may still opt into explicit standing rules.
       const explicit = await PermissionNext.ask({
         sessionID: "session_test2",
         permission: "websearch",

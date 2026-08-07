@@ -64,8 +64,8 @@ process.env["OPENSCIENCE_DISABLE_BUNDLED_SKILLS"] = "true"
 
 // Hermetic API base: several suite paths reach the Atlas backend whenever a
 // session file exists, and session-file.test.ts writes one into the shared
-// per-process test data dir - so later tests (skill discovery's
-// fetchLearnedSkills, billing-mode, atlas-bridge) silently depended on the
+// per-process test data dir - so later tests (billing-mode, atlas-bridge)
+// silently depended on the
 // LIVE production API. When prod hiccuped, those tests hung to their timeout
 // and CI went red on an unrelated commit. Point the base at an unroutable
 // local port so any accidental call fails in milliseconds (ECONNREFUSED),

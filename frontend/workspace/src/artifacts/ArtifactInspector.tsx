@@ -250,7 +250,7 @@ export function ArtifactInspector(props: { context: ArtifactContext; onClose?: (
       message:
         "Describe the fix in one line. The record stays 'addressed' — only a later reviewer pass can confirm it.",
       placeholder: "What change addresses this finding?",
-      confirmLabel: "record fix",
+      confirmLabel: "Record fix",
     })
     const note = reason?.trim()
     if (!note) return

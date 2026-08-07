@@ -10,7 +10,6 @@ describe("model control surface", () => {
     const files = [
       "./prompt-input.tsx",
       "./dialog-select-model.tsx",
-      "./dialog-manage-models.tsx",
       "./model-tooltip.tsx",
       "./model-settings-popover.tsx",
     ].map(source)
@@ -23,16 +22,14 @@ describe("model control surface", () => {
     expect(files[1]).toContain("displayProviderForModel")
   })
 
-  test("shows model names with provider markings without provider grouping", () => {
+  test("groups model names under clear provider headings", () => {
     const picker = source("./dialog-select-model.tsx")
-    const manage = source("./dialog-manage-models.tsx")
     const tooltip = source("./model-tooltip.tsx")
 
     expect(picker).toContain("{i.name}")
     expect(picker).toContain("displayProviderForModel(i.provider, i.id).name")
-    expect(manage).toContain("{i.name}")
-    expect(picker).not.toContain("groupBy=")
-    expect(manage).not.toContain("groupBy=")
+    expect(picker).toContain("groupBy={category}")
+    expect(picker).toContain("modelGroupLabel")
     expect(tooltip).toContain("props.model.name")
   })
 
@@ -56,14 +53,19 @@ describe("model control surface", () => {
     expect(settings).toContain("onKeyDown={onMenuKeyDown}")
     expect(settings).not.toContain("<span data-model-menu-label>Advanced</span>")
     expect(settings).not.toContain("Auto-accept permissions")
-    expect(settings).toContain("<DialogSelectModel />")
+    expect(settings).toContain('<DialogSettings initial="models" />')
     expect(settings).not.toContain("<DialogManageModels />")
     expect(settings).toContain("model-settings-trigger--label")
     expect(settings).toContain("data-model-quick")
     expect(settings).toContain("modelSummary")
     expect(settings).toContain("More models")
+    expect(settings).toContain("Quick models")
+    expect(settings).toContain("Find a model or provider")
+    expect(settings).toContain("Manage models")
+    expect(settings).not.toContain("data-model-source-label")
     expect(settings).toContain("data-model-menu-value")
-    expect(styles).toContain("width: min(286px, calc(100vw - 24px))")
+    expect(styles).toContain("width: min(320px, calc(100vw - 24px))")
+    expect(styles).toContain("overflow-y: auto")
     expect(styles).toContain("min-height: 58px")
     expect(styles).toContain("font-size: 14px")
     expect(styles).toContain("color: #4f8cff")

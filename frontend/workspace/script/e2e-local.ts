@@ -76,6 +76,14 @@ const [serverPort, webPort, modelPort] = await ports()
 const fakeModelServer = startFakeModelServer(modelPort)
 
 const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-e2e-"))
+const browsers = (() => {
+  if (process.env.PLAYWRIGHT_BROWSERS_PATH) return process.env.PLAYWRIGHT_BROWSERS_PATH
+  if (process.platform === "darwin") return path.join(os.homedir(), "Library", "Caches", "ms-playwright")
+  if (process.platform === "win32") {
+    return path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"), "ms-playwright")
+  }
+  return path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), "ms-playwright")
+})()
 
 // Pin Basic-Auth creds so the in-process server + the Playwright-hosted
 // frontend (via VITE_OPENSCIENCE_SERVER_PASSWORD) agree. Without this, flag.ts
@@ -155,6 +163,10 @@ for (const key of providerCredentialEnvKeys) {
 const runnerEnv = {
   ...serverEnv,
   [E2E_MODE_ENV]: "isolated",
+  // App state belongs in the disposable XDG sandbox, but Playwright browsers
+  // are host tooling. Keep their persistent cache or every isolated run looks
+  // for a browser in a new empty directory.
+  PLAYWRIGHT_BROWSERS_PATH: browsers,
   PLAYWRIGHT_SERVER_HOST: "127.0.0.1",
   PLAYWRIGHT_SERVER_PORT: String(serverPort),
   VITE_OPENSCIENCE_SERVER_HOST: "127.0.0.1",

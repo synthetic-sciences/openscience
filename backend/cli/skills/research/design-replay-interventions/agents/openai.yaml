@@ -1,4 +1,0 @@
-interface:
-  display_name: "Design Replay Interventions"
-  short_description: "Freeze controlled replay and transfer evidence"
-  default_prompt: "Use $design-replay-interventions to build and validate an evaluator-owned controlled intervention plan for an evolved benchmark candidate."

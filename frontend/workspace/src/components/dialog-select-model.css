@@ -1,47 +1,13 @@
-.model-picker-sheet__discovery {
+.model-picker-sheet__intro {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px 2px;
-}
-
-.model-picker-sheet__groups {
-  display: flex;
-  gap: 5px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.model-picker-sheet__groups::-webkit-scrollbar {
-  display: none;
-}
-
-.model-picker-sheet__group {
-  flex: 0 0 auto;
-  min-height: 25px;
-  padding: 3px 8px;
-  border: 1px solid var(--border-weaker-base);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-weak);
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 15px;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-
-.model-picker-sheet__group:hover,
-.model-picker-sheet__group[data-active="true"] {
-  border-color: var(--border-strong-base);
-  background: var(--surface-raised-base-hover);
-  color: var(--text-strong);
+  padding: 8px 14px 0;
 }
 
 .model-picker-sheet__pin-note {
   min-height: 14px;
-  margin: 0 2px;
+  margin: 0;
   color: var(--text-weak);
   font-size: 10px;
   line-height: 14px;
@@ -191,7 +157,14 @@
   }
 
   .model-picker-sheet__list [data-slot="list-group"] {
-    padding-bottom: 0 !important;
+    padding-bottom: 4px !important;
+  }
+
+  .model-picker-sheet__list [data-slot="list-header"] {
+    padding: 6px 8px 3px !important;
+    background: var(--surface-raised-stronger-non-alpha);
+    color: var(--text-weaker);
+    text-transform: uppercase;
   }
 
   .model-picker-sheet .model-picker-sheet__list [data-slot="list-item"] {
@@ -276,14 +249,8 @@
     padding: 8px 0 0 !important;
   }
 
-  .model-picker-sheet__discovery {
-    padding: 10px 20px 2px;
-  }
-
-  .model-picker-sheet__group {
-    min-height: 30px;
-    padding: 5px 10px;
-    font-size: 11px;
+  .model-picker-sheet__intro {
+    padding: 9px 20px 0;
   }
 
   .model-picker-sheet__pin-note {
@@ -311,7 +278,15 @@
   }
 
   .model-picker-sheet__list [data-slot="list-group"] {
-    padding-bottom: 0 !important;
+    padding-bottom: 6px !important;
+  }
+
+  .model-picker-sheet__list [data-slot="list-header"] {
+    padding: 9px 20px 5px !important;
+    background: var(--surface-raised-stronger-non-alpha);
+    color: var(--text-weaker);
+    font-size: 11px !important;
+    text-transform: uppercase;
   }
 
   .model-picker-sheet__list [data-slot="list-item"] {

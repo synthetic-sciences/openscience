@@ -10,6 +10,7 @@ const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
 // the same value so the Playwright-hosted frontend can authenticate.
 const serverUsername = process.env.VITE_OPENSCIENCE_SERVER_USERNAME ?? "openscience"
 const serverPassword = process.env.VITE_OPENSCIENCE_SERVER_PASSWORD ?? ""
+const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
 const command = `bun run dev -- --host 0.0.0.0 --port ${target.port}`
 
 export default defineConfig({
@@ -69,7 +70,10 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: executablePath ? { executablePath } : undefined,
+      },
     },
   ],
 })

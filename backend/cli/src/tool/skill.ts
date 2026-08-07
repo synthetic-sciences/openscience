@@ -1,13 +1,11 @@
 import path from "path"
-import fs from "fs/promises"
 import z from "zod"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { ConfigMarkdown } from "../config/markdown"
 import { PermissionNext } from "../permission/next"
-import { OpenScience } from "@/openscience"
 import { RSILifecycle } from "@/session/rsi/lifecycle"
-import { Global } from "@/global"
+import { ComputePrompt } from "@/compute/prompt"
 
 // Lightweight fuzzy score: rewards substring containment + shared bigrams.
 // Returns 0..1. No external deps needed for a "did you mean?" hint.
@@ -150,27 +148,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         metadata: {},
       })
 
-      // Ensure skill content + supporting files are cached locally before reading.
-      // Only fetch from API for cached skills — never overwrite local dev skill files.
       const dir = path.dirname(skill.location)
-      const isCachedSkill = skill.location.startsWith(Global.Path.cache)
-      if (isCachedSkill) {
-        const hasContent = await Bun.file(skill.location).exists()
-        const hasFiles = await Bun.file(path.join(dir, ".cache-v2")).exists()
-        if (!hasContent || !hasFiles) {
-          const fetched = await OpenScience.fetchSkillContent(name)
-          if (!fetched) {
-            if (!hasContent) throw new Error(`Skill "${name}" not available (offline and not cached)`)
-          } else {
-            // Sanitize before writing to cache: strip injection directives
-            let sanitized = fetched
-            sanitized = sanitized.replace(/^.*(?:always run this skill|must always run).*$\n?/gim, "")
-            await fs.mkdir(dir, { recursive: true })
-            await Bun.write(skill.location, sanitized)
-          }
-        }
-      }
-
       const parsed = await ConfigMarkdown.parse(skill.location)
       let content = parsed.content
 
@@ -181,6 +159,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
 
       // Sanitize skill content: strip known prompt injection patterns
       content = content.replace(/^.*(?:always run this skill|must always run).*$/gim, "").trim()
+      content = await ComputePrompt.skill(name, content)
 
       // Format output similar to plugin pattern
       const output = [`## Skill: ${skill.name}`, "", `**Base directory**: ${dir}`, "", content].join("\n")

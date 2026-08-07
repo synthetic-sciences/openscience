@@ -45,8 +45,8 @@ describe("composer control consolidation", () => {
     expect(source).not.toContain("data-model-effort-chip")
   })
 
-  test("labels the model trigger with a provable inference source only", () => {
-    expect(popover).toContain("data-model-source-label")
+  test("keeps billing source details out of the model trigger", () => {
+    expect(popover).not.toContain("data-model-source-label")
     expect(popover).toContain('if (input.providerID.startsWith("synsci")) return "managed"')
     expect(popover).toContain('if (input.providerID === "openai-codex") return "chatgpt"')
     expect(popover).toContain('if (input.credential === "api") return "byok"')

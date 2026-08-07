@@ -7,6 +7,7 @@ import "../../tool/rkernel"
 import type { ExecuteResult, KernelOutput } from "../../science/kernel/types"
 import { KernelRuntime, KernelStartupCancelled, KernelStatus, type KernelIdentity } from "../../science/kernel/registry"
 import { KernelMetrics } from "../../science/kernel/metrics"
+import { KernelHost } from "../../science/kernel/host"
 import { SessionFilesystem } from "../../session/filesystem"
 import { Identifier } from "../../id/id"
 import { Session } from "../../session"
@@ -111,6 +112,61 @@ function response(result: ExecuteResult) {
 export const NotebookRoutes = lazy(() =>
   new Hono()
     .get(
+      "/compute",
+      describeRoute({
+        summary: "Report host compute capacity",
+        operationId: "notebook.compute",
+        responses: { 200: { description: "Machine capacity and the share kernels hold" } },
+      }),
+      async (c) => {
+        // Both samplers measure across the window since THIS caller's previous
+        // poll, so the caller has to name itself. Several surfaces poll this one
+        // route independently — two browser tabs on their own 2.5s offsets are
+        // the ordinary case — and a window shared between them is truncated to
+        // the gap between their polls, which the one-second floor then refuses
+        // for whichever of them polled second, every cycle, forever. A client
+        // that sends no identity shares the default window, which is the
+        // behaviour before this parameter existed.
+        const caller = c.req.query("client")?.slice(0, 128) || "anonymous"
+        const host = await KernelHost.snapshot(caller)
+        const live = KernelRuntime.list().filter((kernel) => kernel.active)
+        const samples = await KernelMetrics.sampleAll(
+          `compute:${caller}`,
+          live.flatMap((kernel) => (kernel.process_id === null ? [] : [kernel.process_id])),
+        )
+        const usage = [...samples.values()]
+        const cpu = usage.filter((sample) => sample.cpu_percent !== undefined)
+        const memory = usage.filter((sample) => sample.memory_bytes !== undefined)
+        return c.json({
+          memory: {
+            total: host.memory.total,
+            available: host.memory.available,
+            // No live kernels at all is a real measurement: they hold exactly
+            // zero bytes. Kernels that exist but went unsampled this poll stay
+            // omitted — that figure is genuinely unknown, not zero.
+            ...(live.length === 0
+              ? { kernels: 0 }
+              : memory.length
+                ? { kernels: memory.reduce((sum, item) => sum + (item.memory_bytes ?? 0), 0) }
+                : {}),
+          },
+          cpu: {
+            cores: host.cpu.cores,
+            ...(host.cpu.busy === undefined ? {} : { busy: host.cpu.busy }),
+            ...(live.length === 0
+              ? { kernels: 0 }
+              : cpu.length
+                ? { kernels: cpu.reduce((sum, item) => sum + (item.cpu_percent ?? 0), 0) / 100 }
+                : {}),
+          },
+          kernels: {
+            live: live.length,
+            running: live.filter((kernel) => kernel.state === "running").length,
+          },
+        })
+      },
+    )
+    .get(
       "/kernels",
       describeRoute({
         summary: "List session kernel records",
@@ -141,15 +197,24 @@ export const NotebookRoutes = lazy(() =>
             KernelRuntime.ensure(primary(session.id))
           }
         }
-        const kernels = await Promise.all(
-          KernelRuntime.list(query.sessionID)
-            .filter((kernel) => owners.has(kernel.sessionID))
-            .map(async (kernel) => {
-              if (!kernel.active || kernel.process_id === null) return kernel
-              const resources = await KernelMetrics.sample(kernel.process_id)
-              return Object.keys(resources).length ? { ...kernel, resources } : kernel
-            }),
+        const live = KernelRuntime.list(query.sessionID).filter((kernel) => owners.has(kernel.sessionID))
+        // Scoped per caller for the same reason /compute is: the CPU figure is a
+        // delta across the window since THIS caller's previous poll, so two
+        // panels sharing one scope truncate each other's window to the stagger
+        // between them, fall under the one-second floor, and both read
+        // Unavailable forever. `client` is deliberately read off the raw query
+        // rather than the validated one — it identifies a poller, it is not part
+        // of the route's contract, and an absent or forged value can only cost
+        // its own sender a window.
+        const caller = c.req.query("client")?.slice(0, 128) || "anonymous"
+        const samples = await KernelMetrics.sampleAll(
+          `kernels:${caller}`,
+          live.flatMap((kernel) => (kernel.active && kernel.process_id !== null ? [kernel.process_id] : [])),
         )
+        const kernels = live.map((kernel) => {
+          const resources = kernel.process_id === null ? undefined : samples.get(kernel.process_id)
+          return resources && Object.keys(resources).length ? { ...kernel, resources } : kernel
+        })
         return c.json({ kernels })
       },
     )

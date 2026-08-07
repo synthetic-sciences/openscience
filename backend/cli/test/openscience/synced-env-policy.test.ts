@@ -2,6 +2,7 @@ import { test, expect } from "bun:test"
 import {
   isSyncedEnvAllowed,
   BLOCKED_SYNCED_ENV,
+  SYNCED_SERVICE_ENV_KEYS,
   managedOpenRouterBaseURL,
 } from "../../src/openscience/synced-env-policy"
 
@@ -43,11 +44,20 @@ test("allows the OpenRouter managed route and compute / ML-service keys", () => 
     "MODAL_TOKEN_ID",
     "LAMBDA_API_KEY",
     "PINECONE_API_KEY",
+    "AWS_ACCESS_KEY_ID",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "AZURE_CLIENT_SECRET",
+    "GITHUB_TOKEN",
+    "OPENALEX_API_KEY",
+    "SEMANTIC_SCHOLAR_API_KEY",
+    "NVIDIA_API_KEY",
     "PATH",
   ]
   for (const key of allowed) {
     expect(isSyncedEnvAllowed(key)).toBe(true)
   }
+  expect(SYNCED_SERVICE_ENV_KEYS).toContain("RUNPOD_API_KEY")
+  expect(SYNCED_SERVICE_ENV_KEYS).not.toContain("MODAL_TOKEN_SECRET")
 })
 
 test("OpenRouter accepts BYOK or managed keys but only the matching Atlas proxy URL", () => {

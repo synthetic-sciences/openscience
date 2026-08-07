@@ -59,6 +59,9 @@ Environment options for explicit external runs:
 - `PLAYWRIGHT_BASE_URL` (required server URL)
 - `PLAYWRIGHT_SERVER_HOST` / `PLAYWRIGHT_SERVER_PORT` (optional SDK backend override)
 
+If the bundled browser cannot be installed on the host, set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to a compatible Chromium executable.
+
 ## Deployment
 
 You can deploy the `dist` folder to any static host provider (netlify, surge, now, etc.)

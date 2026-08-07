@@ -1,12 +1,16 @@
-import { For, Show, createResource, createSignal, type Component, type JSX } from "solid-js"
+import { For, Show, createEffect, createResource, type Component, type JSX, type Setter } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
 import { Select } from "@synsci/ui/select"
+import { Switch } from "@synsci/ui/switch"
 import { showToast } from "@synsci/ui/toast"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { confirmDialog } from "@/atlas/dialogs"
 import { settingsApi } from "./api"
+import { CredentialServices } from "./CredentialServices"
+import { ProviderLogo } from "./ProviderLogo"
 
 type Scheduler = "none" | "slurm" | "pbs"
 type Host = {
@@ -18,7 +22,25 @@ type Host = {
   scheduler: Scheduler
   workdir?: string
 }
-type Info = { ssh_hosts: Host[] }
+type Provider = {
+  id: string
+  connected: boolean
+  enabled: boolean
+  source: "stored" | "modal_toml" | null
+}
+type Modal = {
+  app: string
+  image: string
+  network: "unrestricted" | "none"
+  timeout_minutes: number
+  concurrency: number
+}
+type Info = {
+  providers: Provider[]
+  ssh_hosts: Host[]
+  modal: Modal
+  modal_file: { found: boolean; ready: boolean }
+}
 type Probe = {
   ok: boolean
   host: string
@@ -29,6 +51,11 @@ type Probe = {
   slurm: boolean
   pbs: boolean
   error?: string
+}
+type Notice = {
+  tone: "neutral" | "success" | "error"
+  title: string
+  detail?: string
 }
 
 const schedulers = [
@@ -44,15 +71,270 @@ const Compute: Component = () => {
   const fetchFn = platform.fetch ?? fetch
   const call = <T,>(path = "", init?: RequestInit) => settingsApi<T>(sdk.url, fetchFn, `/settings/compute${path}`, init)
   const [data, control] = createResource(() => call<Info>())
-  const [adding, setAdding] = createSignal(false)
-  const [busy, setBusy] = createSignal<string>()
-  const [probes, setProbes] = createSignal<Record<string, Probe>>({})
-  const [label, setLabel] = createSignal("")
-  const [host, setHost] = createSignal("")
-  const [user, setUser] = createSignal("")
-  const [port, setPort] = createSignal("")
-  const [scheduler, setScheduler] = createSignal<Scheduler>("none")
-  const [workdir, setWorkdir] = createSignal("")
+  const [state, setState] = createStore({
+    adding: false,
+    busy: undefined as string | undefined,
+    probes: {} as Record<string, Probe>,
+    label: "",
+    host: "",
+    user: "",
+    port: "",
+    scheduler: "none" as Scheduler,
+    workdir: "",
+    token: "",
+    secret: "",
+    app: "",
+    image: "",
+    network: "none" as Modal["network"],
+    timeout: "60",
+    concurrency: "10",
+    connection: undefined as Notice | undefined,
+    defaults: undefined as Notice | undefined,
+  })
+  const adding = () => state.adding
+  const setAdding: Setter<boolean> = (value) => setState("adding", value)
+  const busy = () => state.busy
+  const setBusy = (value: string | undefined) => {
+    setState("busy", value)
+    return value
+  }
+  const probes = () => state.probes
+  const setProbes: Setter<Record<string, Probe>> = (value) => setState("probes", value)
+  const label = () => state.label
+  const setLabel: Setter<string> = (value) => setState("label", value)
+  const host = () => state.host
+  const setHost: Setter<string> = (value) => setState("host", value)
+  const user = () => state.user
+  const setUser: Setter<string> = (value) => setState("user", value)
+  const port = () => state.port
+  const setPort: Setter<string> = (value) => setState("port", value)
+  const scheduler = () => state.scheduler
+  const setScheduler: Setter<Scheduler> = (value) => setState("scheduler", value)
+  const workdir = () => state.workdir
+  const setWorkdir: Setter<string> = (value) => setState("workdir", value)
+  const token = () => state.token
+  const setToken: Setter<string> = (value) => setState("token", value)
+  const secret = () => state.secret
+  const setSecret: Setter<string> = (value) => setState("secret", value)
+  const app = () => state.app
+  const setApp: Setter<string> = (value) => setState("app", value)
+  const image = () => state.image
+  const setImage: Setter<string> = (value) => setState("image", value)
+  const network = () => state.network
+  const setNetwork: Setter<Modal["network"]> = (value) => setState("network", value)
+  const timeout = () => state.timeout
+  const setTimeout: Setter<string> = (value) => setState("timeout", value)
+  const concurrency = () => state.concurrency
+  const setConcurrency: Setter<string> = (value) => setState("concurrency", value)
+  const connection = () => state.connection
+  const setConnection = (value: Notice | undefined) => {
+    setState("connection", value)
+    return value
+  }
+  const defaults = () => state.defaults
+  const setDefaults = (value: Notice | undefined) => {
+    setState("defaults", value)
+    return value
+  }
+  const modal = () => data()?.providers.find((item) => item.id === "modal")
+  const dirty = () => {
+    const value = data()?.modal
+    if (!value) return false
+    return (
+      app().trim() !== value.app ||
+      image().trim() !== value.image ||
+      network() !== value.network ||
+      timeout().trim() !== String(value.timeout_minutes) ||
+      concurrency().trim() !== String(value.concurrency)
+    )
+  }
+  const connectionNotice = (): Notice | undefined => {
+    const current = connection()
+    if (current) return current
+    if (!modal()?.connected) return undefined
+    if (!modal()?.enabled) {
+      return { tone: "neutral", title: "Modal is disabled", detail: "Enable Modal to test or dispatch jobs." }
+    }
+    return {
+      tone: "neutral",
+      title: "Configured — connection not tested",
+      detail: "Select Test connection to verify this profile with Modal.",
+    }
+  }
+  const defaultsNotice = (): Notice | undefined => {
+    if (!modal()?.connected) return undefined
+    const current = defaults()
+    if (current?.tone === "error" || busy() === "modal:save") return current
+    if (dirty()) {
+      return {
+        tone: "neutral",
+        title: "Unsaved default changes",
+        detail: "Save defaults before reviewing a new Modal job.",
+      }
+    }
+    return (
+      current ?? {
+        tone: "neutral",
+        title: "Defaults loaded",
+        detail: "These values match the saved Modal configuration.",
+      }
+    )
+  }
+
+  createEffect(() => {
+    const value = data()?.modal
+    if (!value) return
+    setApp(value.app)
+    setImage(value.image)
+    setNetwork(value.network)
+    setTimeout(String(value.timeout_minutes))
+    setConcurrency(String(value.concurrency))
+  })
+
+  const connect = async () => {
+    setBusy("modal:connect")
+    setConnection({ tone: "neutral", title: "Saving Modal token…" })
+    const next = await call<Info>("/provider/modal", {
+      method: "POST",
+      body: JSON.stringify({ key: `${token().trim()} : ${secret().trim()}` }),
+    }).catch((error) => {
+      const detail = message(error)
+      setConnection({ tone: "error", title: "Could not save Modal token", detail })
+      showToast({ title: "Could not save Modal token", description: detail })
+      return undefined
+    })
+    setBusy(undefined)
+    if (!next) return
+    control.mutate(next)
+    setToken("")
+    setSecret("")
+    setConnection({
+      tone: "success",
+      title: "Modal token saved",
+      detail: "Enable Modal, then test the connection before dispatching jobs.",
+    })
+    showToast({
+      variant: "success",
+      title: "Modal token saved",
+      description: "Enable Modal before testing or running.",
+    })
+  }
+
+  const configure = async () => {
+    setBusy("modal:configure")
+    setConnection({ tone: "neutral", title: "Configuring Modal…", detail: "Reading the active ~/.modal.toml profile." })
+    const next = await call<Info>("/modal/configure", { method: "POST" }).catch((error) => {
+      const detail = message(error)
+      setConnection({ tone: "error", title: "Could not configure Modal", detail })
+      showToast({ title: "Could not configure Modal", description: detail })
+      return undefined
+    })
+    setBusy(undefined)
+    if (!next) return
+    control.mutate(next)
+    setConnection({
+      tone: "success",
+      title: "Modal configured and enabled",
+      detail: "The profile is saved. Test the connection to verify it with Modal.",
+    })
+    showToast({
+      variant: "success",
+      title: "Modal configured and enabled",
+      description: "OpenScience will use the active profile in ~/.modal.toml only for approved Modal operations.",
+    })
+  }
+
+  const toggle = async (enabled: boolean) => {
+    setBusy("modal:toggle")
+    setConnection({ tone: "neutral", title: enabled ? "Enabling Modal…" : "Disabling Modal…" })
+    const next = await call<Info>("/provider/modal/enabled", {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }).catch((error) => {
+      const detail = message(error)
+      setConnection({ tone: "error", title: "Could not update Modal", detail })
+      showToast({ title: "Could not update Modal", description: detail })
+      return undefined
+    })
+    setBusy(undefined)
+    if (!next) return
+    control.mutate(next)
+    setConnection({
+      tone: "success",
+      title: enabled ? "Modal enabled" : "Modal disabled",
+      detail: enabled
+        ? "Connection not tested since enabling. Select Test connection to verify it."
+        : "Credential resolution and new Modal dispatches are blocked.",
+    })
+  }
+
+  const check = async () => {
+    setBusy("modal:check")
+    setConnection({ tone: "neutral", title: "Checking Modal connection…", detail: "Verifying the configured profile." })
+    const result = await call<{ ok: true; sdk: string }>("/modal/check", { method: "POST" }).catch((error) => {
+      const detail = message(error)
+      setConnection({ tone: "error", title: "Connection check failed", detail })
+      showToast({ title: "Modal connection failed", description: detail })
+      return undefined
+    })
+    setBusy(undefined)
+    if (!result) return
+    setConnection({
+      tone: "success",
+      title: "Connection verified",
+      detail: `Modal accepted this profile using SDK ${result.sdk}.`,
+    })
+    showToast({ variant: "success", title: "Modal is ready", description: `Connected with Modal SDK ${result.sdk}.` })
+  }
+
+  const saveModal = async () => {
+    const minutes = Number(timeout())
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1_440) {
+      setDefaults({
+        tone: "error",
+        title: "Defaults not saved",
+        detail: "Use a whole-number timeout from 1 to 1440 minutes.",
+      })
+      showToast({ title: "Invalid Modal timeout", description: "Use a whole number from 1 to 1440 minutes." })
+      return
+    }
+    const limit = Number(concurrency())
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      setDefaults({
+        tone: "error",
+        title: "Defaults not saved",
+        detail: "Use a whole-number concurrent job limit from 1 to 100.",
+      })
+      showToast({ title: "Invalid Modal concurrency", description: "Use a whole number from 1 to 100." })
+      return
+    }
+    setBusy("modal:save")
+    setDefaults({ tone: "neutral", title: "Saving Modal defaults…" })
+    const next = await call<Info>("/modal", {
+      method: "PATCH",
+      body: JSON.stringify({
+        app: app().trim(),
+        image: image().trim(),
+        network: network(),
+        timeout_minutes: minutes,
+        concurrency: limit,
+      }),
+    }).catch((error) => {
+      const detail = message(error)
+      setDefaults({ tone: "error", title: "Defaults not saved", detail })
+      showToast({ title: "Could not save Modal defaults", description: detail })
+      return undefined
+    })
+    setBusy(undefined)
+    if (!next) return
+    control.mutate(next)
+    setDefaults({
+      tone: "success",
+      title: "Defaults saved",
+      detail: "New Modal job reviews will use these values.",
+    })
+    showToast({ variant: "success", title: "Modal defaults saved" })
+  }
 
   const reset = () => {
     setLabel("")
@@ -134,19 +416,157 @@ const Compute: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-        <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[820px]">
+      <div class="settings-page-header">
+        <div class="settings-page-header__inner">
           <h2 class="text-16-medium text-text-strong">Compute</h2>
-          <p class="text-13-regular text-text-weak">Choose where kernels and research jobs can run safely.</p>
+          <p class="text-13-regular text-text-weak">
+            Run close to home or head to the cloud when the work gets bigger.
+          </p>
         </div>
       </div>
 
-      <div class="flex flex-col gap-8 px-4 pb-12 sm:px-8 max-w-[820px]">
+      <div class="settings-page-body">
         <Section title="Local machine" subtitle="The default execution target for this OpenScience server.">
           <Panel>
             <Row title="This machine" subtitle="Persistent kernels and batch jobs use the active session sandbox.">
-              <Badge tone="ready">available</Badge>
+              <Badge tone="ready">Available</Badge>
             </Row>
+          </Panel>
+        </Section>
+
+        <CredentialServices
+          category="compute"
+          title="Cloud credentials"
+          description="Connect a cloud once. Credentials stay encrypted locally and go only to the tools that need them."
+        />
+
+        <Section title="Modal" subtitle="Run explicitly approved jobs in isolated Modal sandboxes using your account.">
+          <Panel>
+            <div class="flex flex-col gap-4 px-4 py-4">
+              <div class="flex flex-wrap items-center justify-between gap-4">
+                <div class="flex min-w-0 items-center gap-2.5">
+                  <ProviderLogo id="modal" label="Modal" connected={modal()?.connected} />
+                  <div class="flex min-w-0 flex-col gap-0.5">
+                    <span class="text-14-medium text-text-strong">Modal compute</span>
+                    <span class="text-12-regular text-text-weak">
+                      {modal()?.connected
+                        ? modal()?.source === "modal_toml"
+                          ? "Using the active profile in ~/.modal.toml."
+                          : "Token stored locally and encrypted."
+                        : data()?.modal_file.ready
+                          ? "Modal CLI configuration found at ~/.modal.toml."
+                          : data()?.modal_file.found
+                            ? "Modal config found, but its active profile has no usable token."
+                            : "Enter the token ID and secret from Modal."}
+                    </span>
+                  </div>
+                </div>
+                <Show when={modal()?.connected}>
+                  <Switch
+                    hideLabel
+                    checked={modal()?.enabled ?? false}
+                    disabled={Boolean(busy())}
+                    onChange={(value) => void toggle(value)}
+                  >
+                    Enable Modal
+                  </Switch>
+                </Show>
+              </div>
+              <Show when={connectionNotice()}>{(notice) => <NoticeBox notice={notice()} />}</Show>
+              <Show when={!data.loading && !modal()?.connected && data()?.modal_file.ready}>
+                <div class="flex flex-wrap items-center justify-between gap-3 rounded-[6px] border border-border-weak-base bg-surface-base px-3 py-3">
+                  <p class="text-12-regular text-text-weak">
+                    Configure OpenScience to use this profile. Token values stay in the Modal config file.
+                  </p>
+                  <Button size="small" variant="primary" disabled={Boolean(busy())} onClick={() => void configure()}>
+                    {busy() === "modal:configure" ? "Configuring…" : "Configure"}
+                  </Button>
+                </div>
+              </Show>
+              <Show when={!data.loading && !modal()?.connected && !data()?.modal_file.ready}>
+                <div class="flex flex-col gap-2">
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <Field label="Modal token ID" value={token()} placeholder="ak-…" onInput={setToken} />
+                    <Field
+                      label="Modal token secret"
+                      value={secret()}
+                      placeholder="as-…"
+                      type="password"
+                      onInput={setSecret}
+                    />
+                  </div>
+                  <div class="flex justify-end">
+                    <Button
+                      size="small"
+                      variant="primary"
+                      disabled={!token().trim() || !secret().trim() || Boolean(busy())}
+                      onClick={() => void connect()}
+                    >
+                      {busy() === "modal:connect" ? "Saving…" : "Save token"}
+                    </Button>
+                  </div>
+                </div>
+              </Show>
+              <Show when={modal()?.connected}>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <Field label="Modal app" value={app()} placeholder="openscience" onInput={setApp} />
+                  <Field label="Default image" value={image()} placeholder="python:3.12-slim" onInput={setImage} />
+                  <label class="flex flex-col gap-1.5">
+                    <span class="text-12-medium text-text-strong">Network</span>
+                    <select
+                      aria-label="Modal network"
+                      class="h-9 px-3 rounded-xs border border-border-weak-base bg-surface-base text-13-regular text-text-strong"
+                      value={network()}
+                      onChange={(event) => setNetwork(event.currentTarget.value as Modal["network"])}
+                    >
+                      <option value="none">Blocked</option>
+                      <option value="unrestricted">Unrestricted</option>
+                    </select>
+                  </label>
+                  <Field
+                    label="Default timeout (minutes)"
+                    value={timeout()}
+                    placeholder="60"
+                    inputMode="numeric"
+                    onInput={setTimeout}
+                  />
+                  <Field
+                    label="Concurrent jobs"
+                    value={concurrency()}
+                    placeholder="10"
+                    inputMode="numeric"
+                    onInput={setConcurrency}
+                  />
+                </div>
+                <p class="text-11-regular text-text-weak">
+                  Agents use this as their starting limit and may choose a different timeout for the workload. Every
+                  approval card shows the final limit before dispatch.
+                </p>
+                <Show when={defaultsNotice()}>{(notice) => <NoticeBox notice={notice()} />}</Show>
+                <p class="text-11-regular text-text-weak">
+                  The token is never added to agent shells. Turning Modal off prevents new credential resolution and
+                  dispatch.
+                </p>
+                <div class="flex justify-end gap-2">
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    disabled={!modal()?.enabled || Boolean(busy())}
+                    onClick={() => void check()}
+                  >
+                    {busy() === "modal:check" ? "Testing…" : "Test connection"}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="primary"
+                    disabled={!app().trim() || !image().trim() || Boolean(busy())}
+                    onClick={() => void saveModal()}
+                  >
+                    {busy() === "modal:save" ? "Saving…" : "Save defaults"}
+                  </Button>
+                </div>
+              </Show>
+            </div>
           </Panel>
         </Section>
 
@@ -157,7 +577,7 @@ const Compute: Component = () => {
               fallback={
                 <Panel>
                   <Row title="Loading SSH hosts" subtitle="Reading saved compute profiles.">
-                    <Badge>loading</Badge>
+                    <Badge>Loading</Badge>
                   </Row>
                 </Panel>
               }
@@ -171,7 +591,7 @@ const Compute: Component = () => {
                       subtitle="Add a plain SSH, Slurm, or PBS host, then run a real connection check."
                     >
                       <Button size="small" variant="secondary" onClick={() => setAdding(true)}>
-                        add host
+                        Add host
                       </Button>
                     </Row>
                   </Panel>
@@ -217,7 +637,7 @@ const Compute: Component = () => {
                               disabled={Boolean(busy())}
                               onClick={() => void test(item)}
                             >
-                              {busy() === `test:${item.id}` ? "testing…" : "test"}
+                              {busy() === `test:${item.id}` ? "Testing…" : "Test"}
                             </Button>
                             <Button
                               size="small"
@@ -225,7 +645,7 @@ const Compute: Component = () => {
                               disabled={Boolean(busy())}
                               onClick={() => void remove(item)}
                             >
-                              remove
+                              Remove
                             </Button>
                           </div>
                         </div>
@@ -238,7 +658,7 @@ const Compute: Component = () => {
 
             <Show when={(data()?.ssh_hosts.length ?? 0) > 0 && !adding()}>
               <Button size="small" variant="secondary" onClick={() => setAdding(true)}>
-                add another host
+                Add another host
               </Button>
             </Show>
 
@@ -284,7 +704,7 @@ const Compute: Component = () => {
                 </div>
                 <div class="flex items-center justify-end gap-2">
                   <Button size="small" variant="ghost" disabled={busy() === "add"} onClick={reset}>
-                    cancel
+                    Cancel
                   </Button>
                   <Button
                     type="submit"
@@ -292,23 +712,12 @@ const Compute: Component = () => {
                     variant="primary"
                     disabled={!label().trim() || !host().trim() || busy() === "add"}
                   >
-                    {busy() === "add" ? "adding…" : "add host"}
+                    {busy() === "add" ? "Adding…" : "Add host"}
                   </Button>
                 </div>
               </form>
             </Show>
           </div>
-        </Section>
-
-        <Section title="Atlas Compute" subtitle="Managed accelerators require the separate Atlas integration.">
-          <Panel>
-            <Row
-              title="Managed accelerators"
-              subtitle="Machine, provider, price, duration, and funding will be shown before any paid run starts."
-            >
-              <Badge>coming later</Badge>
-            </Row>
-          </Panel>
         </Section>
       </div>
     </div>
@@ -321,6 +730,7 @@ const Field: Component<{
   label: string
   value: string
   placeholder: string
+  type?: JSX.InputHTMLAttributes<HTMLInputElement>["type"]
   inputMode?: JSX.InputHTMLAttributes<HTMLInputElement>["inputMode"]
   onInput: (value: string) => void
 }> = (props) => (
@@ -330,6 +740,7 @@ const Field: Component<{
       class="h-9 px-3 rounded-xs border border-border-weak-base bg-surface-base text-13-regular text-text-strong outline-none focus:border-border-strong-base"
       value={props.value}
       placeholder={props.placeholder}
+      type={props.type}
       inputMode={props.inputMode}
       onInput={(event) => props.onInput(event.currentTarget.value)}
     />
@@ -348,6 +759,44 @@ const Section: Component<{ title: string; subtitle: string; children: JSX.Elemen
 
 const Panel: Component<{ children: JSX.Element }> = (props) => (
   <div class="border border-border-weak-base rounded-[6px] overflow-hidden bg-surface-base/40">{props.children}</div>
+)
+
+const NoticeBox: Component<{ notice: Notice }> = (props) => (
+  <div
+    role={props.notice.tone === "error" ? "alert" : "status"}
+    aria-live="polite"
+    class="flex items-start gap-2.5 rounded-[6px] border px-3 py-2.5"
+    classList={{
+      "border-border-weak-base bg-surface-base/60": props.notice.tone === "neutral",
+      "border-text-success/30 bg-text-success/5": props.notice.tone === "success",
+      "border-text-danger/30 bg-text-danger/5": props.notice.tone === "error",
+    }}
+  >
+    <span
+      class="mt-1 size-1.5 shrink-0 rounded-full"
+      classList={{
+        "bg-icon-weak-base": props.notice.tone === "neutral",
+        "bg-icon-success-base": props.notice.tone === "success",
+        "bg-text-danger": props.notice.tone === "error",
+      }}
+      aria-hidden="true"
+    />
+    <div class="min-w-0">
+      <p
+        class="text-12-medium"
+        classList={{
+          "text-text-strong": props.notice.tone === "neutral",
+          "text-text-success": props.notice.tone === "success",
+          "text-text-danger": props.notice.tone === "error",
+        }}
+      >
+        {props.notice.title}
+      </p>
+      <Show when={props.notice.detail}>
+        <p class="mt-0.5 text-11-regular text-text-weak">{props.notice.detail}</p>
+      </Show>
+    </div>
+  </div>
 )
 
 const Row: Component<{ title: string; subtitle: string; children: JSX.Element }> = (props) => (

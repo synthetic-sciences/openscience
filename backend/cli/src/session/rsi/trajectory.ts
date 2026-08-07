@@ -12,13 +12,12 @@ import { RLMState } from "../rlm/state"
 import { RSICritic } from "./critic"
 import { RSIDistill } from "./distill"
 import { RSILifecycle } from "./lifecycle"
-import { HarnessEvaluation } from "../harness/evaluation"
 
 export namespace RSITrajectory {
   const log = Log.create({ service: "rsi-trajectory" })
   const TRAJECTORIES_DIR = path.join(Global.Path.data, "trajectories")
 
-  export const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml"] as const
+  export const ARTIFACT_AGENTS = ["research", "biology", "ml"] as const
 
   export interface TrajectoryStep {
     tool: string
@@ -33,17 +32,9 @@ export namespace RSITrajectory {
     agent: string
     hypothesis: string
     steps: TrajectoryStep[]
-    reportedOutcome: "success" | "partial" | "failure"
-    outcome: "unverified" | "success" | "partial" | "failure"
+    outcome: "success" | "partial" | "failure"
     tokenCost: number
     score?: number
-    verification?: {
-      runID: string
-      evaluator: string
-      status: HarnessEvaluation.Status
-      score?: number
-      evaluatedAt: number
-    }
   }
 
   /** Capture a trajectory from a completed ultra agent session.
@@ -105,23 +96,27 @@ export namespace RSITrajectory {
         }
       }
 
-      // This is the agent's own process report, not scientific verification.
-      // Keep it for diagnosis, but never use it to activate learned behavior.
-      const reportedOutcome = (() => {
-        const assistant = messages.findLast((message) => message.info.role === "assistant")
-        if (!assistant) return "partial" as const
-        const states = assistant.parts
-          .filter((part) => part.type === "text")
-          .map((part) => RLMState.parseResearchState(part.text))
-          .filter((state) => state !== null)
-        const state = states.at(-1)
-        if (!state) return "partial" as const
-        const allFailed = state.plan.length > 0 && state.plan.every((item) => item.status === "failed")
-        if (allFailed) return "failure" as const
-        if (state.plan.some((item) => item.status === "failed")) return "partial" as const
-        const done = state.plan.length > 0 && state.plan.every((item) => item.status === "done")
-        return state.status === "complete" || done ? ("success" as const) : ("partial" as const)
-      })()
+      // Determine outcome from last RLM state or heuristic
+      let outcome: Trajectory["outcome"] = "success"
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i]
+        if (msg.info.role !== "assistant") continue
+        for (const part of msg.parts) {
+          if (part.type === "text") {
+            const state = RLMState.parseResearchState(part.text)
+            if (state) {
+              const hasFailures = state.plan.some((o) => o.status === "failed")
+              const allDone = state.plan.every((o) => o.status === "done" || o.status === "failed")
+              const allFailed = state.plan.every((o) => o.status === "failed")
+              if (allFailed) outcome = "failure"
+              else if (hasFailures) outcome = "partial"
+              else if (state.status === "complete" || allDone) outcome = "success"
+              break
+            }
+          }
+        }
+        break
+      }
 
       // Estimate token cost from message count (rough heuristic)
       const tokenCost = messages.reduce((acc, m) => {
@@ -134,8 +129,7 @@ export namespace RSITrajectory {
         agent,
         hypothesis,
         steps,
-        reportedOutcome,
-        outcome: "unverified",
+        outcome,
         tokenCost: Math.round(tokenCost),
       }
 
@@ -159,16 +153,7 @@ export namespace RSITrajectory {
   export async function read(sessionId: string): Promise<Trajectory | null> {
     try {
       const filePath = path.join(TRAJECTORIES_DIR, `${sessionId}.json`)
-      const value = (await Bun.file(filePath).json()) as Trajectory & {
-        reportedOutcome?: Trajectory["reportedOutcome"]
-      }
-      if (value.reportedOutcome) return value
-      return {
-        ...value,
-        reportedOutcome: value.outcome === "failure" ? "failure" : value.outcome === "partial" ? "partial" : "success",
-        outcome: "unverified",
-        verification: undefined,
-      }
+      return await Bun.file(filePath).json()
     } catch {
       return null
     }
@@ -193,8 +178,8 @@ export namespace RSITrajectory {
     await Bun.write(filePath, JSON.stringify(trajectory, null, 2))
   }
 
-  /** Capture and process-score a trajectory. Scientific correctness remains
-   *  unverified until recordEvaluation receives an external evaluator result. */
+  /** Full RSI pipeline: capture → evaluate → score → distill → register.
+   *  All errors caught internally — safe to fire-and-forget. */
   export async function pipeline(sessionID: string): Promise<void> {
     try {
       const trajectory = await capture(sessionID)
@@ -202,41 +187,19 @@ export namespace RSITrajectory {
 
       const score = RSICritic.evaluate(trajectory)
       await setScore(sessionID, score.total)
-      log.info("pipeline: trajectory awaits external evaluation", { sessionId: sessionID, processScore: score.total })
+
+      if (score.total >= 75) {
+        const name = await RSIDistill.distill({ ...trajectory, score: score.total })
+        if (name) {
+          await RSILifecycle.registerSkill(name)
+          log.info("pipeline: skill distilled and registered", { sessionId: sessionID, name, score: score.total })
+        }
+      } else {
+        log.info("pipeline: score below threshold, skipping distill", { sessionId: sessionID, score: score.total })
+      }
     } catch (e) {
       log.error("pipeline failed", { sessionId: sessionID, error: e instanceof Error ? e.message : String(e) })
     }
-  }
-
-  /** Persist an external result and, only for a verified pass, draft an inert
-   *  skill proposal. Proposals are not discoverable skills until promoted. */
-  export async function recordEvaluation(input: HarnessEvaluation.Info) {
-    const evaluation = await HarnessEvaluation.record(input)
-    const trajectory = await read(evaluation.sessionID)
-    if (!trajectory) throw new Error(`No RSI trajectory exists for session ${evaluation.sessionID}`)
-
-    trajectory.verification = {
-      runID: evaluation.runID,
-      evaluator: evaluation.evaluator.name,
-      status: evaluation.status,
-      score: evaluation.score,
-      evaluatedAt: evaluation.evaluatedAt,
-    }
-    trajectory.outcome =
-      evaluation.status === "passed" ? "success" : evaluation.status === "failed" ? "failure" : "partial"
-    const score = RSICritic.evaluate(trajectory)
-    trajectory.score = score.total
-    await persist(trajectory)
-
-    if (!HarnessEvaluation.verified(evaluation)) return { trajectory, proposal: null }
-    const proposal = await RSIDistill.propose(trajectory)
-    if (proposal) await RSILifecycle.registerProposal(proposal, evaluation)
-    return { trajectory, proposal }
-  }
-
-  async function persist(trajectory: Trajectory) {
-    await fs.mkdir(TRAJECTORIES_DIR, { recursive: true })
-    await Bun.write(path.join(TRAJECTORIES_DIR, `${trajectory.sessionId}.json`), JSON.stringify(trajectory, null, 2))
   }
 
   function summarize(text: string, maxLen: number): string {

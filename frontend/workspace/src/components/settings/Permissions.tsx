@@ -57,8 +57,8 @@ const Permissions: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-        <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[760px]">
+      <div class="settings-page-header">
+        <div class="settings-page-header__inner">
           <h2 class="text-16-medium text-text-strong">Permissions</h2>
           <p class="text-13-regular text-text-weak">
             Standing approvals you have granted, and how the agent may use tools.
@@ -66,7 +66,7 @@ const Permissions: Component = () => {
         </div>
       </div>
 
-      <div class="flex flex-col gap-8 px-4 pb-12 sm:px-8 max-w-[760px]">
+      <div class="settings-page-body">
         {/* ── Standing approvals ── */}
         <Show when={route()}>
           <div class="flex flex-col gap-3">
@@ -104,7 +104,7 @@ const Permissions: Component = () => {
                         </span>
                       </div>
                       <Button size="small" variant="ghost" disabled={busy()} onClick={() => void revoke(approval)}>
-                        revoke
+                        Revoke
                       </Button>
                     </div>
                   )}

@@ -12,6 +12,35 @@ import { SettingsNavContext } from "./settings/nav"
 // Select) into the soft, rounded, iOS-style language settings uses — and widens
 // the modal when expanded — without touching global component CSS or tokens.
 const SETTINGS_STYLES = `
+.settings-dialog {
+  font-family: var(--font-family-sans);
+  font-feature-settings: var(--font-family-sans--font-feature-settings, normal);
+  background: var(--background-base);
+  color: var(--text-base);
+}
+.settings-dialog h2,
+.settings-dialog h3,
+.settings-dialog h4 {
+  font-family: inherit;
+  letter-spacing: -0.01em;
+}
+.settings-dialog button,
+.settings-dialog input,
+.settings-dialog select,
+.settings-dialog textarea {
+  font-family: inherit;
+  text-transform: none;
+}
+.settings-dialog .atlas-section-label,
+.settings-section-label {
+  color: var(--text-weak);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 16px;
+  text-transform: none;
+}
 .settings-dialog [data-component="switch"] [data-slot="switch-control"] {
   width: 38px;
   height: 22px;
@@ -35,14 +64,14 @@ const SETTINGS_STYLES = `
   transform: translateX(16px);
 }
 .settings-dialog [data-slot="select-select-trigger"] {
-  border-radius: 4px;
+  border-radius: 9px;
 }
 [data-component="select-content"][data-trigger-style="settings"] {
-  border-radius: 4px;
-  padding: 4px;
+  border-radius: 10px;
+  padding: 5px;
 }
 [data-component="select-content"][data-trigger-style="settings"] [data-slot="select-select-item"] {
-  border-radius: 4px;
+  border-radius: 7px;
 }
 
 /* ── Fixed modal frame ──────────────────────────────────────────────────────
@@ -52,8 +81,13 @@ const SETTINGS_STYLES = `
    so the box jumps size between tabs — the fix is to pin content to the fixed
    container height and let panels manage their own internal overflow. */
 [data-component="dialog"]:has([data-slot="dialog-content"].settings-dialog) [data-slot="dialog-container"] {
-  width: min(calc(100vw - 32px), 880px);
-  height: min(calc(100vh - 40px), 640px);
+  width: min(calc(100vw - 32px), 960px);
+  height: min(calc(100vh - 40px), 720px);
+  overflow: hidden;
+  border: 1px solid var(--border-base);
+  border-radius: 16px;
+  background: var(--background-base);
+  box-shadow: 0 24px 80px color-mix(in srgb, #000 36%, transparent);
 }
 [data-component="dialog"]:has([data-slot="dialog-content"].settings-expanded) [data-slot="dialog-container"] {
   width: min(calc(100vw - 32px), 1200px);
@@ -71,20 +105,20 @@ const SETTINGS_STYLES = `
   height: 100%;
 }
 .settings-nav {
-  width: 184px;
-  flex: 0 0 184px;
+  width: 206px;
+  flex: 0 0 206px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 10px 8px;
+  padding: 14px 10px;
   border-right: 1px solid var(--border-weak-base);
-  background: var(--surface-weak);
+  background: var(--background-strong);
 }
 .settings-nav__sections {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding-top: 2px;
+  gap: 20px;
+  padding-top: 4px;
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -94,32 +128,42 @@ const SETTINGS_STYLES = `
 .settings-nav__section {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 .settings-nav__label {
-  padding: 0 9px 4px;
+  padding: 0 10px 6px;
+  color: var(--text-weaker);
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .settings-nav__item {
   min-width: 0;
-  height: 31px;
+  height: 38px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 9px;
-  border-radius: 5px;
-  font-size: 12px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-weak);
   text-align: left;
   transition: background 120ms ease, color 120ms ease;
 }
 .settings-nav__item:hover {
-  background: var(--surface-raised-base);
+  background: var(--surface-raised-strong);
   color: var(--text-strong);
 }
 .settings-nav__item[data-active="true"] {
-  background: var(--surface-raised-base-active);
+  background: var(--surface-raised-strong);
   color: var(--text-strong);
+  box-shadow: none;
+}
+.settings-nav__item:focus-visible {
+  outline: 1px solid var(--text-strong);
+  outline-offset: -2px;
 }
 .settings-nav__footer {
   display: flex;
@@ -133,16 +177,200 @@ const SETTINGS_STYLES = `
   display: flex;
   flex: 1;
   flex-direction: column;
+  background: var(--background-base);
 }
 .settings-main__header {
-  min-height: 48px;
+  min-height: 54px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 12px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--border-weak-base);
   flex-shrink: 0;
+}
+
+.settings-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  width: min(100%, 800px);
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 32px 18px;
+  background: linear-gradient(to bottom, var(--background-base) 84%, transparent);
+}
+.settings-page-header__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-page-header h2 {
+  display: none;
+}
+.settings-page-header p {
+  max-width: 660px;
+  color: var(--text-weak);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.settings-page-body {
+  display: flex;
+  width: min(100%, 800px);
+  flex-direction: column;
+  gap: 26px;
+  padding: 2px 32px 48px;
+}
+.settings-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+.settings-section-heading > div {
+  min-width: 0;
+}
+.settings-section-heading h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 1.35;
+}
+.settings-section-heading p {
+  margin: 3px 0 0;
+  color: var(--text-weak);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.settings-section-heading > span {
+  flex: 0 0 auto;
+  color: var(--text-weaker);
+  font-size: 11px;
+}
+.settings-error {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--text-danger) 35%, var(--border-base));
+  border-radius: 9px;
+  color: var(--text-danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.credential-services {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settings-list {
+  overflow: hidden;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 12px;
+  background: var(--surface-raised-base);
+}
+.settings-list-item + .settings-list-item {
+  border-top: 1px solid var(--border-weak-base);
+}
+.settings-list-row {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px 10px 14px;
+}
+.settings-list-copy {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-list-copy strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 550;
+}
+.settings-list-copy span {
+  overflow: hidden;
+  color: var(--text-weak);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-list-actions,
+.credential-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.credential-form {
+  display: grid;
+  gap: 12px;
+  padding: 2px 14px 16px 57px;
+}
+.credential-form--custom {
+  padding: 16px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 12px;
+  background: var(--surface-raised-base);
+}
+.credential-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.55fr);
+  gap: 10px;
+}
+.credential-form label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.credential-form label > span {
+  color: var(--text-weak);
+  font-size: 11px;
+}
+.credential-form input,
+.credential-form textarea {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 9px;
+  outline: none;
+  background: var(--surface-raised-strong);
+  color: var(--text-strong);
+  font-size: 13px;
+}
+.credential-form textarea {
+  min-height: 94px;
+  resize: vertical;
+}
+.credential-form input:focus,
+.credential-form textarea:focus {
+  border-color: var(--border-strong-base);
+}
+.credential-form > p {
+  margin: -2px 0 0;
+  color: var(--text-weaker);
+  font-size: 11px;
+}
+.settings-add-row {
+  min-height: 38px;
+  align-self: flex-start;
+  padding: 0 11px;
+  border-radius: 9px;
+  color: var(--text-weak);
+  font-size: 12px;
+  font-weight: 500;
+}
+.settings-add-row:hover {
+  background: var(--surface-raised-base);
+  color: var(--text-strong);
+}
+.settings-dialog [class*="rounded-[4px]"],
+.settings-dialog [class*="rounded-[6px]"] {
+  border-radius: 10px !important;
 }
 
 @media (max-width: 720px) {
@@ -197,6 +425,15 @@ const SETTINGS_STYLES = `
   .settings-main__header {
     min-height: 44px;
   }
+  .settings-page-header {
+    padding: 18px 18px 14px;
+  }
+  .settings-page-body {
+    padding: 2px 18px 36px;
+  }
+  .credential-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 `
 
@@ -233,7 +470,7 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
             <For each={SETTINGS_SECTIONS}>
               {(section) => (
                 <div class="settings-nav__section">
-                  <span class="settings-nav__label atlas-section-label">{section.label}</span>
+                  <span class="settings-nav__label">{section.label}</span>
                   <For each={SETTINGS_PANELS.filter((p) => p.section === section.id)}>
                     {(panel) => (
                       <button
@@ -243,7 +480,7 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
                         onClick={() => navigate(panel.id)}
                         aria-current={current().id === panel.id ? "page" : undefined}
                       >
-                        <Icon name={panel.icon} size="small" class="flex-shrink-0" />
+                        <Icon name={panel.icon} size="medium" class="flex-shrink-0" />
                         <span class="truncate">{panel.title}</span>
                       </button>
                     )}

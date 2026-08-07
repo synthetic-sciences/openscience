@@ -217,7 +217,6 @@ export namespace SessionTrace {
     reviewerFindings: z.array(Finding),
     failures: z.array(Failure),
     retries: z.array(SessionTraceStore.Retry),
-    profiles: z.array(SessionTraceStore.Profile),
     privacy: z.object({
       local: z.literal(true),
       atlasRequired: z.literal(false),
@@ -644,7 +643,6 @@ export namespace SessionTrace {
       reviewerFindings,
       failures,
       retries: stored.retries,
-      profiles: Object.values(stored.profiles).toSorted((a, b) => a.selectedAt - b.selectedAt),
       privacy: {
         local: true,
         atlasRequired: false,

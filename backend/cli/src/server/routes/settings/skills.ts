@@ -44,12 +44,11 @@ export const SettingsSkillsRoutes = lazy(() =>
       "json",
       z.object({
         url: z.string().min(1).describe("Public git repository URL containing one or more SKILL.md skills"),
-        skipClassifier: z.boolean().optional().describe("Bypass the server-side Layer-3 classifier review"),
       }),
     ),
     async (c) => {
-      const { url, skipClassifier } = c.req.valid("json")
-      const result = await Install.add(url, { confirm: false, skipClassifier })
+      const { url } = c.req.valid("json")
+      const result = await Install.add(url, { confirm: false })
       await Skill.invalidate()
       return c.json({
         installed: result.installed,

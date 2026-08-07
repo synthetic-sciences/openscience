@@ -17,7 +17,6 @@ import { FileWatcher } from "./watcher"
 import { createSearchCache } from "./search-cache"
 import { ScienceFile } from "./science"
 import { ArtifactFile } from "./artifacts"
-import { StarterFile } from "./starters"
 import { PublicationFile } from "./publication"
 import { PublicationReview } from "./review"
 import { SessionFilesystem } from "../session/filesystem"
@@ -406,10 +405,6 @@ export namespace File {
 
   export async function manifest(): Promise<ArtifactFile.Manifest> {
     return ArtifactFile.manifest(Instance.directory)
-  }
-
-  export async function starter(template: StarterFile.Template): Promise<StarterFile.Result> {
-    return StarterFile.create(Instance.directory, template)
   }
 
   export async function publicationCapabilities(): Promise<PublicationFile.Capabilities> {

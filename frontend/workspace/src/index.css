@@ -10,6 +10,21 @@
   and long-form rendered research.
 */
 @layer base {
+  html,
+  body {
+    font-family: var(--font-family-sans);
+    font-feature-settings: var(--font-family-sans--font-feature-settings, normal);
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
   h1,
   h2,
   h3,
@@ -19,7 +34,7 @@
     font-family: var(--font-family-sans);
     font-feature-settings: var(--font-family-sans--font-feature-settings, normal);
     font-optical-sizing: auto;
-    font-weight: 400;
+    font-weight: 550;
     letter-spacing: -0.011em;
     line-height: 1.18;
     color: var(--text-strong, var(--color-text));
@@ -27,8 +42,8 @@
   }
 
   h1 {
-    font-weight: 700;
-    letter-spacing: -0.018em;
+    font-weight: 600;
+    letter-spacing: -0.016em;
   }
 }
 

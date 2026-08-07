@@ -70,7 +70,7 @@ export namespace Memory {
 
   function defaultDoc(): Doc {
     return {
-      enabled: true,
+      enabled: false,
       categories: [{ id: "about-you", name: "About you", notes: [] }],
     }
   }
@@ -145,7 +145,7 @@ export namespace Memory {
 
   function assertEnabled(scope: Scope, doc: Doc) {
     if (doc.enabled) return
-    throw new Error(`Memory is disabled for the ${scope} scope. It can be enabled under Settings → Memory.`)
+    throw new Error(`Memory is disabled for the ${scope} scope.`)
   }
 
   function duplicate(doc: Doc, text: string, except?: string) {

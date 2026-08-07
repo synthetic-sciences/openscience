@@ -47,13 +47,27 @@ const child = (name: keyof Mounted, mounted: Mounted) => () => {
   return panel
 }
 
+const request = (status: Array<"running" | "succeeded"> = []) =>
+  Object.assign(
+    async () =>
+      Response.json(
+        status.map((value, index) => ({
+          id: `job_${index}`,
+          status: value,
+        })),
+      ),
+    { url: () => "http://localhost/settings/compute/jobs" },
+  )
+
 describe("compute surface", () => {
   test("defaults to Kernels and does not mount Jobs until selected", async () => {
     const mounted = { kernels: 0, jobs: 0 }
     const host = mount(() =>
       subject.ComputeSurface({
+        strip: () => document.createElement("section"),
         kernels: child("kernels", mounted),
         jobs: child("jobs", mounted),
+        request: request(),
       }),
     )
     const kernels = host.querySelector<HTMLButtonElement>('[role="tab"][data-compute-tab="kernels"]')
@@ -86,8 +100,10 @@ describe("compute surface", () => {
     const mounted = { kernels: 0, jobs: 0 }
     const host = mount(() =>
       subject.ComputeSurface({
+        strip: () => document.createElement("section"),
         kernels: child("kernels", mounted),
         jobs: child("jobs", mounted),
+        request: request(),
       }),
     )
     const kernels = host.querySelector<HTMLButtonElement>('[role="tab"][data-compute-tab="kernels"]')
@@ -107,6 +123,50 @@ describe("compute surface", () => {
     expect(document.activeElement).toBe(kernels)
   })
 
+  test("shows the active project job count beside the Jobs tab", async () => {
+    const mounted = { kernels: 0, jobs: 0 }
+    const host = mount(() =>
+      subject.ComputeSurface({
+        strip: () => document.createElement("section"),
+        kernels: child("kernels", mounted),
+        jobs: child("jobs", mounted),
+        request: request(["running", "succeeded", "running"]),
+      }),
+    )
+    const badge = await (async function wait(attempts = 20): Promise<HTMLElement | null> {
+      const value = host.querySelector<HTMLElement>(".compute-surface__badge")
+      if (value || !attempts) return value
+      await Bun.sleep(10)
+      return wait(attempts - 1)
+    })()
+    expect(badge?.textContent).toBe("2")
+    expect(badge?.getAttribute("aria-label")).toBe("2 active jobs")
+    expect(mounted).toEqual({ kernels: 1, jobs: 0 })
+  })
+
+  test("does not run the heavyweight jobs refresh at the live-view cadence while Kernels is selected", async () => {
+    const mounted = { kernels: 0, jobs: 0 }
+    const calls = { count: 0 }
+    const host = mount(() =>
+      subject.ComputeSurface({
+        strip: () => document.createElement("section"),
+        kernels: child("kernels", mounted),
+        jobs: child("jobs", mounted),
+        request: Object.assign(
+          async () => {
+            calls.count++
+            return new Response(JSON.stringify([]), { headers: { "content-type": "application/json" } })
+          },
+          { url: () => "http://localhost/settings/compute/jobs" },
+        ),
+      }),
+    )
+    await Bun.sleep(2_700)
+
+    expect(calls.count).toBe(1)
+    expect(host.querySelector('[data-compute-child="kernels"]')).not.toBeNull()
+  })
+
   test("contains no unavailable or transport-facing product copy", () => {
     const source = readFileSync(fileURLToPath(new URL("./ComputeSurface.tsx", import.meta.url)), "utf8")
 
@@ -116,12 +176,44 @@ describe("compute surface", () => {
     expect(source).not.toContain("provider")
   })
 
+  test("leaves research job creation to the agent in the product surface", () => {
+    const source = readFileSync(fileURLToPath(new URL("./ComputeSurface.tsx", import.meta.url)), "utf8")
+
+    expect(source).toContain("manual={false}")
+  })
+
   test("uses the compact flat tab geometry", () => {
     const css = readFileSync(fileURLToPath(new URL("./ComputeSurface.css", import.meta.url)), "utf8")
 
     expect(css).toMatch(/\.compute-surface__tabs\s*\{[^}]*min-height: 40px/s)
     expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*min-height: 32px/s)
+    expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*position: relative/s)
     expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*border-radius: 8px/s)
     expect(css).toMatch(/\.compute-surface__tab\[data-active="true"\]\s*\{[^}]*box-shadow: none/s)
+    expect(css).toMatch(/\.compute-surface__badge\s*\{[^}]*border-radius: 999px/s)
+    expect(css).toMatch(/\.compute-surface__badge\s*\{[^}]*position: absolute/s)
+    expect(css).toMatch(/\.compute-surface__badge\s*\{[^}]*min-width: 14px/s)
+  })
+
+  test("renders the host strip above the tablist", () => {
+    const host = mount(() =>
+      subject.ComputeSurface({
+        strip: () => {
+          const strip = document.createElement("section")
+          strip.dataset.computeChild = "strip"
+          return strip
+        },
+        kernels: child("kernels", { kernels: 0, jobs: 0 }),
+        jobs: child("jobs", { kernels: 0, jobs: 0 }),
+        request: request(),
+      }),
+    )
+    const surface = host.querySelector(".compute-surface")
+    const children = [...(surface?.children ?? [])]
+    const strip = children.findIndex((element) => element.matches('[data-compute-child="strip"]'))
+    const tabs = children.findIndex((element) => element.matches('[role="tablist"]'))
+
+    expect(strip).toBe(0)
+    expect(tabs).toBeGreaterThan(strip)
   })
 })

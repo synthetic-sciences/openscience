@@ -234,7 +234,7 @@ const LocalModels: Component = () => {
                       variant="secondary"
                       onClick={() => window.open(rt.install, "_blank", "noopener")}
                     >
-                      install
+                      Install
                     </Button>
                   }
                 >
@@ -247,7 +247,7 @@ const LocalModels: Component = () => {
                         disabled={busy() || !!starting()}
                         onClick={() => startRuntime(rt)}
                       >
-                        {starting() === rt.id ? "starting…" : "start"}
+                        {starting() === rt.id ? "Starting…" : "Start"}
                       </Button>
                     }
                   >
@@ -257,7 +257,7 @@ const LocalModels: Component = () => {
                       disabled={busy() || rt.models.length === 0}
                       onClick={() => addRunning(rt)}
                     >
-                      add {rt.models.length}
+                      Add {rt.models.length}
                     </Button>
                   </Show>
                 </Show>
@@ -301,14 +301,14 @@ const LocalModels: Component = () => {
           <div class="flex items-center justify-between">
             <h3 class="text-13-medium text-text-strong">Detected on this machine</h3>
             <Button size="small" variant="secondary" disabled={busy()} onClick={refetch}>
-              rescan
+              Rescan
             </Button>
           </div>
           <Show
             when={(detected()?.length ?? 0) > 0}
             fallback={
               <p class="text-12-regular text-text-weak/70">
-                Nothing running yet. Start a server (e.g. <code>ollama serve</code>) and hit rescan, or add a custom
+                Nothing running yet. Start a server (e.g. <code>ollama serve</code>) and select Rescan, or add a custom
                 endpoint below.
               </p>
             }
@@ -325,7 +325,7 @@ const LocalModels: Component = () => {
                     </span>
                   </div>
                   <Button size="small" variant="primary" disabled={busy()} onClick={() => addRuntime(d)}>
-                    add {d.models.length}
+                    Add {d.models.length}
                   </Button>
                 </div>
               )}
@@ -351,11 +351,11 @@ const LocalModels: Component = () => {
             />
             <div class="flex gap-2">
               <Button size="small" variant="secondary" disabled={busy() || !url().trim()} onClick={listCustom}>
-                list models
+                List models
               </Button>
               <Show when={found().length > 0}>
                 <Button size="small" variant="primary" disabled={busy() || selected().size === 0} onClick={addCustom}>
-                  add {selected().size} selected
+                  Add {selected().size} selected
                 </Button>
               </Show>
             </div>
@@ -398,7 +398,7 @@ const LocalModels: Component = () => {
                     disabled={busy()}
                     onClick={() => removeProvider(p.id)}
                   >
-                    remove
+                    Remove
                   </Button>
                 </div>
               )}

@@ -56,6 +56,7 @@ const targets = singleFlag
   : NativeTargets
 
 await $`rm -rf dist`
+await $`bun run script/generate-skill-bundle.ts`
 
 // Build the openscience web UI (frontend/workspace) and regenerate the embedded asset
 // manifest so the catch-all route in server.ts can serve it locally instead
@@ -122,8 +123,6 @@ for (const item of targets) {
     const report = await assertLinuxArm64PageSize(`dist/${name}/bin/openscience`)
     console.log(`verified ${name} has ${report.loads} ELF load segments compatible with 64KB-page kernels`)
   }
-
-  // Skills are served via API — no longer copied into dist
 
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(

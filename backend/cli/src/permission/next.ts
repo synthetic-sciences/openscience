@@ -159,14 +159,15 @@ export namespace PermissionNext {
     return merge(asRules(s.standing.global), asRules(s.standing.project), s.session[sessionID] ?? [])
   }
 
-  // Paid actions never inherit a blanket allow: a wildcard ("*") rule cannot
-  // allow a spend-class permission. Allowing one requires a rule naming the
-  // permission explicitly, a standing approval, or answering the prompt.
-  const SPEND = ["atlas", "websearch"]
+  // Paid actions never inherit an allow through wildcard matching. Modal is
+  // stricter: every dispatch requires its own exact-plan card, so no stored or
+  // configured allow rule can bypass the prompt. Deny rules remain applicable.
+  const SPEND = ["atlas", "websearch", "modal"]
 
   function spendFilter(permission: string, rules: Ruleset): Ruleset {
     if (!SPEND.includes(permission)) return rules
-    return rules.filter((rule) => !(rule.permission === "*" && rule.action === "allow"))
+    if (permission === "modal") return rules.filter((rule) => rule.action !== "allow")
+    return rules.filter((rule) => rule.action !== "allow" || rule.permission === permission)
   }
 
   async function persist(s: State) {
@@ -223,7 +224,7 @@ export namespace PermissionNext {
     async (input) => {
       const s = await state()
       const { ruleset, ...request } = input
-      const rules = merge(spendFilter(request.permission, ruleset), approvals(s, request.sessionID))
+      const rules = spendFilter(request.permission, merge(ruleset, approvals(s, request.sessionID)))
       const evaluated = (request.patterns ?? []).map((pattern) => {
         const rule = evaluate(request.permission, pattern, rules)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
@@ -261,7 +262,11 @@ export namespace PermissionNext {
         (pending.info.patterns.length > 0 &&
           pending.info.patterns.every(
             (pattern) =>
-              evaluate(pending.info.permission, pattern, approvals(s, pending.info.sessionID)).action === "allow",
+              evaluate(
+                pending.info.permission,
+                pattern,
+                spendFilter(pending.info.permission, approvals(s, pending.info.sessionID)),
+              ).action === "allow",
           ))
       if (!ok) continue
       delete s.pending[id]

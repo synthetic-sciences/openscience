@@ -1,4 +1,0 @@
-interface:
-  display_name: "Run Proactive Evaluation"
-  short_description: "Calibrate and seal transfer-qualified audits"
-  default_prompt: "Use $run-proactive-evaluation to preflight and run a transfer-qualified active audit."

@@ -15,15 +15,17 @@ interface SkillRow {
   name: string
   description: string
   location: string
+  origin?: "default" | "installed" | "learned" | "user" | "project"
   category?: string
   tags?: string[]
   entry?: boolean
 }
 
-function originOf(location: string): string {
-  if (location.includes("installed-skills")) return "installed"
-  if (location.includes("learned-skills")) return "learned"
-  return "core"
+function originOf(skill: SkillRow): string {
+  if (skill.origin) return skill.origin
+  if (skill.location.includes("installed-skills")) return "installed"
+  if (skill.location.includes("learned-skills")) return "learned"
+  return "default"
 }
 
 export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: () => void }): JSX.Element {
@@ -60,7 +62,7 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
       : all
     const map = new Map<string, SkillRow[]>()
     for (const s of filtered) {
-      const label = s.category || originOf(s.location)
+      const label = s.category || originOf(s)
       const arr = map.get(label) ?? []
       arr.push(s)
       map.set(label, arr)
@@ -285,7 +287,7 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void }): J
       : all
     const map = new Map<string, SkillRow[]>()
     for (const s of filtered) {
-      const label = s.category || originOf(s.location)
+      const label = s.category || originOf(s)
       const arr = map.get(label) ?? []
       arr.push(s)
       map.set(label, arr)

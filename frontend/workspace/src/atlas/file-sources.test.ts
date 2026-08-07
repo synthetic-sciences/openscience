@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   connectedFilesystemGrants,
+  containsFilePath,
   findFilesystemGrant,
   parseFilesystemSnapshot,
   sessionFilesystemRoot,
@@ -108,6 +109,11 @@ describe("filesystem source isolation", () => {
   test("uses the durable session workspace grant as the Session files root", () => {
     expect(sessionFilesystemRoot(snapshot)).toBe("/work/alpha")
     expect(sessionFilesystemRoot()).toBeUndefined()
+  })
+
+  test("treats the filesystem root as containing its descendants", () => {
+    expect(containsFilePath("/", "/outputs/model.pt")).toBe(true)
+    expect(containsFilePath("/", "relative/model.pt")).toBe(false)
   })
 
   test("parses project-persistent folder grants without weakening project identity checks", () => {

@@ -8,7 +8,12 @@ import { Log } from "../util/log"
 import { Lock } from "../util/lock"
 import { Env } from "../env"
 import { Auth } from "../auth"
-import { isSyncedEnvAllowed, BYOK_LLM_ENV_KEYS, managedOpenRouterBaseURL } from "./synced-env-policy"
+import {
+  isSyncedEnvAllowed,
+  BYOK_LLM_ENV_KEYS,
+  SYNCED_SERVICE_ENV_KEYS,
+  managedOpenRouterBaseURL,
+} from "./synced-env-policy"
 import { resolveAtlasPackageDir } from "./atlas-package"
 import { DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 
@@ -74,6 +79,8 @@ function getSyncedConfigDir(): string {
   return path.join(xdg, "openscience")
 }
 
+const syncedGcpFilename = "atlas-gcp-service-account.json"
+
 // Seed the synced-secret set from the on-disk snapshot at import. preload-env.ts
 // replays synced-env.json into process.env at boot but never seeded this set, so
 // on a fresh process where no in-process sync runs (the common steady state, when
@@ -117,27 +124,14 @@ const KERNEL_RUNTIME_KEYS = new Set([
 ])
 const SAFE_SYNCED_KEYS = new Set([
   ...BYOK_LLM_ENV_KEYS,
-  // ML services
-  "TINKER_API_KEY",
-  "TINKER_BASE_URL",
-  "HF_TOKEN",
-  "HUGGING_FACE_HUB_TOKEN",
-  "WANDB_API_KEY",
-  "MODAL_TOKEN_ID",
-  "MODAL_TOKEN_SECRET",
-  "LAMBDA_API_KEY",
-  "LAMBDA_LABS_API_KEY",
-  "RUNPOD_API_KEY",
-  "PRIME_INTELLECT_API_KEY",
-  "TENSORPOOL_API_KEY",
-  "VAST_API_KEY",
-  "LANGSMITH_API_KEY",
-  "LANGCHAIN_API_KEY",
-  "LANGSMITH_TRACING",
-  "PINECONE_API_KEY",
+  ...SYNCED_SERVICE_ENV_KEYS,
   // Misc CLI runtime markers
   "OPENSCIENCE_RUNTIME",
 ])
+
+// Modal credentials belong to its trusted adapter and never enter
+// agent-controlled shells, including when supplied by an explicit export.
+const CONTROL_PLANE_ENV_KEYS = new Set(["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"])
 
 /**
  * Persistent CLI auth session.
@@ -567,7 +561,7 @@ export namespace OpenScience {
     // a fresh `logout` process has only the latter.
     const synced = await readSyncedSnapshot()
     for (const [key, value] of syncedSecretValues.entries()) synced.set(key, value)
-    for (const name of ["synced-env.json", "openscience-synced.json"]) {
+    for (const name of ["synced-env.json", "openscience-synced.json", syncedGcpFilename]) {
       try {
         await fs.unlink(path.join(getSyncedConfigDir(), name))
       } catch {}
@@ -778,6 +772,7 @@ export namespace OpenScience {
     // torn file or fail the rename.
     const tmp = `${filepath}.${process.pid}.${randomUUID()}.tmp`
     await Bun.write(tmp, content, options)
+    if (options?.mode !== undefined && process.platform !== "win32") await fs.chmod(tmp, options.mode)
     await fs.rename(tmp, filepath)
   }
 
@@ -839,6 +834,30 @@ export namespace OpenScience {
           }
         }
       }
+
+      // Atlas transfers a GCP service-account document as an in-memory secret.
+      // Materialize it to an owner-only file before persistence so Google SDKs
+      // receive their standard GOOGLE_APPLICATION_CREDENTIALS path and the JSON
+      // never enters an agent shell.
+      const gcp = fresh.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+      const gcpFile = path.join(getSyncedConfigDir(), syncedGcpFilename)
+      if (gcp) {
+        fresh.delete("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+        const dir = getSyncedConfigDir()
+        const saved = await fs
+          .mkdir(dir, { recursive: true })
+          .then(() => atomicWrite(gcpFile, gcp, { mode: 0o600 }))
+          .then(() => true)
+          .catch((error) => {
+            log.warn("failed to materialize synced GCP credentials", {
+              error: error instanceof Error ? error.message : String(error),
+            })
+            return false
+          })
+        if (saved) fresh.set("GOOGLE_APPLICATION_CREDENTIALS", gcpFile)
+        if (!saved) await fs.unlink(gcpFile).catch(() => {})
+      }
+      if (!gcp) await fs.unlink(gcpFile).catch(() => {})
 
       // Keep user-owned provider keys and the narrow OpenRouter managed route.
       // The policy rejects direct-provider proxy tokens and untrusted provider
@@ -947,6 +966,13 @@ export namespace OpenScience {
           log.warn(describeReason(id, svc.reason))
         }
       }
+
+      // Compatibility only: older releases stored learned skills and the
+      // third-party install ledger in Atlas. Import those records once after a
+      // successful login, then keep all skill state local forever.
+      void import("../skill/migrate")
+        .then((module) => module.SkillMigration.run())
+        .catch((error) => log.warn("legacy skill migration failed", { error: String(error) }))
 
       return { user: data.user, credentials }
     } catch (e) {
@@ -1058,6 +1084,7 @@ export namespace OpenScience {
     const result: Record<string, string> = {}
     for (const [key, value] of Object.entries(env)) {
       if (!value) continue
+      if (CONTROL_PLANE_ENV_KEYS.has(key)) continue
       if (isManagedAtlasKey(value)) continue
       // Entries ending in `_` (LC_, XDG_) are true prefixes; the rest are exact
       // names. Treating all as prefixes let HOME match HOMEBREW_GITHUB_API_TOKEN,
@@ -1233,117 +1260,6 @@ export namespace OpenScience {
       "LOKY_MAX_CPU_COUNT",
     ]
     return Object.fromEntries(vars.filter((v) => !env[v]).map((v) => [v, cap]))
-  }
-
-  // === Server-side Skills ===
-
-  const SKILLS_CACHE_TTL = 60 * 60 * 1000 // 1 hour
-  const skillsCacheDir = path.join(Global.Path.cache, "skills")
-  const skillsIndexPath = path.join(Global.Path.cache, "skills-index.json")
-
-  interface SkillIndexEntry {
-    name: string
-    description: string
-    category?: string
-    tags?: string[]
-  }
-
-  /** Fetch skill index (name + description only) from dashboard API.
-   *  Caches to disk with 1-hour TTL. Returns null on failure. */
-  export async function fetchSkillIndex(): Promise<SkillIndexEntry[] | null> {
-    // Check disk cache first
-    try {
-      const file = Bun.file(skillsIndexPath)
-      const stat = await fs.stat(skillsIndexPath).catch(() => null)
-      if (stat && Date.now() - stat.mtimeMs < SKILLS_CACHE_TTL) {
-        const cached = await file.json()
-        if (Array.isArray(cached)) return cached
-      }
-    } catch {}
-
-    const session = await getSession()
-    if (!session) return null
-
-    try {
-      const res = await atlasFetch(
-        `${API_BASE}/api/cli/skills`,
-        { headers: { Authorization: `Bearer ${session.api_key}` } },
-        SKILL_FETCH_TIMEOUT_MS,
-      )
-
-      if (!res.ok) {
-        log.warn("failed to fetch skill index", { status: res.status })
-        return null
-      }
-
-      const data = await res.json()
-      const skills: SkillIndexEntry[] = data.skills
-
-      // Cache to disk
-      await fs.mkdir(path.dirname(skillsIndexPath), { recursive: true })
-      await Bun.write(skillsIndexPath, JSON.stringify(skills))
-
-      return skills
-    } catch (e) {
-      log.warn("skill index fetch error", { error: e instanceof Error ? e.message : String(e) })
-      return null
-    }
-  }
-
-  /** Fetch full skill content from dashboard API.
-   *  Writes SKILL.md + supporting files (scripts, assets, etc.) to ~/.cache/openscience/skills/{name}/. Returns content or null. */
-  export async function fetchSkillContent(name: string): Promise<string | null> {
-    const session = await getSession()
-    if (!session) return null
-
-    try {
-      const res = await atlasFetch(
-        `${API_BASE}/api/cli/skills/${encodeURIComponent(name)}`,
-        { headers: { Authorization: `Bearer ${session.api_key}` } },
-        SKILL_FETCH_TIMEOUT_MS,
-      )
-
-      if (!res.ok) {
-        log.warn("failed to fetch skill content", { name, status: res.status })
-        return null
-      }
-
-      const data = await res.json()
-      const content: string = data.content
-
-      // Cache to disk
-      const dir = path.join(skillsCacheDir, name)
-      await fs.mkdir(dir, { recursive: true })
-      await Bun.write(path.join(dir, "SKILL.md"), content)
-
-      // Write supporting files (scripts, assets, references, templates, etc.)
-      const files: Record<string, string> | undefined = data.files
-      if (files) {
-        for (const [rel, body] of Object.entries(files)) {
-          const target = path.join(dir, rel)
-          // Prevent path traversal — ensure target stays within skill directory
-          if (!target.startsWith(dir + path.sep) && target !== dir) {
-            log.warn("skipping skill file with path traversal", { name, rel })
-            continue
-          }
-          await fs.mkdir(path.dirname(target), { recursive: true })
-          await Bun.write(target, body)
-          // Make scripts executable
-          if (rel.endsWith(".py") || rel.endsWith(".sh")) {
-            await fs.chmod(target, 0o755)
-          }
-        }
-        log.info("cached skill files", { name, count: Object.keys(files).length })
-      }
-
-      // Write cache version marker (for invalidating old caches missing files)
-      await Bun.write(path.join(dir, ".cache-v2"), "")
-
-      return content
-    } catch (e) {
-      log.warn("skill content fetch error", { name, error: e instanceof Error ? e.message : String(e) })
-      return null
-    }
   }
 
   /** Credit balance cache */
@@ -1581,32 +1497,16 @@ export namespace OpenScience {
     }
   }
 
-  // === Learned Skills (RSI) ===
-
-  const LEARNED_SKILLS_CACHE_TTL = 60 * 60 * 1000 // 1 hour
-  const learnedSkillsCacheDir = path.join(Global.Path.cache, "learned-skills")
-  const learnedSkillsIndexPath = path.join(Global.Path.cache, "learned-skills-index.json")
-
-  interface LearnedSkillEntry {
+  // Legacy skill exports are read exactly once by SkillMigration after a
+  // successful Atlas login. Skills are otherwise entirely local.
+  export interface LegacyLearnedSkillEntry {
     name: string
     description: string
     agent?: string
     score?: number
   }
 
-  /** Fetch learned skills index from dashboard API.
-   *  Caches to disk with 1-hour TTL. Returns null on failure. */
-  export async function fetchLearnedSkills(): Promise<LearnedSkillEntry[] | null> {
-    // Check disk cache first
-    try {
-      const file = Bun.file(learnedSkillsIndexPath)
-      const stat = await fs.stat(learnedSkillsIndexPath).catch(() => null)
-      if (stat && Date.now() - stat.mtimeMs < LEARNED_SKILLS_CACHE_TTL) {
-        const cached = await file.json()
-        if (Array.isArray(cached)) return cached
-      }
-    } catch {}
-
+  export async function fetchLegacyLearnedSkills(): Promise<LegacyLearnedSkillEntry[] | null> {
     const session = await getSession()
     if (!session) return null
 
@@ -1618,28 +1518,21 @@ export namespace OpenScience {
       )
 
       if (!res.ok) {
-        log.warn("failed to fetch learned skills index", { status: res.status })
+        log.warn("failed to export legacy learned skills", { status: res.status })
         return null
       }
 
       const data = await res.json()
       // Atlas returns a bare array of LearnedSkillInfo; older shapes wrapped
       // in { skills: [...] } — accept both.
-      const skills: LearnedSkillEntry[] = Array.isArray(data) ? data : (data.skills ?? [])
-
-      // Cache to disk
-      await fs.mkdir(path.dirname(learnedSkillsIndexPath), { recursive: true })
-      await Bun.write(learnedSkillsIndexPath, JSON.stringify(skills))
-
-      return skills
+      return Array.isArray(data) ? data : (data.skills ?? [])
     } catch (e) {
-      log.warn("learned skills fetch error", { error: e instanceof Error ? e.message : String(e) })
+      log.warn("legacy learned skills export error", { error: e instanceof Error ? e.message : String(e) })
       return null
     }
   }
 
-  /** Fetch specific learned skill content from dashboard API. */
-  export async function fetchLearnedSkillContent(name: string): Promise<string | null> {
+  export async function fetchLegacyLearnedSkillContent(name: string): Promise<string | null> {
     const session = await getSession()
     if (!session) return null
 
@@ -1651,55 +1544,15 @@ export namespace OpenScience {
       )
 
       if (!res.ok) {
-        log.warn("failed to fetch learned skill content", { name, status: res.status })
+        log.warn("failed to export legacy learned skill", { name, status: res.status })
         return null
       }
 
       const data = await res.json()
-      const content: string = data.content
-
-      // Cache to disk
-      const dir = path.join(learnedSkillsCacheDir, name)
-      await fs.mkdir(dir, { recursive: true })
-      await Bun.write(path.join(dir, "SKILL.md"), content)
-
-      return content
+      return data.content
     } catch (e) {
-      log.warn("learned skill content fetch error", { name, error: e instanceof Error ? e.message : String(e) })
+      log.warn("legacy learned skill export error", { name, error: e instanceof Error ? e.message : String(e) })
       return null
-    }
-  }
-
-  /** Upload a learned skill to the dashboard API. */
-  export async function uploadLearnedSkill(
-    name: string,
-    description: string,
-    content: string,
-    metadata: { agent?: string; trajectory_id?: string; score?: number },
-  ): Promise<boolean> {
-    const session = await getSession()
-    if (!session) return false
-
-    try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/learned-skills`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.api_key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name, description, content, ...metadata }),
-      })
-
-      if (!res.ok) {
-        log.warn("failed to upload learned skill", { name, status: res.status })
-        return false
-      }
-
-      log.info("learned skill uploaded", { name })
-      return true
-    } catch (e) {
-      log.warn("learned skill upload error", { name, error: e instanceof Error ? e.message : String(e) })
-      return false
     }
   }
 
@@ -1890,9 +1743,7 @@ export namespace OpenScience {
     }
   }
 
-  // ── installed-skills (URL-installed third-party skills) ──────────────────
-
-  export interface InstalledSkillEntry {
+  export interface LegacyInstalledSkillEntry {
     id: string
     namespace: string
     name: string
@@ -1904,19 +1755,7 @@ export namespace OpenScience {
     installed_at: string
   }
 
-  export interface SkillReviewResult {
-    verdict: "pass" | "warn" | "reject"
-    per_skill: {
-      name: string
-      verdict: "pass" | "warn" | "reject"
-      risk_factors: string[]
-      reasoning: string
-      suspicious_excerpts: { file: string; line: number; snippet: string }[]
-    }[]
-  }
-
-  /** List installed skills for the current user (sync index). */
-  export async function fetchInstalledSkills(): Promise<InstalledSkillEntry[] | null> {
+  export async function fetchLegacyInstalledSkills(): Promise<LegacyInstalledSkillEntry[] | null> {
     const session = await getSession()
     if (!session) return null
     try {
@@ -1926,118 +1765,13 @@ export namespace OpenScience {
         SKILL_FETCH_TIMEOUT_MS,
       )
       if (!res.ok) {
-        log.warn("failed to fetch installed skills index", { status: res.status })
+        log.warn("failed to export legacy installed skills", { status: res.status })
         return null
       }
       return await res.json()
     } catch (e) {
-      log.warn("installed skills fetch error", { error: e instanceof Error ? e.message : String(e) })
+      log.warn("legacy installed skills export error", { error: e instanceof Error ? e.message : String(e) })
       return null
     }
-  }
-
-  /** Fetch one installed skill's content (full SKILL.md). */
-  export async function fetchInstalledSkillContent(namespace: string, name: string): Promise<string | null> {
-    const session = await getSession()
-    if (!session) return null
-    try {
-      const res = await atlasFetch(
-        `${API_BASE}/api/cli/installed-skills/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`,
-        { headers: { Authorization: `Bearer ${session.api_key}` } },
-        SKILL_FETCH_TIMEOUT_MS,
-      )
-      if (!res.ok) return null
-      const data = await res.json()
-      return data.content
-    } catch {
-      return null
-    }
-  }
-
-  /** Upload after a local install. Pointer-only: the backend stores the
-   *  install ledger (repo_url + pinned_sha + classifier verdict), not the
-   *  SKILL.md content. Other machines re-fetch from git on next sync. */
-  export async function postInstalledSkill(body: {
-    namespace: string
-    name: string
-    description: string
-    repo_url: string
-    pinned_sha: string
-    review_verdict: "pass" | "warn"
-    review_meta: Record<string, unknown> | null
-  }): Promise<InstalledSkillEntry | null> {
-    const session = await getSession()
-    if (!session) return null
-    try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/installed-skills`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.api_key}`,
-        },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        log.warn("installed-skill upload failed", { status: res.status })
-        return null
-      }
-      return await res.json()
-    } catch (e) {
-      log.warn("installed-skill upload error", { error: e instanceof Error ? e.message : String(e) })
-      return null
-    }
-  }
-
-  /** Layer-3 classifier round-trip. */
-  export async function requestSkillReview(
-    manifest: {
-      namespace: string
-      name: string
-      description: string
-      content: string
-      scripts?: { path: string; content: string }[]
-    }[],
-  ): Promise<SkillReviewResult | null> {
-    const session = await getSession()
-    if (!session) return null
-    try {
-      const res = await atlasFetch(`${API_BASE}/api/cli/skill-review`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.api_key}`,
-        },
-        body: JSON.stringify({ manifest }),
-      })
-      if (!res.ok) {
-        log.warn("skill-review request failed", { status: res.status })
-        return null
-      }
-      return await res.json()
-    } catch (e) {
-      log.warn("skill-review error", { error: e instanceof Error ? e.message : String(e) })
-      return null
-    }
-  }
-
-  export async function deleteInstalledSkill(namespace: string, name: string): Promise<boolean> {
-    const session = await getSession()
-    if (!session) return false
-    const res = await atlasFetch(
-      `${API_BASE}/api/cli/installed-skills/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`,
-      { method: "DELETE", headers: { Authorization: `Bearer ${session.api_key}` } },
-    )
-    return res.ok
-  }
-
-  export async function deleteInstalledNamespace(namespace: string): Promise<{ archived: number } | null> {
-    const session = await getSession()
-    if (!session) return null
-    const res = await atlasFetch(`${API_BASE}/api/cli/installed-skills/${encodeURIComponent(namespace)}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${session.api_key}` },
-    })
-    if (!res.ok) return null
-    return await res.json()
   }
 }

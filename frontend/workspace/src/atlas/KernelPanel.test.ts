@@ -29,7 +29,7 @@ describe("kernel control room", () => {
     const panel = `${source()}\n${card()}`
 
     expect(panel).toContain('"interrupt" | "restart" | "stop" | "delete"')
-    expect(panel).toContain("sdk.request(path, init, query)")
+    expect(panel).toContain("transport(path, init, query)")
     expect(panel).toContain("remove ? { sessionID: kernel.sessionID } : undefined")
     expect(panel).toContain("kernelCanInterrupt")
     expect(panel).toContain("kernelCanStop")
@@ -69,7 +69,9 @@ describe("kernel control room", () => {
     const panel = source()
     const runtime = readFileSync(fileURLToPath(new URL("../notebook/runtime.ts", import.meta.url)), "utf8")
 
-    expect(panel).toContain("{ sessionID: params.id }")
+    // The session id comes straight from the route params, and the poll names
+    // its client so two panels do not share one sampling window on this route.
+    expect(panel).toContain("{ sessionID: params.id, client }")
     expect(panel).not.toContain("Omit<KernelStatus")
     expect(panel).not.toContain("legacy")
     expect(runtime).toContain('"lazy" | "starting" | "idle" | "running" | "stopped" | "crashed"')
@@ -89,12 +91,59 @@ describe("kernel control room", () => {
     expect(css).toMatch(/\.compute-surface \.kernel-card__metric\s*\{[^}]*min-height: 40px/s)
   })
 
-  test("materializes a new session and refreshes only while kernels are active", () => {
+  test("materializes a new session and polls unconditionally while mounted", () => {
     const panel = source()
 
     expect(panel).toContain("props.onEnsureSession?.()")
     expect(panel).toContain("const sessionID = await ensureSession()")
-    expect(panel).toContain("summary().running === 0 && summary().queued === 0")
+    // Regression guard for the chicken-and-egg bug: a fresh session starts at
+    // {live: 0, running: 0, queued: 0}, so gating the poll on summary() meant
+    // the poll that would discover a kernel starting never began. The panel
+    // must poll unconditionally, the way HostStrip.tsx does — skipping only
+    // while the tab is hidden, and refreshing immediately on visibilitychange.
+    expect(panel).not.toContain("summary().running === 0 && summary().queued === 0")
+    expect(panel).toContain("if (document.hidden) return")
+    expect(panel).toContain("setInterval(refresh, 2_500)")
+    expect(panel).toContain('document.addEventListener("visibilitychange", refresh)')
+    expect(panel).toContain('document.removeEventListener("visibilitychange", refresh)')
     expect(panel).not.toContain('disabled={!params.id || params.id === "new"')
+  })
+
+  test("takes its transport as an injectable prop, defaulting to the session SDK", () => {
+    const panel = source()
+
+    expect(panel).toContain("request?: (path: string, init?: RequestInit, query?: Record<string, string>)")
+    expect(panel).toContain("const transport = props.request ?? useSDK().request")
+  })
+
+  test("names the empty state for live kernels and scopes its promise to this session", () => {
+    const panel = source()
+
+    expect(panel).toContain("No live kernels")
+    expect(panel).toContain("Kernels appear here the moment this session starts computing.")
+    expect(panel).not.toContain("on this machine")
+  })
+
+  test("routes every poll through the fetcher that resolves instead of rejecting", () => {
+    const panel = source()
+
+    // The behaviour itself is asserted in KernelPanel.poll.test.ts against the
+    // real `inventory`; this pins load() to it. A fetcher that rejects leaves
+    // an errored resource for `data.latest` to re-throw on the render path,
+    // and app.tsx's ErrorBoundary — the only one in the app — replaces the
+    // entire workspace with the error page.
+    expect(panel).toContain("return inventory(")
+    expect(panel).not.toContain("throw error")
+  })
+
+  test("says the list is unreadable rather than empty when a poll failed", () => {
+    const panel = source()
+
+    // An empty list after a failed poll is not "No live kernels" — the panel
+    // does not know that. Degrading visibly is the difference between a poll
+    // that failed and a session that is genuinely idle.
+    expect(panel).toContain('{view.error ? "Kernel inventory unavailable" : "No live kernels"}')
+    expect(panel).toContain("The last poll could not read this session's kernels")
+    expect(panel).toContain("Kernel inventory unavailable. ${view.error}")
   })
 })

@@ -11,6 +11,7 @@ const session = path.join(Global.Path.data, "openscience-session.json")
 const synced = path.join(process.env.XDG_CONFIG_HOME!, "openscience")
 const snapshot = path.join(synced, "synced-env.json")
 const managed = path.join(synced, "openscience-synced.json")
+const gcp = path.join(synced, "atlas-gcp-service-account.json")
 const queue = path.join(Global.Path.data, "usage-queue.jsonl")
 const atlas = path.join(os.tmpdir(), `openscience-test-atlas-${process.pid}`, "config.json")
 const sandboxAtlasConfig = process.env.ATLAS_CLI_CONFIG_PATH
@@ -23,7 +24,7 @@ afterEach(async () => {
   delete process.env[EXPORTED]
   if (sandboxAtlasConfig) process.env.ATLAS_CLI_CONFIG_PATH = sandboxAtlasConfig
   else delete process.env.ATLAS_CLI_CONFIG_PATH
-  for (const file of [session, snapshot, managed, queue, atlas]) {
+  for (const file of [session, snapshot, managed, gcp, queue, atlas]) {
     await fs.rm(file, { force: true }).catch(() => {})
   }
 })
@@ -37,6 +38,7 @@ test("clearSession removes every synced credential artifact", async () => {
   // The persisted snapshot preload-env.ts replays into process.env at boot.
   await Bun.write(snapshot, JSON.stringify({ [INJECTED]: "thk_injected_value", [EXPORTED]: "thk_synced_value" }))
   await Bun.write(managed, JSON.stringify({ model: "synsci/some-model" }))
+  await Bun.write(gcp, JSON.stringify({ private_key: "gcp-secret" }))
   await Bun.write(queue, JSON.stringify({ service: "llm", event_type: "chat", tokens_used: 10 }) + "\n")
 
   process.env.ATLAS_CLI_CONFIG_PATH = atlas
@@ -61,6 +63,7 @@ test("clearSession removes every synced credential artifact", async () => {
   expect(await Bun.file(session).exists()).toBe(false)
   expect(await Bun.file(snapshot).exists()).toBe(false)
   expect(await Bun.file(managed).exists()).toBe(false)
+  expect(await Bun.file(gcp).exists()).toBe(false)
   expect(await Bun.file(queue).exists()).toBe(false)
 
   // The injected var is gone; the shell export survives.

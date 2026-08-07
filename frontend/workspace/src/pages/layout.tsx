@@ -1,5 +1,4 @@
 import { type ParentProps } from "solid-js"
-import { SetupGate } from "@/atlas/SetupGate"
 
 /**
  * Outer Router layout — passthrough.
@@ -11,14 +10,9 @@ import { SetupGate } from "@/atlas/SetupGate"
  * project sidebar + workspace tab bar logic now lives in src/atlas/*.
  *
  * Returning `props.children` keeps the routing tree intact while letting
- * each page own its own visual chrome. `SetupGate` is a headless first-run
- * gate mounted once here so it spans every screen.
+ * each page own its own visual chrome. Model setup lives in Customize →
+ * Models and never interrupts first launch.
  */
 export default function Layout(props: ParentProps) {
-  return (
-    <>
-      {props.children}
-      <SetupGate />
-    </>
-  )
+  return props.children
 }

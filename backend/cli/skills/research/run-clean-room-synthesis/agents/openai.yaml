@@ -1,4 +1,0 @@
-interface:
-  display_name: "Run Clean-Room Synthesis"
-  short_description: "Measure atomic factuality without answer-key leakage"
-  default_prompt: "Use $run-clean-room-synthesis to preflight and record a clean-room scientific conclusion synthesis evaluation."

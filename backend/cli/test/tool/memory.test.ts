@@ -18,7 +18,7 @@ const ctx = {
 const blank = () => ({ enabled: true, categories: [] })
 
 afterEach(async () => {
-  await Memory.set("global", blank())
+  await Memory.set("global", { enabled: false, categories: [] })
 })
 
 test("writes are refused with an honest message when memory is disabled", async () => {
@@ -114,6 +114,7 @@ test("missing parameters produce actionable errors", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      await Memory.set("project", blank())
       const memory = await MemoryTool.init()
       expect((await memory.execute({ action: "add" }, ctx)).output).toContain("`text`")
       expect((await memory.execute({ action: "search" }, ctx)).output).toContain("`query`")

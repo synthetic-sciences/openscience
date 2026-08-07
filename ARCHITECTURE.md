@@ -57,7 +57,7 @@ Prompts are assembled in two layers: a provider-level system prompt selected by 
 
 ### Skills
 
-Skills are instruction bundles the agent loads on demand (`src/skill`). Released builds fetch the catalog from the Atlas skill index and cache it; running from source loads the bundled `skills/` tree directly. A small set of system skills (for example `initialize-atlas-graph`) is embedded so it resolves even when the catalog omits it. See [docs/notes/skills.md](docs/notes/skills.md) for the full source order.
+Skills are instruction bundles the agent loads on demand (`src/skill`). The canonical default library is `backend/cli/skills`; releases embed a compressed, hashed copy of the complete tree and materialize it into a versioned local cache. Learned skills, user-authored skills, Git-installed skills, and project skills are also local. Skill discovery, loading, security review, installation, and removal never require Atlas. An authenticated upgrade can perform a one-time read-only import of skill records created by older releases.
 
 ## Frontend
 
@@ -76,7 +76,7 @@ Global config lives in `~/.config/openscience/openscience.json`; project config 
 
 ## Atlas integration
 
-Atlas is a separate, closed platform. Only its client lives here. The CLI talks to it over a documented wire contract: the `synsci` model provider id, `thk_` wallet keys, and the `/api/cli/*` endpoints, with `app.syntheticsciences.ai` as the default managed base URL (`src/endpoints.ts`). Billing classification (`byok`, `managed`, `oauth-free`) is decided client-side in `src/session/billing-gate.ts`; the server is the billing authority. None of the Atlas server, its secrets, or its internal endpoints are part of this repository.
+Atlas is a separate, closed platform. Only its optional client lives here. OpenScience starts and remains useful without an Atlas installation, login, or network connection. After login, the client enables managed models, wallet and credential synchronization, Codex credential backup, research graphs, library search, cloud evidence, and publishing. The standalone `@synsci/atlas` CLI is an optional companion and is used when present, but it is never required to run OpenScience. The wire contract uses the `synsci` model provider id, `thk_` wallet keys, and `/api/cli/*`, with `app.syntheticsciences.ai` as the default managed base URL (`src/endpoints.ts`). Skills are explicitly outside this contract.
 
 ## Build and release
 

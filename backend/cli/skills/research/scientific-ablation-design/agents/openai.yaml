@@ -1,4 +1,0 @@
-interface:
-  display_name: "Scientific Ablation Design"
-  short_description: "Design controlled benchmark ablations"
-  default_prompt: "Use $scientific-ablation-design to construct and validate a controlled ablation matrix for this claimed improvement."

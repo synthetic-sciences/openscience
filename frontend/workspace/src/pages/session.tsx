@@ -58,12 +58,12 @@ import { StatusDot } from "@/atlas/shared/StatusDot"
 import { IconTrash } from "@/atlas/shared/Icon"
 import { toast } from "@/atlas/Toast"
 import { artifactContext } from "@/artifacts/context"
-import { fetchSetupSession } from "@/atlas/setup-session"
 import { createSessionTabs } from "@/atlas/store/sessionTabs"
 import { ProjectTrustControl } from "@/atlas/ProjectTrust"
 import { projectTrustApi, type ProjectTrustApi } from "@/atlas/project-trust"
 import { terminalEndpointAvailable } from "@/atlas/terminal-endpoint"
 import { productPreferences, type ProductPreferences } from "@/context/product-preferences"
+import { SIDEBAR_WIDTH, clampSidebarWidth } from "@/pages/session-sidebar-size"
 
 type SyncSession = ReturnType<typeof useSync>["data"]["session"][number]
 
@@ -74,6 +74,7 @@ type SyncSession = ReturnType<typeof useSync>["data"]["session"][number]
  * real SSE streaming, sub-task delegation, tool calls, TODOs, diff cards).
  */
 const sessionSidebarKey = "openscience-session-sidebar-v1"
+const sessionSidebarWidthKey = "openscience-session-sidebar-width-v1"
 
 function readSessionSidebar() {
   if (typeof localStorage === "undefined") return false
@@ -87,6 +88,22 @@ function readSessionSidebar() {
 function writeSessionSidebar(collapsed: boolean) {
   try {
     localStorage.setItem(sessionSidebarKey, collapsed ? "collapsed" : "expanded")
+  } catch {}
+}
+
+function readSessionSidebarWidth() {
+  if (typeof localStorage === "undefined") return SIDEBAR_WIDTH.initial
+  try {
+    const value = Number.parseFloat(localStorage.getItem(sessionSidebarWidthKey) ?? "")
+    return Number.isFinite(value) ? clampSidebarWidth(value) : SIDEBAR_WIDTH.initial
+  } catch {
+    return SIDEBAR_WIDTH.initial
+  }
+}
+
+function writeSessionSidebarWidth(width: number) {
+  try {
+    localStorage.setItem(sessionSidebarWidthKey, clampSidebarWidth(width).toString())
   } catch {}
 }
 
@@ -106,33 +123,20 @@ export default function Page(): JSX.Element {
   const pending: { value?: Promise<string | undefined>; context?: SessionContext } = {}
   const [mobileSessionsOpen, setMobileSessionsOpen] = createSignal(false)
   const [sessionsCollapsed, setSessionsCollapsed] = createSignal(readSessionSidebar())
-  const [atlasConnected, setAtlasConnected] = createSignal(false)
+  const [sessionsWidth, setSessionsWidth] = createSignal(readSessionSidebarWidth())
   const sessionTabs = createSessionTabs()
 
   createEffect(
     on(
       () => server.url,
       (url) => {
-        setAtlasConnected(false)
-        if (!url) return
-        void fetchSetupSession(url, platform.fetch ?? fetch)
-          .then(setAtlasConnected)
-          .catch(() => setAtlasConnected(false))
-      },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => server.url,
-      (url) => {
-        productPreferences.sync({ show_trace: false, atlas_enabled: true })
+        productPreferences.sync({ show_trace: false, atlas_enabled: false })
         if (!url) return
         const endpoint = `${url.replace(/\/$/, "")}/settings/preferences`
         void (platform.fetch ?? fetch)(endpoint)
           .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Preferences unavailable"))))
           .then((preferences) => productPreferences.sync(preferences as ProductPreferences))
-          .catch(() => productPreferences.sync({ show_trace: false, atlas_enabled: true }))
+          .catch(() => productPreferences.sync({ show_trace: false, atlas_enabled: false }))
       },
     ),
   )
@@ -177,7 +181,7 @@ export default function Page(): JSX.Element {
     return task
   }
 
-  const atlasAvailable = () => atlasConnected() && productPreferences.atlas()
+  const atlasAvailable = () => productPreferences.atlas()
 
   createEffect(() => {
     if (productPreferences.atlas()) return
@@ -196,7 +200,7 @@ export default function Page(): JSX.Element {
     const ok = await confirmDialog(dialog, {
       title: "Delete this session?",
       message: "This removes the conversation and its session-owned workspace. Saved artifacts stay available.",
-      confirmLabel: "delete session",
+      confirmLabel: "Delete session",
       danger: true,
     })
     if (!ok) return
@@ -206,13 +210,13 @@ export default function Page(): JSX.Element {
     const next = sessions().find((s) => s.id !== sessionID)?.id
     try {
       await sync.session.delete(sessionID)
-      toast.info("session deleted")
+      toast.info("Session deleted")
       if (active) {
         navigate(next ? `/${params.dir}/session/${next}` : `/${params.dir}/session/new`)
       }
-    } catch (e: any) {
-      console.error("session.delete failed", e)
-      toast.error("could not delete", e?.message ?? String(e))
+    } catch (error: unknown) {
+      console.error("session.delete failed", error)
+      toast.error("Could not delete session", error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -221,15 +225,15 @@ export default function Page(): JSX.Element {
     if (!trimmed) return
     try {
       await sync.session.rename(sessionID, trimmed)
-    } catch (e: any) {
-      console.error("session.rename failed", e)
-      toast.error("could not rename", e?.message ?? String(e))
+    } catch (error: unknown) {
+      console.error("session.rename failed", error)
+      toast.error("Could not rename session", error instanceof Error ? error.message : String(error))
     }
   }
 
   async function pinSession(sessionID: string, pinned: boolean) {
     await sync.session.pin(sessionID, pinned).catch((error: unknown) => {
-      toast.error("could not update pin", error instanceof Error ? error.message : String(error))
+      toast.error("Could not update pin", error instanceof Error ? error.message : String(error))
     })
   }
 
@@ -369,10 +373,6 @@ export default function Page(): JSX.Element {
   // makes the revert permanent server-side).
   const activeSession = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const revertInfo = createMemo(() => activeSession()?.revert)
-  // New-session worktree selection, shared between the empty-state view and the
-  // composer (matches the v1.1.116 new-session flow).
-  const [newSessionWorktree, setNewSessionWorktree] = createSignal("main")
-
   // A `path.md` mentioned in an assistant message dispatches this. Keep the
   // transcript mounted and open the file in the contextual Files pane.
   onMount(() => {
@@ -430,7 +430,7 @@ export default function Page(): JSX.Element {
       title: "Undo from here?",
       message:
         "Hides this message and everything after it, and rolls back the file changes they made. You can restore until you send the next message.",
-      confirmLabel: "undo",
+      confirmLabel: "Undo",
       danger: true,
     })
     if (!ok) return
@@ -705,6 +705,7 @@ export default function Page(): JSX.Element {
           dirParam={params.dir ?? ""}
           creating={creating()}
           collapsed={sessionsCollapsed()}
+          width={sessionsWidth()}
           mobileOpen={mobileSessionsOpen()}
           onNew={() => {
             setMobileSessionsOpen(false)
@@ -712,6 +713,11 @@ export default function Page(): JSX.Element {
           }}
           onBack={() => navigate("/")}
           onCollapse={toggleSessions}
+          onResize={(width, done) => {
+            const next = clampSidebarWidth(width)
+            setSessionsWidth(next)
+            if (done) writeSessionSidebarWidth(next)
+          }}
           onSearch={() => {
             setMobileSessionsOpen(false)
             uiStore.setPaletteOpen(true)
@@ -980,7 +986,7 @@ export default function Page(): JSX.Element {
                   </div>
                 </Match>
                 <Match when={true}>
-                  <NewSessionView worktree={newSessionWorktree()} onWorktreeChange={setNewSessionWorktree} />
+                  <NewSessionView />
                 </Match>
               </Switch>
 
@@ -1024,10 +1030,7 @@ export default function Page(): JSX.Element {
                       </button>
                     </div>
                   </Show>
-                  <PromptInput
-                    newSessionWorktree={newSessionWorktree()}
-                    onNewSessionWorktreeReset={() => setNewSessionWorktree("main")}
-                  />
+                  <PromptInput />
                 </div>
               </div>
             </section>
@@ -1295,10 +1298,12 @@ function SessionsSidebar(props: {
   dirParam: string
   creating: boolean
   collapsed: boolean
+  width: number
   mobileOpen: boolean
   onNew: () => void
   onBack: () => void
   onCollapse: () => void
+  onResize: (width: number, done: boolean) => void
   onSearch: () => void
   onCustomize: () => void
   onContext: (context: SessionContext) => void
@@ -1312,12 +1317,29 @@ function SessionsSidebar(props: {
   onRename: (id: string, title: string) => void
   onPin: (id: string, pinned: boolean) => void
 }): JSX.Element {
+  const resize = (event: PointerEvent) => {
+    if (props.collapsed) return
+    event.preventDefault()
+    const origin = event.clientX
+    const width = props.width
+    const controller = new AbortController()
+    const move = (next: PointerEvent) => props.onResize(width + next.clientX - origin, false)
+    const stop = (next: PointerEvent) => {
+      props.onResize(width + next.clientX - origin, true)
+      controller.abort()
+    }
+    window.addEventListener("pointermove", move, { signal: controller.signal })
+    window.addEventListener("pointerup", stop, { once: true, signal: controller.signal })
+    window.addEventListener("pointercancel", stop, { once: true, signal: controller.signal })
+  }
+
   return (
     <aside
       class="atlas-scroll session-sidebar"
       data-mobile-open={props.mobileOpen ? "true" : "false"}
       data-collapsed={props.collapsed ? "true" : "false"}
       aria-label="Research sessions"
+      style={{ "--session-sidebar-width": `${props.width}px` }}
     >
       <div class="session-sidebar__top">
         <button type="button" class="session-sidebar__project" aria-label="Back to projects" onClick={props.onBack}>
@@ -1336,18 +1358,17 @@ function SessionsSidebar(props: {
       </div>
 
       <nav class="session-sidebar__actions" aria-label="Research navigation">
-        <span class="session-sidebar__group-label">Research</span>
         <div class="session-sidebar__action-list">
           <SidebarAction
             class="session-sidebar__new"
-            label={props.creating ? "Creating…" : "New research"}
+            label={props.creating ? "Creating…" : "New"}
             detail="Start a session"
             ariaLabel="New research"
             shortcut="⌘N"
             disabled={props.creating}
             onClick={props.onNew}
           >
-            <IconPlus size={13} strokeWidth={1.7} />
+            <IconPlus size={15} strokeWidth={1.7} />
           </SidebarAction>
           <SidebarAction
             label="Search"
@@ -1356,7 +1377,7 @@ function SessionsSidebar(props: {
             shortcut="⌘K"
             onClick={props.onSearch}
           >
-            <IconSearch size={13} strokeWidth={1.5} />
+            <IconSearch size={15} strokeWidth={1.5} />
           </SidebarAction>
           <SidebarAction
             label="Customize"
@@ -1364,7 +1385,7 @@ function SessionsSidebar(props: {
             ariaLabel="Customize OpenScience"
             onClick={props.onCustomize}
           >
-            <IconSettings size={13} strokeWidth={1.5} />
+            <IconSettings size={15} strokeWidth={1.5} />
           </SidebarAction>
         </div>
 
@@ -1377,6 +1398,25 @@ function SessionsSidebar(props: {
           onContext={props.onContext}
         />
       </nav>
+
+      <Show when={!props.collapsed}>
+        <div
+          class="session-sidebar__resize"
+          role="separator"
+          aria-label="Resize sessions sidebar"
+          aria-orientation="vertical"
+          aria-valuemin={SIDEBAR_WIDTH.min}
+          aria-valuemax={SIDEBAR_WIDTH.max}
+          aria-valuenow={props.width}
+          tabindex={0}
+          onPointerDown={resize}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+            event.preventDefault()
+            props.onResize(props.width + (event.key === "ArrowRight" ? 16 : -16), true)
+          }}
+        />
+      </Show>
 
       <div class="session-sidebar__label">
         <span>Recent sessions</span>

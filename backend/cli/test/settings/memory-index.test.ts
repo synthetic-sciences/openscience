@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, test } from "bun:test"
 import { Memory } from "../../src/settings/memory"
 import { MemoryIndex } from "../../src/settings/memory-index"
 import { Storage } from "../../src/storage/storage"
@@ -6,8 +6,12 @@ import { Storage } from "../../src/storage/storage"
 // Unique tokens per test keep searches isolated even though the per-process
 // storage dir is shared across the suite.
 
-afterEach(async () => {
+beforeEach(async () => {
   await Memory.set("global", { enabled: true, categories: [] })
+})
+
+afterEach(async () => {
+  await Memory.set("global", { enabled: false, categories: [] })
 })
 
 test("a saved note becomes a full-text hit", async () => {

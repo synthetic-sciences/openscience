@@ -1,4 +1,0 @@
-interface:
-  display_name: "Run Verifier-Routed Research"
-  short_description: "Execute bounded verifier-routed research units"
-  default_prompt: "Use $run-verifier-routed-research to execute this OpenScience verifier-loop work unit and return one compliant structured result."

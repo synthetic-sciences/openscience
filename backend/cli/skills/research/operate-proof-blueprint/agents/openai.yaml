@@ -1,4 +1,0 @@
-interface:
-  display_name: "Operate Proof Blueprint"
-  short_description: "Run bounded verifier-grounded proof search"
-  default_prompt: "Use $operate-proof-blueprint to lease and advance a verifier-grounded AND/OR Lean proof search."

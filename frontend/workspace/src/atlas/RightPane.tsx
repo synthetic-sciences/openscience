@@ -15,7 +15,8 @@ import {
 import { uiStore, type ContextTab, type WorkTab } from "@/atlas/store/ui"
 import { AtlasCanvas } from "@/atlas/AtlasCanvas"
 import { ComputeSurface } from "@/atlas/ComputeSurface"
-import { ExternalFileAccess, FileExplorer } from "@/atlas/FileExplorer"
+import { ExternalFileAccess } from "@/atlas/FileExplorer"
+import { FilesPane } from "@/atlas/FilesPane"
 import { FileView } from "@/atlas/FilePreview"
 import { TerminalSurface } from "@/atlas/TerminalSurface"
 import { SessionTraceSurface } from "@/atlas/SessionTraceSurface"
@@ -215,10 +216,15 @@ export function RightPane(
   const [expanded, setExpanded] = createSignal(false)
   const [viewport, setViewport] = createSignal(typeof window === "undefined" ? 1440 : window.innerWidth)
   const [narrow, setNarrow] = createSignal(typeof window !== "undefined" && window.innerWidth < INLINE_PANE_BREAKPOINT)
+  const [seen, setSeen] = createSignal(context() === "files")
   const paneWidth = createMemo(() => paneWidthForViewport(width(), viewport()))
   const drag = { start: null as { x: number; width: number } | null }
+  const browser = () => context() === "files" && !uiStore.file() && !uiStore.saved()
 
   createEffect(on(key, () => setWidth(initial())))
+  createEffect(() => {
+    if (context() === "files") setSeen(true)
+  })
 
   onMount(() => {
     const resize = () => {
@@ -300,16 +306,22 @@ export function RightPane(
             onMouseLeave={(event) => (event.currentTarget.style.background = "transparent")}
           />
           <div class="research-inspector__header">
-            <div class="research-inspector__context">
-              <span>Research</span>
-              <strong>
-                {context() === "files" && uiStore.file()
-                  ? uiStore.file()!.name
-                  : context() === "files" && uiStore.saved()
-                    ? uiStore.saved()!.title
-                    : labels[context()]}
-              </strong>
-            </div>
+            <Show
+              when={uiStore.workTabs().length > 0}
+              fallback={
+                <div class="research-inspector__context">
+                  <strong>{labels[context()]}</strong>
+                </div>
+              }
+            >
+              <WorkTabStrip
+                tabs={uiStore.workTabs()}
+                active={uiStore.activeWorkTab()}
+                onSelect={uiStore.activateWorkTab}
+                onClose={uiStore.closeWorkTab}
+                onReorder={uiStore.moveWorkTab}
+              />
+            </Show>
             <div class="research-inspector__controls">
               <Show when={!narrow()}>
                 <button
@@ -338,15 +350,6 @@ export function RightPane(
               </button>
             </div>
           </div>
-          <Show when={uiStore.workTabs().length > 0}>
-            <WorkTabStrip
-              tabs={uiStore.workTabs()}
-              active={uiStore.activeWorkTab()}
-              onSelect={uiStore.activateWorkTab}
-              onClose={uiStore.closeWorkTab}
-              onReorder={uiStore.moveWorkTab}
-            />
-          </Show>
           <Suspense fallback={<InspectorLoading label={labels[context()]} />}>
             <Show when={uiStore.file()} keyed>
               {(file) => (
@@ -381,15 +384,27 @@ export function RightPane(
                 </div>
               )}
             </Show>
+            <Show when={seen()}>
+              <div
+                data-component="files-context"
+                aria-hidden={browser() ? undefined : "true"}
+                style={{
+                  flex: 1,
+                  "min-height": 0,
+                  "min-width": 0,
+                  display: browser() ? "flex" : "none",
+                  "flex-direction": "column",
+                }}
+              >
+                <FilesPane />
+              </div>
+            </Show>
             <Switch>
               <Match when={context() === "artifact" && artifact()}>
                 {(current) => <ArtifactInspector context={current()} />}
               </Match>
               <Match when={context() === "files" && uiStore.saved()}>
                 {(current) => <StoredArtifactView artifact={current()} />}
-              </Match>
-              <Match when={context() === "files" && !uiStore.file() && !uiStore.saved()}>
-                <FileExplorer />
               </Match>
               <Match when={context() === "terminal"}>
                 <TerminalSurface />

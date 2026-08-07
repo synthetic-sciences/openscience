@@ -31,8 +31,7 @@ export namespace RSICritic {
 ## Trajectory
 - Agent: ${trajectory.agent}
 - Hypothesis: ${trajectory.hypothesis}
-- Agent-reported outcome: ${trajectory.reportedOutcome}
-- Externally verified outcome: ${trajectory.outcome}
+- Outcome: ${trajectory.outcome}
 - Steps: ${trajectory.steps.length}
 - Token cost: ~${trajectory.tokenCost}
 
@@ -101,27 +100,43 @@ Respond with ONLY a JSON object:
     }
   }
 
-  /** Deterministic process score. Correctness is zero until an external
-   *  evaluator is attached; tool activity can never stand in for truth. */
+  /** Heuristic evaluate — deterministic scorer, no LLM call.
+   *  Base: success=70, partial=45, failure=20.
+   *  Modifiers: step efficiency (±10), tool diversity (±10), reproducibility (±10). */
   export function evaluate(trajectory: RSITrajectory.Trajectory): CriticScore {
+    // Base score from outcome
+    const base = trajectory.outcome === "success" ? 70 : trajectory.outcome === "partial" ? 45 : 20
+
+    // Step efficiency: penalize >20 steps, reward <10
     const stepCount = trajectory.steps.length
+    const efficiencyMod = stepCount <= 5 ? 10 : stepCount <= 10 ? 5 : stepCount <= 20 ? 0 : stepCount <= 40 ? -5 : -10
+
+    // Tool diversity: reward using multiple distinct tools
     const uniqueTools = new Set(trajectory.steps.map((s) => s.tool)).size
+    const diversityMod = uniqueTools >= 5 ? 10 : uniqueTools >= 3 ? 5 : uniqueTools >= 2 ? 0 : -5
+
+    // Reproducibility: reward having a hypothesis and moderate step count
     const hasHypothesis = trajectory.hypothesis.length > 20
     const hasReasonableSteps = stepCount >= 3 && stepCount <= 30
-    const correctness = trajectory.outcome === "success" ? 25 : trajectory.outcome === "partial" ? 10 : 0
-    const efficiency = stepCount <= 5 ? 25 : stepCount <= 10 ? 22 : stepCount <= 20 ? 18 : stepCount <= 40 ? 12 : 5
-    const coverage = uniqueTools >= 5 ? 20 : uniqueTools >= 3 ? 16 : uniqueTools >= 2 ? 12 : uniqueTools === 1 ? 8 : 0
-    const reproducibility = (hasHypothesis ? 12 : 4) + (hasReasonableSteps ? 13 : 4)
+    const reproducibilityMod = (hasHypothesis ? 5 : -5) + (hasReasonableSteps ? 5 : -5)
+
+    const total = clamp(base + efficiencyMod + diversityMod + reproducibilityMod, 0, 100)
+
+    // Distribute across dimensions (proportional to total)
     const score: CriticScore = {
-      correctness,
-      efficiency,
-      coverage,
-      reproducibility,
-      total: correctness + efficiency + coverage + reproducibility,
-      notes: `Process heuristic: verification=${trajectory.outcome}, reported=${trajectory.reportedOutcome}, steps=${stepCount}, tools=${uniqueTools}`,
+      correctness: clamp(
+        Math.round(25 * (trajectory.outcome === "success" ? 1 : trajectory.outcome === "partial" ? 0.6 : 0.2)),
+        0,
+        25,
+      ),
+      efficiency: clamp(Math.round(25 * ((efficiencyMod + 10) / 20)), 0, 25),
+      coverage: clamp(Math.round(25 * ((diversityMod + 10) / 20)), 0, 25),
+      reproducibility: clamp(Math.round(25 * ((reproducibilityMod + 10) / 20)), 0, 25),
+      total,
+      notes: `Heuristic: outcome=${trajectory.outcome}, steps=${stepCount}, tools=${uniqueTools}`,
     }
 
-    log.info("process evaluation", { sessionId: trajectory.sessionId, total: score.total, outcome: trajectory.outcome })
+    log.info("heuristic evaluation", { sessionId: trajectory.sessionId, total, outcome: trajectory.outcome })
     return score
   }
 

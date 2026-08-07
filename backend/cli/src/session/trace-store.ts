@@ -4,7 +4,6 @@ import { Global } from "@/global"
 import { JsonStore } from "@/util/jsonstore"
 import { Log } from "@/util/log"
 import z from "zod"
-import { HarnessContract } from "./harness/contract"
 
 export namespace SessionTraceStore {
   const log = Log.create({ service: "session.trace.store" })
@@ -35,24 +34,13 @@ export namespace SessionTraceStore {
   })
   export type Retry = z.infer<typeof Retry>
 
-  export const Profile = z.object({
-    messageID: z.string(),
-    id: HarnessContract.Profile,
-    source: z.enum(["contract", "heuristic", "control"]),
-    confidence: z.number().min(0).max(1),
-    reasons: z.array(z.string()),
-    selectedAt: z.number(),
-  })
-  export type Profile = z.infer<typeof Profile>
-
   const State = z.object({
     approvals: z.record(z.string(), Approval).default({}),
     retries: z.array(Retry).default([]),
-    profiles: z.record(z.string(), Profile).default({}),
   })
   export type State = z.infer<typeof State>
 
-  const empty = (): State => ({ approvals: {}, retries: [], profiles: {} })
+  const empty = (): State => ({ approvals: {}, retries: [] })
   const file = (sessionID: string) => path.join(Global.Path.data, "trace", `${encodeURIComponent(sessionID)}.json`)
 
   async function update(sessionID: string, fn: (state: State) => State) {
@@ -121,26 +109,6 @@ export namespace SessionTraceStore {
       createdAt: Date.now(),
     }
     return update(input.sessionID, (state) => ({ ...state, retries: [...state.retries, item] }))
-  }
-
-  export function recordProfile(input: Omit<Profile, "selectedAt"> & { sessionID: string }) {
-    return update(input.sessionID, (state) => {
-      if (state.profiles[input.messageID]) return state
-      return {
-        ...state,
-        profiles: {
-          ...state.profiles,
-          [input.messageID]: {
-            messageID: input.messageID,
-            id: input.id,
-            source: input.source,
-            confidence: input.confidence,
-            reasons: input.reasons,
-            selectedAt: Date.now(),
-          },
-        },
-      }
-    })
   }
 
   export async function remove(sessionID: string) {

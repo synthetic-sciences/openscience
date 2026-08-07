@@ -11,7 +11,6 @@ import { Instance } from "../../project/instance"
 import { lazy } from "../../util/lazy"
 import { ScienceFile } from "../../file/science"
 import { ArtifactFile } from "../../file/artifacts"
-import { StarterFile } from "../../file/starters"
 import { PublicationFile } from "../../file/publication"
 import { ArtifactAnnotation } from "../../file/annotations"
 import { PublicationReview } from "../../file/review"
@@ -793,22 +792,6 @@ export const FileRoutes = lazy(() =>
         c.header("Content-Disposition", 'attachment; filename="openscience-artifact-manifest.json"')
         return c.json(await File.manifest())
       },
-    )
-    .post(
-      "/file/starters",
-      describeRoute({
-        summary: "Create a local scientific starter project",
-        description: "Materialize a valid notebook, sample data, and README without external downloads.",
-        operationId: "file.starter",
-        responses: {
-          200: {
-            description: "Created starter files",
-            content: { "application/json": { schema: resolver(StarterFile.Result) } },
-          },
-        },
-      }),
-      validator("json", z.object({ template: StarterFile.Template })),
-      async (c) => c.json(await File.starter(c.req.valid("json").template)),
     )
     .get(
       "/file/publication/capabilities",

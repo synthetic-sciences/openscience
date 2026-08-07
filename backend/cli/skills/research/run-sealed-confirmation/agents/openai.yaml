@@ -1,4 +1,0 @@
-interface:
-  display_name: "Run Sealed Confirmation"
-  short_description: "Confirm one terminal winner on hidden data"
-  default_prompt: "Use $run-sealed-confirmation to validate and submit a one-shot claim evaluation for the backend-selected winner."

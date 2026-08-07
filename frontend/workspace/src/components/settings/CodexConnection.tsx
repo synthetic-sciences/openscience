@@ -1,11 +1,11 @@
 import { Show, createMemo, createSignal, type Component } from "solid-js"
 import { Button } from "@synsci/ui/button"
-import { StatusDot } from "@/atlas/shared/StatusDot"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { useProviders } from "@/hooks/use-providers"
 import { credentialChange } from "./credential-change"
+import { ProviderLogo } from "./ProviderLogo"
 
 export const CodexConnection: Component<{
   onError?: (message: string | undefined) => void
@@ -59,26 +59,28 @@ export const CodexConnection: Component<{
 
   return (
     <div class="flex flex-col gap-3 rounded-[4px] border border-border-weak-base bg-surface-base/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div class="flex min-w-0 flex-col gap-0.5">
-        <span class="text-13-medium text-text-strong">Sign in with ChatGPT</span>
-        <span class="text-12-regular text-text-weak">
-          Keep Codex model access through your ChatGPT Plus, Pro, or Business plan.
-        </span>
+      <div class="flex min-w-0 items-center gap-2.5">
+        <ProviderLogo id="openai-codex" label="OpenAI" connected={connected()} />
+        <div class="flex min-w-0 flex-col gap-0.5">
+          <span class="text-13-medium text-text-strong">Sign in with ChatGPT</span>
+          <span class="text-12-regular text-text-weak">
+            Keep Codex model access through your ChatGPT Plus, Pro, or Business plan.
+          </span>
+        </div>
       </div>
       <Show
         when={!connected()}
         fallback={
           <div class="flex shrink-0 items-center gap-2">
-            <StatusDot status="active" size={8} />
             <span class="text-12-regular text-text-weak">Connected</span>
             <Button size="small" variant="secondary" disabled={busy()} onClick={() => void disconnect()}>
-              disconnect
+              Disconnect
             </Button>
           </div>
         }
       >
         <Button type="button" size="small" variant="primary" disabled={busy()} onClick={() => void connect()}>
-          {busy() ? "waiting for ChatGPT…" : "Sign in with ChatGPT"}
+          {busy() ? "Waiting for ChatGPT…" : "Sign in with ChatGPT"}
         </Button>
       </Show>
     </div>

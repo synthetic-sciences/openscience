@@ -28,8 +28,8 @@ export const PanelScroll: ParentComponent = (props) => (
 )
 
 export const PanelHeader: Component<{ title: string; description: string; toolbar?: JSX.Element }> = (props) => (
-  <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-    <div class="flex flex-col gap-4 px-4 pt-8 pb-4 sm:px-8 max-w-[820px]">
+  <div class="settings-page-header">
+    <div class="settings-page-header__inner">
       <div class="flex flex-col gap-1">
         <h2 class="text-16-medium text-text-strong">{props.title}</h2>
         <p class="text-13-regular text-text-weak">{props.description}</p>
@@ -39,14 +39,12 @@ export const PanelHeader: Component<{ title: string; description: string; toolba
   </div>
 )
 
-export const PanelBody: ParentComponent = (props) => (
-  <div class="flex flex-col gap-6 px-4 pb-12 sm:px-8 max-w-[820px]">{props.children}</div>
-)
+export const PanelBody: ParentComponent = (props) => <div class="settings-page-body">{props.children}</div>
 
-// Muted "SECTION" subheader with a trailing count.
+// Muted sentence-case subheader with a trailing count.
 export const SectionLabel: Component<{ label: string; count?: number }> = (props) => (
   <div class="flex items-center gap-2 px-0.5">
-    <span class="atlas-section-label">{props.label}</span>
+    <span class="settings-section-label">{props.label}</span>
     <Show when={props.count !== undefined}>
       <span class="text-10-regular text-text-weaker">{props.count}</span>
     </Show>
@@ -56,7 +54,7 @@ export const SectionLabel: Component<{ label: string; count?: number }> = (props
 // Rounded card wrapping a stack of rows (dividers between children handled by
 // Row's border-b). Use for grouped lists.
 export const Card: ParentComponent = (props) => (
-  <div class="border border-border-weak-base rounded-[4px] overflow-hidden bg-surface-base/40">{props.children}</div>
+  <div class="border border-border-weak-base rounded-[10px] overflow-hidden bg-surface-base/40">{props.children}</div>
 )
 
 export const Row: ParentComponent<{ onClick?: () => void }> = (props) => (

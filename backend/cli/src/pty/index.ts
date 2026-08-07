@@ -11,6 +11,7 @@ import { Shell } from "@/shell/shell"
 import { ExecutionAuthority } from "@/project/execution"
 import { Sandbox } from "@/sandbox/sandbox"
 import { OpenScience } from "@/openscience"
+import { terminalArgs, terminalEnv } from "./environment"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -104,19 +105,10 @@ export namespace Pty {
     })
     const id = Identifier.create("pty", false)
     const command = Shell.preferred()
-    const args = command.endsWith("sh") ? ["-l"] : []
+    const args = terminalArgs(command)
     const cwd = authority.workspace
     const source = await OpenScience.subprocessEnv(process.env)
-    const env = Object.fromEntries(
-      Object.entries(source).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
-    )
-    const runtime = {
-      ...env,
-      TERM: "xterm-256color",
-      OPENSCIENCE_TERMINAL: "1",
-      OPENSCIENCE_PROJECT_ID: Instance.project.id,
-      OPENSCIENCE_SESSION_ID: input.sessionID,
-    }
+    const env = terminalEnv(source, Instance.project.id, input.sessionID)
     const sandbox = Sandbox.wrapArgv({
       file: command,
       args,
@@ -130,7 +122,7 @@ export namespace Pty {
     const ptyProcess = spawn(sandbox.file, sandbox.args, {
       name: "xterm-256color",
       cwd,
-      env: runtime,
+      env,
     })
 
     const info = {
