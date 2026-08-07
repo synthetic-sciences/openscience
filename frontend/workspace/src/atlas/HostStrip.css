@@ -1,8 +1,7 @@
 /* 3a's instrument block. Where the previous pass drew two matched gauges, this
    leads with a single figure at display size and puts its qualifiers in small
-   mono beside it — a laboratory readout rather than a dashboard tile. Free
-   memory leads, not used: the question in front of a run is how much room is
-   left. */
+   mono beside it — a laboratory readout rather than a dashboard tile. Memory
+   in use leads, matching the histogram beside it, which plots the same. */
 .host-strip {
   display: flex;
   flex-direction: column;
@@ -11,6 +10,16 @@
   padding: 18px 18px 14px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
+}
+
+/* Set in the same mono capitals as the instrument labels below it, and quiet:
+   it names the block rather than competing with the figure it introduces. */
+.host-strip__title {
+  font-family: var(--font-code);
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
 }
 
 .host-strip__memory {

@@ -86,7 +86,12 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
   })
 
   return (
-    <section class="host-strip" aria-label="Host capacity" data-testid="host-strip">
+    <section class="host-strip" aria-label="System statistics" data-testid="host-strip">
+      {/* Named, because the figures below it are the machine's and the ones on
+          each kernel plate are that kernel's, and nothing else on the surface
+          said which was which — a reader who took "12.6 GB USED" for the
+          kernel's own would be out by three orders of magnitude. */}
+      <span class="host-strip__title">System statistics</span>
       <div class="host-strip__memory">
         <div class="host-strip__figure" data-host-tile="memory">
           <strong class="host-strip__headline">{reading().headline}</strong>

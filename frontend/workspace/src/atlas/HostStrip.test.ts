@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import type { JSX } from "solid-js"
 import { createServer } from "vite"
@@ -125,6 +126,17 @@ describe("host strip", () => {
     expect(values(host)).toEqual(["—", "—"])
     expect(host.textContent).not.toContain("0 B")
     expect(host.textContent).not.toContain("0 / 0")
+  })
+
+  test("names the block, so its figures are not read as a kernel's own", () => {
+    // The strip states the machine; each kernel plate states that kernel. A
+    // reader who took "6.7 GB USED" here for the kernel's own would be out by
+    // three orders of magnitude, and nothing else on the surface said which
+    // was which.
+    const source = readFileSync(fileURLToPath(new URL("./HostStrip.tsx", import.meta.url)), "utf8")
+
+    expect(source).toContain('<span class="host-strip__title">System statistics</span>')
+    expect(source).toContain('aria-label="System statistics"')
   })
 
   test("states the machine's capacity once a poll succeeds", async () => {
