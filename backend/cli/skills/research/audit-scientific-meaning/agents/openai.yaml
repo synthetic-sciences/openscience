@@ -1,0 +1,4 @@
+interface:
+  display_name: "Audit scientific meaning"
+  short_description: "Preflight independent intent and novelty reviews"
+  default_prompt: "Audit this result against its frozen scientific objective, shortcuts, and literature scope, preserving ambiguity and evidence."

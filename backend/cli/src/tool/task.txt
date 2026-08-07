@@ -24,3 +24,4 @@ Rules:
 4. Each invocation is stateless unless you provide a session_id. Give it a bounded objective, relevant context, allowed actions, and an exact return contract.
 5. Treat child output as evidence to inspect, not authority to trust blindly.
 6. The child result is not directly visible to the user. Report only the useful merged outcome and material limitations.
+7. For harness coalition work, pass the exact ready unit as `harness_work_id`, use its required agent and canonical prompt, and resume only its declared `session_id`. This binds the actual Task turn and measured usage before coalition settlement.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Benchmark Integrity"
+  short_description: "Audit traces for benchmark leakage and model substitution"
+  default_prompt: "Use $verify-benchmark-integrity to derive a runtime integrity submission from a normalized evaluator trace."

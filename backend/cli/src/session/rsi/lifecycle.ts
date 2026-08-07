@@ -3,20 +3,22 @@
  *
  * - Tracks usage count per learned skill
  * - Archives skills with 0 uses after 30 days
- * - Flags high performers (>10 uses) for potential promotion
+ * - Reports frequently used skills without treating usage as performance
  */
 
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "@/global"
 import { Log } from "@/util/log"
+import { HarnessEvaluation } from "../harness/evaluation"
 
 export namespace RSILifecycle {
   const log = Log.create({ service: "rsi-lifecycle" })
   const LEARNED_SKILLS_DIR = path.join(Global.Path.data, "learned-skills")
   const STATS_PATH = path.join(LEARNED_SKILLS_DIR, ".stats.json")
+  const PROPOSAL_STATS_PATH = path.join(Global.Path.data, "learned-skill-proposals", ".stats.json")
   const ARCHIVE_AFTER_DAYS = 30
-  const HIGH_PERFORMER_THRESHOLD = 10
+  const FREQUENTLY_USED_THRESHOLD = 10
 
   interface Stats {
     skills: Record<string, SkillStats>
@@ -27,6 +29,20 @@ export namespace RSILifecycle {
     firstUsed: number
     lastUsed: number
     created: number
+  }
+
+  interface ProposalStats {
+    proposals: Record<
+      string,
+      {
+        status: "pending" | "promoted" | "rejected"
+        sessionID: string
+        runID: string
+        evaluator: string
+        score?: number
+        created: number
+      }
+    >
   }
 
   async function readStats(): Promise<Stats> {
@@ -74,6 +90,23 @@ export namespace RSILifecycle {
     }
   }
 
+  /** Register inert evaluator-backed output for later held-out review. */
+  export async function registerProposal(name: string, evaluation: HarnessEvaluation.Info): Promise<void> {
+    const stats = (await Bun.file(PROPOSAL_STATS_PATH)
+      .json()
+      .catch(() => ({ proposals: {} }))) as ProposalStats
+    stats.proposals[name] = {
+      status: "pending",
+      sessionID: evaluation.sessionID,
+      runID: evaluation.runID,
+      evaluator: evaluation.evaluator.name,
+      score: evaluation.score,
+      created: Date.now(),
+    }
+    await fs.mkdir(path.dirname(PROPOSAL_STATS_PATH), { recursive: true })
+    await Bun.write(PROPOSAL_STATS_PATH, JSON.stringify(stats, null, 2) + "\n")
+  }
+
   /** Get stats for a skill. */
   export async function getStats(skillName: string): Promise<SkillStats | null> {
     const stats = await readStats()
@@ -106,15 +139,15 @@ export namespace RSILifecycle {
     return archived
   }
 
-  /** Find high-performing skills (>HIGH_PERFORMER_THRESHOLD uses). */
-  export async function highPerformers(): Promise<string[]> {
+  /** Usage is an adoption signal only; it is not evidence of correctness. */
+  export async function frequentlyUsed(): Promise<string[]> {
     const stats = await readStats()
     return Object.entries(stats.skills)
-      .filter(([, s]) => s.usageCount > HIGH_PERFORMER_THRESHOLD)
+      .filter(([, s]) => s.usageCount > FREQUENTLY_USED_THRESHOLD)
       .map(([name]) => name)
   }
 
-  /** Startup lifecycle check — archive unused, log high performers. */
+  /** Startup lifecycle check — archive unused, report adoption. */
   export async function startupCheck(): Promise<void> {
     try {
       const archived = await archiveUnused()
@@ -122,9 +155,9 @@ export namespace RSILifecycle {
         log.info("startup: archived unused learned skills", { count: archived })
       }
 
-      const performers = await highPerformers()
-      if (performers.length > 0) {
-        log.info("startup: high-performing learned skills", { skills: performers })
+      const frequent = await frequentlyUsed()
+      if (frequent.length > 0) {
+        log.info("startup: frequently used learned skills", { skills: frequent })
       }
     } catch (e) {
       log.warn("lifecycle startup check failed", { error: e instanceof Error ? e.message : String(e) })

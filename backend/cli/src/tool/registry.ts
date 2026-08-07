@@ -40,6 +40,9 @@ import { AtlasRecordTool } from "./atlas-record"
 import { ArtifactSnapshotTool } from "./artifact-snapshot"
 import { ModalTool } from "./modal"
 import { ComputeJobTool } from "./compute-job"
+import { HarnessTool } from "./harness"
+import { ClaimTool } from "./claim"
+import { MemoryTool } from "./memory"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -143,14 +146,24 @@ export namespace ToolRegistry {
       LearnTool,
       ModalTool,
       ComputeJobTool,
+      MemoryTool,
+      HarnessTool,
+      ClaimTool,
       ...custom,
     ]
   }
 
   const ARTIFACT_TOOL_ID = "artifact"
-  const ARTIFACT_AGENTS = ["research", "biology", "ml"]
+  const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml"]
 
   const MODAL_AGENTS = ["research", "biology", "physics", "ml"]
+  // Memory tool: only user-facing primary agents may read/write persistent
+  // memory; subagents (title, compaction, explore, ...) cannot. Plan mode is
+  // excluded because PlanMode.enforce blocks all mutating tools there anyway.
+  const MEMORY_TOOL_ID = "memory"
+  const MEMORY_AGENTS = ["research", "biology", "physics", "ml"]
+  const HARNESS_TOOL_ID = "harness"
+  const CLAIM_TOOL_ID = "claim"
 
   export async function ids() {
     return all().then((x) => x.map((t) => t.id))
@@ -179,6 +192,14 @@ export namespace ToolRegistry {
 
           if (t.id === "modal" || t.id === "compute_job") {
             return !!agent?.name && MODAL_AGENTS.includes(agent.name)
+          }
+
+          if (t.id === HARNESS_TOOL_ID) {
+            return !!agent?.name && MEMORY_AGENTS.includes(agent.name)
+          }
+
+          if (t.id === CLAIM_TOOL_ID) {
+            return !!agent?.name && MEMORY_AGENTS.includes(agent.name)
           }
 
           // Enable websearch/codesearch for zen users OR via enable flag

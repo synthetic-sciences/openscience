@@ -62,6 +62,17 @@ import { PlanMode } from "@/tool/plan-mode"
 import { Inference } from "@/provider/inference"
 import { OpenScience } from "@/openscience"
 import { assertExternalDirectory } from "@/tool/external-directory"
+import { HarnessProfile } from "./harness/profile"
+import { HarnessMemory } from "./harness/memory"
+import { HarnessClaims } from "./harness/claims"
+import { HarnessDomain } from "./harness/domain"
+import { HarnessBlueprint } from "./harness/blueprint"
+import { HarnessFormal } from "./harness/formal"
+import { HarnessSemantic } from "./harness/semantic"
+import { HarnessReplication } from "./harness/replication"
+import { HarnessSynthesis } from "./harness/synthesis"
+import { HarnessWorld } from "./harness/world"
+import { SessionTraceStore } from "./trace-store"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -820,6 +831,35 @@ export namespace SessionPrompt {
 
       const sessionMessages = clone(msgs)
 
+      const request =
+        lastUserMsg?.parts
+          .flatMap((part) => (part.type === "text" && !part.synthetic && !part.ignored ? [part.text] : []))
+          .join("\n") ?? ""
+      const profile = await HarnessProfile.resolve({ sessionID, agent: agent.name, text: request })
+      const hindsight =
+        profile.id === "optimize"
+          ? await HarnessMemory.prompt({ sessionID, query: request, stage: "planning" }).catch(() => "")
+          : ""
+      const claims = profile.id === "react" ? "" : await HarnessClaims.prompt(sessionID).catch(() => "")
+      const domain = await HarnessDomain.resolve({ sessionID, agent: agent.name, profile: profile.id, text: request })
+      const methodology = HarnessDomain.prompt(domain)
+      const [world, semantics, synthesis, replication, formal, blueprint] = await Promise.all([
+        HarnessWorld.prompt(sessionID).catch(() => ""),
+        HarnessSemantic.context(sessionID).catch(() => ""),
+        HarnessSynthesis.context(sessionID).catch(() => ""),
+        HarnessReplication.context(sessionID).catch(() => ""),
+        HarnessFormal.context(sessionID).catch(() => ""),
+        HarnessBlueprint.context(sessionID).catch(() => ""),
+      ])
+      await SessionTraceStore.recordProfile({
+        sessionID,
+        messageID: lastUser.id,
+        id: profile.id,
+        source: profile.source,
+        confidence: profile.confidence,
+        reasons: profile.reasons,
+      })
+
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
         for (const msg of sessionMessages) {
@@ -863,6 +903,16 @@ export namespace SessionPrompt {
         ...(await SystemPrompt.compute()),
         ...(await InstructionPrompt.system()),
         ...(SKILL_ROUTING_AGENTS.has(agent.name) ? [await SystemPrompt.availableSkills(agent.permission)] : []),
+        profile.prompt,
+        ...(world ? [world] : []),
+        ...(hindsight ? [hindsight] : []),
+        ...(claims ? [claims] : []),
+        ...(methodology ? [methodology] : []),
+        ...(semantics ? [semantics] : []),
+        ...(synthesis ? [synthesis] : []),
+        ...(replication ? [replication] : []),
+        ...(formal ? [formal] : []),
+        ...(blueprint ? [blueprint] : []),
         ...artifactContext,
       ]
 

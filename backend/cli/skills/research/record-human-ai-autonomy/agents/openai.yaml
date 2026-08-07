@@ -1,0 +1,4 @@
+interface:
+  display_name: "Record Human-AI Autonomy"
+  short_description: "Capture auditable human-AI contribution traces"
+  default_prompt: "Use $record-human-ai-autonomy to validate and preflight an evaluator-owned human-AI interaction trace."

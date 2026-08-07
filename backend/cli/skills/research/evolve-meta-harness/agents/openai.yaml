@@ -1,0 +1,4 @@
+interface:
+  display_name: "Evolve Meta Harness"
+  short_description: "Qualify harness refinements before promotion"
+  default_prompt: "Use $evolve-meta-harness to build and qualify a trace-grounded harness refinement lineage."

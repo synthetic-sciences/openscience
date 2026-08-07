@@ -1,0 +1,4 @@
+interface:
+  display_name: "Trace Evolutionary Candidate"
+  short_description: "Capture replayable candidate lineage and cycles"
+  default_prompt: "Use $trace-evolutionary-candidate to build an evaluator-owned evolution trace submission for a candidate and its exact parents."

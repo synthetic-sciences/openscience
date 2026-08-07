@@ -1,0 +1,4 @@
+interface:
+  display_name: "Operate Adaptive Search"
+  short_description: "Execute verified adaptive search leases"
+  default_prompt: "Use $operate-adaptive-search to execute this OpenScience adaptive search lease and return one compliant candidate artifact."
