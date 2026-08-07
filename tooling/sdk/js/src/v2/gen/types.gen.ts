@@ -10698,6 +10698,575 @@ export type HarnessReplicationReceiptResponses = {
 export type HarnessReplicationReceiptResponse =
   HarnessReplicationReceiptResponses[keyof HarnessReplicationReceiptResponses]
 
+export type HarnessMetaSelectionData = {
+  body?: {
+    sessionID: string
+    metaToken: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/meta/selection"
+}
+
+export type HarnessMetaSelectionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessMetaSelectionError = HarnessMetaSelectionErrors[keyof HarnessMetaSelectionErrors]
+
+export type HarnessMetaSelectionResponses = {
+  /**
+   * Content-addressed terminal meta-harness selection
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "meta-harness-selection-v1"
+    selectionID: string
+    contractSHA256: string
+    protocolSHA256: string
+    sourceSessionID: string
+    runID: string
+    searchRevision: number
+    stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
+    candidateID: string
+    candidateArtifact: {
+      uri: string
+      sha256: string
+    }
+    optimizationResultSHA256: string
+    optimizationEvaluationSHA256: string
+    selectedAt: number
+  }
+}
+
+export type HarnessMetaSelectionResponse = HarnessMetaSelectionResponses[keyof HarnessMetaSelectionResponses]
+
+export type HarnessMetaRecordData = {
+  body?: {
+    schemaVersion: 1
+    sessionID: string
+    metaToken: string
+    selectionID: string
+    candidateArtifactSHA256: string
+    candidateManifestSHA256: string
+    protectedManifestSHA256: string
+    validatorSHA256: string
+    archive: {
+      uri: string
+      sha256: string
+      schemaSHA256: string
+      indexSHA256: string
+      contents: "full-source-scores-traces"
+      query: "filesystem"
+      complete: true
+      hiddenContent: "excluded"
+      evaluatorContent: "excluded"
+      entries: Array<{
+        candidateID: string
+        artifactSHA256: string
+        sourceSHA256: string
+        state: "evaluated" | "unevaluated"
+        scoresSHA256?: string
+        resultSHA256?: string
+        evaluationSHA256?: string
+        trace?: {
+          uri: string
+          sha256: string
+          schemaSHA256: string
+          complete: true
+          hiddenContent: "excluded"
+          evaluatorContent: "excluded"
+        }
+      }>
+    }
+    refinements: Array<{
+      revision: number
+      scope: "session"
+      parentSnapshotSHA256: string
+      snapshotSHA256: string
+      trigger: string
+      diagnosis: {
+        kind: "implementation" | "fundamental" | "inconclusive"
+        rationale: string
+      }
+      rootCause: string
+      expectedOutcome: string
+      changes: Array<{
+        action: "create" | "update" | "delete" | "rollback"
+        component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
+        path: string
+        beforeSHA256?: string
+        afterSHA256?: string
+        reason: string
+      }>
+      evidence: Array<{
+        candidateID: string
+        traceSHA256: string
+        messageIndex: number
+        excerptSHA256: string
+      }>
+      predictions: Array<{
+        modelID: string
+        taskID: string
+        expected: "fail_to_pass" | "remain_pass"
+      }>
+    }>
+    cells: Array<
+      | {
+          split: "search" | "held_out"
+          modelID: string
+          modelCommitment: string
+          taskID: string
+          taskCommitment: string
+          outcome: "completed" | "failed" | "inconclusive"
+          score?: number
+          passed?: boolean
+          contextTokens: number
+          outputSHA256: string
+          trace: {
+            uri: string
+            sha256: string
+            schemaSHA256: string
+            complete: true
+            hiddenContent: "excluded"
+            evaluatorContent: "excluded"
+          }
+          evidence: Array<string>
+          role: "baseline"
+        }
+      | {
+          split: "search" | "held_out"
+          modelID: string
+          modelCommitment: string
+          taskID: string
+          taskCommitment: string
+          outcome: "completed" | "failed" | "inconclusive"
+          score?: number
+          passed?: boolean
+          contextTokens: number
+          outputSHA256: string
+          trace: {
+            uri: string
+            sha256: string
+            schemaSHA256: string
+            complete: true
+            hiddenContent: "excluded"
+            evaluatorContent: "excluded"
+          }
+          evidence: Array<string>
+          role: "candidate"
+          loaded: boolean
+          phases: Array<{
+            followed: number
+            violatedCommission: number
+            violatedOmission: number
+            requiredUnobserved: number
+            notApplicable: number
+            insufficientEvidence: number
+            phase: "loaded" | "midpoint" | "pre_final" | "final_validation"
+          }>
+        }
+    >
+    evaluatedAt: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/harness/meta/receipts"
+}
+
+export type HarnessMetaRecordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HarnessMetaRecordError = HarnessMetaRecordErrors[keyof HarnessMetaRecordErrors]
+
+export type HarnessMetaRecordResponses = {
+  /**
+   * Immutable meta-harness qualification receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "meta-harness-receipt-v1"
+    receiptID: string
+    contractSHA256: string
+    protocolSHA256: string
+    sourceSessionID: string
+    runID: string
+    selection: {
+      schemaVersion: 1
+      protocolVersion: "meta-harness-selection-v1"
+      selectionID: string
+      contractSHA256: string
+      protocolSHA256: string
+      sourceSessionID: string
+      runID: string
+      searchRevision: number
+      stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
+      candidateID: string
+      candidateArtifact: {
+        uri: string
+        sha256: string
+      }
+      optimizationResultSHA256: string
+      optimizationEvaluationSHA256: string
+      selectedAt: number
+    }
+    candidateManifestSHA256: string
+    protectedManifestSHA256: string
+    validatorSHA256: string
+    archive: {
+      uri: string
+      sha256: string
+      schemaSHA256: string
+      indexSHA256: string
+      contents: "full-source-scores-traces"
+      query: "filesystem"
+      complete: true
+      hiddenContent: "excluded"
+      evaluatorContent: "excluded"
+      entries: Array<{
+        candidateID: string
+        artifactSHA256: string
+        sourceSHA256: string
+        state: "evaluated" | "unevaluated"
+        scoresSHA256?: string
+        resultSHA256?: string
+        evaluationSHA256?: string
+        trace?: {
+          uri: string
+          sha256: string
+          schemaSHA256: string
+          complete: true
+          hiddenContent: "excluded"
+          evaluatorContent: "excluded"
+        }
+      }>
+    }
+    refinements: Array<{
+      revision: number
+      scope: "session"
+      parentSnapshotSHA256: string
+      snapshotSHA256: string
+      trigger: string
+      diagnosis: {
+        kind: "implementation" | "fundamental" | "inconclusive"
+        rationale: string
+      }
+      rootCause: string
+      expectedOutcome: string
+      changes: Array<{
+        action: "create" | "update" | "delete" | "rollback"
+        component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
+        path: string
+        beforeSHA256?: string
+        afterSHA256?: string
+        reason: string
+      }>
+      evidence: Array<{
+        candidateID: string
+        traceSHA256: string
+        messageIndex: number
+        excerptSHA256: string
+      }>
+      predictions: Array<{
+        modelID: string
+        taskID: string
+        expected: "fail_to_pass" | "remain_pass"
+      }>
+    }>
+    cells: Array<
+      | {
+          split: "search" | "held_out"
+          modelID: string
+          modelCommitment: string
+          taskID: string
+          taskCommitment: string
+          outcome: "completed" | "failed" | "inconclusive"
+          score?: number
+          passed?: boolean
+          contextTokens: number
+          outputSHA256: string
+          trace: {
+            uri: string
+            sha256: string
+            schemaSHA256: string
+            complete: true
+            hiddenContent: "excluded"
+            evaluatorContent: "excluded"
+          }
+          evidence: Array<string>
+          role: "baseline"
+        }
+      | {
+          split: "search" | "held_out"
+          modelID: string
+          modelCommitment: string
+          taskID: string
+          taskCommitment: string
+          outcome: "completed" | "failed" | "inconclusive"
+          score?: number
+          passed?: boolean
+          contextTokens: number
+          outputSHA256: string
+          trace: {
+            uri: string
+            sha256: string
+            schemaSHA256: string
+            complete: true
+            hiddenContent: "excluded"
+            evaluatorContent: "excluded"
+          }
+          evidence: Array<string>
+          role: "candidate"
+          loaded: boolean
+          phases: Array<{
+            followed: number
+            violatedCommission: number
+            violatedOmission: number
+            requiredUnobserved: number
+            notApplicable: number
+            insufficientEvidence: number
+            phase: "loaded" | "midpoint" | "pre_final" | "final_validation"
+          }>
+        }
+    >
+    diagnostics: {
+      updaterGain?: number
+      beneficiaryGain?: number
+      worstHeldoutModelGain?: number
+      activationRate: number
+      requiredAdherence?: number
+      finalAdherence?: number
+      maxPhaseDrift?: number
+      predictionPrecision: number
+      riskRegressions: number
+      maxContextTokens: number
+      meanContextIncrease: number
+      loadedBenefit?: number
+      searchPairs: number
+      heldoutPairs: number
+    }
+    status: "passed" | "failed" | "inconclusive"
+    failures: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessMetaRecordResponse = HarnessMetaRecordResponses[keyof HarnessMetaRecordResponses]
+
+export type HarnessMetaReceiptData = {
+  body?: {
+    sessionID: string
+    metaToken: string
+  }
+  path: {
+    receiptID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/harness/meta/receipts/{receiptID}"
+}
+
+export type HarnessMetaReceiptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HarnessMetaReceiptError = HarnessMetaReceiptErrors[keyof HarnessMetaReceiptErrors]
+
+export type HarnessMetaReceiptResponses = {
+  /**
+   * Canonical meta-harness qualification receipt
+   */
+  200: {
+    schemaVersion: 1
+    protocolVersion: "meta-harness-receipt-v1"
+    receiptID: string
+    contractSHA256: string
+    protocolSHA256: string
+    sourceSessionID: string
+    runID: string
+    selection: {
+      schemaVersion: 1
+      protocolVersion: "meta-harness-selection-v1"
+      selectionID: string
+      contractSHA256: string
+      protocolSHA256: string
+      sourceSessionID: string
+      runID: string
+      searchRevision: number
+      stopReason: "budget_exhausted" | "objective_met" | "no_improvement" | "user_cancelled" | "runtime_error"
+      candidateID: string
+      candidateArtifact: {
+        uri: string
+        sha256: string
+      }
+      optimizationResultSHA256: string
+      optimizationEvaluationSHA256: string
+      selectedAt: number
+    }
+    candidateManifestSHA256: string
+    protectedManifestSHA256: string
+    validatorSHA256: string
+    archive: {
+      uri: string
+      sha256: string
+      schemaSHA256: string
+      indexSHA256: string
+      contents: "full-source-scores-traces"
+      query: "filesystem"
+      complete: true
+      hiddenContent: "excluded"
+      evaluatorContent: "excluded"
+      entries: Array<{
+        candidateID: string
+        artifactSHA256: string
+        sourceSHA256: string
+        state: "evaluated" | "unevaluated"
+        scoresSHA256?: string
+        resultSHA256?: string
+        evaluationSHA256?: string
+        trace?: {
+          uri: string
+          sha256: string
+          schemaSHA256: string
+          complete: true
+          hiddenContent: "excluded"
+          evaluatorContent: "excluded"
+        }
+      }>
+    }
+    refinements: Array<{
+      revision: number
+      scope: "session"
+      parentSnapshotSHA256: string
+      snapshotSHA256: string
+      trigger: string
+      diagnosis: {
+        kind: "implementation" | "fundamental" | "inconclusive"
+        rationale: string
+      }
+      rootCause: string
+      expectedOutcome: string
+      changes: Array<{
+        action: "create" | "update" | "delete" | "rollback"
+        component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
+        path: string
+        beforeSHA256?: string
+        afterSHA256?: string
+        reason: string
+      }>
+      evidence: Array<{
+        candidateID: string
+        traceSHA256: string
+        messageIndex: number
+        excerptSHA256: string
+      }>
+      predictions: Array<{
+        modelID: string
+        taskID: string
+        expected: "fail_to_pass" | "remain_pass"
+      }>
+    }>
+    cells: Array<
+      | {
+          split: "search" | "held_out"
+          modelID: string
+          modelCommitment: string
+          taskID: string
+          taskCommitment: string
+          outcome: "completed" | "failed" | "inconclusive"
+          score?: number
+          passed?: boolean
+          contextTokens: number
+          outputSHA256: string
+          trace: {
+            uri: string
+            sha256: string
+            schemaSHA256: string
+            complete: true
+            hiddenContent: "excluded"
+            evaluatorContent: "excluded"
+          }
+          evidence: Array<string>
+          role: "baseline"
+        }
+      | {
+          split: "search" | "held_out"
+          modelID: string
+          modelCommitment: string
+          taskID: string
+          taskCommitment: string
+          outcome: "completed" | "failed" | "inconclusive"
+          score?: number
+          passed?: boolean
+          contextTokens: number
+          outputSHA256: string
+          trace: {
+            uri: string
+            sha256: string
+            schemaSHA256: string
+            complete: true
+            hiddenContent: "excluded"
+            evaluatorContent: "excluded"
+          }
+          evidence: Array<string>
+          role: "candidate"
+          loaded: boolean
+          phases: Array<{
+            followed: number
+            violatedCommission: number
+            violatedOmission: number
+            requiredUnobserved: number
+            notApplicable: number
+            insufficientEvidence: number
+            phase: "loaded" | "midpoint" | "pre_final" | "final_validation"
+          }>
+        }
+    >
+    diagnostics: {
+      updaterGain?: number
+      beneficiaryGain?: number
+      worstHeldoutModelGain?: number
+      activationRate: number
+      requiredAdherence?: number
+      finalAdherence?: number
+      maxPhaseDrift?: number
+      predictionPrecision: number
+      riskRegressions: number
+      maxContextTokens: number
+      meanContextIncrease: number
+      loadedBenefit?: number
+      searchPairs: number
+      heldoutPairs: number
+    }
+    status: "passed" | "failed" | "inconclusive"
+    failures: Array<string>
+    evaluatedAt: number
+    recordedAt: number
+  }
+}
+
+export type HarnessMetaReceiptResponse = HarnessMetaReceiptResponses[keyof HarnessMetaReceiptResponses]
+
 export type HarnessConfirmationSelectionData = {
   body?: {
     sessionID: string
@@ -14897,6 +15466,82 @@ export type HarnessBindData = {
       maxSourceLines: number
       maxChangedLines: number
     }
+    metaHarness?: {
+      protocol: {
+        protocolVersion: "meta-harness-v1"
+        validatorSHA256: string
+        archiveSchemaSHA256: string
+        traceSchemaSHA256: string
+        baseline: {
+          artifactSHA256: string
+          manifestSHA256: string
+        }
+        mutable: Array<{
+          root: string
+          component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
+        }>
+        protected: {
+          manifestSHA256: string
+          roots: Array<string>
+        }
+        archive: {
+          contents: "full-source-scores-traces"
+          query: "filesystem"
+          summariesOnly: false
+          hiddenContent: "excluded"
+          evaluatorContent: "excluded"
+        }
+        updater: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        judge: {
+          name: string
+          version: string
+          promptSHA256: string
+          configSHA256: string
+        }
+        search: {
+          models: Array<{
+            id: string
+            commitment: string
+          }>
+          tasks: Array<{
+            id: string
+            commitment: string
+            activationRequired: boolean
+          }>
+        }
+        heldout: {
+          models: Array<{
+            id: string
+            commitment: string
+          }>
+          tasks: Array<{
+            id: string
+            commitment: string
+            activationRequired: boolean
+          }>
+        }
+        thresholds: {
+          minSearchGain: number
+          minHeldoutGain: number
+          maxModelRegression: number
+          minActivationRate: number
+          minRequiredAdherence: number
+          minFinalAdherence: number
+          maxPhaseDrift: number
+          minPredictionPrecision: number
+          maxRiskRegressions: number
+          maxContextTokens: number
+          maxMeanContextIncrease: number
+        }
+        promotionRequired: true
+      }
+      token: string
+    }
     interventions?: {
       protocolVersion: "intervention-study-v1"
       validatorSHA256: string
@@ -15689,6 +16334,79 @@ export type HarnessBindResponses = {
       maxTotalBytes: number
       maxSourceLines: number
       maxChangedLines: number
+    }
+    metaHarness?: {
+      protocolVersion: "meta-harness-v1"
+      validatorSHA256: string
+      archiveSchemaSHA256: string
+      traceSchemaSHA256: string
+      baseline: {
+        artifactSHA256: string
+        manifestSHA256: string
+      }
+      mutable: Array<{
+        root: string
+        component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
+      }>
+      protected: {
+        manifestSHA256: string
+        roots: Array<string>
+      }
+      archive: {
+        contents: "full-source-scores-traces"
+        query: "filesystem"
+        summariesOnly: false
+        hiddenContent: "excluded"
+        evaluatorContent: "excluded"
+      }
+      updater: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      judge: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      search: {
+        models: Array<{
+          id: string
+          commitment: string
+        }>
+        tasks: Array<{
+          id: string
+          commitment: string
+          activationRequired: boolean
+        }>
+      }
+      heldout: {
+        models: Array<{
+          id: string
+          commitment: string
+        }>
+        tasks: Array<{
+          id: string
+          commitment: string
+          activationRequired: boolean
+        }>
+      }
+      thresholds: {
+        minSearchGain: number
+        minHeldoutGain: number
+        maxModelRegression: number
+        minActivationRate: number
+        minRequiredAdherence: number
+        minFinalAdherence: number
+        maxPhaseDrift: number
+        minPredictionPrecision: number
+        maxRiskRegressions: number
+        maxContextTokens: number
+        maxMeanContextIncrease: number
+      }
+      promotionRequired: true
     }
     interventions?: {
       protocolVersion: "intervention-study-v1"
@@ -16806,6 +17524,79 @@ export type HarnessContractResponses = {
       maxSourceLines: number
       maxChangedLines: number
     }
+    metaHarness?: {
+      protocolVersion: "meta-harness-v1"
+      validatorSHA256: string
+      archiveSchemaSHA256: string
+      traceSchemaSHA256: string
+      baseline: {
+        artifactSHA256: string
+        manifestSHA256: string
+      }
+      mutable: Array<{
+        root: string
+        component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
+      }>
+      protected: {
+        manifestSHA256: string
+        roots: Array<string>
+      }
+      archive: {
+        contents: "full-source-scores-traces"
+        query: "filesystem"
+        summariesOnly: false
+        hiddenContent: "excluded"
+        evaluatorContent: "excluded"
+      }
+      updater: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      judge: {
+        name: string
+        version: string
+        promptSHA256: string
+        configSHA256: string
+      }
+      search: {
+        models: Array<{
+          id: string
+          commitment: string
+        }>
+        tasks: Array<{
+          id: string
+          commitment: string
+          activationRequired: boolean
+        }>
+      }
+      heldout: {
+        models: Array<{
+          id: string
+          commitment: string
+        }>
+        tasks: Array<{
+          id: string
+          commitment: string
+          activationRequired: boolean
+        }>
+      }
+      thresholds: {
+        minSearchGain: number
+        minHeldoutGain: number
+        maxModelRegression: number
+        minActivationRate: number
+        minRequiredAdherence: number
+        minFinalAdherence: number
+        maxPhaseDrift: number
+        minPredictionPrecision: number
+        maxRiskRegressions: number
+        maxContextTokens: number
+        maxMeanContextIncrease: number
+      }
+      promotionRequired: true
+    }
     interventions?: {
       protocolVersion: "intervention-study-v1"
       validatorSHA256: string
@@ -17360,6 +18151,7 @@ export type HarnessReportResponses = {
       synthesisReceiptID?: string
       autonomyReceiptID?: string
       proofReceiptID?: string
+      metaReceiptID?: string
       confirmationReceiptID?: string
       evaluations: number
     }
@@ -17445,6 +18237,27 @@ export type HarnessReportResponses = {
         guardIDs: Array<string>
       }
       archive: number
+    }
+    metaHarness?: {
+      status: "passed" | "failed" | "inconclusive"
+      selectionID: string
+      diagnostics: {
+        updaterGain?: number
+        beneficiaryGain?: number
+        worstHeldoutModelGain?: number
+        activationRate: number
+        requiredAdherence?: number
+        finalAdherence?: number
+        maxPhaseDrift?: number
+        predictionPrecision: number
+        riskRegressions: number
+        maxContextTokens: number
+        meanContextIncrease: number
+        loadedBenefit?: number
+        searchPairs: number
+        heldoutPairs: number
+      }
+      failures: Array<string>
     }
     generatedAt: number
   }

@@ -257,6 +257,7 @@ export namespace HarnessSkill {
       recipe: contract.recipe,
       integrity: contract.integrity,
       evolution: contract.evolution,
+      metaHarness: contract.metaHarness,
       interventions: contract.interventions,
       simulation: contract.simulation,
       evaluatorAudit: contract.evaluatorAudit,

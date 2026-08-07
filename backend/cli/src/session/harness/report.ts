@@ -9,6 +9,7 @@ import { HarnessConfirmation } from "./confirmation"
 import { HarnessContract } from "./contract"
 import { HarnessEvaluation } from "./evaluation"
 import { HarnessFormal } from "./formal"
+import { HarnessMeta } from "./meta"
 import { HarnessSearch } from "./search"
 import { SessionTrace } from "../trace"
 
@@ -133,6 +134,10 @@ export namespace HarnessReport {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          metaReceiptID: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
           confirmationReceiptID: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
@@ -170,6 +175,15 @@ export namespace HarnessReport {
           objectives: HarnessContract.Objectives,
           objectiveAudit: HarnessContract.ObjectiveAudit.optional(),
           archive: z.number().int().nonnegative(),
+        })
+        .strict()
+        .optional(),
+      metaHarness: z
+        .object({
+          status: HarnessEvaluation.Status,
+          selectionID: z.string().regex(/^[a-f0-9]{64}$/),
+          diagnostics: HarnessMeta.Diagnostics,
+          failures: z.array(z.string()),
         })
         .strict()
         .optional(),
@@ -221,6 +235,7 @@ export namespace HarnessReport {
     evaluations: HarnessEvaluation.Info[]
     trace?: Trace
     search?: HarnessSearch.State
+    meta?: HarnessMeta.Receipt
     confirmation?: HarnessConfirmation.Receipt
     autonomy?: HarnessAutonomy.Receipt
     formal?: HarnessFormal.Receipt
@@ -240,9 +255,19 @@ export namespace HarnessReport {
       throw new Error(`Formal proof receipt does not match the selected evaluation`)
     }
     const blueprint = input.blueprint ? HarnessBlueprint.bind(contract, input.blueprint) : undefined
+    const meta = input.meta ? HarnessMeta.bind(contract, input.meta) : undefined
+    if (meta && meta.selection.candidateID !== input.search?.bestID) {
+      throw new Error(`Meta-harness qualification does not match the selected search winner`)
+    }
     const confirmation = input.confirmation ? HarnessConfirmation.binds(contract, input.confirmation) : undefined
     if (confirmation && !contract.confirmation) {
       throw new Error(`A legacy harness report cannot cite sealed confirmation evidence`)
+    }
+    if (confirmation && contract.metaHarness && meta?.status !== "passed") {
+      throw new Error(`A sealed report requires a passing meta-harness qualification`)
+    }
+    if (confirmation && meta && confirmation.selection.candidateID !== meta.selection.candidateID) {
+      throw new Error(`Meta-harness and sealed confirmation receipts select different candidates`)
     }
     const provisional = Boolean(contract.confirmation && !confirmation)
     const result = contract.confirmation ? confirmation : evaluation
@@ -266,6 +291,7 @@ export namespace HarnessReport {
       launch: contract.launch,
       integrity: contract.integrity,
       evolution: contract.evolution,
+      metaHarness: contract.metaHarness,
       interventions: contract.interventions,
       search: contract.search,
       evaluatorAudit: contract.evaluatorAudit,
@@ -375,6 +401,7 @@ export namespace HarnessReport {
         synthesisReceiptID: contract.confirmation ? undefined : evaluation?.synthesisReceiptID,
         autonomyReceiptID: evaluation?.autonomyReceiptID,
         proofReceiptID: evaluation?.proofReceiptID,
+        metaReceiptID: meta?.receiptID,
         confirmationReceiptID: confirmation?.receiptID,
         evaluations: evaluations.length,
       },
@@ -409,6 +436,14 @@ export namespace HarnessReport {
             archive: HarnessSearch.frontier(input.search).length,
           }
         : undefined,
+      metaHarness: meta
+        ? {
+            status: meta.status,
+            selectionID: meta.selection.selectionID,
+            diagnostics: meta.diagnostics,
+            failures: meta.failures,
+          }
+        : undefined,
       generatedAt: input.generatedAt ?? Date.now(),
     })
   }
@@ -416,10 +451,11 @@ export namespace HarnessReport {
   export async function build(sessionID: string) {
     const contract = await HarnessContract.read(sessionID)
     if (!contract) throw new Error(`No harness contract is bound to session ${sessionID}`)
-    const [evaluations, trace, search, confirmation, blueprint] = await Promise.all([
+    const [evaluations, trace, search, meta, confirmation, blueprint] = await Promise.all([
       HarnessEvaluation.list(sessionID),
       SessionTrace.build(sessionID),
       HarnessSearch.read(sessionID).catch(() => undefined),
+      HarnessMeta.current(contract),
       HarnessConfirmation.current(contract),
       contract.formalProof?.blueprint
         ? HarnessBlueprint.read(sessionID)
@@ -439,6 +475,7 @@ export namespace HarnessReport {
       evaluations,
       trace: trace.summary,
       search,
+      meta: meta ?? undefined,
       confirmation: confirmation ?? undefined,
       autonomy,
       formal,

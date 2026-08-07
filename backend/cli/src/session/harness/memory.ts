@@ -76,6 +76,10 @@ export namespace HarnessMemory {
             .string()
             .regex(/^[a-f0-9]{64}$/)
             .optional(),
+          metaHarnessSHA256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
           confirmationSHA256: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
@@ -102,6 +106,8 @@ export namespace HarnessMemory {
     contract.autonomy ? digest(JSON.stringify(contract.autonomy)) : undefined
   const formal = (contract: HarnessContract.Info) =>
     contract.formalProof ? digest(JSON.stringify(contract.formalProof)) : undefined
+  const meta = (contract: HarnessContract.Info) =>
+    contract.metaHarness ? digest(JSON.stringify(contract.metaHarness)) : undefined
   const confirmation = (contract: HarnessContract.Info) =>
     contract.confirmation ? digest(JSON.stringify(contract.confirmation)) : undefined
   const key = (contract: HarnessContract.Info) => {
@@ -115,8 +121,10 @@ export namespace HarnessMemory {
     const accountable = provenance ? `${scientific}\0${provenance}` : scientific
     const proof = formal(contract)
     const verified = proof ? `${accountable}\0${proof}` : accountable
+    const harness = meta(contract)
+    const qualified = harness ? `${verified}\0${harness}` : verified
     const sealed = confirmation(contract)
-    return digest(sealed ? `${verified}\0${sealed}` : verified)
+    return digest(sealed ? `${qualified}\0${sealed}` : qualified)
   }
   const file = (contract: HarnessContract.Info) => path.join(root, `${key(contract)}.json`)
   const clip = (value: string, max = 1_000) =>
@@ -141,6 +149,7 @@ export namespace HarnessMemory {
     const provenance = autonomy(contract)
     const proof = formal(contract)
     const repeat = replication(contract)
+    const harness = meta(contract)
     const sealed = confirmation(contract)
     return {
       schemaVersion: 1,
@@ -154,6 +163,7 @@ export namespace HarnessMemory {
         ...(provenance ? { autonomySHA256: provenance } : {}),
         ...(proof ? { formalProofSHA256: proof } : {}),
         ...(repeat ? { replicationSHA256: repeat } : {}),
+        ...(harness ? { metaHarnessSHA256: harness } : {}),
         ...(sealed ? { confirmationSHA256: sealed } : {}),
       },
       entries: {},

@@ -614,7 +614,17 @@ The evaluator uses `run-replicated-evaluation` outside the candidate process, ex
 
 For maximized and pass-rate metrics, the lower endpoint must clear the frozen target; for minimized metrics, the upper endpoint must clear it. The final evaluation score must exactly equal the backend estimate. A best seed, favorable subset, point estimate, or self-authored replication statement cannot pass. The first valid receipt freezes the subject's canonical attempt; byte-identical retries are idempotent and changed retries are rejected. Receipts are content-addressed, contract/session/subject/metric/time bound, re-derived on read, and must exist before the subject's final evaluation. Replication is also part of report comparability, verified-memory scope, learned-skill comparison, and matched harness ablation.
 
-### 9. Confirm one terminal winner on an untouched split
+### 9. Qualify continual harness refinements before promotion
+
+`meta-harness-v1` treats the harness itself as an evolved artifact rather than a hand-written prompt that is assumed to help. Before search, the contract freezes an immutable baseline and protected manifest; exact mutable roots for prompt, memory, skill, tool, middleware, subagent, and scaffold components; archive, trace, and validator commitments; distinct updater and adherence-judge identities; disjoint sorted search and held-out model/task matrices; and thresholds for transfer gain, worst-model regression, activation, adherence, phase drift, prediction precision, risk regressions, and context cost. Every split includes an activation task, and the qualifier capability is distinct from optimization, judge-audit, semantic-audit, and claim-evaluator capabilities.
+
+The bundled `evolve-meta-harness` skill keeps refinements local and versioned. Each revision descends from the immutable baseline or preceding content hash, changes only one declared mutable component root, cites a message in the complete archived search trace, diagnoses implementation versus fundamental failure, states a root cause and targeted change, and predicts search-task flips or protected passing cells before evaluation. Atomic snapshots and explicit rollback revisions preserve history; global promotion is never an updater side effect. Every search candidate remains in the filesystem archive with exact source, scores, evaluation, and raw trace—including failures and unevaluated proposals. Summaries are navigation only.
+
+After search terminates, only the qualifier can call `POST /harness/meta/selection`; the backend chooses the verified winner. Qualification then runs the exact baseline and candidate across the full search and unseen model/task cross products without feeding held-out outcomes back into search. Candidate activation tasks record whether the harness loaded plus independent adherence counts at loaded, midpoint, pre-final, and final-validation phases. OpenScience direction-normalizes gains, checks transfer for each held-out model, and derives all diagnostics itself. Missing evidence is inconclusive; a failed cell or threshold breach fails. The first receipt is immutable and retry-resistant.
+
+This receipt is a promotion firewall, not benchmark fitness. `sealed-confirmation-v1` refuses to expose the claim subject until a bound meta-harness receipt passes. Reports preserve the receipt, complete diagnostics, and model-harness pair in the comparison key while keeping optimization provisional. The protocol incorporates mechanisms from Prime Agent, Agentic Harness Engineering, Meta-Harness, A-Evolve, MLEvolve, and EvoScientist while reusing—not duplicating—OpenScience's existing graph search, runtime persistence, evolution provenance, and evaluator isolation.
+
+### 10. Confirm one terminal winner on an untouched split
 
 `sealed-confirmation-v1` closes the selection-bias gap left by fixed-candidate uncertainty intervals. The contract uses `development` or `validation` for repeated optimization and reserves a distinct `held_out` or `release` manifest for confirmation. It freezes the claim task, official source pin when applicable, validator, environment, evaluator identity, metric, direction, target, one-subject selection rule, terminal-only exposure, and fail-closed behavior. Optimization and claim evaluator tokens must be distinct. Public-subset adapters, blocked upstream runners, and unverified official recipes cannot pose as hidden confirmation integrations.
 
@@ -624,7 +634,7 @@ The first valid receipt becomes the session's canonical holdout attempt. Exact c
 
 For a confirmation-enabled contract, optimization evaluations are deliberately absent from report quality. Before confirmation, the report is marked provisional, has no quality status or score, and is excluded from comparison and the Pareto frontier. After confirmation, the report uses only the sealed aggregate, claim evaluator identity, and receipt ID. The confirmation protocol also scopes retrospective memory and the report comparison key.
 
-### 10. Verify with domain packs
+### 11. Verify with domain packs
 
 Final passing results must contain evidence-backed receipts for every blocking check selected by the adapter.
 
@@ -640,13 +650,13 @@ Final passing results must contain evidence-backed receipts for every blocking c
 
 An adapter can require no universal pack when the benchmark spans incompatible task types; the orchestrator may add task-specific packs at bind time. Pack selection is frozen in the contract and comparison key.
 
-### 11. Reuse only verified hindsight
+### 12. Reuse only verified hindsight
 
 Retrospective entries are scoped by benchmark name, version, task, and evaluator. They contain the exact candidate artifact reference, branch, generation, external outcome, score, metrics, evidence references, evaluator feedback, and evaluation usage.
 
 Retrieval combines query overlap, task affinity, and workflow stage. It deliberately returns a relevant contrasting failure beside a success when possible. Retrieved text is escaped, length-bounded, and explicitly labeled as precedent data rather than instructions.
 
-### 12. Keep claims separate from execution reports
+### 13. Keep claims separate from execution reports
 
 The claim ledger supports descriptive, statistical, causal, mechanistic, theoretical, and performance claims. Status is derived from verified evidence, never assigned by the agent.
 
@@ -657,7 +667,7 @@ The claim ledger supports descriptive, statistical, causal, mechanistic, theoret
 - Clean replay, independent implementation, and independent derivation require a separate verifier session, fresh process, clean workspace, and exact source hash.
 - Independent implementation/derivation additionally withhold the producer's output and require independent code or reasoning.
 
-### 13. Promote skills only after held-out qualification
+### 14. Promote skills only after held-out qualification
 
 `/learn` and RSI distillation write inert proposals under `learned-skill-proposals`; skill discovery reads only promoted content under `learned-skills`.
 
@@ -675,7 +685,7 @@ Before a proposal exists, OpenScience checks its frontmatter, runtime-risk patte
 
 If later evidence introduces a regression before promotion, qualification returns to pending. Promoted content cannot accept more evidence; changes require a new versioned proposal.
 
-### 14. Execute benchmark-native protocol skills
+### 15. Execute benchmark-native protocol skills
 
 The bundled skill catalog includes executable protocols for work that is otherwise easy to describe but hard to audit:
 
@@ -700,7 +710,7 @@ The bundled skill catalog includes executable protocols for work that is otherwi
 
 Their scripts return machine-readable JSON and nonzero failure codes, so an orchestrator can use them as blocking gates instead of relying on prompt compliance. They validate the protocol and reported measurements; they do not manufacture hidden data, run an unavailable simulator, or turn an internal result into official benchmark evidence.
 
-### 15. Attribute gains with matched ablations
+### 16. Attribute gains with matched ablations
 
 `POST /harness/ablations` freezes a server-timestamped study before any paired evaluation exists. A study supports `profile`, `orchestration`, adaptive `search`, active `audit`, `simulation`, `evaluator_audit`, `semantic_audit`, scientific `synthesis`, human-AI `autonomy`, `formal_proof`, `replication`, `fidelities`, and named `skill` or `tool` factors. It requires at least three distinct seeds on a held-out or release split. Within each seed, baseline and arm must have identical objectives, benchmark/evaluator protocol, packs, model, remaining tools/skills, budget, intervention, contamination policy, and seed after removing exactly the declared factor. Across pairs, every non-seed field and both factor values must remain identical.
 
@@ -710,7 +720,7 @@ After all runs settle, `POST /harness/ablations/:planID/assessment` reauthentica
 
 The resulting content-addressed receipt establishes matched evidence for one declared harness mechanism. It does not by itself establish benchmark SOTA, generalize beyond the bound task, or rescue an incompatible official comparison.
 
-### 16. Qualify the evaluator before trusting a pass
+### 17. Qualify the evaluator before trusting a pass
 
 Authentication proves who submitted an evaluation; it does not prove that evaluator is competent. A run can therefore bind an `evaluatorAudit` protocol with an auditor identity and bearer capability distinct from the evaluator, a hidden-suite commitment, minimum clean and per-fault case counts, required fault classes, and thresholds for sensitivity, specificity, balanced accuracy, Brier score, and recall for every required fault.
 
@@ -720,7 +730,7 @@ A passing final evaluation under this protocol must cite a passing receipt recor
 
 This mechanism does not claim that a finite meta-evaluation suite makes a judge infallible. It prevents an authenticated but untested judge from silently becoming ground truth and makes evaluator quality a versioned, ablatable part of the benchmark protocol.
 
-### 17. Score scientific synthesis from frozen atomic facts
+### 18. Score scientific synthesis from frozen atomic facts
 
 `scientific-synthesis-v1` covers SciConBench-style long-form conclusions where ordinary answer matching cannot distinguish genuine evidence synthesis from answer-key retrieval. Before execution, the evaluator privately salts the reference conclusion and every atomic reference fact, then binds only their commitments. The contract also freezes the public-question hash, cutoff date, canonical retrieval-tool subset, complete trace and filter-policy hashes, tool-event budget, distinct decomposer/precision/recall prompt commitments and frozen configurations, minimum fact count and component thresholds, and `inconclusive` handling for judge failures. The contamination cutoff must match, the primary metric must be maximized `factual_f1`, and the evaluator must pass an independent audit containing wrong-answer, unsupported-claim, and data-leakage faults.
 
@@ -730,7 +740,7 @@ Each run or candidate can freeze only one canonical, content-addressed receipt. 
 
 The public policy is injected into both the main agent and any conditional coalition without exposing hidden commitments. Its exact protocol scopes verified hindsight, learned-skill comparisons, report comparison, and a dedicated matched-ablation factor, so conclusions or optimization traces from one hidden reference cannot silently transfer into another.
 
-### 18. Derive human-AI autonomy from the complete interaction trace
+### 19. Derive human-AI autonomy from the complete interaction trace
 
 `human-ai-autonomy-v1` adapts the contribution axis in DeepMind's Aletheia Human-AI Interaction cards to benchmark execution. The contract predeclares one of `essentially_autonomous`, `human_ai_collaboration`, or `primarily_human`; pins the evaluator-runtime recorder, trace schema, classification policy, event ceiling, raw-retention requirement, and delayed-disclosure policy; and is immutable before the agent starts. Collaborative and primarily-human claims must also retain the legacy `human_reprompted` label, but that coarse label never determines the receipt.
 
@@ -740,7 +750,7 @@ A passing final evaluation must postdate and cite the one canonical passing rece
 
 This closes API forgery, trace reordering, artifact substitution, late-start capture, post-final edits, and unfavorable-receipt replacement inside the stated boundary. It cannot prove that an evaluator-controlled recorder omitted no off-platform conversation or that a semantic contribution label is correct; credible public claims still require a qualified recorder, retained raw evidence, and expert audit. Public disclosure of essential prompts after release is supported as a policy commitment, but hidden benchmark content must not be exposed early.
 
-### 19. Verify formal proofs at an explicit trust tier
+### 20. Verify formal proofs at an explicit trust tier
 
 `formal-proof-v1` binds a Lean 4 claim before search begins. The contract distinguishes `exact_proof`, `exact_refutation`, and `repaired_proof`; freezes the trusted challenge and canonical statement independently; names the declaration and module; commits `lean-toolchain`, `lake-manifest.json`, the full dependency closure, verifier binaries, complete file budget, source-escape policy, and transitive axiom allowlist; and selects `kernel`, `fresh_recheck`, or `external_crosscheck`. The `formal` domain pack is added automatically.
 
@@ -750,7 +760,7 @@ Each run or candidate gets exactly one immutable content-addressed receipt, boun
 
 This proves only the frozen formal statement relative to the accepted axioms and environment. It does not prove that autoformalization matches the intended informal theorem, that definitions are non-vacuous, or that a result is novel or important. Those remain semantic-review and scientific-evidence obligations; strict public claims should use `external_crosscheck`.
 
-### 20. Search formal proofs through a bounded AND/OR blueprint
+### 21. Search formal proofs through a bounded AND/OR blueprint
 
 `proof-blueprint-v1` is an optional search layer nested inside `formal-proof-v1`. The root is derived from the exact frozen statement, declaration, and module. Goals are content-addressed OR nodes, so an identical helper statement is solved once even when several decompositions need it. Accepted decompositions are AND nodes: the frozen Lean compiler and sketch validator must confirm that the parent follows assuming only the exact introduced child declarations, and every child must close before the branch closes.
 
@@ -758,7 +768,7 @@ The evaluator owns all transitions. Atomic leases select distinct deepest-ready 
 
 The relevance/easier/plausible reviewer controls search admission but has no proof authority. A `proved` blueprint is only a compiler-grounded route through provisional lemmas. Passing final evaluation still requires the exact artifact's `formal-proof-v1` receipt with its source, axiom, fresh-replay, and independent-checker gates. The bundled `operate-proof-blueprint` skill freezes architecture artifacts, hashes private attempt evidence, derives exact placeholder lists, rejects path and symlink escapes, and emits no evaluator capability.
 
-### 21. Compare only compatible runs
+### 22. Compare only compatible runs
 
 Legacy reports choose only a final evaluation. Confirmation-enabled reports choose only a canonical sealed claim receipt and exclude provisional optimization scores from comparison. Their comparison key hashes benchmark, version, task, split, evaluator identity/source, fidelity, adaptive-search, launch, runtime-integrity, evolution, controlled-intervention, simulation, evaluator-audit, semantic-audit, replicated-evaluation, sealed-confirmation, scientific-synthesis, human-AI-autonomy, formal-proof, and objective-audit protocols, metric, direction, target, domain packs, and contamination policy. Cross-task or cross-protocol comparisons fail instead of normalizing unlike scores. Reports surface controller telemetry alongside the applicable evidence receipt.
 
@@ -817,6 +827,9 @@ Every adapter is version-agnostic. A development/validation run must still bind 
 | `POST` | `/harness/simulations/receipts/:id`                  | Read a capability-protected simulator validation receipt      |
 | `POST` | `/harness/replications/receipts`                     | Recompute and freeze a conservative replicated result         |
 | `POST` | `/harness/replications/receipts/:id`                 | Read a capability-protected replicated evaluation receipt     |
+| `POST` | `/harness/meta/selection`                            | Resolve the terminal harness-refinement subject               |
+| `POST` | `/harness/meta/receipts`                             | Derive and freeze cross-model harness qualification           |
+| `POST` | `/harness/meta/receipts/:id`                         | Read the canonical meta-harness qualification receipt         |
 | `POST` | `/harness/confirmations/selection`                   | Resolve one capability-protected terminal winner              |
 | `POST` | `/harness/confirmations/receipts`                    | Derive and freeze its one-shot claim result                   |
 | `POST` | `/harness/confirmations/receipts/:id`                | Read the canonical sealed confirmation receipt                |
@@ -870,6 +883,9 @@ The implementation borrows principles, not source code, from the following prima
 | [SkyDiscover](https://github.com/skydiscover-ai/skydiscover)                                                                                                                                         | Island-style diversity, UCB selection, migration/fusion, staged evaluation, and strategy mutation after stagnation.                                                                                   |
 | [GEPA](https://arxiv.org/abs/2507.19457)                                                                                                                                                             | Feed detailed evaluator feedback into reflective search rather than optimizing from a scalar alone.                                                                                                   |
 | [EvoScientist](https://github.com/EvoScientist/EvoScientist) and its [paper](https://arxiv.org/abs/2603.08127)                                                                                       | Turn repeated observations into proposed reusable skills; OpenScience adds stricter quarantine and held-out promotion.                                                                                |
+| [Prime Agent](https://github.com/PrimeIntellect-ai/prime-agent)                                                                                                                                      | Keep an immutable base while versioning local supplemental prompt, memory, skill, and subagent state through evidence-backed refinement, atomic save, and rollback.                                   |
+| [Agentic Harness Engineering](https://github.com/china-qijizhifeng/agentic-harness-engineering) and its [paper](https://arxiv.org/abs/2604.25850)                                                    | Preserve full raw traces and require trace-cited root cause, targeted edits, predicted task flips, risk tasks, and next-iteration falsification.                                                      |
+| [Meta-Harness](https://github.com/stanford-iris-lab/meta-harness), [A-Evolve](https://github.com/A-EVO-Lab/a-evolve), and [HarnessBench](https://github.com/Qihoo360/harness-bench)                  | Evaluate harness activation, adherence, phase drift, context overhead, updater benefit, and transfer to unseen models/tasks as model-harness pairs behind an independent promotion firewall.          |
 | [ResearchHarness](https://github.com/InternScience/ResearchHarness)                                                                                                                                  | Keep the benchmark substrate explicit, inspectable, tool-bounded, and traceable while isolating agent workspaces from evaluator state.                                                                |
 | [PhysicsIntern](https://github.com/huggingface/physics-intern-skills)                                                                                                                                | Use durable research state, fresh verification contexts, independent derivations/computations, and adversarial critique.                                                                              |
 | [ResearchClawBench](https://arxiv.org/abs/2606.07591)                                                                                                                                                | Evaluate end-to-end research against hidden target work and make protocol mismatch, evidence mismatch, and missing scientific core visible.                                                           |

@@ -41,6 +41,13 @@ export namespace HarnessAdapter {
       recipe: HarnessRecipe.Selection.optional(),
       integrity: HarnessContract.Integrity.optional(),
       evolution: HarnessContract.Evolution.optional(),
+      metaHarness: z
+        .object({
+          protocol: HarnessContract.MetaHarness,
+          token: Token,
+        })
+        .strict()
+        .optional(),
       interventions: HarnessContract.Interventions.optional(),
       simulation: HarnessContract.Simulation.optional(),
       evaluatorAudit: z
@@ -167,6 +174,34 @@ export namespace HarnessAdapter {
           code: "custom",
           path: ["confirmation", "token"],
           message: "Optimization and claim evaluator capabilities must differ",
+        })
+      }
+      if (value.metaHarness && value.metaHarness.token === value.evaluator.token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["metaHarness", "token"],
+          message: "Optimization evaluator and meta-harness qualifier capabilities must differ",
+        })
+      }
+      if (value.metaHarness && value.evaluatorAudit && value.metaHarness.token === value.evaluatorAudit.token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["metaHarness", "token"],
+          message: "Evaluator auditor and meta-harness qualifier capabilities must differ",
+        })
+      }
+      if (value.metaHarness && value.semanticAudit && value.metaHarness.token === value.semanticAudit.token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["metaHarness", "token"],
+          message: "Semantic reviewer and meta-harness qualifier capabilities must differ",
+        })
+      }
+      if (value.metaHarness && value.confirmation && value.metaHarness.token === value.confirmation.token) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["metaHarness", "token"],
+          message: "Claim evaluator and meta-harness qualifier capabilities must differ",
         })
       }
       if (value.confirmation && value.evaluatorAudit && value.confirmation.token === value.evaluatorAudit.token) {
@@ -304,6 +339,16 @@ export namespace HarnessAdapter {
         })
         .strict()
         .optional(),
+      meta: z
+        .object({
+          name: z.string().min(1),
+          version: z.string().min(1),
+          promptSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+          configSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+          tokenSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+        })
+        .strict()
+        .optional(),
       confirmation: z
         .object({
           name: z.string().min(1),
@@ -410,6 +455,29 @@ export namespace HarnessAdapter {
       })
     ) {
       throw new Error(`Claim evaluator identity does not match the bound harness contract`)
+    }
+    return contract
+  }
+
+  export async function authorizeMeta(sessionID: string, token: string) {
+    const [contract, binding] = await Promise.all([HarnessContract.read(sessionID), credential(sessionID)])
+    if (!contract?.metaHarness || !binding.meta) {
+      throw new Error(`No meta-harness qualifier is bound to session ${sessionID}`)
+    }
+    if (binding.contractFingerprint !== HarnessContract.fingerprint(contract)) {
+      throw new Error(`Meta-harness qualifier capability does not match the bound harness contract`)
+    }
+    if (!timingSafeEqual(binding.meta.tokenSHA256, digest(Token.parse(token)))) {
+      throw new Error(`Meta-harness qualifier capability was rejected`)
+    }
+    if (
+      JSON.stringify(binding.meta) !==
+      JSON.stringify({
+        ...contract.metaHarness.judge,
+        tokenSHA256: binding.meta.tokenSHA256,
+      })
+    ) {
+      throw new Error(`Meta-harness qualifier identity does not match the bound harness contract`)
     }
     return contract
   }
@@ -522,6 +590,7 @@ export namespace HarnessAdapter {
       recipe,
       integrity: task.integrity,
       evolution: task.evolution,
+      metaHarness: task.metaHarness?.protocol,
       interventions: task.interventions,
       simulation: task.simulation,
       evaluatorAudit: task.evaluatorAudit?.protocol,
@@ -563,6 +632,12 @@ export namespace HarnessAdapter {
         ? {
             ...task.semanticAudit.protocol.reviewer,
             tokenSHA256: digest(task.semanticAudit.token),
+          }
+        : undefined,
+      meta: task.metaHarness
+        ? {
+            ...task.metaHarness.protocol.judge,
+            tokenSHA256: digest(task.metaHarness.token),
           }
         : undefined,
       confirmation: task.confirmation

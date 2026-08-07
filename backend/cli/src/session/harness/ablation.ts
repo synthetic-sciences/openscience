@@ -255,6 +255,7 @@ export namespace HarnessAblation {
       recipe: contract.recipe,
       integrity: contract.integrity,
       evolution: contract.evolution,
+      metaHarness: contract.metaHarness,
       interventions: contract.interventions,
       ...(factor.kind === "simulation" ? {} : { simulation: contract.simulation }),
       ...(factor.kind === "evaluator_audit" ? {} : { evaluatorAudit: contract.evaluatorAudit }),

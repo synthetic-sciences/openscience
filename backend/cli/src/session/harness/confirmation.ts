@@ -5,6 +5,7 @@ import { JsonStore } from "@/util/jsonstore"
 import { HarnessContract } from "./contract"
 import { HarnessDomain } from "./domain"
 import { HarnessEvaluation } from "./evaluation"
+import { HarnessMeta } from "./meta"
 import { HarnessSearch } from "./search"
 
 export namespace HarnessConfirmation {
@@ -201,6 +202,7 @@ export namespace HarnessConfirmation {
   export async function select(contract: HarnessContract.Info) {
     const protocol = contract.confirmation
     if (!protocol) throw new Error(`Harness contract does not require sealed confirmation`)
+    await HarnessMeta.assertPromotable(contract)
     const state = await HarnessSearch.read(contract.sessionID)
     if (state.runID !== contract.runID) throw new Error(`Search state does not match the bound harness run`)
     if (state.status !== "completed" || !state.stopReason || !state.bestID) {

@@ -175,6 +175,12 @@ import type {
   HarnessLaunchReceiptResponses,
   HarnessLaunchRecordErrors,
   HarnessLaunchRecordResponses,
+  HarnessMetaReceiptErrors,
+  HarnessMetaReceiptResponses,
+  HarnessMetaRecordErrors,
+  HarnessMetaRecordResponses,
+  HarnessMetaSelectionErrors,
+  HarnessMetaSelectionResponses,
   HarnessOrchestrationCheckpointErrors,
   HarnessOrchestrationCheckpointResponses,
   HarnessOrchestrationStartErrors,
@@ -4873,6 +4879,256 @@ export class Replication extends HeyApiClient {
   }
 }
 
+export class Meta extends HeyApiClient {
+  /**
+   * Resolve the terminal meta-harness qualification subject
+   *
+   * Returns the backend-selected verified winner after search termination, isolated behind the independent meta-harness qualifier capability.
+   */
+  public selection<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      metaToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "metaToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      HarnessMetaSelectionResponses,
+      HarnessMetaSelectionErrors,
+      ThrowOnError
+    >({
+      url: "/harness/meta/selection",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Record a one-shot continual-harness qualification
+   *
+   * Freezes the complete refinement lineage, full trace archive, cross-model held-out matrix, activation/adherence diagnostics, and backend-derived promotion verdict.
+   */
+  public record<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      schemaVersion?: 1
+      sessionID?: string
+      metaToken?: string
+      selectionID?: string
+      candidateArtifactSHA256?: string
+      candidateManifestSHA256?: string
+      protectedManifestSHA256?: string
+      validatorSHA256?: string
+      archive?: {
+        uri: string
+        sha256: string
+        schemaSHA256: string
+        indexSHA256: string
+        contents: "full-source-scores-traces"
+        query: "filesystem"
+        complete: true
+        hiddenContent: "excluded"
+        evaluatorContent: "excluded"
+        entries: Array<{
+          candidateID: string
+          artifactSHA256: string
+          sourceSHA256: string
+          state: "evaluated" | "unevaluated"
+          scoresSHA256?: string
+          resultSHA256?: string
+          evaluationSHA256?: string
+          trace?: {
+            uri: string
+            sha256: string
+            schemaSHA256: string
+            complete: true
+            hiddenContent: "excluded"
+            evaluatorContent: "excluded"
+          }
+        }>
+      }
+      refinements?: Array<{
+        revision: number
+        scope: "session"
+        parentSnapshotSHA256: string
+        snapshotSHA256: string
+        trigger: string
+        diagnosis: {
+          kind: "implementation" | "fundamental" | "inconclusive"
+          rationale: string
+        }
+        rootCause: string
+        expectedOutcome: string
+        changes: Array<{
+          action: "create" | "update" | "delete" | "rollback"
+          component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
+          path: string
+          beforeSHA256?: string
+          afterSHA256?: string
+          reason: string
+        }>
+        evidence: Array<{
+          candidateID: string
+          traceSHA256: string
+          messageIndex: number
+          excerptSHA256: string
+        }>
+        predictions: Array<{
+          modelID: string
+          taskID: string
+          expected: "fail_to_pass" | "remain_pass"
+        }>
+      }>
+      cells?: Array<
+        | {
+            split: "search" | "held_out"
+            modelID: string
+            modelCommitment: string
+            taskID: string
+            taskCommitment: string
+            outcome: "completed" | "failed" | "inconclusive"
+            score?: number
+            passed?: boolean
+            contextTokens: number
+            outputSHA256: string
+            trace: {
+              uri: string
+              sha256: string
+              schemaSHA256: string
+              complete: true
+              hiddenContent: "excluded"
+              evaluatorContent: "excluded"
+            }
+            evidence: Array<string>
+            role: "baseline"
+          }
+        | {
+            split: "search" | "held_out"
+            modelID: string
+            modelCommitment: string
+            taskID: string
+            taskCommitment: string
+            outcome: "completed" | "failed" | "inconclusive"
+            score?: number
+            passed?: boolean
+            contextTokens: number
+            outputSHA256: string
+            trace: {
+              uri: string
+              sha256: string
+              schemaSHA256: string
+              complete: true
+              hiddenContent: "excluded"
+              evaluatorContent: "excluded"
+            }
+            evidence: Array<string>
+            role: "candidate"
+            loaded: boolean
+            phases: Array<{
+              followed: number
+              violatedCommission: number
+              violatedOmission: number
+              requiredUnobserved: number
+              notApplicable: number
+              insufficientEvidence: number
+              phase: "loaded" | "midpoint" | "pre_final" | "final_validation"
+            }>
+          }
+      >
+      evaluatedAt?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "schemaVersion" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "metaToken" },
+            { in: "body", key: "selectionID" },
+            { in: "body", key: "candidateArtifactSHA256" },
+            { in: "body", key: "candidateManifestSHA256" },
+            { in: "body", key: "protectedManifestSHA256" },
+            { in: "body", key: "validatorSHA256" },
+            { in: "body", key: "archive" },
+            { in: "body", key: "refinements" },
+            { in: "body", key: "cells" },
+            { in: "body", key: "evaluatedAt" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessMetaRecordResponses, HarnessMetaRecordErrors, ThrowOnError>({
+      url: "/harness/meta/receipts",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read a capability-protected meta-harness receipt
+   */
+  public receipt<ThrowOnError extends boolean = false>(
+    parameters: {
+      receiptID: string
+      directory?: string
+      sessionID?: string
+      metaToken?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "receiptID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "metaToken" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HarnessMetaReceiptResponses, HarnessMetaReceiptErrors, ThrowOnError>({
+      url: "/harness/meta/receipts/{receiptID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Confirmation extends HeyApiClient {
   /**
    * Resolve the sealed post-search confirmation subject
@@ -7054,6 +7310,82 @@ export class Harness extends HeyApiClient {
         maxSourceLines: number
         maxChangedLines: number
       }
+      metaHarness?: {
+        protocol: {
+          protocolVersion: "meta-harness-v1"
+          validatorSHA256: string
+          archiveSchemaSHA256: string
+          traceSchemaSHA256: string
+          baseline: {
+            artifactSHA256: string
+            manifestSHA256: string
+          }
+          mutable: Array<{
+            root: string
+            component: "prompt" | "memory" | "skill" | "tool" | "middleware" | "subagent" | "scaffold"
+          }>
+          protected: {
+            manifestSHA256: string
+            roots: Array<string>
+          }
+          archive: {
+            contents: "full-source-scores-traces"
+            query: "filesystem"
+            summariesOnly: false
+            hiddenContent: "excluded"
+            evaluatorContent: "excluded"
+          }
+          updater: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+          judge: {
+            name: string
+            version: string
+            promptSHA256: string
+            configSHA256: string
+          }
+          search: {
+            models: Array<{
+              id: string
+              commitment: string
+            }>
+            tasks: Array<{
+              id: string
+              commitment: string
+              activationRequired: boolean
+            }>
+          }
+          heldout: {
+            models: Array<{
+              id: string
+              commitment: string
+            }>
+            tasks: Array<{
+              id: string
+              commitment: string
+              activationRequired: boolean
+            }>
+          }
+          thresholds: {
+            minSearchGain: number
+            minHeldoutGain: number
+            maxModelRegression: number
+            minActivationRate: number
+            minRequiredAdherence: number
+            minFinalAdherence: number
+            maxPhaseDrift: number
+            minPredictionPrecision: number
+            maxRiskRegressions: number
+            maxContextTokens: number
+            maxMeanContextIncrease: number
+          }
+          promotionRequired: true
+        }
+        token: string
+      }
       interventions?: {
         protocolVersion: "intervention-study-v1"
         validatorSHA256: string
@@ -7457,6 +7789,7 @@ export class Harness extends HeyApiClient {
             { in: "body", key: "recipe" },
             { in: "body", key: "integrity" },
             { in: "body", key: "evolution" },
+            { in: "body", key: "metaHarness" },
             { in: "body", key: "interventions" },
             { in: "body", key: "simulation" },
             { in: "body", key: "evaluatorAudit" },
@@ -7765,6 +8098,11 @@ export class Harness extends HeyApiClient {
   private _replication?: Replication
   get replication(): Replication {
     return (this._replication ??= new Replication({ client: this.client }))
+  }
+
+  private _meta?: Meta
+  get meta(): Meta {
+    return (this._meta ??= new Meta({ client: this.client }))
   }
 
   private _confirmation?: Confirmation

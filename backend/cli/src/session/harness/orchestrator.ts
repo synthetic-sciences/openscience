@@ -6,6 +6,7 @@ import { HarnessBenchmark } from "./benchmark"
 import { HarnessConfirmation } from "./confirmation"
 import { HarnessContract } from "./contract"
 import { HarnessLaunch } from "./launch"
+import { HarnessMeta } from "./meta"
 import { HarnessSemantic } from "./semantic"
 import { HarnessReplication } from "./replication"
 import { HarnessSynthesis } from "./synthesis"
@@ -1046,6 +1047,7 @@ export namespace HarnessOrchestrator {
         ...(contract.formalProof ? [HarnessFormal.prompt(contract)] : []),
         ...(contract.formalProof?.blueprint ? [HarnessBlueprint.prompt(contract)] : []),
         ...(contract.replication ? [HarnessReplication.prompt(contract)] : []),
+        ...(contract.metaHarness ? [HarnessMeta.prompt(contract)] : []),
         ...(contract.confirmation ? [HarnessConfirmation.prompt(contract)] : []),
         instruction(role),
         ...(lane

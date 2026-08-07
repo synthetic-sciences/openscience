@@ -16,6 +16,7 @@ import { HarnessFailure } from "@/session/harness/failure"
 import { HarnessFormal } from "@/session/harness/formal"
 import { HarnessJudge } from "@/session/harness/judge"
 import { HarnessLaunch } from "@/session/harness/launch"
+import { HarnessMeta } from "@/session/harness/meta"
 import { HarnessIntegrity } from "@/session/harness/integrity"
 import { HarnessIntervention } from "@/session/harness/intervention"
 import { HarnessOrchestrator } from "@/session/harness/orchestrator"
@@ -480,6 +481,71 @@ export const HarnessRoutes = lazy(() =>
             requirePassed: false,
           }),
         )
+      },
+    )
+    .post(
+      "/meta/selection",
+      describeRoute({
+        summary: "Resolve the terminal meta-harness qualification subject",
+        description:
+          "Returns the backend-selected verified winner after search termination, isolated behind the independent meta-harness qualifier capability.",
+        operationId: "harness.meta.selection",
+        responses: {
+          200: {
+            description: "Content-addressed terminal meta-harness selection",
+            content: { "application/json": { schema: resolver(HarnessMeta.Selection) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessMeta.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorizeMeta(input.sessionID, input.metaToken)
+        return c.json(await HarnessMeta.select(contract))
+      },
+    )
+    .post(
+      "/meta/receipts",
+      describeRoute({
+        summary: "Record a one-shot continual-harness qualification",
+        description:
+          "Freezes the complete refinement lineage, full trace archive, cross-model held-out matrix, activation/adherence diagnostics, and backend-derived promotion verdict.",
+        operationId: "harness.meta.record",
+        responses: {
+          200: {
+            description: "Immutable meta-harness qualification receipt",
+            content: { "application/json": { schema: resolver(HarnessMeta.Receipt) } },
+          },
+          ...errors(400, 403, 409),
+        },
+      }),
+      validator("json", HarnessMeta.Submit),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorizeMeta(input.sessionID, input.metaToken)
+        return c.json(await HarnessMeta.record(input, contract))
+      },
+    )
+    .post(
+      "/meta/receipts/:receiptID",
+      describeRoute({
+        summary: "Read a capability-protected meta-harness receipt",
+        operationId: "harness.meta.receipt",
+        responses: {
+          200: {
+            description: "Canonical meta-harness qualification receipt",
+            content: { "application/json": { schema: resolver(HarnessMeta.Receipt) } },
+          },
+          ...errors(400, 403, 404),
+        },
+      }),
+      validator("param", z.object({ receiptID: z.string().regex(/^[a-f0-9]{64}$/) })),
+      validator("json", HarnessMeta.Access),
+      async (c) => {
+        const input = c.req.valid("json")
+        const contract = await HarnessAdapter.authorizeMeta(input.sessionID, input.metaToken)
+        return c.json(await HarnessMeta.assert(contract, c.req.valid("param").receiptID))
       },
     )
     .post(

@@ -28854,6 +28854,2883 @@
         ]
       }
     },
+    "/harness/meta/selection": {
+      "post": {
+        "operationId": "harness.meta.selection",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Resolve the terminal meta-harness qualification subject",
+        "description": "Returns the backend-selected verified winner after search termination, isolated behind the independent meta-harness qualifier capability.",
+        "responses": {
+          "200": {
+            "description": "Content-addressed terminal meta-harness selection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "meta-harness-selection-v1"
+                    },
+                    "selectionID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "contractSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "searchRevision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "stopReason": {
+                      "type": "string",
+                      "enum": [
+                        "budget_exhausted",
+                        "objective_met",
+                        "no_improvement",
+                        "user_cancelled",
+                        "runtime_error"
+                      ]
+                    },
+                    "candidateID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "candidateArtifact": {
+                      "type": "object",
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "uri",
+                        "sha256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "optimizationResultSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "optimizationEvaluationSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "selectedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "selectionID",
+                    "contractSHA256",
+                    "protocolSHA256",
+                    "sourceSessionID",
+                    "runID",
+                    "searchRevision",
+                    "stopReason",
+                    "candidateID",
+                    "candidateArtifact",
+                    "optimizationResultSHA256",
+                    "optimizationEvaluationSHA256",
+                    "selectedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "metaToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "metaToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.meta.selection({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/meta/receipts": {
+      "post": {
+        "operationId": "harness.meta.record",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Record a one-shot continual-harness qualification",
+        "description": "Freezes the complete refinement lineage, full trace archive, cross-model held-out matrix, activation/adherence diagnostics, and backend-derived promotion verdict.",
+        "responses": {
+          "200": {
+            "description": "Immutable meta-harness qualification receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "meta-harness-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "contractSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "selection": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "meta-harness-selection-v1"
+                        },
+                        "selectionID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "contractSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "protocolSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "sourceSessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "searchRevision": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "budget_exhausted",
+                            "objective_met",
+                            "no_improvement",
+                            "user_cancelled",
+                            "runtime_error"
+                          ]
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "candidateArtifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "optimizationResultSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "optimizationEvaluationSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "selectedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "protocolVersion",
+                        "selectionID",
+                        "contractSHA256",
+                        "protocolSHA256",
+                        "sourceSessionID",
+                        "runID",
+                        "searchRevision",
+                        "stopReason",
+                        "candidateID",
+                        "candidateArtifact",
+                        "optimizationResultSHA256",
+                        "optimizationEvaluationSHA256",
+                        "selectedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "candidateManifestSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protectedManifestSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "validatorSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "archive": {
+                      "type": "object",
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "schemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "indexSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "contents": {
+                          "type": "string",
+                          "const": "full-source-scores-traces"
+                        },
+                        "query": {
+                          "type": "string",
+                          "const": "filesystem"
+                        },
+                        "complete": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "hiddenContent": {
+                          "type": "string",
+                          "const": "excluded"
+                        },
+                        "evaluatorContent": {
+                          "type": "string",
+                          "const": "excluded"
+                        },
+                        "entries": {
+                          "minItems": 1,
+                          "maxItems": 10000,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "candidateID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "artifactSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "sourceSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "evaluated",
+                                  "unevaluated"
+                                ]
+                              },
+                              "scoresSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "resultSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "evaluationSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "trace": {
+                                "type": "object",
+                                "properties": {
+                                  "uri": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "schemaSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "complete": {
+                                    "type": "boolean",
+                                    "const": true
+                                  },
+                                  "hiddenContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  },
+                                  "evaluatorContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  }
+                                },
+                                "required": [
+                                  "uri",
+                                  "sha256",
+                                  "schemaSHA256",
+                                  "complete",
+                                  "hiddenContent",
+                                  "evaluatorContent"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "candidateID",
+                              "artifactSHA256",
+                              "sourceSHA256",
+                              "state"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "uri",
+                        "sha256",
+                        "schemaSHA256",
+                        "indexSHA256",
+                        "contents",
+                        "query",
+                        "complete",
+                        "hiddenContent",
+                        "evaluatorContent",
+                        "entries"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "refinements": {
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "revision": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "scope": {
+                            "type": "string",
+                            "const": "session"
+                          },
+                          "parentSnapshotSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "snapshotSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          },
+                          "diagnosis": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "implementation",
+                                  "fundamental",
+                                  "inconclusive"
+                                ]
+                              },
+                              "rationale": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "rationale"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "rootCause": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8000
+                          },
+                          "expectedOutcome": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8000
+                          },
+                          "changes": {
+                            "minItems": 1,
+                            "maxItems": 128,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "action": {
+                                  "type": "string",
+                                  "enum": [
+                                    "create",
+                                    "update",
+                                    "delete",
+                                    "rollback"
+                                  ]
+                                },
+                                "component": {
+                                  "type": "string",
+                                  "enum": [
+                                    "prompt",
+                                    "memory",
+                                    "skill",
+                                    "tool",
+                                    "middleware",
+                                    "subagent",
+                                    "scaffold"
+                                  ]
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                },
+                                "beforeSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "afterSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4000
+                                }
+                              },
+                              "required": [
+                                "action",
+                                "component",
+                                "path",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 256,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "candidateID": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "traceSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "messageIndex": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "excerptSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "candidateID",
+                                "traceSHA256",
+                                "messageIndex",
+                                "excerptSHA256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "predictions": {
+                            "minItems": 1,
+                            "maxItems": 256,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "modelID": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                },
+                                "taskID": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "expected": {
+                                  "type": "string",
+                                  "enum": [
+                                    "fail_to_pass",
+                                    "remain_pass"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "modelID",
+                                "taskID",
+                                "expected"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "revision",
+                          "scope",
+                          "parentSnapshotSHA256",
+                          "snapshotSHA256",
+                          "trigger",
+                          "diagnosis",
+                          "rootCause",
+                          "expectedOutcome",
+                          "changes",
+                          "evidence",
+                          "predictions"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "cells": {
+                      "minItems": 4,
+                      "maxItems": 65536,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "split": {
+                                "type": "string",
+                                "enum": [
+                                  "search",
+                                  "held_out"
+                                ]
+                              },
+                              "modelID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "modelCommitment": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "taskID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "taskCommitment": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": [
+                                  "completed",
+                                  "failed",
+                                  "inconclusive"
+                                ]
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "passed": {
+                                "type": "boolean"
+                              },
+                              "contextTokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "outputSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "trace": {
+                                "type": "object",
+                                "properties": {
+                                  "uri": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "schemaSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "complete": {
+                                    "type": "boolean",
+                                    "const": true
+                                  },
+                                  "hiddenContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  },
+                                  "evaluatorContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  }
+                                },
+                                "required": [
+                                  "uri",
+                                  "sha256",
+                                  "schemaSHA256",
+                                  "complete",
+                                  "hiddenContent",
+                                  "evaluatorContent"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "evidence": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "role": {
+                                "type": "string",
+                                "const": "baseline"
+                              }
+                            },
+                            "required": [
+                              "split",
+                              "modelID",
+                              "modelCommitment",
+                              "taskID",
+                              "taskCommitment",
+                              "outcome",
+                              "contextTokens",
+                              "outputSHA256",
+                              "trace",
+                              "evidence",
+                              "role"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "split": {
+                                "type": "string",
+                                "enum": [
+                                  "search",
+                                  "held_out"
+                                ]
+                              },
+                              "modelID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "modelCommitment": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "taskID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "taskCommitment": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": [
+                                  "completed",
+                                  "failed",
+                                  "inconclusive"
+                                ]
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "passed": {
+                                "type": "boolean"
+                              },
+                              "contextTokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "outputSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "trace": {
+                                "type": "object",
+                                "properties": {
+                                  "uri": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "schemaSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "complete": {
+                                    "type": "boolean",
+                                    "const": true
+                                  },
+                                  "hiddenContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  },
+                                  "evaluatorContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  }
+                                },
+                                "required": [
+                                  "uri",
+                                  "sha256",
+                                  "schemaSHA256",
+                                  "complete",
+                                  "hiddenContent",
+                                  "evaluatorContent"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "evidence": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "role": {
+                                "type": "string",
+                                "const": "candidate"
+                              },
+                              "loaded": {
+                                "type": "boolean"
+                              },
+                              "phases": {
+                                "maxItems": 4,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "followed": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "violatedCommission": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "violatedOmission": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "requiredUnobserved": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "notApplicable": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "insufficientEvidence": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "loaded",
+                                        "midpoint",
+                                        "pre_final",
+                                        "final_validation"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "followed",
+                                    "violatedCommission",
+                                    "violatedOmission",
+                                    "requiredUnobserved",
+                                    "notApplicable",
+                                    "insufficientEvidence",
+                                    "phase"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "split",
+                              "modelID",
+                              "modelCommitment",
+                              "taskID",
+                              "taskCommitment",
+                              "outcome",
+                              "contextTokens",
+                              "outputSHA256",
+                              "trace",
+                              "evidence",
+                              "role",
+                              "loaded",
+                              "phases"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "diagnostics": {
+                      "type": "object",
+                      "properties": {
+                        "updaterGain": {
+                          "type": "number"
+                        },
+                        "beneficiaryGain": {
+                          "type": "number"
+                        },
+                        "worstHeldoutModelGain": {
+                          "type": "number"
+                        },
+                        "activationRate": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "requiredAdherence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "finalAdherence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "maxPhaseDrift": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "predictionPrecision": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "riskRegressions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "maxContextTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "meanContextIncrease": {
+                          "type": "number"
+                        },
+                        "loadedBenefit": {
+                          "type": "number"
+                        },
+                        "searchPairs": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "heldoutPairs": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "activationRate",
+                        "predictionPrecision",
+                        "riskRegressions",
+                        "maxContextTokens",
+                        "meanContextIncrease",
+                        "searchPairs",
+                        "heldoutPairs"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "failures": {
+                      "maxItems": 1024,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "contractSHA256",
+                    "protocolSHA256",
+                    "sourceSessionID",
+                    "runID",
+                    "selection",
+                    "candidateManifestSHA256",
+                    "protectedManifestSHA256",
+                    "validatorSHA256",
+                    "archive",
+                    "refinements",
+                    "cells",
+                    "diagnostics",
+                    "status",
+                    "failures",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schemaVersion": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "metaToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  },
+                  "selectionID": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "candidateArtifactSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "candidateManifestSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "protectedManifestSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "validatorSHA256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "archive": {
+                    "type": "object",
+                    "properties": {
+                      "uri": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "schemaSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "indexSHA256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "contents": {
+                        "type": "string",
+                        "const": "full-source-scores-traces"
+                      },
+                      "query": {
+                        "type": "string",
+                        "const": "filesystem"
+                      },
+                      "complete": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "hiddenContent": {
+                        "type": "string",
+                        "const": "excluded"
+                      },
+                      "evaluatorContent": {
+                        "type": "string",
+                        "const": "excluded"
+                      },
+                      "entries": {
+                        "minItems": 1,
+                        "maxItems": 10000,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "candidateID": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "artifactSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "sourceSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "evaluated",
+                                "unevaluated"
+                              ]
+                            },
+                            "scoresSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "resultSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "evaluationSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "trace": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "schemaSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "complete": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
+                                "hiddenContent": {
+                                  "type": "string",
+                                  "const": "excluded"
+                                },
+                                "evaluatorContent": {
+                                  "type": "string",
+                                  "const": "excluded"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256",
+                                "schemaSHA256",
+                                "complete",
+                                "hiddenContent",
+                                "evaluatorContent"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "candidateID",
+                            "artifactSHA256",
+                            "sourceSHA256",
+                            "state"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "uri",
+                      "sha256",
+                      "schemaSHA256",
+                      "indexSHA256",
+                      "contents",
+                      "query",
+                      "complete",
+                      "hiddenContent",
+                      "evaluatorContent",
+                      "entries"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "refinements": {
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "revision": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "scope": {
+                          "type": "string",
+                          "const": "session"
+                        },
+                        "parentSnapshotSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "snapshotSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "trigger": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        },
+                        "diagnosis": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "implementation",
+                                "fundamental",
+                                "inconclusive"
+                              ]
+                            },
+                            "rationale": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 8000
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "rationale"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "rootCause": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 8000
+                        },
+                        "expectedOutcome": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 8000
+                        },
+                        "changes": {
+                          "minItems": 1,
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "action": {
+                                "type": "string",
+                                "enum": [
+                                  "create",
+                                  "update",
+                                  "delete",
+                                  "rollback"
+                                ]
+                              },
+                              "component": {
+                                "type": "string",
+                                "enum": [
+                                  "prompt",
+                                  "memory",
+                                  "skill",
+                                  "tool",
+                                  "middleware",
+                                  "subagent",
+                                  "scaffold"
+                                ]
+                              },
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              },
+                              "beforeSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "afterSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "reason": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000
+                              }
+                            },
+                            "required": [
+                              "action",
+                              "component",
+                              "path",
+                              "reason"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "evidence": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "candidateID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "traceSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "messageIndex": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "excerptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "candidateID",
+                              "traceSHA256",
+                              "messageIndex",
+                              "excerptSHA256"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "predictions": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "modelID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "taskID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "expected": {
+                                "type": "string",
+                                "enum": [
+                                  "fail_to_pass",
+                                  "remain_pass"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "modelID",
+                              "taskID",
+                              "expected"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "revision",
+                        "scope",
+                        "parentSnapshotSHA256",
+                        "snapshotSHA256",
+                        "trigger",
+                        "diagnosis",
+                        "rootCause",
+                        "expectedOutcome",
+                        "changes",
+                        "evidence",
+                        "predictions"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "cells": {
+                    "minItems": 4,
+                    "maxItems": 65536,
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "split": {
+                              "type": "string",
+                              "enum": [
+                                "search",
+                                "held_out"
+                              ]
+                            },
+                            "modelID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "modelCommitment": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "taskID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "taskCommitment": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "completed",
+                                "failed",
+                                "inconclusive"
+                              ]
+                            },
+                            "score": {
+                              "type": "number"
+                            },
+                            "passed": {
+                              "type": "boolean"
+                            },
+                            "contextTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "outputSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "trace": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "schemaSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "complete": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
+                                "hiddenContent": {
+                                  "type": "string",
+                                  "const": "excluded"
+                                },
+                                "evaluatorContent": {
+                                  "type": "string",
+                                  "const": "excluded"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256",
+                                "schemaSHA256",
+                                "complete",
+                                "hiddenContent",
+                                "evaluatorContent"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "evidence": {
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              }
+                            },
+                            "role": {
+                              "type": "string",
+                              "const": "baseline"
+                            }
+                          },
+                          "required": [
+                            "split",
+                            "modelID",
+                            "modelCommitment",
+                            "taskID",
+                            "taskCommitment",
+                            "outcome",
+                            "contextTokens",
+                            "outputSHA256",
+                            "trace",
+                            "evidence",
+                            "role"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "split": {
+                              "type": "string",
+                              "enum": [
+                                "search",
+                                "held_out"
+                              ]
+                            },
+                            "modelID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "modelCommitment": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "taskID": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "taskCommitment": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "outcome": {
+                              "type": "string",
+                              "enum": [
+                                "completed",
+                                "failed",
+                                "inconclusive"
+                              ]
+                            },
+                            "score": {
+                              "type": "number"
+                            },
+                            "passed": {
+                              "type": "boolean"
+                            },
+                            "contextTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "outputSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "trace": {
+                              "type": "object",
+                              "properties": {
+                                "uri": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2048
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "schemaSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "complete": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
+                                "hiddenContent": {
+                                  "type": "string",
+                                  "const": "excluded"
+                                },
+                                "evaluatorContent": {
+                                  "type": "string",
+                                  "const": "excluded"
+                                }
+                              },
+                              "required": [
+                                "uri",
+                                "sha256",
+                                "schemaSHA256",
+                                "complete",
+                                "hiddenContent",
+                                "evaluatorContent"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "evidence": {
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              }
+                            },
+                            "role": {
+                              "type": "string",
+                              "const": "candidate"
+                            },
+                            "loaded": {
+                              "type": "boolean"
+                            },
+                            "phases": {
+                              "maxItems": 4,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "followed": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "violatedCommission": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "violatedOmission": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "requiredUnobserved": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "notApplicable": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "insufficientEvidence": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "phase": {
+                                    "type": "string",
+                                    "enum": [
+                                      "loaded",
+                                      "midpoint",
+                                      "pre_final",
+                                      "final_validation"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "followed",
+                                  "violatedCommission",
+                                  "violatedOmission",
+                                  "requiredUnobserved",
+                                  "notApplicable",
+                                  "insufficientEvidence",
+                                  "phase"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "split",
+                            "modelID",
+                            "modelCommitment",
+                            "taskID",
+                            "taskCommitment",
+                            "outcome",
+                            "contextTokens",
+                            "outputSHA256",
+                            "trace",
+                            "evidence",
+                            "role",
+                            "loaded",
+                            "phases"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "evaluatedAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "schemaVersion",
+                  "sessionID",
+                  "metaToken",
+                  "selectionID",
+                  "candidateArtifactSHA256",
+                  "candidateManifestSHA256",
+                  "protectedManifestSHA256",
+                  "validatorSHA256",
+                  "archive",
+                  "refinements",
+                  "cells",
+                  "evaluatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.meta.record({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/harness/meta/receipts/{receiptID}": {
+      "post": {
+        "operationId": "harness.meta.receipt",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "receiptID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a capability-protected meta-harness receipt",
+        "responses": {
+          "200": {
+            "description": "Canonical meta-harness qualification receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "protocolVersion": {
+                      "type": "string",
+                      "const": "meta-harness-receipt-v1"
+                    },
+                    "receiptID": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "contractSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protocolSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "sourceSessionID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "runID": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    },
+                    "selection": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "meta-harness-selection-v1"
+                        },
+                        "selectionID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "contractSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "protocolSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "sourceSessionID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "runID": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "searchRevision": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "stopReason": {
+                          "type": "string",
+                          "enum": [
+                            "budget_exhausted",
+                            "objective_met",
+                            "no_improvement",
+                            "user_cancelled",
+                            "runtime_error"
+                          ]
+                        },
+                        "candidateID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "candidateArtifact": {
+                          "type": "object",
+                          "properties": {
+                            "uri": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2048
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "uri",
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "optimizationResultSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "optimizationEvaluationSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "selectedAt": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "protocolVersion",
+                        "selectionID",
+                        "contractSHA256",
+                        "protocolSHA256",
+                        "sourceSessionID",
+                        "runID",
+                        "searchRevision",
+                        "stopReason",
+                        "candidateID",
+                        "candidateArtifact",
+                        "optimizationResultSHA256",
+                        "optimizationEvaluationSHA256",
+                        "selectedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "candidateManifestSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "protectedManifestSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "validatorSHA256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "archive": {
+                      "type": "object",
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "schemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "indexSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "contents": {
+                          "type": "string",
+                          "const": "full-source-scores-traces"
+                        },
+                        "query": {
+                          "type": "string",
+                          "const": "filesystem"
+                        },
+                        "complete": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "hiddenContent": {
+                          "type": "string",
+                          "const": "excluded"
+                        },
+                        "evaluatorContent": {
+                          "type": "string",
+                          "const": "excluded"
+                        },
+                        "entries": {
+                          "minItems": 1,
+                          "maxItems": 10000,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "candidateID": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "artifactSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "sourceSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "evaluated",
+                                  "unevaluated"
+                                ]
+                              },
+                              "scoresSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "resultSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "evaluationSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "trace": {
+                                "type": "object",
+                                "properties": {
+                                  "uri": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "schemaSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "complete": {
+                                    "type": "boolean",
+                                    "const": true
+                                  },
+                                  "hiddenContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  },
+                                  "evaluatorContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  }
+                                },
+                                "required": [
+                                  "uri",
+                                  "sha256",
+                                  "schemaSHA256",
+                                  "complete",
+                                  "hiddenContent",
+                                  "evaluatorContent"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "candidateID",
+                              "artifactSHA256",
+                              "sourceSHA256",
+                              "state"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "uri",
+                        "sha256",
+                        "schemaSHA256",
+                        "indexSHA256",
+                        "contents",
+                        "query",
+                        "complete",
+                        "hiddenContent",
+                        "evaluatorContent",
+                        "entries"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "refinements": {
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "revision": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "scope": {
+                            "type": "string",
+                            "const": "session"
+                          },
+                          "parentSnapshotSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "snapshotSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          },
+                          "diagnosis": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "implementation",
+                                  "fundamental",
+                                  "inconclusive"
+                                ]
+                              },
+                              "rationale": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 8000
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "rationale"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "rootCause": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8000
+                          },
+                          "expectedOutcome": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 8000
+                          },
+                          "changes": {
+                            "minItems": 1,
+                            "maxItems": 128,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "action": {
+                                  "type": "string",
+                                  "enum": [
+                                    "create",
+                                    "update",
+                                    "delete",
+                                    "rollback"
+                                  ]
+                                },
+                                "component": {
+                                  "type": "string",
+                                  "enum": [
+                                    "prompt",
+                                    "memory",
+                                    "skill",
+                                    "tool",
+                                    "middleware",
+                                    "subagent",
+                                    "scaffold"
+                                  ]
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                },
+                                "beforeSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "afterSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4000
+                                }
+                              },
+                              "required": [
+                                "action",
+                                "component",
+                                "path",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "evidence": {
+                            "minItems": 1,
+                            "maxItems": 256,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "candidateID": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "traceSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "messageIndex": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "excerptSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "candidateID",
+                                "traceSHA256",
+                                "messageIndex",
+                                "excerptSHA256"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "predictions": {
+                            "minItems": 1,
+                            "maxItems": 256,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "modelID": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                },
+                                "taskID": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "expected": {
+                                  "type": "string",
+                                  "enum": [
+                                    "fail_to_pass",
+                                    "remain_pass"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "modelID",
+                                "taskID",
+                                "expected"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "revision",
+                          "scope",
+                          "parentSnapshotSHA256",
+                          "snapshotSHA256",
+                          "trigger",
+                          "diagnosis",
+                          "rootCause",
+                          "expectedOutcome",
+                          "changes",
+                          "evidence",
+                          "predictions"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "cells": {
+                      "minItems": 4,
+                      "maxItems": 65536,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "split": {
+                                "type": "string",
+                                "enum": [
+                                  "search",
+                                  "held_out"
+                                ]
+                              },
+                              "modelID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "modelCommitment": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "taskID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "taskCommitment": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": [
+                                  "completed",
+                                  "failed",
+                                  "inconclusive"
+                                ]
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "passed": {
+                                "type": "boolean"
+                              },
+                              "contextTokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "outputSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "trace": {
+                                "type": "object",
+                                "properties": {
+                                  "uri": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "schemaSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "complete": {
+                                    "type": "boolean",
+                                    "const": true
+                                  },
+                                  "hiddenContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  },
+                                  "evaluatorContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  }
+                                },
+                                "required": [
+                                  "uri",
+                                  "sha256",
+                                  "schemaSHA256",
+                                  "complete",
+                                  "hiddenContent",
+                                  "evaluatorContent"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "evidence": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "role": {
+                                "type": "string",
+                                "const": "baseline"
+                              }
+                            },
+                            "required": [
+                              "split",
+                              "modelID",
+                              "modelCommitment",
+                              "taskID",
+                              "taskCommitment",
+                              "outcome",
+                              "contextTokens",
+                              "outputSHA256",
+                              "trace",
+                              "evidence",
+                              "role"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "split": {
+                                "type": "string",
+                                "enum": [
+                                  "search",
+                                  "held_out"
+                                ]
+                              },
+                              "modelID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "modelCommitment": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "taskID": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "taskCommitment": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": [
+                                  "completed",
+                                  "failed",
+                                  "inconclusive"
+                                ]
+                              },
+                              "score": {
+                                "type": "number"
+                              },
+                              "passed": {
+                                "type": "boolean"
+                              },
+                              "contextTokens": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "outputSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "trace": {
+                                "type": "object",
+                                "properties": {
+                                  "uri": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048
+                                  },
+                                  "sha256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "schemaSHA256": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "complete": {
+                                    "type": "boolean",
+                                    "const": true
+                                  },
+                                  "hiddenContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  },
+                                  "evaluatorContent": {
+                                    "type": "string",
+                                    "const": "excluded"
+                                  }
+                                },
+                                "required": [
+                                  "uri",
+                                  "sha256",
+                                  "schemaSHA256",
+                                  "complete",
+                                  "hiddenContent",
+                                  "evaluatorContent"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "evidence": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "role": {
+                                "type": "string",
+                                "const": "candidate"
+                              },
+                              "loaded": {
+                                "type": "boolean"
+                              },
+                              "phases": {
+                                "maxItems": 4,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "followed": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "violatedCommission": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "violatedOmission": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "requiredUnobserved": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "notApplicable": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "insufficientEvidence": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "loaded",
+                                        "midpoint",
+                                        "pre_final",
+                                        "final_validation"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "followed",
+                                    "violatedCommission",
+                                    "violatedOmission",
+                                    "requiredUnobserved",
+                                    "notApplicable",
+                                    "insufficientEvidence",
+                                    "phase"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "split",
+                              "modelID",
+                              "modelCommitment",
+                              "taskID",
+                              "taskCommitment",
+                              "outcome",
+                              "contextTokens",
+                              "outputSHA256",
+                              "trace",
+                              "evidence",
+                              "role",
+                              "loaded",
+                              "phases"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "diagnostics": {
+                      "type": "object",
+                      "properties": {
+                        "updaterGain": {
+                          "type": "number"
+                        },
+                        "beneficiaryGain": {
+                          "type": "number"
+                        },
+                        "worstHeldoutModelGain": {
+                          "type": "number"
+                        },
+                        "activationRate": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "requiredAdherence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "finalAdherence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "maxPhaseDrift": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "predictionPrecision": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "riskRegressions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "maxContextTokens": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "meanContextIncrease": {
+                          "type": "number"
+                        },
+                        "loadedBenefit": {
+                          "type": "number"
+                        },
+                        "searchPairs": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "heldoutPairs": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "activationRate",
+                        "predictionPrecision",
+                        "riskRegressions",
+                        "maxContextTokens",
+                        "meanContextIncrease",
+                        "searchPairs",
+                        "heldoutPairs"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "inconclusive"
+                      ]
+                    },
+                    "failures": {
+                      "maxItems": 1024,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "evaluatedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "recordedAt": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "protocolVersion",
+                    "receiptID",
+                    "contractSHA256",
+                    "protocolSHA256",
+                    "sourceSessionID",
+                    "runID",
+                    "selection",
+                    "candidateManifestSHA256",
+                    "protectedManifestSHA256",
+                    "validatorSHA256",
+                    "archive",
+                    "refinements",
+                    "cells",
+                    "diagnostics",
+                    "status",
+                    "failures",
+                    "evaluatedAt",
+                    "recordedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "metaToken": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "metaToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.harness.meta.receipt({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/harness/confirmations/selection": {
       "post": {
         "operationId": "harness.confirmation.selection",
@@ -47798,6 +50675,407 @@
                       ],
                       "additionalProperties": false
                     },
+                    "metaHarness": {
+                      "type": "object",
+                      "properties": {
+                        "protocolVersion": {
+                          "type": "string",
+                          "const": "meta-harness-v1"
+                        },
+                        "validatorSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "archiveSchemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "traceSchemaSHA256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "baseline": {
+                          "type": "object",
+                          "properties": {
+                            "artifactSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "manifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "artifactSHA256",
+                            "manifestSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "mutable": {
+                          "minItems": 1,
+                          "maxItems": 64,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "root": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              },
+                              "component": {
+                                "type": "string",
+                                "enum": [
+                                  "prompt",
+                                  "memory",
+                                  "skill",
+                                  "tool",
+                                  "middleware",
+                                  "subagent",
+                                  "scaffold"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "root",
+                              "component"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "protected": {
+                          "type": "object",
+                          "properties": {
+                            "manifestSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "roots": {
+                              "minItems": 1,
+                              "maxItems": 128,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              }
+                            }
+                          },
+                          "required": [
+                            "manifestSHA256",
+                            "roots"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "archive": {
+                          "type": "object",
+                          "properties": {
+                            "contents": {
+                              "type": "string",
+                              "const": "full-source-scores-traces"
+                            },
+                            "query": {
+                              "type": "string",
+                              "const": "filesystem"
+                            },
+                            "summariesOnly": {
+                              "type": "boolean",
+                              "const": false
+                            },
+                            "hiddenContent": {
+                              "type": "string",
+                              "const": "excluded"
+                            },
+                            "evaluatorContent": {
+                              "type": "string",
+                              "const": "excluded"
+                            }
+                          },
+                          "required": [
+                            "contents",
+                            "query",
+                            "summariesOnly",
+                            "hiddenContent",
+                            "evaluatorContent"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "updater": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "promptSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "configSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "promptSHA256",
+                            "configSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "judge": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "promptSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "configSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "version",
+                            "promptSHA256",
+                            "configSHA256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "search": {
+                          "type": "object",
+                          "properties": {
+                            "models": {
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "commitment": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "commitment"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "tasks": {
+                              "minItems": 1,
+                              "maxItems": 256,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"
+                                  },
+                                  "commitment": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "activationRequired": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "commitment",
+                                  "activationRequired"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "models",
+                            "tasks"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "heldout": {
+                          "type": "object",
+                          "properties": {
+                            "models": {
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "commitment": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "commitment"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "tasks": {
+                              "minItems": 1,
+                              "maxItems": 256,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"
+                                  },
+                                  "commitment": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "activationRequired": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "commitment",
+                                  "activationRequired"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "models",
+                            "tasks"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "thresholds": {
+                          "type": "object",
+                          "properties": {
+                            "minSearchGain": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "minHeldoutGain": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "maxModelRegression": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "minActivationRate": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "minRequiredAdherence": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "minFinalAdherence": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "maxPhaseDrift": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "minPredictionPrecision": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "maxRiskRegressions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000
+                            },
+                            "maxContextTokens": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "maxMeanContextIncrease": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "minSearchGain",
+                            "minHeldoutGain",
+                            "maxModelRegression",
+                            "minActivationRate",
+                            "minRequiredAdherence",
+                            "minFinalAdherence",
+                            "maxPhaseDrift",
+                            "minPredictionPrecision",
+                            "maxRiskRegressions",
+                            "maxContextTokens",
+                            "maxMeanContextIncrease"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "promotionRequired": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "protocolVersion",
+                        "validatorSHA256",
+                        "archiveSchemaSHA256",
+                        "traceSchemaSHA256",
+                        "baseline",
+                        "mutable",
+                        "protected",
+                        "archive",
+                        "updater",
+                        "judge",
+                        "search",
+                        "heldout",
+                        "thresholds",
+                        "promotionRequired"
+                      ],
+                      "additionalProperties": false
+                    },
                     "interventions": {
                       "type": "object",
                       "properties": {
@@ -50608,6 +53886,422 @@
                       "maxTotalBytes",
                       "maxSourceLines",
                       "maxChangedLines"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "metaHarness": {
+                    "type": "object",
+                    "properties": {
+                      "protocol": {
+                        "type": "object",
+                        "properties": {
+                          "protocolVersion": {
+                            "type": "string",
+                            "const": "meta-harness-v1"
+                          },
+                          "validatorSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "archiveSchemaSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "traceSchemaSHA256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "baseline": {
+                            "type": "object",
+                            "properties": {
+                              "artifactSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "manifestSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "artifactSHA256",
+                              "manifestSHA256"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "mutable": {
+                            "minItems": 1,
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "root": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                },
+                                "component": {
+                                  "type": "string",
+                                  "enum": [
+                                    "prompt",
+                                    "memory",
+                                    "skill",
+                                    "tool",
+                                    "middleware",
+                                    "subagent",
+                                    "scaffold"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "root",
+                                "component"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "protected": {
+                            "type": "object",
+                            "properties": {
+                              "manifestSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "roots": {
+                                "minItems": 1,
+                                "maxItems": 128,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              }
+                            },
+                            "required": [
+                              "manifestSHA256",
+                              "roots"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "archive": {
+                            "type": "object",
+                            "properties": {
+                              "contents": {
+                                "type": "string",
+                                "const": "full-source-scores-traces"
+                              },
+                              "query": {
+                                "type": "string",
+                                "const": "filesystem"
+                              },
+                              "summariesOnly": {
+                                "type": "boolean",
+                                "const": false
+                              },
+                              "hiddenContent": {
+                                "type": "string",
+                                "const": "excluded"
+                              },
+                              "evaluatorContent": {
+                                "type": "string",
+                                "const": "excluded"
+                              }
+                            },
+                            "required": [
+                              "contents",
+                              "query",
+                              "summariesOnly",
+                              "hiddenContent",
+                              "evaluatorContent"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "updater": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "promptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "configSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "version",
+                              "promptSHA256",
+                              "configSHA256"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "judge": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "promptSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "configSHA256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "version",
+                              "promptSHA256",
+                              "configSHA256"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "search": {
+                            "type": "object",
+                            "properties": {
+                              "models": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 240
+                                    },
+                                    "commitment": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "commitment"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "tasks": {
+                                "minItems": 1,
+                                "maxItems": 256,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"
+                                    },
+                                    "commitment": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    },
+                                    "activationRequired": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "commitment",
+                                    "activationRequired"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "models",
+                              "tasks"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "heldout": {
+                            "type": "object",
+                            "properties": {
+                              "models": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 240
+                                    },
+                                    "commitment": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "commitment"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "tasks": {
+                                "minItems": 1,
+                                "maxItems": 256,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"
+                                    },
+                                    "commitment": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    },
+                                    "activationRequired": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "commitment",
+                                    "activationRequired"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "models",
+                              "tasks"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "thresholds": {
+                            "type": "object",
+                            "properties": {
+                              "minSearchGain": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "minHeldoutGain": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "maxModelRegression": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "minActivationRate": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "minRequiredAdherence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "minFinalAdherence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "maxPhaseDrift": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "minPredictionPrecision": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "maxRiskRegressions": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000
+                              },
+                              "maxContextTokens": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "maxMeanContextIncrease": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "minSearchGain",
+                              "minHeldoutGain",
+                              "maxModelRegression",
+                              "minActivationRate",
+                              "minRequiredAdherence",
+                              "minFinalAdherence",
+                              "maxPhaseDrift",
+                              "minPredictionPrecision",
+                              "maxRiskRegressions",
+                              "maxContextTokens",
+                              "maxMeanContextIncrease"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "promotionRequired": {
+                            "type": "boolean",
+                            "const": true
+                          }
+                        },
+                        "required": [
+                          "protocolVersion",
+                          "validatorSHA256",
+                          "archiveSchemaSHA256",
+                          "traceSchemaSHA256",
+                          "baseline",
+                          "mutable",
+                          "protected",
+                          "archive",
+                          "updater",
+                          "judge",
+                          "search",
+                          "heldout",
+                          "thresholds",
+                          "promotionRequired"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "token": {
+                        "type": "string",
+                        "minLength": 32,
+                        "maxLength": 1024
+                      }
+                    },
+                    "required": [
+                      "protocol",
+                      "token"
                     ],
                     "additionalProperties": false
                   },
@@ -55735,6 +59429,407 @@
                           ],
                           "additionalProperties": false
                         },
+                        "metaHarness": {
+                          "type": "object",
+                          "properties": {
+                            "protocolVersion": {
+                              "type": "string",
+                              "const": "meta-harness-v1"
+                            },
+                            "validatorSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "archiveSchemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "traceSchemaSHA256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "baseline": {
+                              "type": "object",
+                              "properties": {
+                                "artifactSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "manifestSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "artifactSHA256",
+                                "manifestSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "mutable": {
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "root": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1000
+                                  },
+                                  "component": {
+                                    "type": "string",
+                                    "enum": [
+                                      "prompt",
+                                      "memory",
+                                      "skill",
+                                      "tool",
+                                      "middleware",
+                                      "subagent",
+                                      "scaffold"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "root",
+                                  "component"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "protected": {
+                              "type": "object",
+                              "properties": {
+                                "manifestSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "roots": {
+                                  "minItems": 1,
+                                  "maxItems": 128,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 1000
+                                  }
+                                }
+                              },
+                              "required": [
+                                "manifestSHA256",
+                                "roots"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "archive": {
+                              "type": "object",
+                              "properties": {
+                                "contents": {
+                                  "type": "string",
+                                  "const": "full-source-scores-traces"
+                                },
+                                "query": {
+                                  "type": "string",
+                                  "const": "filesystem"
+                                },
+                                "summariesOnly": {
+                                  "type": "boolean",
+                                  "const": false
+                                },
+                                "hiddenContent": {
+                                  "type": "string",
+                                  "const": "excluded"
+                                },
+                                "evaluatorContent": {
+                                  "type": "string",
+                                  "const": "excluded"
+                                }
+                              },
+                              "required": [
+                                "contents",
+                                "query",
+                                "summariesOnly",
+                                "hiddenContent",
+                                "evaluatorContent"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "updater": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "promptSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "configSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "promptSHA256",
+                                "configSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "judge": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "promptSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "configSHA256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "version",
+                                "promptSHA256",
+                                "configSHA256"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "search": {
+                              "type": "object",
+                              "properties": {
+                                "models": {
+                                  "minItems": 1,
+                                  "maxItems": 64,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 240
+                                      },
+                                      "commitment": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "commitment"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "tasks": {
+                                  "minItems": 1,
+                                  "maxItems": 256,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"
+                                      },
+                                      "commitment": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "activationRequired": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "commitment",
+                                      "activationRequired"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "models",
+                                "tasks"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "heldout": {
+                              "type": "object",
+                              "properties": {
+                                "models": {
+                                  "minItems": 1,
+                                  "maxItems": 64,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 240
+                                      },
+                                      "commitment": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "commitment"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "tasks": {
+                                  "minItems": 1,
+                                  "maxItems": 256,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"
+                                      },
+                                      "commitment": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "activationRequired": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "commitment",
+                                      "activationRequired"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "models",
+                                "tasks"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "thresholds": {
+                              "type": "object",
+                              "properties": {
+                                "minSearchGain": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "minHeldoutGain": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "maxModelRegression": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "minActivationRate": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "minRequiredAdherence": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "minFinalAdherence": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "maxPhaseDrift": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "minPredictionPrecision": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "maxRiskRegressions": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10000
+                                },
+                                "maxContextTokens": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "maxMeanContextIncrease": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "minSearchGain",
+                                "minHeldoutGain",
+                                "maxModelRegression",
+                                "minActivationRate",
+                                "minRequiredAdherence",
+                                "minFinalAdherence",
+                                "maxPhaseDrift",
+                                "minPredictionPrecision",
+                                "maxRiskRegressions",
+                                "maxContextTokens",
+                                "maxMeanContextIncrease"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "promotionRequired": {
+                              "type": "boolean",
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "protocolVersion",
+                            "validatorSHA256",
+                            "archiveSchemaSHA256",
+                            "traceSchemaSHA256",
+                            "baseline",
+                            "mutable",
+                            "protected",
+                            "archive",
+                            "updater",
+                            "judge",
+                            "search",
+                            "heldout",
+                            "thresholds",
+                            "promotionRequired"
+                          ],
+                          "additionalProperties": false
+                        },
                         "interventions": {
                           "type": "object",
                           "properties": {
@@ -58232,6 +62327,10 @@
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
                         },
+                        "metaReceiptID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
                         "confirmationReceiptID": {
                           "type": "string",
                           "pattern": "^[a-f0-9]{64}$"
@@ -58676,6 +62775,111 @@
                         "proposalPolicy",
                         "objectives",
                         "archive"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "metaHarness": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "passed",
+                            "failed",
+                            "inconclusive"
+                          ]
+                        },
+                        "selectionID": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "diagnostics": {
+                          "type": "object",
+                          "properties": {
+                            "updaterGain": {
+                              "type": "number"
+                            },
+                            "beneficiaryGain": {
+                              "type": "number"
+                            },
+                            "worstHeldoutModelGain": {
+                              "type": "number"
+                            },
+                            "activationRate": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "requiredAdherence": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "finalAdherence": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "maxPhaseDrift": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "predictionPrecision": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "riskRegressions": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "maxContextTokens": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "meanContextIncrease": {
+                              "type": "number"
+                            },
+                            "loadedBenefit": {
+                              "type": "number"
+                            },
+                            "searchPairs": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "heldoutPairs": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "activationRate",
+                            "predictionPrecision",
+                            "riskRegressions",
+                            "maxContextTokens",
+                            "meanContextIncrease",
+                            "searchPairs",
+                            "heldoutPairs"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "failures": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "selectionID",
+                        "diagnostics",
+                        "failures"
                       ],
                       "additionalProperties": false
                     },

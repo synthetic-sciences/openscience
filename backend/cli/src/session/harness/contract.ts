@@ -559,6 +559,208 @@ export namespace HarnessContract {
     })
   export type Evolution = z.infer<typeof Evolution>
 
+  export const MetaComponent = z.enum(["prompt", "memory", "skill", "tool", "middleware", "subagent", "scaffold"])
+  export type MetaComponent = z.infer<typeof MetaComponent>
+
+  export const MetaIdentity = z
+    .object({
+      name: z.string().min(1).max(200),
+      version: z.string().min(1).max(200),
+      promptSHA256: Hash,
+      configSHA256: Hash,
+    })
+    .strict()
+  export type MetaIdentity = z.infer<typeof MetaIdentity>
+
+  export const MetaTask = z
+    .object({
+      id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/),
+      commitment: Hash,
+      activationRequired: z.boolean(),
+    })
+    .strict()
+  export type MetaTask = z.infer<typeof MetaTask>
+
+  const MetaTasks = z
+    .array(MetaTask)
+    .min(1)
+    .max(256)
+    .refine((items) => new Set(items.map((item) => item.id)).size === items.length, "Meta-harness tasks must be unique")
+    .refine(
+      (items) => new Set(items.map((item) => item.commitment)).size === items.length,
+      "Meta-harness task commitments must be unique",
+    )
+    .refine(
+      (items) => items.every((item, index) => !index || items[index - 1]!.id < item.id),
+      "Meta-harness tasks must be sorted by ID",
+    )
+    .refine(
+      (items) => items.some((item) => item.activationRequired),
+      "Each meta-harness split must include an activation-required task",
+    )
+
+  export const MetaModel = z
+    .object({
+      id: z.string().min(1).max(240),
+      commitment: Hash,
+    })
+    .strict()
+  export type MetaModel = z.infer<typeof MetaModel>
+
+  const MetaModels = z
+    .array(MetaModel)
+    .min(1)
+    .max(64)
+    .refine(
+      (items) => new Set(items.map((item) => item.id)).size === items.length,
+      "Meta-harness model IDs must be unique",
+    )
+    .refine(
+      (items) => new Set(items.map((item) => item.commitment)).size === items.length,
+      "Meta-harness model commitments must be unique",
+    )
+    .refine(
+      (items) => items.every((item, index) => !index || items[index - 1]!.id < item.id),
+      "Meta-harness models must be sorted by ID",
+    )
+
+  export const MetaHarness = z
+    .object({
+      protocolVersion: z.literal("meta-harness-v1"),
+      validatorSHA256: Hash,
+      archiveSchemaSHA256: Hash,
+      traceSchemaSHA256: Hash,
+      baseline: z
+        .object({
+          artifactSHA256: Hash,
+          manifestSHA256: Hash,
+        })
+        .strict(),
+      mutable: z
+        .array(
+          z
+            .object({
+              root: SourcePath,
+              component: MetaComponent,
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(64)
+        .refine(
+          (items) => new Set(items.map((item) => item.root)).size === items.length,
+          "Mutable roots must be unique",
+        )
+        .refine(
+          (items) => items.every((item, index) => !index || items[index - 1]!.root < item.root),
+          "Mutable roots must be sorted",
+        ),
+      protected: z
+        .object({
+          manifestSHA256: Hash,
+          roots: z
+            .array(SourcePath)
+            .min(1)
+            .max(128)
+            .refine((items) => new Set(items).size === items.length, "Protected roots must be unique")
+            .refine(
+              (items) => items.every((item, index) => !index || items[index - 1]! < item),
+              "Protected roots must be sorted",
+            ),
+        })
+        .strict(),
+      archive: z
+        .object({
+          contents: z.literal("full-source-scores-traces"),
+          query: z.literal("filesystem"),
+          summariesOnly: z.literal(false),
+          hiddenContent: z.literal("excluded"),
+          evaluatorContent: z.literal("excluded"),
+        })
+        .strict(),
+      updater: MetaIdentity,
+      judge: MetaIdentity,
+      search: z
+        .object({
+          models: MetaModels,
+          tasks: MetaTasks,
+        })
+        .strict(),
+      heldout: z
+        .object({
+          models: MetaModels,
+          tasks: MetaTasks,
+        })
+        .strict(),
+      thresholds: z
+        .object({
+          minSearchGain: z.number().finite().nonnegative(),
+          minHeldoutGain: z.number().finite().nonnegative(),
+          maxModelRegression: z.number().finite().nonnegative(),
+          minActivationRate: z.number().finite().min(0).max(1),
+          minRequiredAdherence: z.number().finite().min(0).max(1),
+          minFinalAdherence: z.number().finite().min(0).max(1),
+          maxPhaseDrift: z.number().finite().min(0).max(1),
+          minPredictionPrecision: z.number().finite().min(0).max(1),
+          maxRiskRegressions: z.number().int().nonnegative().max(10_000),
+          maxContextTokens: z.number().int().positive(),
+          maxMeanContextIncrease: z.number().finite().nonnegative(),
+        })
+        .strict(),
+      promotionRequired: z.literal(true),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      const covers = (root: string, target: string) => root === "." || target === root || target.startsWith(`${root}/`)
+      const mutable = value.mutable.map((item) => item.root)
+      for (const [index, root] of mutable.entries()) {
+        if (mutable.some((other, otherIndex) => index !== otherIndex && covers(other, root))) {
+          ctx.addIssue({ code: "custom", path: ["mutable", index, "root"], message: "Mutable roots cannot overlap" })
+        }
+        if (value.protected.roots.some((other) => covers(root, other) || covers(other, root))) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["mutable", index, "root"],
+            message: "Mutable and protected roots cannot overlap",
+          })
+        }
+      }
+      for (const [index, root] of value.protected.roots.entries()) {
+        if (value.protected.roots.some((other, otherIndex) => index !== otherIndex && covers(other, root))) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["protected", "roots", index],
+            message: "Protected roots cannot overlap",
+          })
+        }
+      }
+      const searchModels = new Set(value.search.models.map((model) => model.id))
+      const searchModelCommitments = new Set(value.search.models.map((model) => model.commitment))
+      if (
+        value.heldout.models.some((model) => searchModels.has(model.id) || searchModelCommitments.has(model.commitment))
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["heldout", "models"],
+          message: "Held-out models must be unseen in search",
+        })
+      }
+      const searchTasks = new Set(value.search.tasks.map((item) => item.id))
+      const searchCommitments = new Set(value.search.tasks.map((item) => item.commitment))
+      if (value.heldout.tasks.some((task) => searchTasks.has(task.id) || searchCommitments.has(task.commitment))) {
+        ctx.addIssue({ code: "custom", path: ["heldout", "tasks"], message: "Held-out tasks must be unseen in search" })
+      }
+      if (
+        value.updater.name === value.judge.name &&
+        value.updater.version === value.judge.version &&
+        value.updater.promptSHA256 === value.judge.promptSHA256 &&
+        value.updater.configSHA256 === value.judge.configSHA256
+      ) {
+        ctx.addIssue({ code: "custom", path: ["judge"], message: "Updater and adherence judge identities must differ" })
+      }
+    })
+  export type MetaHarness = z.infer<typeof MetaHarness>
+
   export const InterventionFamily = z.enum([
     "replay",
     "retune",
@@ -1327,6 +1529,7 @@ export namespace HarnessContract {
       recipe: HarnessRecipe.Materialized.optional(),
       integrity: Integrity.optional(),
       evolution: Evolution.optional(),
+      metaHarness: MetaHarness.optional(),
       interventions: Interventions.optional(),
       simulation: Simulation.optional(),
       evaluatorAudit: EvaluatorAudit.optional(),
@@ -1440,6 +1643,7 @@ export namespace HarnessContract {
           value.failureDiscovery ||
           value.integrity ||
           value.evolution ||
+          value.metaHarness ||
           value.interventions ||
           value.simulation ||
           value.evaluatorAudit ||
@@ -1487,6 +1691,7 @@ export namespace HarnessContract {
           value.failureDiscovery ||
           value.integrity ||
           value.evolution ||
+          value.metaHarness ||
           value.interventions ||
           value.simulation ||
           value.evaluatorAudit ||
@@ -1537,6 +1742,80 @@ export namespace HarnessContract {
           code: "custom",
           path: ["benchmark", "evaluatorSource"],
           message: "Evolution trace validation requires a capability-authenticated evaluator source",
+        })
+      }
+      if (value.metaHarness && value.profile !== "optimize") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["metaHarness"],
+          message: "Meta-harness qualification requires the optimize profile",
+        })
+      }
+      if (value.metaHarness && (!value.search || !value.evolution || !value.confirmation)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["metaHarness"],
+          message:
+            "Meta-harness qualification requires adaptive search, exact evolution provenance, and sealed confirmation",
+        })
+      }
+      if (value.metaHarness && value.evolution) {
+        const covers = (root: string, target: string) =>
+          root === "." || target === root || target.startsWith(`${root}/`)
+        const roots = [...value.metaHarness.mutable.map((item) => item.root), ...value.metaHarness.protected.roots]
+        if (roots.some((root) => !value.evolution!.roots.some((source) => covers(source, root)))) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["evolution", "roots"],
+            message: "Evolution source capture must cover every mutable and protected meta-harness root",
+          })
+        }
+      }
+      if (
+        value.metaHarness &&
+        (!value.benchmark.metric || !["maximize", "minimize"].includes(value.benchmark.direction ?? ""))
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["metaHarness"],
+          message: "Meta-harness qualification requires a numeric benchmark metric and direction",
+        })
+      }
+      if (value.metaHarness && value.benchmark.evaluatorSource === "human") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["benchmark", "evaluatorSource"],
+          message: "Meta-harness qualification requires capability-authenticated evaluation",
+        })
+      }
+      if (value.metaHarness && !value.metaHarness.search.models.some((model) => model.id === value.model.name)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["model", "name"],
+          message: "The bound beneficiary model must be present in the meta-harness search model set",
+        })
+      }
+      if (
+        value.metaHarness &&
+        value.metaHarness.judge.name === value.benchmark.evaluator &&
+        value.metaHarness.judge.version === value.benchmark.evaluatorVersion
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["metaHarness", "judge"],
+          message: "Adherence judging requires an identity distinct from the optimization score evaluator",
+        })
+      }
+      if (
+        value.metaHarness &&
+        value.confirmation &&
+        value.metaHarness.judge.name === value.confirmation.claim.evaluator.name &&
+        value.metaHarness.judge.version === value.confirmation.claim.evaluator.version
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["metaHarness", "judge"],
+          message: "Adherence judging requires an identity distinct from the sealed claim evaluator",
         })
       }
       if (value.interventions && value.profile !== "optimize") {
