@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, test } from "bun:test"
+import { afterAll, afterEach, beforeEach, expect, test } from "bun:test"
 import type { JSX } from "solid-js"
 import { createServer } from "vite"
 import solid from "vite-plugin-solid"
@@ -25,6 +25,19 @@ const [pane, artifacts, state, web] = await Promise.all([
 const cleanups: Array<() => void> = []
 
 afterAll(() => server.close())
+
+// The ui store is a module singleton, so it is shared with every other test
+// file that loads it in this process — session-shell.test.ts opens the pane
+// and does not put it back. Resetting before as well as after means this file
+// asserts against a state it actually established, rather than against
+// whatever the previous file happened to leave behind.
+const reset = () => {
+  state.uiStore.closeContext()
+  state.uiStore.setRightPaneMode("tools")
+  state.uiStore.setRightPaneTab("canvas")
+}
+
+beforeEach(reset)
 
 afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup())

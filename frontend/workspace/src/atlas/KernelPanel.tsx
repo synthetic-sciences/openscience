@@ -2,8 +2,8 @@ import { For, Show, createMemo, createResource, onCleanup, type JSX } from "soli
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
-import { IconCpu, IconPlus, IconRefresh } from "@/atlas/shared/Icon"
-import { summarizeKernels, type KernelStatus } from "@/notebook/runtime"
+import { IconCpu } from "@/atlas/shared/Icon"
+import { type KernelStatus } from "@/notebook/runtime"
 import { useExecutionAuthority } from "./use-execution-authority"
 import { useKernelList } from "./use-kernel-list"
 import { identify } from "@/atlas/poll-identity"
@@ -107,7 +107,6 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   // HostStrip.tsx for the full mechanism). `data.loading`, used below to
   // disable the refresh button, is unaffected and left alone.
   const kernels = useKernelList(() => data.latest?.kernels)
-  const summary = createMemo(() => summarizeKernels(kernels))
   const ensureSession = async () => {
     if (params.id && params.id !== "new") return params.id
     return props.onEnsureSession?.()
@@ -215,33 +214,33 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
     <section aria-label="Session kernel control room" data-testid="kernel-panel" class="kernel-panel">
       <header class="kernel-panel__header">
         <div class="kernel-panel__heading">
-          <span class="kernel-panel__eyebrow">Compute</span>
+          {/* No "Compute" eyebrow: the tab above already says it, and 5a's
+              restraint is mostly about not saying things twice. The live/
+              running/queued breakdown moved onto the kernel's own metric grid,
+              where it sits beside the figures it qualifies. */}
           <strong>Session kernels</strong>
-          <span>
-            {summary().live} live · {summary().running} running · {summary().queued} queued
-          </span>
+          <span>{view.updated ? `Synced ${time(view.updated)}` : "Not synced yet"}</span>
         </div>
         <div class="kernel-panel__refresh">
-          <Show when={view.updated}>
-            <span aria-label={`Updated ${time(view.updated)}`}>{time(view.updated)}</span>
-          </Show>
           <button
             type="button"
-            aria-label="Create named kernel"
-            title="Create an isolated named Python or R kernel"
-            onClick={() => void begin()}
-            disabled={!!view.action}
-          >
-            <IconPlus size={13} strokeWidth={1.6} />
-          </button>
-          <button
-            type="button"
+            class="kernel-panel__text-action"
             aria-label="Refresh kernels"
             title="Refresh kernel inventory"
             onClick={() => void api.refetch()}
             disabled={data.loading}
           >
-            <IconRefresh size={12} strokeWidth={1.6} />
+            Refresh
+          </button>
+          <button
+            type="button"
+            class="kernel-panel__primary-action"
+            aria-label="Create named kernel"
+            title="Create an isolated named Python or R kernel"
+            onClick={() => void begin()}
+            disabled={!!view.action}
+          >
+            New kernel
           </button>
         </div>
       </header>
@@ -288,14 +287,10 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
           </form>
         </Show>
 
+        {/* Prose, not a callout. The icon and the bolded lead-in made this read
+            as a warning about something that is simply how kernels work. */}
         <section class="kernel-panel__scope" aria-label="Kernel ownership model">
-          <span class="kernel-panel__scope-icon" aria-hidden="true">
-            <IconCpu size={13} strokeWidth={1.5} />
-          </span>
-          <p>
-            <strong>Session-owned kernels.</strong> Named records survive app restarts; live variables persist only
-            while their backend process remains alive.
-          </p>
+          <p>Named records survive app restarts. Live variables persist only while the backend process stays alive.</p>
         </section>
 
         <Show when={authority.message()}>

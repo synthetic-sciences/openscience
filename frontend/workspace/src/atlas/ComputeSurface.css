@@ -2,46 +2,80 @@
   --compute-radius: 10px;
 }
 
+/* 3a sets the tabs in mono capitals — the same voice as the instrument labels
+   above them, so the strip and the tabs read as one apparatus rather than a
+   readout with navigation bolted underneath. Selection is a 2px underline in
+   the brand colour; the single solid terracotta on this surface stays with the
+   primary action. */
 .compute-surface__tabs {
   box-sizing: border-box;
-  min-height: 40px;
-  gap: 4px;
-  margin: 8px 10px 0;
-  padding: 4px;
-  border-radius: var(--compute-radius);
-  background: color-mix(in srgb, var(--color-bg-subtle) 72%, transparent);
+  display: flex;
+  gap: 26px;
+  margin: 0;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
 }
 
 .compute-surface__tab {
   position: relative;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 8px;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-height: 0;
+  padding: 9px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  cursor: pointer;
 }
 
-.compute-surface__badge {
-  position: absolute;
-  top: 3px;
-  right: 5px;
-  box-sizing: border-box;
-  min-width: 14px;
-  height: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 3px;
-  border-radius: 999px;
-  color: var(--color-bg);
-  background: var(--color-accent);
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
+/* The count joins the label as "JOBS · 24" rather than sitting apart, so the
+   pair reads as one token of type. */
+.compute-surface__count::before {
+  content: "·";
+  padding-right: 5px;
+  color: var(--color-text-faint);
+}
+
+.compute-surface__count {
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
 }
 
 .compute-surface__tab[data-active="true"] {
-  background: var(--color-surface-solid);
-  box-shadow: none;
+  background: none;
+  color: var(--color-text);
+  box-shadow: inset 0 -2px 0 var(--surface-brand-base);
+}
+
+.compute-surface__tab:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The visible count is aria-hidden so a screen reader hears "Jobs, 24 jobs"
+   rather than "Jobs 24" with no unit. */
+.compute-surface__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .compute-surface .kernel-panel__header {
@@ -70,16 +104,49 @@
 }
 
 .compute-surface .kernel-panel__refresh {
-  gap: 7px;
-  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
 }
 
-.compute-surface .kernel-panel__refresh button {
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg-elevated);
+/* 3a gives the routine action a hairline outline rather than nothing at all,
+   so the two sit as a pair of pills with only their fill distinguishing
+   weight. */
+.compute-surface .kernel-panel__text-action {
+  width: auto;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  background: none;
+  color: var(--color-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.compute-surface .kernel-panel__primary-action {
+  width: auto;
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-brand-base);
+  color: var(--text-on-brand-strong);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.compute-surface .kernel-panel__text-action:disabled,
+.compute-surface .kernel-panel__primary-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.compute-surface .kernel-panel__primary-action:hover:not(:disabled) {
+  background: var(--surface-brand-hover);
 }
 
 .compute-surface .kernel-panel__body {
@@ -129,36 +196,22 @@
   background: var(--color-text);
 }
 
+/* Sits under a hairline as the last thing in the header block, so it reads as
+   a note about the section rather than a banner inside the list. */
 .compute-surface .kernel-panel__scope {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 2px 9px;
-  padding: 0;
+  display: block;
+  margin: 0 0 14px;
+  padding: 0 0 14px;
   border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.compute-surface .kernel-panel__scope-icon {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 auto;
-  border: 0;
+  border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   background: transparent;
 }
 
 .compute-surface .kernel-panel__scope p {
   max-width: none;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--color-text-faint);
-}
-
-.compute-surface .kernel-panel__scope strong {
-  font-size: inherit;
-  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--color-text-muted);
 }
 
@@ -201,137 +254,210 @@
   gap: 8px;
 }
 
+/* 3a nests the kernel in its own card rather than letting it sit flat on the
+   panel — the runtime is a distinct object with its own controls, and the
+   inset says so. */
 .compute-surface .kernel-card {
-  gap: 8px;
-  padding: 12px;
-  border-radius: 12px;
-  background: var(--surface-raised-strong);
-  box-shadow: none;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 16px 16px 14px;
+  border-radius: 18px;
+  background: var(--color-bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--color-border);
 }
 
 .compute-surface .kernel-card__header {
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  gap: 9px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
 }
 
+/* The language badge becomes the eyebrow's voice: small mono capitals over the
+   name, rather than a coloured tile beside it. */
 .compute-surface .kernel-card__language {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  grid-row: 1;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  color: var(--color-text-faint);
+  font-family: var(--font-code);
   font-size: 10px;
-}
-
-.compute-surface .kernel-card__title {
-  gap: 1px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .compute-surface .kernel-card__title strong {
-  font-size: 14px;
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
 }
 
 .compute-surface .kernel-card__title span {
-  font-size: 11px;
+  font-family: var(--font-code);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
 }
 
-.compute-surface .kernel-card__owner {
-  padding: 3px 6px;
-  border-radius: 6px;
-  font-size: 10px;
+/* Lifecycle reads as a pill, so a glance finds the runtime's state without
+   reading the metric grid underneath. */
+.compute-surface .kernel-card__owner,
+.compute-surface .kernel-card__state {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--font-code);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .compute-surface .kernel-card__state {
+  align-self: start;
+  justify-self: start;
   gap: 6px;
-  min-height: 18px;
-  font-size: 11px;
+  min-height: 0;
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
 }
 
 .compute-surface .kernel-card__state strong {
-  font-size: 12px;
+  font-size: inherit;
+  font-weight: 400;
+  letter-spacing: inherit;
 }
 
 .compute-surface .kernel-card__state-dot {
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
 }
 
-.compute-surface .kernel-card__metrics {
-  border-radius: 10px;
-}
-
+/* Label and value joined by a dotted leader, as a printed record would set
+   them — the eye follows the rule across rather than guessing which value
+   belongs to which label. */
+.compute-surface .kernel-card__metrics,
 .compute-surface .kernel-card__metrics--usage {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.compute-surface .kernel-card__metrics--usage .kernel-card__metric:nth-child(2n) {
-  border-right: 1px solid var(--color-border);
-}
-
-.compute-surface .kernel-card__metrics--usage .kernel-card__metric:nth-child(3n) {
-  border-right: 0;
-}
-
-.compute-surface .kernel-card__metrics--usage .kernel-card__metric:nth-last-child(-n + 3) {
-  border-bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
 }
 
 .compute-surface .kernel-card__metric {
-  min-height: 40px;
-  box-sizing: border-box;
-  gap: 2px;
-  padding: 7px 9px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
 }
 
 .compute-surface .kernel-card__metric span {
+  order: 1;
+  flex: none;
+  font-family: var(--font-code);
   font-size: 10px;
-  letter-spacing: 0;
-  text-transform: none;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.compute-surface .kernel-card__metric::after {
+  content: "";
+  order: 2;
+  flex: 1;
+  border-bottom: 1px dotted var(--color-border-strong);
+  transform: translateY(-3px);
 }
 
 .compute-surface .kernel-card__metric strong {
-  font-size: 12px;
+  order: 3;
+  flex: none;
+  font-family: var(--font-code);
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--color-text);
+  white-space: nowrap;
 }
 
 .compute-surface .kernel-card__environment {
-  gap: 6px;
-  padding: 9px 10px;
-  border-radius: 10px;
+  gap: 7px;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0;
+  background: none;
 }
 
-.compute-surface .kernel-card__environment-header strong,
+.compute-surface .kernel-card__environment-header strong {
+  font-size: 13px;
+  font-weight: 400;
+}
+
 .compute-surface .kernel-card__environment-header span {
-  font-size: 11px;
-}
-
-.compute-surface .kernel-card__environment-row > span,
-.compute-surface .kernel-card__environment-row code,
-.compute-surface .kernel-card__environment-row p {
-  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  font-family: var(--font-code);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
 .compute-surface .kernel-card__recovery {
-  padding-left: 9px;
-  font-size: 11px;
+  padding-left: 0;
+  border-left: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
 }
 
+/* Three equal pills. None of them is the primary action on this surface —
+   that belongs to New kernel — so all three are outlined, and only Stop
+   carries a colour, because it is the one that discards work. */
 .compute-surface .kernel-card__controls {
-  gap: 7px;
+  gap: 6px;
 }
 
 .compute-surface .kernel-card__controls button {
-  min-height: 34px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  flex: 1;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  background: none;
+  color: var(--color-text);
   font-size: 12px;
 }
 
+.compute-surface .kernel-card__stop {
+  color: var(--color-error);
+}
+
 .compute-surface .kernel-card__control-note {
-  margin-top: -2px;
-  font-size: 10px;
+  margin-top: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.compute-surface .kernel-card__identity {
+  border-top: 1px solid var(--color-border);
 }
 
 .compute-surface .kernel-card__identity summary {
-  padding-top: 8px;
-  font-size: 11px;
+  padding-top: 11px;
+  font-family: var(--font-code);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .compute-surface .kernel-card__identity > div {

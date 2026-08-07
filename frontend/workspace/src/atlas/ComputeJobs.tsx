@@ -16,6 +16,7 @@ import {
   serial,
   stableJobs,
 } from "@/atlas/ComputeJobsAPI"
+import { ledger, type RunTone } from "@/atlas/run-ledger"
 import { useExecutionAuthority } from "@/atlas/use-execution-authority"
 import {
   IconActivity,
@@ -817,15 +818,17 @@ export function ComputeJobs(
               </div>
             }
           >
-            <div style={listHeader}>
-              <span>Recent runs</span>
-              <button type="button" disabled={busy()} style={textButton} onClick={() => void clear()}>
-                <IconTrash size={14} />
+            {/* One header over the whole ledger rather than a rule per day.
+                The age is already on every row, so day bands repeated in a
+                heading what the rows were saying anyway. */}
+            <div style={ledgerHeader}>
+              <span style={ledgerTitle}>RECENT RUNS</span>
+              <button type="button" disabled={busy()} style={clearButton} onClick={() => void clear()}>
                 Clear finished
               </button>
             </div>
             <div style={list}>
-              <For each={jobs()}>
+              <For each={ledger(jobs() ?? [])}>
                 {(item) => {
                   const job = () => item
                   return (
@@ -843,39 +846,25 @@ export function ComputeJobs(
                               : "transparent",
                         }}
                       >
-                        <StatusIcon status={item.status} />
-                        <span
-                          style={{ display: "flex", "flex-direction": "column", gap: "4px", "min-width": 0, flex: 1 }}
-                        >
-                          <span
-                            style={{
-                              color: "var(--color-text)",
-                              "font-size": "14px",
-                              "font-weight": 600,
-                              overflow: "hidden",
-                              "text-overflow": "ellipsis",
-                              "white-space": "nowrap",
-                            }}
-                          >
-                            {item.name}
-                          </span>
-                          <span
-                            style={{
-                              color: "var(--color-text-faint)",
-                              "font-size": "12px",
-                              overflow: "hidden",
-                              "text-overflow": "ellipsis",
-                              "white-space": "nowrap",
-                            }}
-                          >
-                            {item.target_label} · {item.status}
-                          </span>
+                        {/* Position in the ledger, not an identifier —
+                                  it is what makes this read as a numbered
+                                  record rather than a list of cards. */}
+                        <span style={runIndex} aria-hidden="true">
+                          {item.index}
                         </span>
-                        <span
-                          style={{ color: "var(--color-text-faint)", "font-size": "11px", "white-space": "nowrap" }}
-                        >
-                          {age(item.created_at)}
+                        <span style={runStack}>
+                          <span style={runName}>{item.name}</span>
+                          <span style={runTarget}>{item.target}</span>
                         </span>
+                        {/* A column, so it is stated on every row: one
+                                  with holes is harder to scan than one always
+                                  filled, because the eye tracks a fixed
+                                  position instead of hunting. */}
+                        <span style={runStatus}>
+                          <span style={{ ...dot, background: toneColor(item.tone) }} aria-hidden="true" />
+                          <span style={{ ...runStatusText, color: toneColor(item.tone) }}>{item.statusLabel}</span>
+                        </span>
+                        <span style={runAge}>{age(item.created_at)}</span>
                         <span style={disclosure}>
                           <Show when={selected() === item.id} fallback={<IconChevronRight size={15} />}>
                             <IconChevronDown size={15} />
@@ -1496,7 +1485,114 @@ const list: JSX.CSSProperties = {
 const run: JSX.CSSProperties = {
   display: "flex",
   "flex-direction": "column",
-  "border-bottom": "1px solid color-mix(in srgb, var(--color-border) 66%, transparent)",
+}
+
+// 3a's ledger: a numbered record, not a stack of cards. The day rules are
+// gone — the age is already on every row, so the bands repeated in a heading
+// what the rows were saying anyway.
+const ledgerHeader: JSX.CSSProperties = {
+  display: "flex",
+  "align-items": "center",
+  "justify-content": "space-between",
+  gap: "12px",
+  padding: "6px 18px 8px",
+  "border-bottom": "1px solid var(--color-border)",
+  "flex-shrink": 0,
+}
+
+const ledgerTitle: JSX.CSSProperties = {
+  color: "var(--color-text-faint)",
+  "font-family": FONT_MONO,
+  "font-size": "10px",
+  "letter-spacing": "0.12em",
+}
+
+const clearButton: JSX.CSSProperties = {
+  all: "unset",
+  cursor: "pointer",
+  color: "var(--icon-brand-base)",
+  "font-family": FONT_SANS,
+  "font-size": "11.5px",
+}
+
+const runIndex: JSX.CSSProperties = {
+  width: "16px",
+  flex: "none",
+  color: "var(--color-text-faint)",
+  "font-family": FONT_MONO,
+  "font-size": "10.5px",
+  "font-variant-numeric": "tabular-nums",
+}
+
+const runStack: JSX.CSSProperties = {
+  display: "flex",
+  "flex-direction": "column",
+  gap: "2px",
+  "min-width": 0,
+  flex: 1,
+}
+
+const runName: JSX.CSSProperties = {
+  color: "var(--color-text)",
+  "font-size": "13.5px",
+  overflow: "hidden",
+  "text-overflow": "ellipsis",
+  "white-space": "nowrap",
+}
+
+// Where it ran, on its own line in mono so it lines up with the status column
+// beside it rather than competing with the name above it.
+const runTarget: JSX.CSSProperties = {
+  color: "var(--color-text-muted)",
+  "font-family": FONT_MONO,
+  "font-size": "10px",
+  "letter-spacing": "0.08em",
+  overflow: "hidden",
+  "text-overflow": "ellipsis",
+  "white-space": "nowrap",
+}
+
+const runStatus: JSX.CSSProperties = {
+  display: "flex",
+  "align-items": "center",
+  gap: "6px",
+  flex: "none",
+}
+
+const runStatusText: JSX.CSSProperties = {
+  width: "66px",
+  "font-family": FONT_MONO,
+  "font-size": "10px",
+  "letter-spacing": "0.09em",
+  "white-space": "nowrap",
+}
+
+const dot: JSX.CSSProperties = {
+  width: "5px",
+  height: "5px",
+  "border-radius": "50%",
+  flex: "none",
+}
+
+const runAge: JSX.CSSProperties = {
+  width: "22px",
+  flex: "none",
+  "text-align": "right",
+  color: "var(--color-text-faint)",
+  "font-family": FONT_MONO,
+  "font-size": "10.5px",
+  "font-variant-numeric": "tabular-nums",
+  "white-space": "nowrap",
+}
+
+// Status reaches the dot and the word through the same semantic tokens the
+// rest of the app uses; the app ships 16 themes and a literal colour here
+// would be right in exactly one of them.
+function toneColor(tone: RunTone): string {
+  if (tone === "danger") return "var(--color-error)"
+  if (tone === "success") return "var(--color-success)"
+  if (tone === "active") return "var(--color-warning)"
+  return "var(--color-text-muted)"
 }
 
 const row: JSX.CSSProperties = {

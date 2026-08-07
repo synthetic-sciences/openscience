@@ -32,7 +32,12 @@ const tabs = [
 ] as const
 
 export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
-  const [state, setState] = createStore({ tab: "kernels" as Tab, active: 0 })
+  // `active` still drives nothing visible on its own — the counts beside each
+  // tab label are totals, which is what 5a shows and what a glance wants:
+  // "how much is here", not "how much is moving". The active figure stays
+  // because the jobs panel reports it and the empty/idle copy reads better
+  // knowing it.
+  const [state, setState] = createStore({ tab: "kernels" as Tab, active: 0, jobs: 0, kernels: 0 })
   const id = createUniqueId()
   const refs: Partial<Record<Tab, HTMLButtonElement>> = {}
   const strip = props.strip ?? HostStrip
@@ -42,7 +47,9 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
 
   const refresh = async () => {
     const list = await api.list().catch(() => undefined)
-    if (list) setState("active", list.filter((job) => !terminal.has(job.status)).length)
+    if (!list) return
+    setState("active", list.filter((job) => !terminal.has(job.status)).length)
+    setState("jobs", list.length)
   }
 
   createEffect(() => {
@@ -78,7 +85,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
 
   return (
     <section class="compute-surface" aria-label="Compute">
-      <Dynamic component={strip} />
+      <Dynamic component={strip} onKernels={(live: number) => setState("kernels", live)} />
       <div
         class="compute-surface__tabs"
         role="tablist"
@@ -102,14 +109,18 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
               onClick={() => select(item.id)}
             >
               <span>{item.label}</span>
-              <Show when={item.id === "jobs" && state.active > 0}>
-                <span
-                  class="compute-surface__badge"
-                  aria-label={`${state.active} active job${state.active === 1 ? "" : "s"}`}
-                >
-                  {state.active}
-                </span>
-              </Show>
+              {/* The count rides in the label rather than in a badge: 5a puts
+                  the two numbers on the same baseline as their words so the
+                  row reads as one line of type, and drops the badge that
+                  competed with the terracotta underline for the eye. */}
+              <span class="compute-surface__count" aria-hidden="true">
+                {item.id === "jobs" ? state.jobs : state.kernels}
+              </span>
+              <span class="compute-surface__sr">
+                {item.id === "jobs"
+                  ? `${state.jobs} job${state.jobs === 1 ? "" : "s"}`
+                  : `${state.kernels} kernel${state.kernels === 1 ? "" : "s"}`}
+              </span>
             </button>
           )}
         </For>

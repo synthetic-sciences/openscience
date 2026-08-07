@@ -95,10 +95,12 @@ const settle = async (calls: Array<Promise<Response>>) => {
 }
 
 const values = (host: HTMLElement) =>
-  [...host.querySelectorAll(".host-strip__value")].map((element) => element.textContent)
+  [host.querySelector(".host-strip__headline"), host.querySelector(".host-strip__cores-value")].map(
+    (element) => element?.textContent,
+  )
 
 describe("host strip", () => {
-  test("reads Unavailable on every tile when the server cannot be reached", async () => {
+  test("reads unavailable on every instrument when the server cannot be reached", async () => {
     const calls: Array<Promise<Response>> = []
     const host = guard(() => subject.HostStrip({ request: track(offline, calls) }))
     await settle(calls)
@@ -106,23 +108,23 @@ describe("host strip", () => {
     expect(calls.length).toBeGreaterThan(0)
     await expect(calls[0]).rejects.toThrow()
     expect(host.querySelector("[data-boundary]")).toBeNull()
-    expect(host.querySelectorAll(".host-strip__tile").length).toBe(3)
-    expect(values(host)).toEqual(["Unavailable", "Unavailable", "Unavailable"])
+    expect(host.querySelectorAll(".host-strip__figure, .host-strip__cores").length).toBe(2)
+    expect(values(host)).toEqual(["—", "—"])
     expect(host.textContent).not.toContain("0 B")
-    expect(host.textContent).not.toContain("0.0 cores")
+    expect(host.textContent).not.toContain("0 / 0")
   })
 
-  test("reads Unavailable on every tile when the server answers an error status", async () => {
+  test("reads unavailable on every instrument when the server answers an error status", async () => {
     const calls: Array<Promise<Response>> = []
     const host = guard(() => subject.HostStrip({ request: track(erroring, calls) }))
     await settle(calls)
 
     expect((await calls[0])?.status).toBe(503)
     expect(host.querySelector("[data-boundary]")).toBeNull()
-    expect(host.querySelectorAll(".host-strip__tile").length).toBe(3)
-    expect(values(host)).toEqual(["Unavailable", "Unavailable", "Unavailable"])
+    expect(host.querySelectorAll(".host-strip__figure, .host-strip__cores").length).toBe(2)
+    expect(values(host)).toEqual(["—", "—"])
     expect(host.textContent).not.toContain("0 B")
-    expect(host.textContent).not.toContain("0.0 cores")
+    expect(host.textContent).not.toContain("0 / 0")
   })
 
   test("states the machine's capacity once a poll succeeds", async () => {
@@ -131,8 +133,10 @@ describe("host strip", () => {
     await settle(calls)
 
     expect(host.querySelector("[data-boundary]")).toBeNull()
-    expect(values(host)).toEqual(["412 MB", "0.4 cores", "2"])
-    expect(host.textContent).toContain("~2 of 8 cores busy")
+    expect(values(host)).toEqual(["9.3", "2 / 8"])
+    // 5a states the reading itself rather than a sentence about it.
+    expect(host.textContent).toContain("GB FREE")
+    expect(host.textContent).toContain("OF 16.0")
   })
 
   test("asks the route the compute strip is served from, naming itself to the server", async () => {
@@ -193,9 +197,8 @@ describe("host strip", () => {
 
     const memoryTile = host.querySelector('[data-host-tile="memory"]')
     const cpuTile = host.querySelector('[data-host-tile="cpu"]')
-    const kernelsTile = host.querySelector('[data-host-tile="kernels"]')
     expect(memoryTile).not.toBeNull()
-    expect(values(host)).toEqual(["412 MB", "0.4 cores", "2"])
+    expect(values(host)).toEqual(["9.3", "2 / 8"])
 
     capacity = {
       memory: { total: 16_000_000_000, available: 5_000_000_000, kernels: 900_000_000 },
@@ -208,10 +211,9 @@ describe("host strip", () => {
     // Identity: the very same element instances are still the ones mounted.
     expect(host.querySelector('[data-host-tile="memory"]')).toBe(memoryTile)
     expect(host.querySelector('[data-host-tile="cpu"]')).toBe(cpuTile)
-    expect(host.querySelector('[data-host-tile="kernels"]')).toBe(kernelsTile)
     expect(host.contains(memoryTile)).toBe(true)
     // Freshness: the values inside those same nodes actually moved.
-    expect(values(host)).toEqual(["900 MB", "1.1 cores", "5"])
+    expect(values(host)).toEqual(["5.0", "4 / 8"])
   })
 
   test("stays mounted with no Suspense fallback while a poll is genuinely in flight", async () => {
@@ -258,7 +260,7 @@ describe("host strip", () => {
     // Let the first load resolve; the fallback should be gone and tiles present.
     await Bun.sleep(20)
     expect(host.querySelector("[data-fallback]")).toBeNull()
-    expect(values(host)).toEqual(["412 MB", "0.4 cores", "2"])
+    expect(values(host)).toEqual(["9.3", "2 / 8"])
     const memoryTile = host.querySelector('[data-host-tile="memory"]')
     expect(memoryTile).not.toBeNull()
 
@@ -273,7 +275,7 @@ describe("host strip", () => {
     expect(host.querySelector("[data-fallback]")).toBeNull()
     expect(memoryTile?.isConnected).toBe(true)
     expect(host.querySelector('[data-host-tile="memory"]')).toBe(memoryTile)
-    expect(values(host)).toEqual(["412 MB", "0.4 cores", "2"])
+    expect(values(host)).toEqual(["9.3", "2 / 8"])
 
     // Resolve it and confirm the value actually moved.
     settleSecond?.(new Response(JSON.stringify(refreshed), { headers: { "content-type": "application/json" } }))
@@ -281,7 +283,7 @@ describe("host strip", () => {
 
     expect(host.querySelector("[data-fallback]")).toBeNull()
     expect(host.querySelector('[data-host-tile="memory"]')).toBe(memoryTile)
-    expect(values(host)).toEqual(["900 MB", "1.1 cores", "5"])
+    expect(values(host)).toEqual(["5.0", "4 / 8"])
   })
 
   test("refreshes when the tab is shown again and polls nothing after unmount", async () => {

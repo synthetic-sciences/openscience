@@ -21,7 +21,11 @@ describe("kernel control room", () => {
   test("keeps ownership guidance compact and inline", () => {
     const panel = source()
 
-    expect(panel).toContain("<strong>Session-owned kernels.</strong>")
+    // Stated as prose rather than as a bolded callout with an icon — this is
+    // how kernels work, not a warning about them.
+    expect(panel).toContain("Named records survive app restarts.")
+    expect(panel).toContain("Live variables persist only while the backend process stays alive.")
+    expect(panel).not.toContain("<strong>Session-owned kernels.</strong>")
     expect(panel).not.toContain("Project inventory")
   })
 
@@ -79,16 +83,22 @@ describe("kernel control room", () => {
     expect(runtime).toContain("process_identity_verified: boolean | null")
   })
 
-  test("keeps the invoked compute control room compact and softly grouped", () => {
+  test("nests the kernel as its own card with a printed-record metric grid", () => {
     const css = styles()
 
     expect(css).toMatch(/\.compute-surface \.kernel-panel__header\s*\{[^}]*min-height: 48px/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-panel__heading strong\s*\{[^}]*font-size: 15px/s)
     expect(css).toMatch(/\.compute-surface \.kernel-panel__scope\s*\{[^}]*background: transparent/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*padding: 12px/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*border-radius: 12px/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*box-shadow: none/s)
-    expect(css).toMatch(/\.compute-surface \.kernel-card__metric\s*\{[^}]*min-height: 40px/s)
+    // The runtime is a distinct object with its own controls, so it sits in an
+    // inset card rather than flat on the panel.
+    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*border-radius: 18px/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-card\s*\{[^}]*background: var\(--color-bg-elevated\)/s)
+    // Label and value joined by a dotted leader, as a printed record sets them.
+    expect(css).toMatch(/\.compute-surface \.kernel-card__metric::after\s*\{[^}]*border-bottom: 1px dotted/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-card__metrics\b[^{]*\{[^}]*grid-template-columns: 1fr 1fr/s)
+    // Only Stop carries a colour, because it is the one that discards work.
+    expect(css).toMatch(/\.compute-surface \.kernel-card__stop\s*\{[^}]*color: var\(--color-error\)/s)
+    // No hardcoded colour: the app ships 16 themes.
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}/)
   })
 
   test("materializes a new session and polls unconditionally while mounted", () => {

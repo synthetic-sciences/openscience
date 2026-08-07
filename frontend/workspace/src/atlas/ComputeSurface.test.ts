@@ -123,7 +123,7 @@ describe("compute surface", () => {
     expect(document.activeElement).toBe(kernels)
   })
 
-  test("shows the active project job count beside the Jobs tab", async () => {
+  test("carries the job total in the Jobs tab label", async () => {
     const mounted = { kernels: 0, jobs: 0 }
     const host = mount(() =>
       subject.ComputeSurface({
@@ -133,14 +133,21 @@ describe("compute surface", () => {
         request: request(["running", "succeeded", "running"]),
       }),
     )
-    const badge = await (async function wait(attempts = 20): Promise<HTMLElement | null> {
-      const value = host.querySelector<HTMLElement>(".compute-surface__badge")
-      if (value || !attempts) return value
+    const count = await (async function wait(attempts = 20): Promise<HTMLElement | null> {
+      const value = host.querySelector<HTMLElement>('[data-compute-tab="jobs"] .compute-surface__count')
+      if (value?.textContent === "3" || !attempts) return value
       await Bun.sleep(10)
       return wait(attempts - 1)
     })()
-    expect(badge?.textContent).toBe("2")
-    expect(badge?.getAttribute("aria-label")).toBe("2 active jobs")
+
+    // The label states how many runs are here, not how many are moving — a
+    // total is what a glance at a tab wants, and the running ones are already
+    // legible in the list by their status dots.
+    expect(count?.textContent).toBe("3")
+    // Read aloud with a unit, because "Jobs 3" alone is ambiguous.
+    const tab = host.querySelector('[data-compute-tab="jobs"]')
+    expect(tab?.textContent).toContain("3 jobs")
+    expect(count?.getAttribute("aria-hidden")).toBe("true")
     expect(mounted).toEqual({ kernels: 1, jobs: 0 })
   })
 
@@ -182,17 +189,23 @@ describe("compute surface", () => {
     expect(source).toContain("manual={false}")
   })
 
-  test("uses the compact flat tab geometry", () => {
+  test("marks the selected tab with an underline rather than a filled shape", () => {
     const css = readFileSync(fileURLToPath(new URL("./ComputeSurface.css", import.meta.url)), "utf8")
 
-    expect(css).toMatch(/\.compute-surface__tabs\s*\{[^}]*min-height: 40px/s)
-    expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*min-height: 32px/s)
-    expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*position: relative/s)
-    expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*border-radius: 8px/s)
-    expect(css).toMatch(/\.compute-surface__tab\[data-active="true"\]\s*\{[^}]*box-shadow: none/s)
-    expect(css).toMatch(/\.compute-surface__badge\s*\{[^}]*border-radius: 999px/s)
-    expect(css).toMatch(/\.compute-surface__badge\s*\{[^}]*position: absolute/s)
-    expect(css).toMatch(/\.compute-surface__badge\s*\{[^}]*min-width: 14px/s)
+    // Type on a hairline, not a pill group.
+    expect(css).toMatch(/\.compute-surface__tabs\s*\{[^}]*border-bottom: 1px solid var\(--color-border\)/s)
+    expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*text-transform: uppercase/s)
+    expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*font-family: var\(--font-code\)/s)
+    // The one solid terracotta on this surface belongs to the primary action,
+    // so selection is an underline drawn in the brand colour instead.
+    expect(css).toMatch(
+      /\.compute-surface__tab\[data-active="true"\]\s*\{[^}]*box-shadow: inset 0 -2px 0 var\(--surface-brand-base\)/s,
+    )
+    expect(css).toMatch(/\.compute-surface__tab\[data-active="true"\]\s*\{[^}]*background: none/s)
+    // The count joins its label as one token of type rather than sitting apart.
+    expect(css).toMatch(/\.compute-surface__count::before\s*\{[^}]*content: "·"/s)
+    // No hardcoded colour: the app ships 16 themes.
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}/)
   })
 
   test("renders the host strip above the tablist", () => {

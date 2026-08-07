@@ -111,7 +111,8 @@ describe("compute jobs surface", () => {
   })
 
   test("nests collapsible details beneath each run", () => {
-    const runs = source.indexOf("<For each={jobs()}>")
+    // Runs are grouped into day bands, so the rows come from the inner loop.
+    const runs = source.indexOf("<For each={ledger(")
     const details = source.indexOf("id={`compute-run-${item.id}`}")
 
     expect(runs).toBeGreaterThan(-1)

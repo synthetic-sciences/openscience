@@ -1,84 +1,135 @@
+/* 3a's instrument block. Where the previous pass drew two matched gauges, this
+   leads with a single figure at display size and puts its qualifiers in small
+   mono beside it — a laboratory readout rather than a dashboard tile. Free
+   memory leads, not used: the question in front of a run is how much room is
+   left. */
 .host-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   box-sizing: border-box;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--color-border-weak-base);
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
 }
 
-.host-strip__tile {
-  /* Each tile is its own query container, and the grid above gives all three
-     the same width, so they change layout together rather than each wrapping
-     at whatever width its own caption happens to need. */
-  container-type: inline-size;
-  display: grid;
-  gap: 6px;
+.host-strip__memory {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
   min-width: 0;
 }
 
-.host-strip__reading {
+.host-strip__figure {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
-/* Beside the value there is room for the caption only while the tile is wide
-   enough for both. Narrower than that, the caption drops onto its own line
-   under the number and takes the full tile width, which is far more readable
-   than squeezing "~0 of 8 cores busy" into a few characters per line. Widen
-   the pane and it returns to the side. */
-@container (max-width: 180px) {
-  .host-strip__reading {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-  }
+.host-strip__headline {
+  font-size: 44px;
+  line-height: 0.9;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
-.host-strip__value {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+.host-strip__labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 3px;
+}
+
+.host-strip__unit,
+.host-strip__ceiling {
+  font-family: var(--font-code);
+  font-size: 10px;
+  letter-spacing: 0.1em;
   white-space: nowrap;
 }
 
-.host-strip__caption {
-  /* Wraps rather than truncates so the free/busy numbers stay readable at any
-     width. min-height reserves two lines (10px * 1.4 line-height) on every
-     tile unconditionally, so a caption that needs to wrap grows all three
-     tiles together instead of leaving the other two short and ragged. */
-  min-width: 0;
-  min-height: 28px;
-  overflow-wrap: break-word;
-  font-size: 10px;
-  line-height: 1.4;
+.host-strip__unit {
+  color: var(--color-text-muted);
+}
+
+/* The ceiling is context, so it sits a step quieter than the unit above it. */
+.host-strip__ceiling {
   color: var(--color-text-faint);
-  white-space: normal;
 }
 
-.host-strip__meter {
-  position: relative;
-  height: 3px;
+/* Twenty samples of memory pressure, oldest left. The bars carry no labels
+   because the current value is already stated at 44px beside them; this is
+   here to show direction, not to be read off. */
+.host-strip__history {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 34px;
+  flex: none;
+}
+
+.host-strip__bar {
+  width: 4px;
+  border-radius: 1px;
+  background: var(--color-border-strong);
+  transition: height 240ms ease;
+}
+
+/* The newest few in the accent, so the eye lands on now rather than on the
+   middle of the series. */
+.host-strip__bar[data-recent="true"] {
+  background: var(--surface-brand-base);
+}
+
+.host-strip__cores {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.host-strip__cores-label {
+  width: 52px;
+  flex: none;
+  font-family: var(--font-code);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+
+.host-strip__segments {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.host-strip__segment {
+  flex: 1;
+  height: 6px;
   border-radius: 2px;
-  background: color-mix(in srgb, var(--color-bg-subtle) 72%, transparent);
+  background: var(--color-border);
 }
 
-.host-strip__fill,
-.host-strip__share {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  border-radius: 2px;
+/* Busy cores read in the instrument blue, kept distinct from the terracotta so
+   the one solid accent on this surface still belongs to the primary action. */
+.host-strip__segment[data-lit="true"] {
+  background: var(--border-info-selected);
 }
 
-.host-strip__fill {
-  background: color-mix(in srgb, var(--color-text-faint) 40%, transparent);
+.host-strip__cores-value {
+  font-family: var(--font-code);
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.host-strip__share {
-  background: var(--color-accent);
+@media (prefers-reduced-motion: reduce) {
+  .host-strip__bar {
+    transition: none;
+  }
 }
