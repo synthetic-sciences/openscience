@@ -25,7 +25,7 @@ describe("run ledger", () => {
     // with holes is harder to scan than one that is always filled.
     const rows = ledger([run("succeeded"), run("running"), run("failed")])
 
-    expect(rows.map((row) => row.statusLabel)).toEqual(["SUCCEEDED", "RUNNING", "FAILED"])
+    expect(rows.map((row) => row.statusLabel)).toEqual(["Succeeded", "Running", "Failed"])
   })
 
   test("names a semantic tone rather than a colour", () => {
@@ -44,13 +44,14 @@ describe("run ledger", () => {
   test("upper-cases the target so the two mono columns sit together", () => {
     const rows = ledger([run("succeeded", "This computer"), run("succeeded", "Modal")])
 
-    expect(rows.map((row) => row.target)).toEqual(["THIS COMPUTER", "MODAL"])
+    // The target reads as the server names it rather than being shouted.
+    expect(rows.map((row) => row.target)).toEqual(["This computer", "Modal"])
   })
 
   test("keeps every field the caller passed in", () => {
     const rows = ledger([{ status: "failed" as Status, target_label: "Modal", id: "job_1", name: "cifar" }])
 
-    expect(rows[0]).toMatchObject({ id: "job_1", name: "cifar", status: "failed", statusLabel: "FAILED", index: "01" })
+    expect(rows[0]).toMatchObject({ id: "job_1", name: "cifar", status: "failed", statusLabel: "Failed", index: "01" })
   })
 
   test("returns nothing for an empty list", () => {

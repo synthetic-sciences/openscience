@@ -29,8 +29,6 @@
   border-radius: 0;
   background: none;
   font-size: 10.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
   cursor: pointer;
 }
@@ -300,8 +298,6 @@
   background: none;
   color: var(--color-text-faint);
   font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -347,8 +343,6 @@
   border-radius: 999px;
   font-size: 9.5px;
   font-weight: 400;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -405,8 +399,6 @@
   gap: 7px;
   margin: -2px 0 2px;
   font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
 }
 
@@ -452,8 +444,6 @@
   padding: 12px 0;
   font-size: 9.5px;
   font-weight: 400;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
   color: var(--color-text-faint);
   list-style: none;
 }
@@ -506,7 +496,6 @@
 
 .compute-surface .kernel-card__usage-label > span:first-child {
   font-size: 9.5px;
-  letter-spacing: 0.11em;
   color: var(--color-text-faint);
 }
 
@@ -597,8 +586,6 @@
   order: 1;
   flex: none;
   font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
   white-space: nowrap;
 }
@@ -639,8 +626,6 @@
   border-radius: 999px;
   box-shadow: inset 0 0 0 1px var(--color-border-strong);
   font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
 }
 
 .compute-surface .kernel-card__recovery {
@@ -687,8 +672,6 @@
 .compute-surface .kernel-card__identity summary {
   padding-top: 11px;
   font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
 }
 

@@ -61,8 +61,8 @@ export function hostReading(capacity?: Partial<Capacity>): Reading {
 
   return {
     headline: used ?? "—",
-    unit: used === undefined ? "UNAVAILABLE" : "GB USED",
-    ceiling: total ? `OF ${total}` : "",
+    unit: used === undefined ? "Unavailable" : "GB used",
+    ceiling: total ? `of ${total}` : "",
     segments,
     lit: cores === undefined ? 0 : Math.round(ratio(busy ?? 0, cores) * segments),
     cores: cores === undefined ? "—" : `${busy === undefined ? 0 : Math.round(busy)} / ${cores}`,

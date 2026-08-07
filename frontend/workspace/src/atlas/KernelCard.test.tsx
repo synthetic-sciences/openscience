@@ -257,7 +257,7 @@ describe("KernelCard lifecycle controls", () => {
 
     const plate = host.querySelector<HTMLButtonElement>(".kernel-card__plate")
     expect(plate?.getAttribute("aria-expanded")).toBe("false")
-    expect(host.querySelector(".kernel-card__language")?.textContent).toBe("KERNEL 01 · PYTHON")
+    expect(host.querySelector(".kernel-card__language")?.textContent).toBe("Kernel 01 · Python")
     expect(host.querySelector(".kernel-card__state")?.textContent).toBe("running")
     // The two figures that survive the collapse.
     expect(host.querySelector(".kernel-card__usage")?.textContent).toContain("2.4")
@@ -309,7 +309,7 @@ describe("KernelCard lifecycle controls", () => {
       { collapsed: true },
     )
 
-    expect(host.querySelector(".kernel-card__language")?.textContent).toBe("KERNEL 03 · R")
+    expect(host.querySelector(".kernel-card__language")?.textContent).toBe("Kernel 03 · R")
   })
   test("counts uptime like a stopwatch rather than freezing at its first reading", async () => {
     // The kernel object is reconciled in place, so it does not change while a

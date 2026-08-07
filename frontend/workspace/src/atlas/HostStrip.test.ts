@@ -130,7 +130,7 @@ describe("host strip", () => {
 
   test("names the block, so its figures are not read as a kernel's own", () => {
     // The strip states the machine; each kernel plate states that kernel. A
-    // reader who took "6.7 GB USED" here for the kernel's own would be out by
+    // reader who took "6.7 GB used" here for the kernel's own would be out by
     // three orders of magnitude, and nothing else on the surface said which
     // was which.
     const source = readFileSync(fileURLToPath(new URL("./HostStrip.tsx", import.meta.url)), "utf8")
@@ -147,8 +147,8 @@ describe("host strip", () => {
     expect(host.querySelector("[data-boundary]")).toBeNull()
     expect(values(host)).toEqual(["6.7", "2 / 8"])
     // 5a states the reading itself rather than a sentence about it.
-    expect(host.textContent).toContain("GB USED")
-    expect(host.textContent).toContain("OF 16.0")
+    expect(host.textContent).toContain("GB used")
+    expect(host.textContent).toContain("of 16.0")
   })
 
   test("asks the route the compute strip is served from, naming itself to the server", async () => {

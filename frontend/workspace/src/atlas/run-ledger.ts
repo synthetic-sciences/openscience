@@ -38,8 +38,8 @@ export type RunEntry = {
 }
 
 /**
- * Turns runs into ledger entries: a number, an uppercase target, an uppercase
- * status and its tone.
+ * Turns runs into ledger entries: a number, the target as the server names it,
+ * the status in sentence case, and its tone.
  *
  * Numbering is by position in the list as given, so it matches what the reader
  * sees rather than any internal ordering — the API returns newest first, and
@@ -49,8 +49,8 @@ export function ledger<T extends Run>(runs: readonly T[]): (T & RunEntry)[] {
   return runs.map((run, position) => ({
     ...run,
     index: String(position + 1).padStart(2, "0"),
-    statusLabel: run.status.toUpperCase(),
+    statusLabel: run.status.charAt(0).toUpperCase() + run.status.slice(1),
     tone: tones[run.status] ?? "muted",
-    target: run.target_label.toUpperCase(),
+    target: run.target_label,
   }))
 }

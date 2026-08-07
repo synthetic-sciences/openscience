@@ -27,9 +27,9 @@ const host = { memory: { total: 16_400_000_000, available: 12_000_000_000 }, cpu
 
 describe("kernel plate eyebrow", () => {
   test("numbers by list position and names the language", () => {
-    expect(plateEyebrow(kernel(), 0)).toBe("KERNEL 01 · PYTHON")
-    expect(plateEyebrow(kernel(), 9)).toBe("KERNEL 10 · PYTHON")
-    expect(plateEyebrow(kernel({ language: "r" }), 1)).toBe("KERNEL 02 · R")
+    expect(plateEyebrow(kernel(), 0)).toBe("Kernel 01 · Python")
+    expect(plateEyebrow(kernel(), 9)).toBe("Kernel 10 · Python")
+    expect(plateEyebrow(kernel({ language: "r" }), 1)).toBe("Kernel 02 · R")
   })
 })
 

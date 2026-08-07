@@ -114,7 +114,7 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
       </div>
 
       <div class="host-strip__cores" data-host-tile="cpu">
-        <span class="host-strip__cores-label">CORES</span>
+        <span class="host-strip__cores-label">Cores</span>
         <span class="host-strip__segments" role="presentation">
           <Index each={Array.from({ length: reading().segments })}>
             {(_, position) => <span class="host-strip__segment" data-lit={position < reading().lit} />}

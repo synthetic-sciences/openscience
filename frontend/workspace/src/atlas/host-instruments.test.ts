@@ -15,8 +15,8 @@ describe("host reading", () => {
     // made it count down while the bars climbed, so the two instruments
     // appeared to disagree about the same machine.
     expect(reading.headline).toBe("2.9")
-    expect(reading.unit).toBe("GB USED")
-    expect(reading.ceiling).toBe("OF 16.0")
+    expect(reading.unit).toBe("GB used")
+    expect(reading.ceiling).toBe("of 16.0")
   })
 
   test("states busy cores against the count, in whole segments", () => {
@@ -31,7 +31,7 @@ describe("host reading", () => {
     const reading = hostReading({ kernels: { live: 0, running: 0 } })
 
     expect(reading.headline).toBe("—")
-    expect(reading.unit).toBe("UNAVAILABLE")
+    expect(reading.unit).toBe("Unavailable")
     expect(reading.ceiling).toBe("")
     expect(reading.lit).toBe(0)
   })
@@ -46,8 +46,8 @@ describe("host reading", () => {
 
     const halfMemory = hostReading({ memory: { total: 16_000_000_000 } as never, cpu: { cores: 4 } })
     expect(halfMemory.headline).toBe("—")
-    expect(halfMemory.unit).toBe("UNAVAILABLE")
-    expect(halfMemory.ceiling).toBe("OF 16.0")
+    expect(halfMemory.unit).toBe("Unavailable")
+    expect(halfMemory.ceiling).toBe("of 16.0")
 
     const noMemory = hostReading({ cpu: { cores: 4, busy: 1 } })
     expect(noMemory.headline).toBe("—")

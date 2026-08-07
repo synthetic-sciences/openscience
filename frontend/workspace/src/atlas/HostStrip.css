@@ -16,8 +16,6 @@
    it names the block rather than competing with the figure it introduces. */
 .host-strip__title {
   font-size: 9.5px;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
   color: var(--color-text-faint);
 }
 
@@ -55,7 +53,6 @@
 .host-strip__unit,
 .host-strip__ceiling {
   font-size: 10px;
-  letter-spacing: 0.1em;
   white-space: nowrap;
 }
 
@@ -102,7 +99,6 @@
   width: 52px;
   flex: none;
   font-size: 10px;
-  letter-spacing: 0.1em;
   color: var(--color-text-muted);
 }
 

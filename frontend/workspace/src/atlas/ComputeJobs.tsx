@@ -828,7 +828,7 @@ export function ComputeJobs(
                 The age is already on every row, so day bands repeated in a
                 heading what the rows were saying anyway. */}
             <div style={ledgerHeader}>
-              <span style={ledgerTitle}>RECENT RUNS</span>
+              <span style={ledgerTitle}>Recent runs</span>
               <button type="button" disabled={busy()} style={clearButton} onClick={() => void clear()}>
                 Clear finished
               </button>
@@ -1517,7 +1517,6 @@ const ledgerTitle: JSX.CSSProperties = {
   color: "var(--color-text-faint)",
   "font-family": FONT_MONO,
   "font-size": "10px",
-  "letter-spacing": "0.12em",
 }
 
 const clearButton: JSX.CSSProperties = {
@@ -1559,7 +1558,6 @@ const runTarget: JSX.CSSProperties = {
   color: "var(--color-text-muted)",
   "font-family": FONT_MONO,
   "font-size": "10px",
-  "letter-spacing": "0.08em",
   overflow: "hidden",
   "text-overflow": "ellipsis",
   "white-space": "nowrap",
@@ -1576,7 +1574,6 @@ const runStatusText: JSX.CSSProperties = {
   width: "66px",
   "font-family": FONT_MONO,
   "font-size": "10px",
-  "letter-spacing": "0.09em",
   "white-space": "nowrap",
 }
 

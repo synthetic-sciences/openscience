@@ -46,20 +46,20 @@ const gb = (bytes?: number | null) => {
 }
 
 const language = (kernel: KernelStatus) => {
-  if (kernel.language === "python") return "PYTHON"
+  if (kernel.language === "python") return "Python"
   if (kernel.language === "r") return "R"
-  return kernel.language.toUpperCase()
+  return kernel.language.charAt(0).toUpperCase() + kernel.language.slice(1)
 }
 
 /**
- * "KERNEL 01 · PYTHON" — the plate's eyebrow.
+ * "Kernel 01 · Python" — the plate's eyebrow.
  *
  * The ordinal is the kernel's position in the rendered list, not an id: the
  * point is to tell two plates apart at a glance while they are collapsed, and
  * a runtime id is far too long to read at eyebrow size.
  */
 export function plateEyebrow(kernel: KernelStatus, index: number): string {
-  return `KERNEL ${String(index + 1).padStart(2, "0")} · ${language(kernel)}`
+  return `Kernel ${String(index + 1).padStart(2, "0")} · ${language(kernel)}`
 }
 
 /**

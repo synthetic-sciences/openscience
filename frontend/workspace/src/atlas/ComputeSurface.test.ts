@@ -194,7 +194,11 @@ describe("compute surface", () => {
 
     // Type on a hairline, not a pill group.
     expect(css).toMatch(/\.compute-surface__tabs\s*\{[^}]*border-bottom: 1px solid var\(--color-border\)/s)
-    expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*text-transform: uppercase/s)
+    // origin/main's compute surface sets nothing in capitals and keeps
+    // letter-spacing only as negative tracking on a heading, so neither
+    // appears here either.
+    expect(css).not.toContain("text-transform: uppercase")
+    expect(css).not.toMatch(/letter-spacing: 0\.\d/)
     // No face named on this surface: origin/main puts the whole app on one sans
     // face, and every label here inherits it rather than naming a second token
     // that could drift from it. `font-family: inherit` is the one allowed form.
