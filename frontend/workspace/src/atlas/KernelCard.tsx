@@ -7,7 +7,6 @@ import {
   kernelCanForget,
   kernelCanInterrupt,
   kernelCanStop,
-  kernelCpuLabel,
   kernelEnvironmentLabel,
   kernelEnvironmentTone,
   kernelGpuLabel,
@@ -130,7 +129,13 @@ export function KernelCard(props: {
               <div class="kernel-card__usage-fill" style={{ width: `${Math.round(usage().fill * 100)}%` }} />
             </div>
           </div>
-          <div class="kernel-card__usage-item">
+          {/* A share of the whole machine reads the same as a share of one
+              core, so the unit is stated rather than left to be inferred. The
+              segments say the rest: how many cores that share occupies. */}
+          <div
+            class="kernel-card__usage-item"
+            title={`Share of this machine's ${usage().segments} cores. Each segment is one core.`}
+          >
             <div class="kernel-card__usage-label">
               <span>CPU</span>
               <span>
@@ -169,7 +174,13 @@ export function KernelCard(props: {
         >
           <Metric label="Target" value={kernelTargetLabel(props.kernel)} />
           <Metric label="Uptime" value={uptime()} />
-          <Metric label="CPU" value={kernelCpuLabel(props.kernel.resources?.cpu_percent)} />
+          {/* The same value the head states, not a second reading of the same
+              field: the head normalises against the host's cores, so computing
+              this row independently would print a per-core figure beside a
+              machine one — 187.5% and 23.4% for one kernel. Only the placeholder
+              differs, because a lone "—" among three "Unavailable" siblings
+              reads as a different kind of absence rather than the same one. */}
+          <Metric label="CPU" value={usage().cpu === "—" ? "Unavailable" : usage().cpu} />
           <Metric label="Memory" value={kernelMemoryLabel(props.kernel.resources?.memory_bytes)} />
           <Metric label="GPU" value={kernelGpuLabel(props.kernel.resources?.gpu_percent)} />
           <Metric label="VRAM" value={kernelVramLabel(props.kernel.resources?.vram_bytes)} />

@@ -146,18 +146,23 @@ describe("KernelCard lifecycle controls", () => {
   })
 
   test("shows the local target with sampled usage and an unavailable fallback, never zero", () => {
+    // CPU is stated as a share of the machine, so this row needs the host
+    // reading the surface passes down: 12.34% of one core on an 8-core box is
+    // 1.5% of the machine.
+    const capacity = { memory: { total: 16_400_000_000, available: 12_000_000_000 }, cpu: { cores: 8 } }
     const sampled = mount(() =>
       subject.KernelCard({
         kernel: kernel({ resources: { cpu_percent: 12.34, memory_bytes: 412_000_000 } }),
         routeID: "ses_current",
         action: "",
+        capacity,
         onControl: () => {},
       }),
     )
     const usage = sampled.querySelector(".kernel-card__metrics--usage")
     expect(usage?.textContent).toContain("Target")
     expect(usage?.textContent).toContain("Local")
-    expect(usage?.textContent).toContain("12.3%")
+    expect(usage?.textContent).toContain("1.5%")
     expect(usage?.textContent).toContain("412 MB")
     expect(usage?.textContent).toContain("Uptime")
     expect(usage?.textContent).toContain("GPU")
@@ -165,9 +170,10 @@ describe("KernelCard lifecycle controls", () => {
 
     const partial = mount(() =>
       subject.KernelCard({
-        kernel: kernel({ resources: { cpu_percent: 3 } }),
+        kernel: kernel({ resources: { cpu_percent: 24 } }),
         routeID: "ses_current",
         action: "",
+        capacity,
         onControl: () => {},
       }),
     )

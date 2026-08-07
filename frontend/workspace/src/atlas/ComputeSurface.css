@@ -406,7 +406,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 0;
+  margin: -2px 0 2px;
   font-family: var(--font-code);
   font-size: 10px;
   letter-spacing: 0.09em;
@@ -551,19 +551,27 @@
   background: var(--border-info-selected);
 }
 
-/* The opened body keeps the head's horizontal rhythm. */
+/* The opened body keeps the head's horizontal rhythm, and sets its own
+   vertical one. The card is gap: 0 so the divider under the head can run the
+   full width of the plate, which means every block below has to carry its own
+   spacing — without this they stacked flush and the record read as one dense
+   paragraph of figures. */
 .compute-surface .kernel-card__metrics,
 .compute-surface .kernel-card__environment,
 .compute-surface .kernel-card__recovery,
 .compute-surface .kernel-card__controls,
-.compute-surface .kernel-card__control-note,
 .compute-surface .kernel-card__identity {
-  margin-left: 16px;
-  margin-right: 16px;
+  margin: 16px 16px 0;
+}
+
+/* The two grids are one ledger read as a single column of rows, so they sit
+   closer to each other than to the blocks around them. */
+.compute-surface .kernel-card__metrics--usage {
+  margin-top: 9px;
 }
 
 .compute-surface .kernel-card__identity {
-  margin-bottom: 14px;
+  margin-bottom: 4px;
 }
 
 /* Label and value joined by a dotted leader, as a printed record would set
@@ -573,7 +581,7 @@
 .compute-surface .kernel-card__metrics--usage {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 7px 20px;
+  gap: 9px 20px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -620,8 +628,8 @@
 }
 
 .compute-surface .kernel-card__environment {
-  gap: 7px;
-  padding: 12px 0 0;
+  gap: 10px;
+  padding: 16px 0 0;
   border-top: 1px solid var(--color-border);
   border-radius: 0;
   background: none;
