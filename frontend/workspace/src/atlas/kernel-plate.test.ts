@@ -54,35 +54,61 @@ describe("kernel plate usage", () => {
     expect(idle.fill).toBeCloseTo(0.016 / 16.4, 4)
   })
 
-  test("states what the kernel itself is using, not a share of the machine", () => {
-    // Percent of ONE core over the kernel's process group, which is what the
-    // backend measures and the `top` convention. A kernel across nearly two
-    // cores reads 180%, and the segments say which two of eight.
+  test("states CPU as a share of the machine, so it never exceeds 100%", () => {
+    // The backend measures percent of ONE core over the process group, so a
+    // kernel across nearly two cores of eight arrives as 180 and is stated as
+    // 22.5% of the machine. The segments keep the core count, which is what a
+    // small share hides.
     const busy = plateUsage(kernel({ resources: { cpu_percent: 180 } }), host)
 
-    expect(busy.cpu).toBe("180.0%")
+    expect(busy.cpu).toBe("22.5%")
     expect(busy.segments).toBe(8)
     expect(busy.lit).toBe(2)
 
-    // Dividing by the host's cores would cap this at 100% but would make it a
-    // statement about the machine — and would leave a single-threaded kernel,
-    // which is most of them, unable to read above 12.5% however hard it works.
-    expect(plateUsage(kernel({ resources: { cpu_percent: 24 } }), host).cpu).toBe("24.0%")
-    expect(plateUsage(kernel({ resources: { cpu_percent: 800 } }), host).cpu).toBe("800.0%")
+    // Every core saturated is exactly 100%, not 800%.
+    expect(plateUsage(kernel({ resources: { cpu_percent: 800 } }), host).cpu).toBe("100.0%")
+    // And a group measured slightly over its own ceiling is clamped rather
+    // than printed as more than the whole machine.
+    expect(plateUsage(kernel({ resources: { cpu_percent: 820 } }), host).cpu).toBe("100.0%")
   })
 
-  test("states its own usage even when the host reading is missing", () => {
-    // This figure is the kernel's alone, so a capacity body that lost its cpu
-    // section costs the segments' accuracy and nothing else.
+  test("keeps a decimal, because one core of eight is only 12.5%", () => {
+    // The cost of normalising: a single-threaded kernel — most of them — can
+    // never reach an eighth of this machine, so whole percents would round
+    // most real work to a number that barely moves.
+    expect(plateUsage(kernel({ resources: { cpu_percent: 24 } }), host).cpu).toBe("3.0%")
+    expect(plateUsage(kernel({ resources: { cpu_percent: 100 } }), host).cpu).toBe("12.5%")
+  })
+
+  test("refuses to state a share of a machine it has not measured", () => {
+    // Without a core count the per-core figure cannot be converted, and
+    // printing it unconverted would pass 180% of one core off as 180% of the
+    // host — a factor of eight, silently.
     const noCores = plateUsage(kernel({ resources: { cpu_percent: 180 } }), { memory: host.memory })
 
-    expect(noCores.cpu).toBe("180.0%")
+    expect(noCores.cpu).toBe("—")
     expect(noCores.segments).toBe(8)
   })
 
   test("lights one segment for real but sub-core work rather than reading idle", () => {
     expect(plateUsage(kernel({ resources: { cpu_percent: 4 } }), host).lit).toBe(1)
     expect(plateUsage(kernel({ resources: { cpu_percent: 0 } }), host).lit).toBe(0)
+  })
+
+  test("never lights a segment the figure beside it does not account for", () => {
+    // 0.2% of one core is 0.025% of this machine, which rounds away — and a
+    // lit segment beside a figure reading 0.0% is the number and the bar
+    // disagreeing about the same measurement.
+    const trace = plateUsage(kernel({ resources: { cpu_percent: 0.2 } }), host)
+
+    expect(trace.cpu).toBe("0.0%")
+    expect(trace.lit).toBe(0)
+
+    // Just enough to survive the rounding lights one, and says so.
+    const visible = plateUsage(kernel({ resources: { cpu_percent: 1 } }), host)
+
+    expect(visible.cpu).toBe("0.1%")
+    expect(visible.lit).toBe(1)
   })
 
   test("says nothing it cannot measure", () => {
