@@ -470,17 +470,16 @@
   gap: 16px;
 }
 
+/* Equal halves, so the memory track and the core segments are the same length
+   and read as one instrument rather than two of different sizes. 3a pinned the
+   cores to 126px, which is close to even in a narrow pane but leaves the two
+   bars visibly mismatched once the pane is wide — and this one is read wide. */
 .compute-surface .kernel-card__usage-item {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
-}
-
-.compute-surface .kernel-card__usage-item:last-child {
-  flex: none;
-  width: 126px;
 }
 
 .compute-surface .kernel-card__usage-label {
@@ -664,12 +663,6 @@
 
 .compute-surface .kernel-card__stop {
   color: var(--color-error);
-}
-
-.compute-surface .kernel-card__control-note {
-  margin-top: 0;
-  font-size: 11px;
-  line-height: 1.5;
 }
 
 .compute-surface .kernel-card__identity {
