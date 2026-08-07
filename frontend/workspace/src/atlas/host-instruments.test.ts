@@ -8,11 +8,14 @@ const capacity = {
 }
 
 describe("host reading", () => {
-  test("leads with free memory, because that is the question before a run", () => {
+  test("leads with memory in use, which is what the histogram beside it plots", () => {
     const reading = hostReading(capacity)
 
-    expect(reading.headline).toBe("13.1")
-    expect(reading.unit).toBe("GB FREE")
+    // 16.0 total less 13.1 available. Reading the headline off `available`
+    // made it count down while the bars climbed, so the two instruments
+    // appeared to disagree about the same machine.
+    expect(reading.headline).toBe("2.9")
+    expect(reading.unit).toBe("GB USED")
     expect(reading.ceiling).toBe("OF 16.0")
   })
 
@@ -38,8 +41,13 @@ describe("host reading", () => {
     // response — must not take the whole strip down. Dereferencing it would
     // throw inside a memo, and the only ErrorBoundary wraps the workspace.
     const noCpu = hostReading({ memory: { total: 16_000_000_000, available: 13_100_000_000 } })
-    expect(noCpu.headline).toBe("13.1")
+    expect(noCpu.headline).toBe("2.9")
     expect(noCpu.cores).toBe("—")
+
+    const halfMemory = hostReading({ memory: { total: 16_000_000_000 } as never, cpu: { cores: 4 } })
+    expect(halfMemory.headline).toBe("—")
+    expect(halfMemory.unit).toBe("UNAVAILABLE")
+    expect(halfMemory.ceiling).toBe("OF 16.0")
 
     const noMemory = hostReading({ cpu: { cores: 4, busy: 1 } })
     expect(noMemory.headline).toBe("—")

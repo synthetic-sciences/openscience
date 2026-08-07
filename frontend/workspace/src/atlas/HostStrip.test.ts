@@ -133,9 +133,9 @@ describe("host strip", () => {
     await settle(calls)
 
     expect(host.querySelector("[data-boundary]")).toBeNull()
-    expect(values(host)).toEqual(["9.3", "2 / 8"])
+    expect(values(host)).toEqual(["6.7", "2 / 8"])
     // 5a states the reading itself rather than a sentence about it.
-    expect(host.textContent).toContain("GB FREE")
+    expect(host.textContent).toContain("GB USED")
     expect(host.textContent).toContain("OF 16.0")
   })
 
@@ -198,7 +198,7 @@ describe("host strip", () => {
     const memoryTile = host.querySelector('[data-host-tile="memory"]')
     const cpuTile = host.querySelector('[data-host-tile="cpu"]')
     expect(memoryTile).not.toBeNull()
-    expect(values(host)).toEqual(["9.3", "2 / 8"])
+    expect(values(host)).toEqual(["6.7", "2 / 8"])
 
     capacity = {
       memory: { total: 16_000_000_000, available: 5_000_000_000, kernels: 900_000_000 },
@@ -213,7 +213,7 @@ describe("host strip", () => {
     expect(host.querySelector('[data-host-tile="cpu"]')).toBe(cpuTile)
     expect(host.contains(memoryTile)).toBe(true)
     // Freshness: the values inside those same nodes actually moved.
-    expect(values(host)).toEqual(["5.0", "4 / 8"])
+    expect(values(host)).toEqual(["11.0", "4 / 8"])
   })
 
   test("stays mounted with no Suspense fallback while a poll is genuinely in flight", async () => {
@@ -260,7 +260,7 @@ describe("host strip", () => {
     // Let the first load resolve; the fallback should be gone and tiles present.
     await Bun.sleep(20)
     expect(host.querySelector("[data-fallback]")).toBeNull()
-    expect(values(host)).toEqual(["9.3", "2 / 8"])
+    expect(values(host)).toEqual(["6.7", "2 / 8"])
     const memoryTile = host.querySelector('[data-host-tile="memory"]')
     expect(memoryTile).not.toBeNull()
 
@@ -275,7 +275,7 @@ describe("host strip", () => {
     expect(host.querySelector("[data-fallback]")).toBeNull()
     expect(memoryTile?.isConnected).toBe(true)
     expect(host.querySelector('[data-host-tile="memory"]')).toBe(memoryTile)
-    expect(values(host)).toEqual(["9.3", "2 / 8"])
+    expect(values(host)).toEqual(["6.7", "2 / 8"])
 
     // Resolve it and confirm the value actually moved.
     settleSecond?.(new Response(JSON.stringify(refreshed), { headers: { "content-type": "application/json" } }))
@@ -283,7 +283,7 @@ describe("host strip", () => {
 
     expect(host.querySelector("[data-fallback]")).toBeNull()
     expect(host.querySelector('[data-host-tile="memory"]')).toBe(memoryTile)
-    expect(values(host)).toEqual(["5.0", "4 / 8"])
+    expect(values(host)).toEqual(["11.0", "4 / 8"])
   })
 
   test("refreshes when the tab is shown again and polls nothing after unmount", async () => {

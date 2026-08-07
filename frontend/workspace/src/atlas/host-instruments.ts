@@ -5,9 +5,10 @@ export type Capacity = {
 }
 
 export type Reading = {
-  /** The figure set at display size. 3a leads with free memory, not used —
-   *  "how much room is left" is the question a researcher about to start a run
-   *  is actually asking. */
+  /** The figure set at display size: memory in use, against the total below
+   *  it. Used rather than free, so the headline agrees with the histogram
+   *  beside it — the bars encode the fraction in use, and a headline counting
+   *  down while the bars climb made the two read as different measurements. */
   headline: string
   /** Stacked beneath the headline: the unit, then the ceiling. */
   unit: string
@@ -47,15 +48,20 @@ export const SAMPLES = 20
 export function hostReading(capacity?: Partial<Capacity>): Reading {
   const memory = capacity?.memory
   const cpu = capacity?.cpu
-  const free = gb(memory?.available)
   const total = gb(memory?.total)
+  // Derived rather than reported: the route carries total and available, and
+  // subtracting is the only figure consistent with the histogram's ratio.
+  const used =
+    memory?.total === undefined || memory?.available === undefined
+      ? undefined
+      : gb(Math.max(0, memory.total - memory.available))
   const cores = cpu?.cores
   const busy = cpu?.busy
   const segments = cores === undefined ? 8 : Math.min(12, Math.max(1, Math.round(cores)))
 
   return {
-    headline: free ?? "—",
-    unit: memory ? "GB FREE" : "UNAVAILABLE",
+    headline: used ?? "—",
+    unit: used === undefined ? "UNAVAILABLE" : "GB USED",
     ceiling: total ? `OF ${total}` : "",
     segments,
     lit: cores === undefined ? 0 : Math.round(ratio(busy ?? 0, cores) * segments),

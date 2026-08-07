@@ -398,6 +398,23 @@
   color: var(--color-text-muted);
 }
 
+/* One row, as the design sets them. The base grid is two columns, which left
+   Stop stranded on a line of its own — and Stop is the one that discards work,
+   so it read as an afterthought rather than the control to be careful with. */
+.compute-surface .kernel-card__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compute-surface .kernel-card__controls button {
+  flex: 1 1 0;
+  min-width: 92px;
+  min-height: 34px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
 /* The identity disclosure is set in the same mono capitals as the instrument
    labels, so it reads as the last row of the record rather than a link. */
 .compute-surface .kernel-card__identity summary {
