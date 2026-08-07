@@ -160,7 +160,7 @@ export const CredentialServices: Component<{
                 <ProviderLogo id={service.id} label={service.label} connected={service.connected} />
                 <div class="settings-list-copy">
                   <strong>{service.label}</strong>
-                  <span>{service.connected ? "Connected" : service.description}</span>
+                  <span>{service.connected ? "Connected and ready" : service.description}</span>
                 </div>
                 <div class="settings-list-actions">
                   <Show when={service.connected}>
@@ -226,7 +226,7 @@ export const CredentialServices: Component<{
                   </For>
                   <div class="credential-form-actions">
                     <Button type="submit" size="small" variant="primary" disabled={saving() || !ready(service)}>
-                      {saving() ? "Saving…" : "Save"}
+                      {saving() ? "Saving…" : "Save credential"}
                     </Button>
                     <Button type="button" size="small" variant="ghost" onClick={() => setEditing(undefined)}>
                       Cancel
@@ -266,7 +266,7 @@ export const CredentialServices: Component<{
               placeholder="Paste secret"
               onInput={setSecret}
             />
-            <p>The agent receives this as SERVICE_NAME_ENVIRONMENT_FIELD.</p>
+            <p>OpenScience will make this available as SERVICE_NAME_ENVIRONMENT_FIELD.</p>
             <div class="credential-form-actions">
               <Button
                 type="submit"
@@ -274,7 +274,7 @@ export const CredentialServices: Component<{
                 variant="primary"
                 disabled={saving() || !name().trim() || !secret().trim()}
               >
-                {saving() ? "Saving…" : "Save"}
+                {saving() ? "Saving…" : "Save credential"}
               </Button>
               <Button type="button" size="small" variant="ghost" onClick={() => setCustom(false)}>
                 Cancel

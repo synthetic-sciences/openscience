@@ -419,7 +419,9 @@ const Compute: Component = () => {
       <div class="settings-page-header">
         <div class="settings-page-header__inner">
           <h2 class="text-16-medium text-text-strong">Compute</h2>
-          <p class="text-13-regular text-text-weak">Choose where kernels and research jobs can run safely.</p>
+          <p class="text-13-regular text-text-weak">
+            Run close to home or head to the cloud when the work gets bigger.
+          </p>
         </div>
       </div>
 
@@ -435,7 +437,7 @@ const Compute: Component = () => {
         <CredentialServices
           category="compute"
           title="Cloud credentials"
-          description="AWS, Google Cloud, Azure, and NVIDIA credentials are encrypted locally and exposed only to the tools that use them."
+          description="Connect a cloud once. Credentials stay encrypted locally and go only to the tools that need them."
         />
 
         <Section title="Modal" subtitle="Run explicitly approved jobs in isolated Modal sandboxes using your account.">

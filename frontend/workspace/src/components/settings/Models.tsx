@@ -110,7 +110,7 @@ export default function Models() {
         <div class="settings-page-header__inner">
           <h2 class="text-16-medium text-text-strong">Models</h2>
           <p class="text-13-regular text-text-weak">
-            Choose the models used for research and which ones appear in the composer.
+            Pick the models you like working with and keep your everyday choices close at hand.
           </p>
         </div>
       </div>
@@ -133,7 +133,7 @@ export default function Models() {
               Managed inference
             </h3>
             <p class="text-12-regular text-text-weak">
-              Route model calls through OpenScience credits, your own keys, or automatic credential detection.
+              Use OpenScience credits, bring your own key, or let us spot one that is already configured.
             </p>
           </div>
           <ManagedInference onError={setError} />
@@ -145,8 +145,7 @@ export default function Models() {
               ChatGPT / Codex
             </h3>
             <p class="text-12-regular text-text-weak">
-              Use supported OpenAI models through your existing ChatGPT plan. OAuth tokens stay in owner-only local
-              storage.
+              Already have ChatGPT? Connect it once and use supported OpenAI models here. OAuth tokens stay local.
             </p>
           </div>
           <CodexConnection onError={setError} />
@@ -158,8 +157,8 @@ export default function Models() {
               Provider keys
             </h3>
             <p class="text-12-regular text-text-weak">
-              Bring your own model-provider key. Keys stay in an owner-only local auth file, not the system keychain,
-              and the provider bills you directly.
+              Prefer your own account? Add a provider key here. It stays in your owner-only local auth file, and the
+              provider bills you directly.
             </p>
           </div>
           <ProviderKeys onError={setError} />

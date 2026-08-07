@@ -13,6 +13,13 @@ type Source =
   | { kind: "image"; src: string }
   | { kind: "fallback" }
 
+type Theme = {
+  ink: string
+  wash: string
+  ring: string
+  shadow: string
+}
+
 const OPENALEX =
   "data:image/png;base64,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"
 const TINKER =
@@ -53,6 +60,196 @@ const VECTORS = {
   },
 } satisfies Record<string, Vector>
 
+const THEMES: Record<string, Theme> = {
+  anthropic: {
+    ink: "#c15f3c",
+    wash: "linear-gradient(145deg, #fff4ee, #f5d8c9)",
+    ring: "rgba(193, 95, 60, 0.24)",
+    shadow: "rgba(193, 95, 60, 0.16)",
+  },
+  openai: {
+    ink: "#087f6d",
+    wash: "linear-gradient(145deg, #effcf8, #ccefe5)",
+    ring: "rgba(8, 127, 109, 0.22)",
+    shadow: "rgba(8, 127, 109, 0.14)",
+  },
+  "openai-codex": {
+    ink: "#087f6d",
+    wash: "linear-gradient(145deg, #effcf8, #ccefe5)",
+    ring: "rgba(8, 127, 109, 0.22)",
+    shadow: "rgba(8, 127, 109, 0.14)",
+  },
+  google: {
+    ink: "#ffffff",
+    wash: "linear-gradient(145deg, #4285f4 0%, #6f83e8 34%, #a66dcc 58%, #ea6e85 78%, #fbbc04 100%)",
+    ring: "rgba(66, 133, 244, 0.28)",
+    shadow: "rgba(112, 94, 214, 0.2)",
+  },
+  gemini: {
+    ink: "#ffffff",
+    wash: "linear-gradient(145deg, #4285f4 0%, #8f6ed5 50%, #d96570 100%)",
+    ring: "rgba(113, 93, 216, 0.28)",
+    shadow: "rgba(113, 93, 216, 0.2)",
+  },
+  xai: {
+    ink: "#5e53aa",
+    wash: "linear-gradient(145deg, #f6f3ff, #dfdcf8)",
+    ring: "rgba(94, 83, 170, 0.22)",
+    shadow: "rgba(94, 83, 170, 0.14)",
+  },
+  meta: {
+    ink: "#0866ff",
+    wash: "linear-gradient(145deg, #f1f7ff, #d5e6ff)",
+    ring: "rgba(8, 102, 255, 0.22)",
+    shadow: "rgba(8, 102, 255, 0.14)",
+  },
+  openrouter: {
+    ink: "#6956d9",
+    wash: "linear-gradient(145deg, #f7f4ff, #e1dcff)",
+    ring: "rgba(105, 86, 217, 0.22)",
+    shadow: "rgba(105, 86, 217, 0.15)",
+  },
+  togetherai: {
+    ink: "#d94f2b",
+    wash: "linear-gradient(145deg, #fff6ef, #ffdccc)",
+    ring: "rgba(217, 79, 43, 0.22)",
+    shadow: "rgba(217, 79, 43, 0.14)",
+  },
+  groq: {
+    ink: "#f55036",
+    wash: "linear-gradient(145deg, #fff5f1, #ffd9d1)",
+    ring: "rgba(245, 80, 54, 0.22)",
+    shadow: "rgba(245, 80, 54, 0.14)",
+  },
+  "fireworks-ai": {
+    ink: "#cf496f",
+    wash: "linear-gradient(145deg, #fff5f8, #ffd7e3)",
+    ring: "rgba(207, 73, 111, 0.22)",
+    shadow: "rgba(207, 73, 111, 0.14)",
+  },
+  mistral: {
+    ink: "#e95024",
+    wash: "linear-gradient(145deg, #fff6d9, #ffbc4b 58%, #f47421)",
+    ring: "rgba(233, 80, 36, 0.24)",
+    shadow: "rgba(244, 116, 33, 0.18)",
+  },
+  deepseek: {
+    ink: "#4d6bfe",
+    wash: "linear-gradient(145deg, #f2f5ff, #d6defe)",
+    ring: "rgba(77, 107, 254, 0.22)",
+    shadow: "rgba(77, 107, 254, 0.14)",
+  },
+  moonshotai: {
+    ink: "#565bd8",
+    wash: "linear-gradient(145deg, #f4f4ff, #dcdcff)",
+    ring: "rgba(86, 91, 216, 0.22)",
+    shadow: "rgba(86, 91, 216, 0.14)",
+  },
+  zai: {
+    ink: "#5a4ee0",
+    wash: "linear-gradient(145deg, #f7f4ff, #ddd8ff)",
+    ring: "rgba(90, 78, 224, 0.22)",
+    shadow: "rgba(90, 78, 224, 0.14)",
+  },
+  cerebras: {
+    ink: "#e85828",
+    wash: "linear-gradient(145deg, #fff4ec, #ffd8c4)",
+    ring: "rgba(232, 88, 40, 0.22)",
+    shadow: "rgba(232, 88, 40, 0.14)",
+  },
+  perplexity: {
+    ink: "#167c80",
+    wash: "linear-gradient(145deg, #effafa, #cdebed)",
+    ring: "rgba(22, 124, 128, 0.22)",
+    shadow: "rgba(22, 124, 128, 0.14)",
+  },
+  aws: {
+    ink: "#ff9900",
+    wash: "linear-gradient(145deg, #27384f, #17263a)",
+    ring: "rgba(255, 153, 0, 0.3)",
+    shadow: "rgba(19, 41, 69, 0.24)",
+  },
+  gcp: {
+    ink: "#ffffff",
+    wash: "linear-gradient(145deg, #4285f4 0%, #34a853 42%, #fbbc05 70%, #ea4335 100%)",
+    ring: "rgba(66, 133, 244, 0.28)",
+    shadow: "rgba(66, 133, 244, 0.18)",
+  },
+  azure: {
+    ink: "#0078d4",
+    wash: "linear-gradient(145deg, #eef9ff, #cfeeff)",
+    ring: "rgba(0, 120, 212, 0.22)",
+    shadow: "rgba(0, 120, 212, 0.14)",
+  },
+  nvidia: {
+    ink: "#76b900",
+    wash: "linear-gradient(145deg, #f6ffe8, #dff1bd)",
+    ring: "rgba(118, 185, 0, 0.24)",
+    shadow: "rgba(84, 132, 0, 0.14)",
+  },
+  modal: {
+    ink: "#7057d7",
+    wash: "linear-gradient(145deg, #f8f4ff, #e5dbff)",
+    ring: "rgba(112, 87, 215, 0.22)",
+    shadow: "rgba(112, 87, 215, 0.14)",
+  },
+  github: {
+    ink: "#7656c9",
+    wash: "linear-gradient(145deg, #f7f3ff, #e3d9fb)",
+    ring: "rgba(118, 86, 201, 0.22)",
+    shadow: "rgba(118, 86, 201, 0.14)",
+  },
+  literature: {
+    ink: "#3f7ecb",
+    wash: "linear-gradient(145deg, #f1f8ff, #d3e9ff)",
+    ring: "rgba(63, 126, 203, 0.22)",
+    shadow: "rgba(63, 126, 203, 0.14)",
+  },
+  openalex: {
+    ink: "#8457d6",
+    wash: "linear-gradient(145deg, #faf5ff, #e5d6fa)",
+    ring: "rgba(132, 87, 214, 0.22)",
+    shadow: "rgba(132, 87, 214, 0.14)",
+  },
+  huggingface: {
+    ink: "#f3a900",
+    wash: "linear-gradient(145deg, #fff9df, #ffe791)",
+    ring: "rgba(243, 169, 0, 0.25)",
+    shadow: "rgba(243, 169, 0, 0.16)",
+  },
+  tinker: {
+    ink: "#d76b52",
+    wash: "linear-gradient(145deg, #fff5ef, #f5d9ce)",
+    ring: "rgba(215, 107, 82, 0.22)",
+    shadow: "rgba(215, 107, 82, 0.14)",
+  },
+  wandb: {
+    ink: "#d79600",
+    wash: "linear-gradient(145deg, #fff9dc, #ffe27a)",
+    ring: "rgba(215, 150, 0, 0.25)",
+    shadow: "rgba(215, 150, 0, 0.16)",
+  },
+  pinecone: {
+    ink: "#635bdb",
+    wash: "linear-gradient(145deg, #f5f4ff, #dddafe)",
+    ring: "rgba(99, 91, 219, 0.22)",
+    shadow: "rgba(99, 91, 219, 0.14)",
+  },
+  langsmith: {
+    ink: "#7fc8ff",
+    wash: "linear-gradient(145deg, #e7f5ff, #b9ddff)",
+    ring: "rgba(91, 168, 226, 0.24)",
+    shadow: "rgba(91, 168, 226, 0.16)",
+  },
+}
+
+const FALLBACK: Theme = {
+  ink: "#6c63b8",
+  wash: "linear-gradient(145deg, #f7f5ff, #e4e0f6)",
+  ring: "rgba(108, 99, 184, 0.2)",
+  shadow: "rgba(108, 99, 184, 0.12)",
+}
+
 const SOURCES: Record<string, Source> = {
   anthropic: { kind: "provider", id: "anthropic" },
   openai: { kind: "provider", id: "openai" },
@@ -92,6 +289,10 @@ export function providerLogoSource(id: string) {
   return SOURCES[id] ?? ({ kind: "fallback" } as const)
 }
 
+export function providerLogoTheme(id: string) {
+  return THEMES[id] ?? FALLBACK
+}
+
 const Mark: Component<{ source: Source; label: string; small?: boolean }> = (props) => {
   if (props.source.kind === "provider") {
     return <ProviderIcon id={props.source.id} class={props.small ? "size-[15px]" : "size-[18px]"} aria-hidden="true" />
@@ -127,19 +328,23 @@ export const ProviderLogo: Component<{
 }> = (props) => {
   const label = () => props.label ?? props.id
   const small = () => props.size === "small"
+  const source = () => providerLogoSource(props.id)
+  const theme = () => providerLogoTheme(props.id)
   return (
     <span
-      class="relative flex shrink-0 items-center justify-center overflow-hidden border border-border-weak-base bg-surface-base text-text-strong"
+      class="provider-logo relative flex shrink-0 items-center justify-center overflow-hidden border"
       classList={{ "size-6 rounded-[7px]": small(), "size-8 rounded-[9px]": !small() }}
+      style={`--provider-logo-ink: ${theme().ink}; --provider-logo-wash: ${theme().wash}; --provider-logo-ring: ${theme().ring}; --provider-logo-shadow: ${theme().shadow};`}
       role="img"
       aria-label={`${label()} logo`}
       data-provider-logo={props.id}
+      data-provider-logo-source={source().kind}
     >
-      <Mark source={providerLogoSource(props.id)} label={label()} small={small()} />
+      <Mark source={source()} label={label()} small={small()} />
       <Show when={props.connected}>
         <span
           aria-hidden="true"
-          class="absolute bottom-[2px] right-[2px] size-1.5 rounded-full border border-surface-base bg-icon-success-base"
+          class="provider-logo__status absolute bottom-[2px] right-[2px] size-1.5 rounded-full bg-icon-success-base"
         />
       </Show>
     </span>
