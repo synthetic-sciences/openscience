@@ -83,7 +83,13 @@ export function KernelCard(props: {
             <strong title={kernelLabel(props.kernel)}>{kernelLabel(props.kernel)}</strong>
           </div>
           <span class="kernel-card__lede">
-            <span class="kernel-card__uptime">{kernelUptimeLabel(props.kernel)}</span>
+            {/* Uptime is only a fact while something is up. On a stopped
+                record it read "Unavailable", which is three times the width of
+                the figure it replaces and says nothing the pill beside it does
+                not already say. */}
+            <Show when={kernelUptimeLabel(props.kernel) !== "Unavailable"}>
+              <span class="kernel-card__uptime">{kernelUptimeLabel(props.kernel)}</span>
+            </Show>
             <span class="kernel-card__state" data-tone={kernelTone(props.kernel.state)}>
               {kernelStateLabel(props.kernel.state)}
             </span>
