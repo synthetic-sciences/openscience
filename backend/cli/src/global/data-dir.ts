@@ -47,7 +47,14 @@ const artifactJournals = new Set([
 /** How long a sealed import trusts itself before re-reading the previous root.
  *  Only pays a walk once per interval per machine, and only while that root
  *  still exists — which is what makes it affordable to keep watching at all. */
-const RESCAN_INTERVAL = Number(process.env["OPENSCIENCE_LEGACY_RESCAN_MS"]) || 6 * 60 * 60 * 1000
+const RESCAN_INTERVAL = (() => {
+  // `Number(x) || default` reads 0 as "unset", which quietly makes the one
+  // value worth passing — rescan on every launch, for a repro or a support
+  // session — mean six hours instead. It also swallows typos into the default
+  // without a word.
+  const configured = Number(process.env["OPENSCIENCE_LEGACY_RESCAN_MS"])
+  return Number.isFinite(configured) && configured >= 0 ? configured : 6 * 60 * 60 * 1000
+})()
 
 export interface DataResolution {
   path: string
@@ -80,7 +87,7 @@ async function hash(file: string) {
 
 async function inventory(root: string) {
   const stack = [root]
-  const files: Array<{ path: string; bytes: number; mode: number }> = []
+  const files: Array<{ path: string; bytes: number; mode: number; mtime: number }> = []
   while (stack.length) {
     const dir = stack.pop()
     if (!dir) continue
@@ -99,7 +106,12 @@ async function inventory(root: string) {
       // CLI from booting at all.
       const stat = await fs.stat(full).catch(() => undefined)
       if (!stat) continue
-      files.push({ path: path.relative(root, full), bytes: stat.size, mode: stat.mode & 0o777 })
+      files.push({
+        path: path.relative(root, full),
+        bytes: stat.size,
+        mode: stat.mode & 0o777,
+        mtime: stat.mtimeMs,
+      })
     }
   }
   return files.sort((a, b) => a.path.localeCompare(b.path))
@@ -119,16 +131,25 @@ async function inventory(root: string) {
  * import into a deferred file.
  */
 async function sweep(root: string) {
-  const stack = [root]
+  // Skip the same top-level names the import itself never touches. Staging
+  // files are only ever written where files are copied, so descending into
+  // `log/` and `bin/` searches the two trees guaranteed not to contain any —
+  // and `log/` is exactly the one that grows without bound.
+  const stack = (await entries(root))
+    .filter((entry) => entry.isDirectory() && !reserved.has(entry.name))
+    .map((entry) => path.join(root, entry.name))
+  stack.push(root)
   const now = Date.now()
+  const seen = new Set<string>()
   while (stack.length) {
     const dir = stack.pop()
-    if (!dir) continue
+    if (!dir || seen.has(dir)) continue
+    seen.add(dir)
     for (const entry of await entries(dir)) {
       if (entry.isSymbolicLink()) continue
       const full = path.join(dir, entry.name)
       if (entry.isDirectory()) {
-        stack.push(full)
+        if (dir !== root) stack.push(full)
         continue
       }
       if (!entry.name.endsWith(pending)) continue
@@ -166,11 +187,21 @@ async function lease(target: string) {
   const owned =
     held ??
     // A holder that crashed leaves the file behind forever, so an old lock is
-    // assumed dead rather than trusted.
+    // assumed dead rather than trusted. Claimed by renaming it aside rather
+    // than deleting it: two processes can both find the same lock expired, and
+    // with `rm` both would then delete and re-create it, ending up with two
+    // live holders — the exact contention the lease exists to prevent, in the
+    // one situation it was added for. Only one rename of a given name wins.
     (await (async () => {
       const stat = await fs.stat(lockpath).catch(() => undefined)
       if (!stat || Date.now() - stat.mtimeMs < STALE_LOCK) return undefined
-      await fs.rm(lockpath, { force: true }).catch(() => undefined)
+      const aside = `${lockpath}.${randomUUID()}.dead`
+      const claimed = await fs
+        .rename(lockpath, aside)
+        .then(() => true)
+        .catch(() => false)
+      if (!claimed) return undefined
+      await fs.rm(aside, { force: true }).catch(() => undefined)
       return take()
     })())
 
@@ -219,7 +250,9 @@ async function describe(root: string, names: string[]) {
     names.map((name) =>
       fs
         .stat(path.join(root, name))
-        .then((stat) => (stat.isFile() ? { path: name, bytes: stat.size, mode: stat.mode & 0o777 } : undefined))
+        .then((stat) =>
+          stat.isFile() ? { path: name, bytes: stat.size, mode: stat.mode & 0o777, mtime: stat.mtimeMs } : undefined,
+        )
         .catch(() => undefined),
     ),
   )
@@ -430,235 +463,268 @@ export async function resolveDataDirectory(input: {
   // do. If it does not, fall through and import anyway.
   const release = await lease(target)
   if (!release && (await settled(target))) return { path: target }
-
-  // A resume revisits only the paths the previous run named. The rest of the
-  // tree was settled then, and re-walking it to rediscover that is what made a
-  // single unreadable file expensive on every launch. An import or a rescan
-  // both want the whole tree — a rescan is exactly a repeat import, and it is
-  // cheap precisely because everything already present is skipped by lstat
-  // before it is ever read.
-  const source =
-    mode === "resume"
-      ? (await describe(legacy, outstanding)).filter((file) => !artifactJournals.has(file.path))
-      : (await inventory(legacy)).filter(
-          (file) =>
-            !reserved.has(file.path.split(path.sep)[0]) &&
-            !transient.test(file.path) &&
-            !artifactJournals.has(file.path),
-        )
-  if (source.length === 0) {
-    // Nothing to fetch — either the stragglers are gone from the legacy root
-    // too, or the rescan found it empty. Record the check so the next launch
-    // takes the cheap path.
-    if (sealed)
-      await Bun.write(
-        path.join(target, marker),
-        `${JSON.stringify({ ...sealed, pending: [], checkedAt: Date.now() }, null, 2)}\n`,
-        { mode: 0o600 },
-      ).catch(() => undefined)
-    return { path: target }
+  // Every exit below this line has to give the lease back. Doing that at the
+  // individual returns is how the fresh-install path came to leak it — no
+  // legacy root means no source files, which took an early return that skipped
+  // the release, and from then on every launch waited the full timeout on a
+  // lock nobody held. One release, in a finally, is the only version of this
+  // that stays true as the function grows.
+  try {
+    return await run()
+  } finally {
+    await release?.()
   }
 
-  // Not on a resume. That path runs on every launch for as long as one file
-  // stays unreadable, and walking the whole target each time to look for
-  // orphans costs more than the retry it is attached to. An orphan can wait
-  // for the next full pass — the rescan comes around within the interval.
-  if (mode !== "resume") await sweep(target)
-
-  const occupied = (await entries(target)).some((entry) => !reserved.has(entry.name) && !transient.test(entry.name))
-
-  // Once a single file has landed in the target this process must keep using
-  // the target, whatever fails afterwards. Falling back to the legacy root at
-  // that point splits a single launch across two data roots — the CLI reading
-  // one while its server writes the other, which is the failure this import
-  // exists to end.
-  const landed = { value: false }
-  const result = await (async () => {
-    const copied = [] as typeof source
-    // Two different reasons to not carry a file, with opposite consequences.
-    // `present` means the target already has its own copy — settled forever,
-    // and the whole point of never overwriting. `deferred` means this run
-    // could not read or verify the source: a permission error, a file being
-    // rewritten underneath us, a disk hiccup. Those go into the marker's
-    // `pending` list to be retried by name, so the two must not be counted
-    // together: folding them would either strand the second permanently or
-    // send the next launch chasing the first.
-    const present: string[] = []
-    const deferred: string[] = []
-    const carried = new Set<string>()
-    for (const file of source) {
-      if (stores.has(file.path)) continue
-      const destination = path.join(target, file.path)
-      const exists = await fs
-        .lstat(destination)
-        .then(() => true)
-        .catch(() => false)
-      if (exists) {
-        present.push(file.path)
-        continue
-      }
-      // Source order is sorted, so a database sorts before its -wal/-shm and
-      // `carried` is already decided by the time the journal is considered.
-      if (journal.test(file.path) && !carried.has(file.path.replace(journal, ""))) {
-        present.push(file.path)
-        continue
-      }
-      // Staged beside its destination rather than in a scratch directory that
-      // is later copied across. Going through a staging root meant writing
-      // every byte twice and needing twice the free space before the CLI would
-      // start — and on a nearly full disk the second write is what fails, so
-      // the cost also bought a failure mode. Here the bytes are written once
-      // and the file is linked into place.
-      //
-      // One unreadable file must cost that file and nothing else. Letting the
-      // copy throw abandoned the entire import — credentials, session, and
-      // history included — over a single chmod 000 leftover.
-      // Unique per call, not just per process. Two imports running inside one
-      // process — which is what a Promise.all over resolveDataDirectory is —
-      // share a pid, so a pid-suffixed name has them writing the same staging
-      // file and deleting it out from under each other mid-verify. Same
-      // reasoning as atomicWrite in openscience/index.ts.
-      const temporary = `${destination}.${process.pid}.${randomUUID()}${pending}`
-      const ready = await fs
-        .mkdir(path.dirname(destination), { recursive: true })
-        .then(() => fs.copyFile(path.join(legacy, file.path), temporary))
-        .then(() => fs.chmod(temporary, file.mode))
-        // Verify the copy against a fresh hash of its source, so a file being
-        // rewritten underneath us is dropped alone rather than silently landing
-        // half old and half new.
-        .then(async () => {
-          const [copy, origin] = await Promise.all([hash(temporary), hash(path.join(legacy, file.path))])
-          return copy === origin
-        })
-        .catch(() => false)
-      if (!ready) {
-        await fs.rm(temporary, { force: true }).catch(() => undefined)
-        deferred.push(file.path)
-        continue
-      }
-      // link() is the atomic create-if-absent that makes two concurrently
-      // booting processes safe: the loser is told EEXIST rather than
-      // overwriting the winner. Filesystems without hardlinks fall back to a
-      // copy with the same exclusive semantics.
-      const created = await fs
-        .link(temporary, destination)
-        .then(() => "created" as const)
-        .catch((error: NodeJS.ErrnoException) =>
-          error.code === "EEXIST"
-            ? ("present" as const)
-            : fs
-                .copyFile(temporary, destination, constants.COPYFILE_EXCL)
-                .then(() => "created" as const)
-                .catch((fallback: NodeJS.ErrnoException) =>
-                  fallback.code === "EEXIST" ? ("present" as const) : ("failed" as const),
-                ),
-        )
-      await fs.rm(temporary, { force: true }).catch(() => undefined)
-      if (created !== "created") {
-        ;(created === "present" ? present : deferred).push(file.path)
-        continue
-      }
-      landed.value = true
-      carried.add(file.path)
-      copied.push(file)
-    }
-
-    const merged: string[] = []
-    const notes: string[] = []
-    for (const name of stores) {
-      const old = source.find((file) => file.path === name)
-      if (!old) continue
-      // A corrupt legacy store must cost that store, not the import. Left
-      // unguarded this threw past the marker write, so every later boot
-      // re-ran the whole import and failed at the same byte, forever.
-      const outcome = await (async () => {
-        const previous = await JsonStore.read(path.join(target, name))
-        const raw = await object(path.join(legacy, name))
-        // Credentials are the one store whose values are not portable on
-        // their own; everything else is plaintext JSON that means the same
-        // thing in either root.
-        const legacyData = name === "credentials.json" ? await reseal(legacy, target, raw) : raw
-        if (!legacyData) {
-          notes.push("legacy credentials.json not imported: its machine key is unreadable")
-          return 0
-        }
-        if (!Object.keys(legacyData).some((key) => !(key in previous))) return 0
-        const count = { value: 0 }
-        await JsonStore.update(path.join(target, name), (current) => {
-          count.value = Object.keys(legacyData).filter((key) => !(key in current)).length
-          return { ...legacyData, ...current }
-        })
-        return count.value
-      })().catch((error: unknown) => {
-        notes.push(`legacy ${name} not imported: ${error instanceof Error ? error.message : String(error)}`)
-        return 0
-      })
-      if (outcome > 0) {
-        landed.value = true
-        merged.push(name)
-      }
-    }
-
-    // Artifacts are the one part of the import that reads a foreign file
-    // format, so they are the one part that can fail on data this code never
-    // wrote: a truncated or half-written legacy artifacts.db raises "file is
-    // not a database". Recovering a user's credentials and history must not
-    // hinge on that — record the reason and finish the import without it,
-    // rather than throwing away everything already verified.
-    // Skipped only on a resume, which is chasing a handful of named files:
-    // replaying every artifact row to rediscover that they are all already
-    // there would cost more than the retry it is part of. A rescan does run
-    // it — new artifacts written to the previous root are exactly what it is
-    // looking for.
-    const artifacts =
+  async function run(): Promise<DataResolution> {
+    // A resume revisits only the paths the previous run named. The rest of the
+    // tree was settled then, and re-walking it to rediscover that is what made a
+    // single unreadable file expensive on every launch. An import or a rescan
+    // both want the whole tree — a rescan is exactly a repeat import, and it is
+    // cheap precisely because everything already present is skipped by lstat
+    // before it is ever read.
+    //
+    // A rescan is looking for what the previous root has GAINED since it was
+    // last read, not for everything the target happens to be missing. Those are
+    // very different sets: the target is missing anything the user deleted, and
+    // copying that back means a session they removed reappears, and a provider
+    // they logged out of comes back with its key. The legacy copy is never
+    // deleted, so without this gate the deletion loses to the copy every
+    // interval, forever. An mtime newer than the last check is precisely
+    // "written by the old install since we looked", which is all this was for.
+    const since = mode === "rescan" ? Number(sealed?.checkedAt ?? sealed?.migratedAt) : undefined
+    const source =
       mode === "resume"
-        ? 0
-        : await mergeArtifacts(legacy, target).catch((error: unknown) => {
-            notes.push(`legacy artifact store not imported: ${error instanceof Error ? error.message : String(error)}`)
-            return 0
-          })
-    const bytes = copied.reduce((total, file) => total + file.bytes, 0)
-    const migration = {
-      source: legacy,
-      target,
-      files: copied.length,
-      bytes,
-      merged: merged.length,
-      artifacts,
-      skipped: present.length,
-      deferred: deferred.length,
+        ? (await describe(legacy, outstanding)).filter((file) => !artifactJournals.has(file.path))
+        : (await inventory(legacy)).filter(
+            (file) =>
+              !reserved.has(file.path.split(path.sep)[0]) &&
+              !transient.test(file.path) &&
+              !artifactJournals.has(file.path) &&
+              (since === undefined || !Number.isFinite(since) || file.mtime > since),
+          )
+    if (source.length === 0) {
+      // Nothing to fetch — either the stragglers are gone from the legacy root
+      // too, or the rescan found it empty. Record the check so the next launch
+      // takes the cheap path.
+      if (sealed)
+        await Bun.write(
+          path.join(target, marker),
+          `${JSON.stringify({ ...sealed, pending: [], checkedAt: Date.now() }, null, 2)}\n`,
+          { mode: 0o600 },
+        ).catch(() => undefined)
+      return { path: target }
     }
-    await fs.mkdir(target, { recursive: true })
-    // Always seal, and carry the outstanding paths inside the marker. Leaving
-    // the marker unwritten instead made every later launch re-walk and re-stat
-    // the whole legacy tree — `--version` included — for as long as one file
-    // stayed unreadable, which for a root-owned leftover is forever. Naming
-    // the stragglers means the retry costs one stat each and the common case
-    // still short-circuits on the first line of the function.
-    // A later pass keeps the original import's record and only updates what is
-    // still outstanding — overwriting it with a retry's counts would erase the
-    // one account of what actually moved. `checkedAt` is what paces the rescan,
-    // so it is stamped on every pass, including the first.
-    const record = sealed
-      ? { ...sealed, pending: deferred, checkedAt: Date.now() }
-      : { ...migration, migratedAt: Date.now(), checkedAt: Date.now(), pending: deferred }
-    await Bun.write(path.join(target, marker), `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 })
-    if (deferred.length > 0)
-      notes.push(`${deferred.length} file(s) could not be read from ${legacy}; the next launch will retry them`)
-    return {
-      path: target,
-      migrated: migration,
-      warning: notes.length ? notes.join("; ") : undefined,
-    } satisfies DataResolution
-  })().catch((error: unknown) => {
-    return {
-      path: occupied || landed.value ? target : legacy,
-      error: error instanceof Error ? error.message : String(error),
-    } satisfies DataResolution
-  })
-  // Released on every path, including the failed one — a lease that outlives
-  // its holder would make the next launch wait out the full stale timeout for
-  // nothing.
-  await release?.()
-  return result
+
+    // Not on a resume. That path runs on every launch for as long as one file
+    // stays unreadable, and walking the whole target each time to look for
+    // orphans costs more than the retry it is attached to. An orphan can wait
+    // for the next full pass — the rescan comes around within the interval.
+    if (mode !== "resume") await sweep(target)
+
+    const occupied = (await entries(target)).some((entry) => !reserved.has(entry.name) && !transient.test(entry.name))
+
+    // Once a single file has landed in the target this process must keep using
+    // the target, whatever fails afterwards. Falling back to the legacy root at
+    // that point splits a single launch across two data roots — the CLI reading
+    // one while its server writes the other, which is the failure this import
+    // exists to end.
+    const landed = { value: false }
+    const result = await (async () => {
+      const copied = [] as typeof source
+      // Two different reasons to not carry a file, with opposite consequences.
+      // `present` means the target already has its own copy — settled forever,
+      // and the whole point of never overwriting. `deferred` means this run
+      // could not read or verify the source: a permission error, a file being
+      // rewritten underneath us, a disk hiccup. Those go into the marker's
+      // `pending` list to be retried by name, so the two must not be counted
+      // together: folding them would either strand the second permanently or
+      // send the next launch chasing the first.
+      const present: string[] = []
+      const deferred: string[] = []
+      const carried = new Set<string>()
+      for (const file of source) {
+        if (stores.has(file.path)) continue
+        const destination = path.join(target, file.path)
+        const exists = await fs
+          .lstat(destination)
+          .then(() => true)
+          .catch(() => false)
+        if (exists) {
+          present.push(file.path)
+          continue
+        }
+        // Source order is sorted, so a database sorts before its -wal/-shm and
+        // `carried` is already decided by the time the journal is considered.
+        if (journal.test(file.path) && !carried.has(file.path.replace(journal, ""))) {
+          present.push(file.path)
+          continue
+        }
+        // Staged beside its destination rather than in a scratch directory that
+        // is later copied across. Going through a staging root meant writing
+        // every byte twice and needing twice the free space before the CLI would
+        // start — and on a nearly full disk the second write is what fails, so
+        // the cost also bought a failure mode. Here the bytes are written once
+        // and the file is linked into place.
+        //
+        // One unreadable file must cost that file and nothing else. Letting the
+        // copy throw abandoned the entire import — credentials, session, and
+        // history included — over a single chmod 000 leftover.
+        // Unique per call, not just per process. Two imports running inside one
+        // process — which is what a Promise.all over resolveDataDirectory is —
+        // share a pid, so a pid-suffixed name has them writing the same staging
+        // file and deleting it out from under each other mid-verify. Same
+        // reasoning as atomicWrite in openscience/index.ts.
+        const temporary = `${destination}.${process.pid}.${randomUUID()}${pending}`
+        const ready = await fs
+          .mkdir(path.dirname(destination), { recursive: true })
+          .then(() => fs.copyFile(path.join(legacy, file.path), temporary))
+          .then(() => fs.chmod(temporary, file.mode))
+          // Verify the copy against a fresh hash of its source, so a file being
+          // rewritten underneath us is dropped alone rather than silently landing
+          // half old and half new.
+          .then(async () => {
+            const [copy, origin] = await Promise.all([hash(temporary), hash(path.join(legacy, file.path))])
+            return copy === origin
+          })
+          .catch(() => false)
+        if (!ready) {
+          await fs.rm(temporary, { force: true }).catch(() => undefined)
+          deferred.push(file.path)
+          continue
+        }
+        // link() is the atomic create-if-absent that makes two concurrently
+        // booting processes safe: the loser is told EEXIST rather than
+        // overwriting the winner. Filesystems without hardlinks fall back to a
+        // copy with the same exclusive semantics.
+        const created = await fs
+          .link(temporary, destination)
+          .then(() => "created" as const)
+          .catch((error: NodeJS.ErrnoException) =>
+            error.code === "EEXIST"
+              ? ("present" as const)
+              : fs
+                  .copyFile(temporary, destination, constants.COPYFILE_EXCL)
+                  .then(() => "created" as const)
+                  .catch((fallback: NodeJS.ErrnoException) =>
+                    fallback.code === "EEXIST" ? ("present" as const) : ("failed" as const),
+                  ),
+          )
+        await fs.rm(temporary, { force: true }).catch(() => undefined)
+        if (created !== "created") {
+          ;(created === "present" ? present : deferred).push(file.path)
+          continue
+        }
+        landed.value = true
+        carried.add(file.path)
+        copied.push(file)
+      }
+
+      const merged: string[] = []
+      const notes: string[] = []
+      for (const name of stores) {
+        // Load-bearing on a rescan: `source` is filtered by mtime there, so a
+        // store the old install has not rewritten is absent and this merge does
+        // not run. That is what keeps a provider the user logged out of from
+        // being re-added out of the previous root's copy.
+        const old = source.find((file) => file.path === name)
+        if (!old) continue
+        // A corrupt legacy store must cost that store, not the import. Left
+        // unguarded this threw past the marker write, so every later boot
+        // re-ran the whole import and failed at the same byte, forever.
+        const outcome = await (async () => {
+          const previous = await JsonStore.read(path.join(target, name))
+          const raw = await object(path.join(legacy, name))
+          // Credentials are the one store whose values are not portable on
+          // their own; everything else is plaintext JSON that means the same
+          // thing in either root.
+          const legacyData = name === "credentials.json" ? await reseal(legacy, target, raw) : raw
+          if (!legacyData) {
+            notes.push("legacy credentials.json not imported: its machine key is unreadable")
+            return 0
+          }
+          if (!Object.keys(legacyData).some((key) => !(key in previous))) return 0
+          const count = { value: 0 }
+          await JsonStore.update(path.join(target, name), (current) => {
+            count.value = Object.keys(legacyData).filter((key) => !(key in current)).length
+            return { ...legacyData, ...current }
+          })
+          return count.value
+        })().catch((error: unknown) => {
+          notes.push(`legacy ${name} not imported: ${error instanceof Error ? error.message : String(error)}`)
+          return 0
+        })
+        if (outcome > 0) {
+          landed.value = true
+          merged.push(name)
+        }
+      }
+
+      // Artifacts are the one part of the import that reads a foreign file
+      // format, so they are the one part that can fail on data this code never
+      // wrote: a truncated or half-written legacy artifacts.db raises "file is
+      // not a database". Recovering a user's credentials and history must not
+      // hinge on that — record the reason and finish the import without it,
+      // rather than throwing away everything already verified.
+      // Skipped only on a resume, which is chasing a handful of named files:
+      // replaying every artifact row to rediscover that they are all already
+      // there would cost more than the retry it is part of. A rescan does run
+      // it — new artifacts written to the previous root are exactly what it is
+      // looking for.
+      const artifacts =
+        mode === "resume"
+          ? 0
+          : await mergeArtifacts(legacy, target).catch((error: unknown) => {
+              notes.push(
+                `legacy artifact store not imported: ${error instanceof Error ? error.message : String(error)}`,
+              )
+              return 0
+            })
+      const bytes = copied.reduce((total, file) => total + file.bytes, 0)
+      const migration = {
+        source: legacy,
+        target,
+        files: copied.length,
+        bytes,
+        merged: merged.length,
+        artifacts,
+        skipped: present.length,
+        deferred: deferred.length,
+      }
+      await fs.mkdir(target, { recursive: true })
+      // Always seal, and carry the outstanding paths inside the marker. Leaving
+      // the marker unwritten instead made every later launch re-walk and re-stat
+      // the whole legacy tree — `--version` included — for as long as one file
+      // stayed unreadable, which for a root-owned leftover is forever. Naming
+      // the stragglers means the retry costs one stat each and the common case
+      // still short-circuits on the first line of the function.
+      // A later pass keeps the original import's record and only updates what is
+      // still outstanding — overwriting it with a retry's counts would erase the
+      // one account of what actually moved. `checkedAt` is what paces the rescan,
+      // so it is stamped on every pass, including the first.
+      // A resume that actually carried something leaves `checkedAt` alone, so
+      // the next launch rescans instead of waiting out another full interval.
+      // The artifact merge is skipped on a resume, so a blob whose bytes just
+      // arrived has no rows describing it until that rescan runs — and while
+      // that is true, `doctor` reports nothing outstanding and `--prune-legacy`
+      // would delete the only copy of those rows.
+      const resumed = mode === "resume" && copied.length > 0
+      const record = sealed
+        ? { ...sealed, pending: deferred, ...(resumed ? {} : { checkedAt: Date.now() }) }
+        : { ...migration, migratedAt: Date.now(), checkedAt: Date.now(), pending: deferred }
+      await Bun.write(path.join(target, marker), `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 })
+      if (deferred.length > 0)
+        notes.push(`${deferred.length} file(s) could not be read from ${legacy}; the next launch will retry them`)
+      return {
+        path: target,
+        migrated: migration,
+        warning: notes.length ? notes.join("; ") : undefined,
+      } satisfies DataResolution
+    })().catch((error: unknown) => {
+      return {
+        path: occupied || landed.value ? target : legacy,
+        error: error instanceof Error ? error.message : String(error),
+      } satisfies DataResolution
+    })
+    return result
+  }
 }

@@ -223,9 +223,36 @@ async function reportLegacyRoot(prune: boolean) {
   if (!found) return
 
   const size = found.bytes > 1024 * 1024 ? `${(found.bytes / 1024 / 1024).toFixed(0)} MB` : `${found.bytes} bytes`
-  const outstanding = Global.DataMigration.migrated?.deferred ?? 0
   prompts.log.info(`Previous data directory: ${legacy} (${found.files} files, ${size})`)
 
+  // The marker in the current data root is the only record that an import
+  // actually ran, and that is what this has to be sure of before offering to
+  // delete anything. Asking `DataMigration.migrated` instead answered a
+  // different question: it is undefined whenever no import was attempted at
+  // all — an explicit OPENSCIENCE_DATA_DIR, a settings ▸ Storage relocation
+  // pointer, or an import that threw — and reading that as "nothing left to
+  // do" would have offered to recursively delete a directory whose contents
+  // were never copied anywhere.
+  const record = await Bun.file(path.join(Global.Path.data, ".xdg-data-migration-v2.json"))
+    .json()
+    .then((value) => (value && typeof value === "object" ? (value as { pending?: unknown }) : undefined))
+    .catch(() => undefined)
+  const outstanding = Array.isArray(record?.pending) ? record.pending.length : 0
+
+  if (Global.DataMigration.error) {
+    prompts.log.warn(
+      `The last import did not complete (${Global.DataMigration.error}), so this directory may still hold the ` +
+        `only copy of some data. Leaving it alone.`,
+    )
+    return
+  }
+  if (!record) {
+    prompts.log.warn(
+      `Nothing has been imported out of it into ${Global.Path.data} — this data root was chosen explicitly ` +
+        `(OPENSCIENCE_DATA_DIR or a storage location setting) rather than by the upgrade. Leaving it alone.`,
+    )
+    return
+  }
   if (outstanding > 0) {
     prompts.log.warn(
       `${outstanding} file(s) have not been imported out of it yet, so it is still the only copy of those. ` +

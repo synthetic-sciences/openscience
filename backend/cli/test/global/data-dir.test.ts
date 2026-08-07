@@ -374,6 +374,44 @@ describe("OpenScience data directory", () => {
     expect(JSON.parse(await fs.readFile(record, "utf8")).migratedAt).toBe(aged.migratedAt)
   })
 
+  test("a rescan does not resurrect what the user deleted", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    await fs.mkdir(path.join(legacy, "storage", "session"), { recursive: true })
+    await fs.writeFile(path.join(legacy, "storage", "session", "ses_a.json"), '{"id":"a"}')
+    await fs.writeFile(
+      path.join(legacy, "auth.json"),
+      JSON.stringify({ "openai-codex": { access: "tok" }, openrouter: { key: "tok" } }),
+    )
+
+    await resolveDataDirectory({ home, legacy })
+    expect(fsSync.existsSync(path.join(target, "storage", "session", "ses_a.json"))).toBe(true)
+
+    // The user deletes a session and logs out of a provider. Both only ever
+    // touch the current root — the previous root still has its own copy of
+    // each, and that copy is never deleted.
+    await fs.rm(path.join(target, "storage", "session", "ses_a.json"))
+    await fs.writeFile(path.join(target, "auth.json"), JSON.stringify({ "openai-codex": { access: "tok" } }))
+
+    // Age the previous root's copies to before the last check, and put the
+    // last check far enough back to trigger a rescan. That is the real shape:
+    // files the old install wrote long ago, and an interval that has elapsed.
+    const stale = new Date(Date.now() - 8 * 60 * 60 * 1000)
+    for (const file of ["auth.json", path.join("storage", "session", "ses_a.json")])
+      await fs.utimes(path.join(legacy, file), stale, stale)
+    const record = path.join(target, ".xdg-data-migration-v2.json")
+    const aged = JSON.parse(await fs.readFile(record, "utf8"))
+    await fs.writeFile(record, JSON.stringify({ ...aged, checkedAt: Date.now() - 7 * 60 * 60 * 1000 }))
+
+    await resolveDataDirectory({ home, legacy })
+
+    // Deleting has to win over copying, or the deletion silently never happened
+    // — and for the credential that would mean a revoked key back in place.
+    expect(fsSync.existsSync(path.join(target, "storage", "session", "ses_a.json"))).toBe(false)
+    expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8")).openrouter).toBeUndefined()
+  })
+
   test("stops watching a previous root that no longer exists", async () => {
     const home = await root()
     const legacy = path.join(home, "share", "openscience")
@@ -555,16 +593,40 @@ describe("OpenScience data directory", () => {
     ])
 
     expect(results.map((result) => result.path)).toEqual([target, target, target])
-    // Exactly one run should have done the copying. The others are correct
-    // either way — this is about not walking and hashing the same tree three
-    // times over, and not contending on the artifact database while doing it.
-    expect(results.filter((result) => result.migrated).length).toBe(1)
-    expect(results.find((result) => result.migrated)?.migrated?.files).toBe(61)
+    // Deliberately not asserting that exactly one caller imported. Whether a
+    // loser skips depends on the winner writing the marker inside LEASE_WAIT,
+    // which is a race — and on a cold Windows or macOS runner hashing 61 files
+    // twice each, one it would sometimes lose. The lease is an optimisation;
+    // pinning a test to it would buy flakes in the new CI legs to assert
+    // something that is allowed to not happen. What must hold is the outcome.
+    expect(results.every((result) => !result.error)).toBe(true)
     for (let i = 0; i < 60; i++)
       expect(fsSync.existsSync(path.join(target, "storage", "session", `ses_${i}.json`))).toBe(true)
     expect(JSON.parse(await fs.readFile(path.join(target, "auth.json"), "utf8"))["openai-codex"].access).toBe("kept")
     // The lease must not outlive the run that took it.
     expect(fsSync.existsSync(path.join(target, ".openscience-import.lock"))).toBe(false)
+  })
+
+  test("a fresh install with nothing to import leaves no lease behind", async () => {
+    const home = await root()
+    // No legacy root at all — the ordinary case for anyone installing today,
+    // and the one that took an early return past the lease release. Boot one
+    // leaked the lock; every boot after it then waited out the full timeout on
+    // a lock nobody was holding, `--version` included.
+    const legacy = path.join(home, "share", "openscience")
+    const lock = path.join(home, ".openscience", ".openscience-import.lock")
+
+    const first = await resolveDataDirectory({ home, legacy })
+    expect(first.path).toBe(path.join(home, ".openscience"))
+    expect(fsSync.existsSync(lock)).toBe(false)
+
+    const started = performance.now()
+    const second = await resolveDataDirectory({ home, legacy })
+    const elapsed = performance.now() - started
+
+    expect(second.path).toBe(first.path)
+    expect(elapsed).toBeLessThan(500)
+    expect(fsSync.existsSync(lock)).toBe(false)
   })
 
   test("an uncontended import never waits on the lease", async () => {
