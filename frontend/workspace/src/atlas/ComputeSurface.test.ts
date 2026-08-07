@@ -199,6 +199,15 @@ describe("compute surface", () => {
     // appears here either.
     expect(css).not.toContain("text-transform: uppercase")
     expect(css).not.toMatch(/letter-spacing: 0\.\d/)
+    // ...but absence is not enough, and asserting only absence is what let the
+    // ledger keep shouting while this test passed. atlas.css sets uppercase and
+    // 0.05em tracking on `.kernel-card__metric span`, and the cascade resolves
+    // per property, so the base declarations win against a rule that simply
+    // omits them. They have to be turned off by name.
+    const base = readFileSync(fileURLToPath(new URL("../styles/atlas.css", import.meta.url)), "utf8")
+    expect(base).toMatch(/\.kernel-card__metric span\s*\{[^}]*text-transform: uppercase/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-card__metric span\s*\{[^}]*text-transform: none/s)
+    expect(css).toMatch(/\.compute-surface \.kernel-card__metric span\s*\{[^}]*letter-spacing: 0;/s)
     // No face named on this surface: origin/main puts the whole app on one sans
     // face, and every label here inherits it rather than naming a second token
     // that could drift from it. `font-family: inherit` is the one allowed form.

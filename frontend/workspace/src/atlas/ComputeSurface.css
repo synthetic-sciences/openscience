@@ -582,10 +582,17 @@
   background: none;
 }
 
+/* Stated rather than merely omitted. The base rule (atlas.css, `.kernel-card__
+   metric span`) sets uppercase and 0.05em tracking, and the cascade resolves
+   per property — so dropping these declarations here left the base ones
+   winning and the ledger still shouting. Setting them to their initial values
+   is what actually turns it off, which is why origin/main writes them out too. */
 .compute-surface .kernel-card__metric span {
   order: 1;
   flex: none;
   font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--color-text-muted);
   white-space: nowrap;
 }
