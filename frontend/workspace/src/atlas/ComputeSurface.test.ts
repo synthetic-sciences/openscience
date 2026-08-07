@@ -195,7 +195,11 @@ describe("compute surface", () => {
     // Type on a hairline, not a pill group.
     expect(css).toMatch(/\.compute-surface__tabs\s*\{[^}]*border-bottom: 1px solid var\(--color-border\)/s)
     expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*text-transform: uppercase/s)
-    expect(css).toMatch(/\.compute-surface__tab\s*\{[^}]*font-family: var\(--font-code\)/s)
+    // No face named on this surface: origin/main puts the whole app on one sans
+    // face, and every label here inherits it rather than naming a second token
+    // that could drift from it. `font-family: inherit` is the one allowed form.
+    expect(css).not.toContain("--font-code")
+    expect(css.match(/font-family:[^;]*/g) ?? []).toEqual(["font-family: inherit"])
     // The one solid terracotta on this surface belongs to the primary action,
     // so selection is an underline drawn in the brand colour instead.
     expect(css).toMatch(

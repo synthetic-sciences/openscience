@@ -1,6 +1,6 @@
 /* 3a's instrument block. Where the previous pass drew two matched gauges, this
    leads with a single figure at display size and puts its qualifiers in small
-   mono beside it — a laboratory readout rather than a dashboard tile. Memory
+   capitals beside it — a laboratory readout rather than a dashboard tile. Memory
    in use leads, matching the histogram beside it, which plots the same. */
 .host-strip {
   display: flex;
@@ -12,10 +12,9 @@
   background: var(--color-bg);
 }
 
-/* Set in the same mono capitals as the instrument labels below it, and quiet:
+/* Set in the same capitals as the instrument labels below it, and quiet:
    it names the block rather than competing with the figure it introduces. */
 .host-strip__title {
-  font-family: var(--font-code);
   font-size: 9.5px;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -55,7 +54,6 @@
 
 .host-strip__unit,
 .host-strip__ceiling {
-  font-family: var(--font-code);
   font-size: 10px;
   letter-spacing: 0.1em;
   white-space: nowrap;
@@ -103,7 +101,6 @@
 .host-strip__cores-label {
   width: 52px;
   flex: none;
-  font-family: var(--font-code);
   font-size: 10px;
   letter-spacing: 0.1em;
   color: var(--color-text-muted);
@@ -130,7 +127,6 @@
 }
 
 .host-strip__cores-value {
-  font-family: var(--font-code);
   font-size: 10.5px;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;

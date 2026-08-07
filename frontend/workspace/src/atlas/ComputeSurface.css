@@ -2,7 +2,7 @@
   --compute-radius: 10px;
 }
 
-/* 3a sets the tabs in mono capitals — the same voice as the instrument labels
+/* 3a sets the tabs in letter-spaced capitals — the same voice as the labels
    above them, so the strip and the tabs read as one apparatus rather than a
    readout with navigation bolted underneath. Selection is a 2px underline in
    the brand colour; the single solid terracotta on this surface stays with the
@@ -28,7 +28,6 @@
   border: 0;
   border-radius: 0;
   background: none;
-  font-family: var(--font-code);
   font-size: 10.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -292,15 +291,14 @@
   min-width: 0;
 }
 
-/* The language badge becomes the eyebrow's voice: small mono capitals over the
-   name, rather than a coloured tile beside it. */
+/* The language badge becomes the eyebrow's voice: small letter-spaced
+   capitals over the name, rather than a coloured tile beside it. */
 .compute-surface .kernel-card__language {
   width: auto;
   height: auto;
   border-radius: 0;
   background: none;
   color: var(--color-text-faint);
-  font-family: var(--font-code);
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -325,8 +323,8 @@
 }
 
 .compute-surface .kernel-card__uptime {
-  font-family: var(--font-code);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
   white-space: nowrap;
 }
@@ -347,7 +345,6 @@
   align-items: center;
   padding: 3px 8px;
   border-radius: 999px;
-  font-family: var(--font-code);
   font-size: 9.5px;
   font-weight: 400;
   letter-spacing: 0.09em;
@@ -407,7 +404,6 @@
   align-items: center;
   gap: 7px;
   margin: -2px 0 2px;
-  font-family: var(--font-code);
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -447,14 +443,13 @@
   font-size: 12px;
 }
 
-/* The identity disclosure is set in the same mono capitals as the instrument
+/* The identity disclosure is set in the same capitals as the instrument
    labels, so it reads as the last row of the record rather than a link. */
 .compute-surface .kernel-card__identity summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 0;
-  font-family: var(--font-code);
   font-size: 9.5px;
   font-weight: 400;
   letter-spacing: 0.11em;
@@ -503,7 +498,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-family: var(--font-code);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -601,7 +596,6 @@
 .compute-surface .kernel-card__metric span {
   order: 1;
   flex: none;
-  font-family: var(--font-code);
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -620,7 +614,7 @@
 .compute-surface .kernel-card__metric strong {
   order: 3;
   flex: none;
-  font-family: var(--font-code);
+  font-variant-numeric: tabular-nums;
   font-size: 11.5px;
   font-weight: 400;
   color: var(--color-text);
@@ -644,7 +638,6 @@
   padding: 3px 8px;
   border-radius: 999px;
   box-shadow: inset 0 0 0 1px var(--color-border-strong);
-  font-family: var(--font-code);
   font-size: 9.5px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -693,7 +686,6 @@
 
 .compute-surface .kernel-card__identity summary {
   padding-top: 11px;
-  font-family: var(--font-code);
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
