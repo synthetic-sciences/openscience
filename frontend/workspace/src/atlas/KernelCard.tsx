@@ -1,4 +1,4 @@
-import { Index, Show, createSignal, type JSX } from "solid-js"
+import { Index, Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js"
 import { IconChevronDown, IconChevronRight } from "@/atlas/shared/Icon"
 import type { Capacity } from "./host-instruments"
 import { plateEyebrow, plateUsage } from "./kernel-plate"
@@ -14,6 +14,8 @@ import {
   kernelLabel,
   kernelLanguageLabel,
   kernelMemoryLabel,
+  kernelNetworkLabel,
+  kernelNetworkTone,
   kernelOwnershipLabel,
   kernelRecoveryLabel,
   kernelStateLabel,
@@ -58,6 +60,18 @@ export function KernelCard(props: {
   // any of them is busy. The head answers that without opening anything.
   const [open, setOpen] = createSignal(false)
   const usage = () => plateUsage(props.kernel, props.capacity)
+  // Uptime is a stopwatch, not a figure carried in on the poll. The kernel
+  // object is reconciled in place and does not change while a runtime simply
+  // keeps running, so nothing re-evaluated this label and it sat at whatever
+  // it read the moment the runtime came up. The interval only exists while
+  // there is something to count.
+  const [now, setNow] = createSignal(Date.now())
+  createEffect(() => {
+    if (!props.kernel.active || !props.kernel.started_at) return
+    const timer = setInterval(() => setNow(Date.now()), 1_000)
+    onCleanup(() => clearInterval(timer))
+  })
+  const uptime = () => kernelUptimeLabel(props.kernel, now())
   return (
     <article
       class="kernel-card"
@@ -90,8 +104,8 @@ export function KernelCard(props: {
                 record it read "Unavailable", which is three times the width of
                 the figure it replaces and says nothing the pill beside it does
                 not already say. */}
-            <Show when={kernelUptimeLabel(props.kernel) !== "Unavailable"}>
-              <span class="kernel-card__uptime">{kernelUptimeLabel(props.kernel)}</span>
+            <Show when={uptime() !== "Unavailable"}>
+              <span class="kernel-card__uptime">{uptime()}</span>
             </Show>
             <span class="kernel-card__state" data-tone={kernelTone(props.kernel.state)}>
               {kernelStateLabel(props.kernel.state)}
@@ -154,7 +168,7 @@ export function KernelCard(props: {
           title="CPU and memory are sampled by the server on each refresh. Unavailable means the platform did not report a value."
         >
           <Metric label="Target" value={kernelTargetLabel(props.kernel)} />
-          <Metric label="Uptime" value={kernelUptimeLabel(props.kernel)} />
+          <Metric label="Uptime" value={uptime()} />
           <Metric label="CPU" value={kernelCpuLabel(props.kernel.resources?.cpu_percent)} />
           <Metric label="Memory" value={kernelMemoryLabel(props.kernel.resources?.memory_bytes)} />
           <Metric label="GPU" value={kernelGpuLabel(props.kernel.resources?.gpu_percent)} />
@@ -166,6 +180,17 @@ export function KernelCard(props: {
             <strong>{kernelLanguageLabel(props.kernel)} environment</strong>
             <span data-tone={kernelEnvironmentTone(props.kernel)}>{kernelEnvironmentLabel(props.kernel)}</span>
           </div>
+          {/* On its own line rather than trailing the sandbox behind a middot:
+              joined, the label wrapped inside its own pill, and what a run can
+              reach is the fact on this card most worth reading on its own. */}
+          <Show when={kernelNetworkLabel(props.kernel)}>
+            {(network) => (
+              <p class="kernel-card__network" data-tone={kernelNetworkTone(props.kernel)}>
+                <span class="kernel-card__network-dot" aria-hidden="true" />
+                {network()}
+              </p>
+            )}
+          </Show>
           <Show when={props.kernel.environment?.cwd}>
             {(cwd) => (
               <div class="kernel-card__environment-row">

@@ -32,6 +32,7 @@ type ComputeSurfaceProps = {
   jobs?: Component<{
     onEnsureSession?: () => Promise<string | undefined>
     onActiveChange?: (count: number) => void
+    onTotalChange?: (count: number) => void
     manual?: boolean
   }>
   onEnsureSession?: () => Promise<string | undefined>
@@ -68,12 +69,15 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
     setState("jobs", list.length)
   }
 
+  // Only while the jobs panel is not mounted: when it is, it reports its own
+  // total off the poll it already runs, and a second poll here would ask the
+  // same route twice as often for the same number.
   createEffect(() => {
-    if (state.tab === "kernels") void refresh()
+    if (state.tab !== "jobs") void refresh()
   })
 
   const timer = setInterval(() => {
-    if (state.tab === "kernels") void refresh()
+    if (state.tab !== "jobs") void refresh()
   }, inactiveRefresh)
   onCleanup(() => clearInterval(timer))
 
@@ -166,6 +170,7 @@ export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {
               component={jobs}
               onEnsureSession={props.onEnsureSession}
               onActiveChange={(count) => setState("active", count)}
+              onTotalChange={(count) => setState("jobs", count)}
               manual={false}
             />
           </div>

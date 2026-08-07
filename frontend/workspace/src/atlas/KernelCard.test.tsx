@@ -305,4 +305,43 @@ describe("KernelCard lifecycle controls", () => {
 
     expect(host.querySelector(".kernel-card__language")?.textContent).toBe("KERNEL 03 · R")
   })
+  test("counts uptime like a stopwatch rather than freezing at its first reading", async () => {
+    // The kernel object is reconciled in place, so it does not change while a
+    // runtime simply keeps running. Uptime therefore has to be driven by a
+    // clock inside the card; before it was, the head sat at "2s" for as long
+    // as the runtime lived.
+    const host = mount(
+      () =>
+        subject.KernelCard({
+          kernel: kernel({ active: true, state: "running", started_at: Date.now() - 2_000 }),
+          routeID: "ses_current",
+          action: "",
+          onControl: () => {},
+        }),
+      { collapsed: true },
+    )
+
+    const first = host.querySelector(".kernel-card__uptime")?.textContent
+    expect(first).toMatch(/^\d+s$/)
+    await Bun.sleep(1_200)
+    const second = host.querySelector(".kernel-card__uptime")?.textContent
+    expect(second).not.toBe(first)
+  })
+
+  test("stops the clock when there is nothing running to count", () => {
+    const host = mount(
+      () =>
+        subject.KernelCard({
+          kernel: kernel({ active: false, state: "stopped", started_at: null }),
+          routeID: "ses_current",
+          action: "",
+          onControl: () => {},
+        }),
+      { collapsed: true },
+    )
+
+    // "Unavailable" is three times the width of the figure it replaces and
+    // says nothing the lifecycle pill beside it does not.
+    expect(host.querySelector(".kernel-card__uptime")).toBeNull()
+  })
 })

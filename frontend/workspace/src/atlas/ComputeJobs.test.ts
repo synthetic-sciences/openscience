@@ -228,4 +228,19 @@ describe("compute jobs surface", () => {
     expect(source).toContain(".finally(() =>")
     expect(source).not.toContain("Save the session before starting")
   })
+  test("marks a run that is still moving so the ledger shows motion, not just a word", () => {
+    // The status column already names it, but a word does not read as motion,
+    // and this is the only row whose value will change on its own.
+    expect(source).toContain('class={terminal.has(item.status) ? undefined : "compute-run--active"}')
+    expect(source).toContain('position: "relative"')
+  })
+
+  test("keeps the tab total live while the jobs panel is the one mounted", () => {
+    // The surface's own poll is gated on the tab, so on the jobs tab the total
+    // beside the label froze at whatever it read when the user switched — a
+    // project with 11 runs kept reading 10. The panel reports its own count
+    // off the poll it already runs rather than a second poll of the same route.
+    expect(source).toContain("onTotalChange?: (count: number) => void")
+    expect(source).toContain("props.onTotalChange?.(list.length)")
+  })
 })

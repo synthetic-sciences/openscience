@@ -208,11 +208,37 @@ export function kernelEnvironmentLabel(kernel?: KernelStatus) {
   if (kernel?.authority?.mode === "read_only") return "read-only · execution blocked"
   const sandbox = kernel?.environment?.sandbox
   if (!sandbox) return "environment pending"
-  if (sandbox.enforced) {
-    return `${sandbox.backend} sandbox · network ${sandbox.network === "deny" ? "blocked" : "allowed"}`
-  }
+  // The network clause moved to its own line. Joined by a middot it made a
+  // label long enough to wrap inside its pill, and it buried the one fact on
+  // this card that changes what a run can reach.
+  if (sandbox.enforced) return `${sandbox.backend} sandbox`
   if (sandbox.requested) return "sandbox unavailable · host access"
   return "sandbox off · host access"
+}
+
+/**
+ * Whether this runtime can reach the network, as its own statement.
+ *
+ * Null when nothing has been measured — an environment that has not reported a
+ * sandbox is not a runtime with an open network, and saying so would be a
+ * claim this card cannot make.
+ */
+export function kernelNetworkLabel(kernel?: KernelStatus) {
+  const sandbox = kernel?.environment?.sandbox
+  if (!sandbox) return null
+  return sandbox.enforced && sandbox.network === "deny" ? "network disabled" : "network allowed"
+}
+
+/**
+ * Reaching the network is the state worth noticing, so it carries the warning
+ * tone and a blocked network stays grey. This is deliberately the opposite of
+ * kernelEnvironmentTone, which reads an enforced sandbox as the good outcome:
+ * there the question is whether the sandbox holds, here it is what the run can
+ * still touch through it.
+ */
+export function kernelNetworkTone(kernel?: KernelStatus): KernelTone {
+  const sandbox = kernel?.environment?.sandbox
+  return sandbox?.enforced && sandbox.network === "deny" ? "muted" : "pending"
 }
 
 export function kernelEnvironmentTone(kernel?: KernelStatus): KernelTone {

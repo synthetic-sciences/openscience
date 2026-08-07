@@ -6,6 +6,8 @@ import {
   kernelAtlasLabel,
   kernelCpuLabel,
   kernelEnvironmentLabel,
+  kernelNetworkLabel,
+  kernelNetworkTone,
   kernelEnvironmentTone,
   kernelGpuLabel,
   kernelLabel,
@@ -131,6 +133,30 @@ describe("kernel runtime presentation", () => {
     )
   })
 
+  test("states network reach on its own, with an open network as the notable case", () => {
+    const sandboxed = (network: "deny" | "allow", enforced = true) =>
+      kernel({
+        environment: {
+          cwd: "/work/project",
+          atlas: { access: "host_broker", credentials: "withheld", sources: "source_ids_only" },
+          sandbox: { requested: true, enforced, backend: "bubblewrap", network, platform: "linux", available: true },
+        },
+      })
+
+    expect(kernelNetworkLabel(sandboxed("deny"))).toBe("network disabled")
+    expect(kernelNetworkTone(sandboxed("deny"))).toBe("muted")
+    expect(kernelNetworkLabel(sandboxed("allow"))).toBe("network allowed")
+    expect(kernelNetworkTone(sandboxed("allow"))).toBe("pending")
+
+    // A sandbox that was asked for but never took hold does not block anything,
+    // whatever its recorded network setting says.
+    expect(kernelNetworkLabel(sandboxed("deny", false))).toBe("network allowed")
+    expect(kernelNetworkTone(sandboxed("deny", false))).toBe("pending")
+
+    // Nothing measured yet is not the same as an open network.
+    expect(kernelNetworkLabel(kernel())).toBeNull()
+  })
+
   test("states the actual sandbox and network contract", () => {
     expect(kernelEnvironmentLabel(kernel())).toBe("environment pending")
     expect(
@@ -154,7 +180,7 @@ describe("kernel runtime presentation", () => {
           },
         }),
       ),
-    ).toBe("seatbelt sandbox · network blocked")
+    ).toBe("seatbelt sandbox")
     expect(
       kernelEnvironmentLabel(
         kernel({

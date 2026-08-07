@@ -39,6 +39,10 @@ export function ComputeJobs(
   props: {
     onEnsureSession?: () => Promise<string | undefined>
     onActiveChange?: (count: number) => void
+    // The surface shows a total beside the tab label. It cannot poll for it
+    // while this panel is open without duplicating this panel's own 2.5s poll,
+    // so the count comes from here instead.
+    onTotalChange?: (count: number) => void
     manual?: boolean
   } = {},
 ): JSX.Element {
@@ -148,6 +152,10 @@ export function ComputeJobs(
   const active = createMemo(() => jobs()?.filter((job) => !terminal.has(job.status)).length ?? 0)
 
   createEffect(() => props.onActiveChange?.(active()))
+  createEffect(() => {
+    const list = jobs()
+    if (list) props.onTotalChange?.(list.length)
+  })
 
   const refresh = async (report = false) => {
     if (!cache.value) {
@@ -835,9 +843,16 @@ export function ComputeJobs(
                         type="button"
                         aria-expanded={selected() === item.id}
                         aria-controls={`compute-run-${item.id}`}
+                        // A run that is still moving gets a sweep along the
+                        // foot of its row. The status column already names it,
+                        // but a word does not read as motion — and this is the
+                        // one row in the ledger whose value will change on its
+                        // own, so it is the one worth catching the eye.
+                        class={terminal.has(item.status) ? undefined : "compute-run--active"}
                         onClick={() => setSelected((value) => (value === item.id ? undefined : item.id))}
                         style={{
                           ...row,
+                          position: "relative",
                           background:
                             selected() === item.id
                               ? "color-mix(in srgb, var(--color-surface-solid) 92%, var(--color-accent) 8%)"

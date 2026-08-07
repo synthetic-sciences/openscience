@@ -398,6 +398,38 @@
   color: var(--color-text-muted);
 }
 
+/* The network statement sits under the environment header as its own line,
+   led by a dot in its tone. An open network is the state that changes what a
+   run can touch, so it carries the warning colour; a blocked one stays grey
+   rather than spending attention on the safe, and far more common, case. */
+.compute-surface .kernel-card__network {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-family: var(--font-code);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.compute-surface .kernel-card__network-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--color-text-faint);
+}
+
+.compute-surface .kernel-card__network[data-tone="pending"] {
+  color: var(--color-warning);
+}
+
+.compute-surface .kernel-card__network[data-tone="pending"] .kernel-card__network-dot {
+  background: var(--color-warning);
+}
+
 /* One row, as the design sets them. The base grid is two columns, which left
    Stop stranded on a line of its own — and Stop is the one that discards work,
    so it read as an afterthought rather than the control to be careful with. */
@@ -697,4 +729,52 @@
 .compute-surface .kernel-card__environment-row code,
 .compute-surface .kernel-card__environment-row p {
   justify-self: stretch;
+}
+
+/* A run that is still moving sweeps a gradient along the foot of its row. The
+   status column already says RUNNING, but a word does not read as motion, and
+   this is the only row in the ledger whose value will change on its own. The
+   warning tone is the same one the status text carries, so the row says one
+   thing in two ways rather than two things. */
+.compute-surface .compute-run--active::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-warning) 85%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 45% 100%;
+  background-repeat: no-repeat;
+  animation: compute-run-sweep 1.8s linear infinite;
+}
+
+@keyframes compute-run-sweep {
+  from {
+    background-position: -45% 0;
+  }
+  to {
+    background-position: 145% 0;
+  }
+}
+
+/* Motion here is decorative — the status column carries the same fact in
+   words, so removing it costs nothing. */
+@media (prefers-reduced-motion: reduce) {
+  .compute-surface .compute-run--active::after {
+    animation: none;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--color-warning) 55%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 100% 100%;
+  }
 }

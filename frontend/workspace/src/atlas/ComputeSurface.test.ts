@@ -229,4 +229,10 @@ describe("compute surface", () => {
     expect(strip).toBe(0)
     expect(tabs).toBeGreaterThan(strip)
   })
+  test("does not poll the jobs route itself while the jobs panel is mounted", () => {
+    const source = readFileSync(fileURLToPath(new URL("./ComputeSurface.tsx", import.meta.url)), "utf8")
+    // Two polls of the same route at different intervals, for the same number.
+    expect(source).toContain('if (state.tab !== "jobs") void refresh()')
+    expect(source).toContain('onTotalChange={(count) => setState("jobs", count)}')
+  })
 })
