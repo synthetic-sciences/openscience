@@ -76,10 +76,13 @@ export function KernelCard(props: {
         onClick={() => setOpen(!open())}
       >
         <div class="kernel-card__header">
-          <span class="kernel-card__language" aria-hidden="true">
-            {plateEyebrow(props.kernel, props.index ?? 0)}
-          </span>
+          {/* The eyebrow belongs inside the title column, not beside it: the
+              head is two groups pushed apart, and a third flex child made
+              `space-between` spread all three and centre the name. */}
           <div class="kernel-card__title">
+            <span class="kernel-card__language" aria-hidden="true">
+              {plateEyebrow(props.kernel, props.index ?? 0)}
+            </span>
             <strong title={kernelLabel(props.kernel)}>{kernelLabel(props.kernel)}</strong>
           </div>
           <span class="kernel-card__lede">

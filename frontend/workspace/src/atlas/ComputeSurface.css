@@ -295,7 +295,6 @@
 /* The language badge becomes the eyebrow's voice: small mono capitals over the
    name, rather than a coloured tile beside it. */
 .compute-surface .kernel-card__language {
-  order: -1;
   width: auto;
   height: auto;
   border-radius: 0;
