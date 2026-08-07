@@ -29,7 +29,6 @@ import {
   IconCopy,
   IconDownload,
   IconPlus,
-  IconRefresh,
   IconStop,
   IconTrash,
 } from "@/atlas/shared/Icon"
@@ -487,10 +486,9 @@ export function ComputeJobs(
             </span>
           </div>
         </div>
+        {/* No refresh control: this panel polls every 2.5s on its own, so the
+            button only ever did what was about to happen regardless. */}
         <div style={{ display: "flex", gap: "6px" }}>
-          <Action title="Refresh jobs" onClick={() => void refresh(true)}>
-            <IconRefresh size={15} />
-          </Action>
           <Show when={props.manual}>
             <Action
               title={creating() ? "Close job setup" : "New job"}

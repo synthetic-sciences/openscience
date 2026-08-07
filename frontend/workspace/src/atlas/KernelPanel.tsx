@@ -104,8 +104,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   // nearest Suspense boundary on every in-flight fetch, which suspends the
   // entire RightPane on every 2.5s poll. `.latest` only suspends on the first
   // load and returns the previous value while a refetch is in flight (see
-  // HostStrip.tsx for the full mechanism). `data.loading`, used below to
-  // disable the refresh button, is unaffected and left alone.
+  // HostStrip.tsx for the full mechanism).
   const kernels = useKernelList(() => data.latest?.kernels)
   const ensureSession = async () => {
     if (params.id && params.id !== "new") return params.id
@@ -221,17 +220,12 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
           <strong>Session kernels</strong>
           <span>{view.updated ? `Synced ${time(view.updated)}` : "Not synced yet"}</span>
         </div>
+        {/* No refresh control: the panel already polls every 2.5s and on
+            visibilitychange, so the button asked the user to do what was
+            happening anyway — and disabling it per poll made it flicker
+            twice a second. The "Synced Ns ago" line beside the title is the
+            honest version of the same information. */}
         <div class="kernel-panel__refresh">
-          <button
-            type="button"
-            class="kernel-panel__text-action"
-            aria-label="Refresh kernels"
-            title="Refresh kernel inventory"
-            onClick={() => void api.refetch()}
-            disabled={data.loading}
-          >
-            Refresh
-          </button>
           <button
             type="button"
             class="kernel-panel__primary-action"
