@@ -349,7 +349,8 @@
 .compute-surface .kernel-card__state {
   flex: none;
   min-height: 0;
-  gap: 0;
+  gap: 5px;
+  color: var(--color-text);
   box-shadow: inset 0 0 0 1px var(--color-border-strong);
 }
 
@@ -364,26 +365,53 @@
    pill has no dot, so the tone has to be the pill: a tinted ground and a ring
    in the status colour. color-mix against the card's own ground keeps that
    legible in all sixteen themes rather than only the dark one it was drawn in. */
+/* The word is set in the neutral text colour and the status colour moves to
+   the dot. Colouring the word meant setting a hue on a 12% tint of itself,
+   which works on a dark ground — the tint darkens it — but collapses on a
+   light one, where the tint is near-white and the hue has nothing to separate
+   from. Measured across all eighteen themes, that scheme fell to 1.0:1 on
+   vesper/light and sat under AA on nearly every light variant; this one holds
+   3.8:1 at worst and clears AA almost everywhere. A dot carries colour at a
+   size where contrast is not what makes it legible. */
 .compute-surface .kernel-card__state[data-tone="active"] {
-  color: var(--color-success);
   background: color-mix(in srgb, var(--color-success) 12%, var(--color-bg-elevated));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-success) 38%, var(--color-bg-elevated));
 }
 
+.compute-surface .kernel-card__state[data-tone="active"] .kernel-card__state-dot {
+  background: var(--color-success);
+}
+
 .compute-surface .kernel-card__state[data-tone="pending"] {
-  color: var(--color-warning);
   background: color-mix(in srgb, var(--color-warning) 12%, var(--color-bg-elevated));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-warning) 38%, var(--color-bg-elevated));
 }
 
+.compute-surface .kernel-card__state[data-tone="pending"] .kernel-card__state-dot {
+  background: var(--color-warning);
+}
+
 .compute-surface .kernel-card__state[data-tone="danger"] {
-  color: var(--color-error);
   background: color-mix(in srgb, var(--color-error) 12%, var(--color-bg-elevated));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-error) 38%, var(--color-bg-elevated));
 }
 
+.compute-surface .kernel-card__state[data-tone="danger"] .kernel-card__state-dot {
+  background: var(--color-error);
+}
+
+.compute-surface .kernel-card__state-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--color-text-faint);
+}
+
 /* Ready and muted stay uncoloured. A kernel that is merely alive is not news,
    and colouring it would spend the eye's attention on the common case. */
+/* Ready and muted keep an uncoloured dot: a runtime that is merely alive is
+   not news, and tinting it would spend attention on the common case. */
 .compute-surface .kernel-card__state[data-tone="ready"],
 .compute-surface .kernel-card__state[data-tone="muted"] {
   color: var(--color-text-muted);

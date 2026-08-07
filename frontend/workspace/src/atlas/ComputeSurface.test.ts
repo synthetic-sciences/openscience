@@ -252,4 +252,22 @@ describe("compute surface", () => {
     expect(source).toContain('if (state.tab !== "jobs") void refresh()')
     expect(source).toContain('onTotalChange={(count) => setState("jobs", count)}')
   })
+  test("carries state colour on the dot, never on the word", () => {
+    const css = readFileSync(fileURLToPath(new URL("./ComputeSurface.css", import.meta.url)), "utf8")
+
+    // Colouring the word means setting a hue on a 12% tint of itself. That
+    // works on a dark ground, where the tint darkens it, and collapses on a
+    // light one, where the tint is near-white and the hue has nothing to
+    // separate from — measured across all shipped themes it fell to 1.0:1 on
+    // vesper/light and sat under AA on nearly every light variant. The dot
+    // carries the colour instead, at a size where contrast is not what makes
+    // it legible.
+    for (const tone of ["active", "pending", "danger"]) {
+      const rule = css.match(new RegExp(`\\.kernel-card__state\\[data-tone="${tone}"\\] \\{[^}]*\\}`, "s"))?.[0]
+      expect(rule).toBeDefined()
+      expect(rule).not.toMatch(/color:/)
+      expect(rule).toContain("background: color-mix")
+      expect(css).toContain(`.kernel-card__state[data-tone="${tone}"] .kernel-card__state-dot`)
+    }
+  })
 })

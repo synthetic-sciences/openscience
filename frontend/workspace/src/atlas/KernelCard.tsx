@@ -107,6 +107,7 @@ export function KernelCard(props: {
               <span class="kernel-card__uptime">{uptime()}</span>
             </Show>
             <span class="kernel-card__state" data-tone={kernelTone(props.kernel.state)}>
+              <span class="kernel-card__state-dot" aria-hidden="true" />
               {kernelStateLabel(props.kernel.state)}
             </span>
             <span class="kernel-card__caret" aria-hidden="true">
