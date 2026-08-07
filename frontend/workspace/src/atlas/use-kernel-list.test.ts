@@ -138,6 +138,30 @@ describe("kernel list reconciliation", () => {
     expect(executions(cardB)).toBe("9")
   })
 
+  test("moves the collapsed plate's own figures when a poll changes them", async () => {
+    // These are the two numbers a collapsed plate is reduced to, and they sit
+    // on a nested object (`resources`) rather than on the kernel itself — so
+    // this pins that reconcile's patch reaches them and the head re-renders,
+    // rather than the card holding the first reading it was given.
+    const usage = (element: Element | null) => element?.querySelector(".kernel-card__usage")?.textContent ?? ""
+    const [source, setSource] = core.createSignal<KernelStatus[] | undefined>([
+      kernel({ id: "kernel-a", resources: { cpu_percent: 0, memory_bytes: 16_000_000 } }),
+    ])
+    const host = mount(() => list(source))
+    await Promise.resolve()
+
+    const card = host.querySelector('[data-kernel-id="kernel-a"]')
+    expect(usage(card)).toContain("16 MB")
+    expect(usage(card)).toContain("0.0%")
+
+    setSource([kernel({ id: "kernel-a", resources: { cpu_percent: 187.5, memory_bytes: 2_400_000_000 } })])
+    await Promise.resolve()
+
+    expect(host.querySelector('[data-kernel-id="kernel-a"]')).toBe(card)
+    expect(usage(card)).toContain("2.4 GB")
+    expect(usage(card)).toContain("187.5%")
+  })
+
   test("mounts a newly appeared kernel and unmounts one that disappeared", async () => {
     const [source, setSource] = core.createSignal<KernelStatus[] | undefined>([
       kernel({ id: "kernel-a" }),

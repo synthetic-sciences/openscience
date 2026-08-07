@@ -132,9 +132,9 @@ export function KernelCard(props: {
           </div>
           <div class="kernel-card__usage-item">
             <div class="kernel-card__usage-label">
-              <span>CORES</span>
+              <span>CPU</span>
               <span>
-                <strong>{usage().cores}</strong> / {usage().segments}
+                <strong>{usage().cpu}</strong>
               </span>
             </div>
             <div class="kernel-card__usage-cores">

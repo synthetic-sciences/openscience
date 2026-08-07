@@ -1,5 +1,5 @@
 import type { Capacity } from "./host-instruments"
-import type { KernelStatus } from "@/notebook/runtime"
+import { kernelCpuLabel, kernelMemoryLabel, type KernelStatus } from "@/notebook/runtime"
 
 /**
  * The figures 3a keeps visible on a collapsed kernel plate.
@@ -14,7 +14,11 @@ import type { KernelStatus } from "@/notebook/runtime"
  */
 
 export type Usage = {
-  /** The kernel's own figure, already in GB, or "—" when unmeasured. */
+  /** The kernel's own memory, in whatever unit fits it, or "—" when
+   *  unmeasured. Adaptive rather than fixed to GB: the host total is tens of
+   *  GB, but a Python kernel holds tens of MB, and rendering that against a GB
+   *  scale to one decimal printed "0.0" for every kernel that was not a
+   *  training run — a live figure at a resolution that could never move. */
   ram: string
   /** The host ceiling it is drawn against, e.g. "/ 16.4 GB". Empty when the
    *  host never reported a total — a bare number with no ceiling is honest,
@@ -22,8 +26,13 @@ export type Usage = {
   ceiling: string
   /** 0–1, for the bar's width. */
   fill: number
-  /** Cores this kernel is turning, and the host's count. */
-  cores: string
+  /** Utilisation as the ledger states it, on the Unix convention the backend
+   *  measures in: 100% is one core saturated, so a kernel across two cores
+   *  reads about 200%. Stated as a percentage rather than a core count because
+   *  that is the figure actually measured — and because a single-threaded
+   *  Python kernel, which is most of them, lives between 0 and 100% and would
+   *  otherwise read "0 of 8" no matter how hard it was working. */
+  cpu: string
   segments: number
   lit: number
 }
@@ -56,7 +65,8 @@ export function plateEyebrow(kernel: KernelStatus, index: number): string {
  * and a body missing one degrades only that figure.
  */
 export function plateUsage(kernel: KernelStatus, capacity?: Partial<Capacity>): Usage {
-  const used = gb(kernel.resources?.memory_bytes)
+  const bytes = kernel.resources?.memory_bytes
+  const used = gb(bytes)
   const total = gb(capacity?.memory?.total)
   const percent = kernel.resources?.cpu_percent
   const cores = capacity?.cpu?.cores
@@ -69,13 +79,18 @@ export function plateUsage(kernel: KernelStatus, capacity?: Partial<Capacity>): 
   const segments = cores === undefined ? 8 : Math.min(12, Math.max(1, Math.round(cores)))
 
   return {
-    ram: used === undefined ? "—" : used.toFixed(1),
+    // The same helper the opened ledger uses, for the same reason as cpu: one
+    // measurement, one unit, wherever it is stated.
+    ram: used === undefined ? "—" : kernelMemoryLabel(bytes),
     ceiling: total === undefined ? "" : `/ ${total.toFixed(1)} GB`,
     fill: used === undefined || total === undefined || total <= 0 ? 0 : Math.min(1, used / total),
-    cores: turning === undefined ? "—" : String(Math.round(turning)),
+    // The same helper the opened ledger uses, so the head and the row beneath
+    // it cannot disagree about one measurement.
+    cpu: percent === undefined || percent === null ? "—" : kernelCpuLabel(percent),
     segments,
-    // Round up, so a kernel doing real but sub-core work still lights one
-    // segment rather than reading as idle.
+    // The segments still count cores: they are what makes multi-core work
+    // legible at a glance, which a bare percentage does not. Rounded up, so a
+    // kernel doing real but sub-core work lights one rather than reading idle.
     lit: turning === undefined ? 0 : Math.min(segments, Math.ceil(turning)),
   }
 }
