@@ -1515,7 +1515,6 @@ const ledgerHeader: JSX.CSSProperties = {
 
 const ledgerTitle: JSX.CSSProperties = {
   color: "var(--color-text-faint)",
-  "font-family": FONT_MONO,
   "font-size": "10px",
 }
 
@@ -1531,7 +1530,6 @@ const runIndex: JSX.CSSProperties = {
   width: "16px",
   flex: "none",
   color: "var(--color-text-faint)",
-  "font-family": FONT_MONO,
   "font-size": "10.5px",
   "font-variant-numeric": "tabular-nums",
 }
@@ -1552,11 +1550,9 @@ const runName: JSX.CSSProperties = {
   "white-space": "nowrap",
 }
 
-// Where it ran, on its own line in mono so it lines up with the status column
-// beside it rather than competing with the name above it.
+// Where it ran, on its own line under the name rather than competing with it.
 const runTarget: JSX.CSSProperties = {
   color: "var(--color-text-muted)",
-  "font-family": FONT_MONO,
   "font-size": "10px",
   overflow: "hidden",
   "text-overflow": "ellipsis",
@@ -1572,7 +1568,6 @@ const runStatus: JSX.CSSProperties = {
 
 const runStatusText: JSX.CSSProperties = {
   width: "66px",
-  "font-family": FONT_MONO,
   "font-size": "10px",
   "white-space": "nowrap",
 }
@@ -1589,7 +1584,6 @@ const runAge: JSX.CSSProperties = {
   flex: "none",
   "text-align": "right",
   color: "var(--color-text-faint)",
-  "font-family": FONT_MONO,
   "font-size": "10.5px",
   "font-variant-numeric": "tabular-nums",
   "white-space": "nowrap",

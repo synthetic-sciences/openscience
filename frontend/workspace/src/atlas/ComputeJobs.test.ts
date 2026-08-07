@@ -243,4 +243,27 @@ describe("compute jobs surface", () => {
     expect(source).toContain("onTotalChange?: (count: number) => void")
     expect(source).toContain("props.onTotalChange?.(list.length)")
   })
+  test("keeps mono for code and the app's face for labels", () => {
+    // The surface moved to one sans face, but this panel styles inline, so its
+    // rules were missed by the stylesheet pass and the ledger's labels stayed
+    // mono while the kernel plate's equivalents did not.
+    const style = (name: string) => {
+      const start = source.indexOf(`const ${name}: JSX.CSSProperties = {`)
+      expect(start).toBeGreaterThan(-1)
+      return source.slice(start, source.indexOf("}", start))
+    }
+
+    for (const label of ["ledgerTitle", "runIndex", "runTarget", "runStatusText", "runAge"]) {
+      expect(style(label)).not.toContain("FONT_MONO")
+    }
+    // A figure that lost mono's fixed advance needs tabular ones, or the
+    // column wanders as the values change.
+    expect(style("runIndex")).toContain("tabular-nums")
+    expect(style("runAge")).toContain("tabular-nums")
+
+    // Code-shaped content keeps mono, which is what origin/main does too.
+    for (const code of ["commandBox", "log", "meta", "manifestGrid"]) {
+      expect(style(code)).toContain("FONT_MONO")
+    }
+  })
 })
