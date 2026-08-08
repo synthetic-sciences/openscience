@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run Topic-Aware Failure Discovery"
+  short_description: "Discover validated failures without score leakage"
+  default_prompt: "Use $run-topic-aware-failure-discovery to execute a committed topic-aware adversarial evaluation stream."

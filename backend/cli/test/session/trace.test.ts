@@ -205,8 +205,19 @@ test("builds one local observable harness trace without reasoning or copied outp
         message: "provider overloaded",
         delayMs: 50,
       })
+      await SessionTraceStore.recordProfile({
+        sessionID: session.id,
+        messageID: user.id,
+        id: "reproduce",
+        source: "heuristic",
+        confidence: 0.94,
+        reasons: ["reproduction-language"],
+      })
 
       const trace = await SessionTrace.build(session.id)
+      expect(trace.profiles).toEqual([
+        expect.objectContaining({ messageID: user.id, id: "reproduce", source: "heuristic", confidence: 0.94 }),
+      ])
       expect(trace.summary).toMatchObject({
         cost: 0.42,
         toolCalls: 7,
@@ -249,7 +260,7 @@ test("builds one local observable harness trace without reasoning or copied outp
       expect(trace.turns[0].timeToFirstUsefulOutputMs).toBe(100)
 
       await Session.remove(session.id)
-      expect(await SessionTraceStore.read(session.id)).toEqual({ approvals: {}, retries: [] })
+      expect(await SessionTraceStore.read(session.id)).toEqual({ approvals: {}, retries: [], profiles: {} })
     },
   })
 })

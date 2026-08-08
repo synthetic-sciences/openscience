@@ -27,6 +27,7 @@ import { Command } from "../command"
 import { Global } from "../global"
 import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
+import { HarnessRoutes } from "./routes/harness"
 import { PtyRoutes } from "./routes/pty"
 import { McpRoutes } from "./routes/mcp"
 import { FileRoutes } from "./routes/file"
@@ -312,6 +313,7 @@ export namespace Server {
         .route("/config", ConfigRoutes())
         .route("/experimental", ExperimentalRoutes())
         .route("/session", SessionRoutes())
+        .route("/harness", HarnessRoutes())
         .route("/search", SearchRoutes())
         .route("/permission", PermissionRoutes())
         .route("/question", QuestionRoutes())

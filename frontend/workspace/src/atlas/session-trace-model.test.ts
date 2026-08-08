@@ -30,6 +30,7 @@ const trace: SessionTraceResponse = {
     retryCount: 1,
   },
   turns: [],
+  profiles: [],
   inference: [
     {
       messageID: "msg_assistant",
