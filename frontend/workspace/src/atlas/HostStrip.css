@@ -43,11 +43,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Unit and ceiling sit on one baseline beside the figure — "4.4 GB used of
+   16.4" — rather than stacked three deep. Stacking spent three lines saying
+   what one says, and the column of tiny type beside a 44px numeral was the
+   densest corner of the surface. */
 .host-strip__labels {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-bottom: 3px;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
 }
 
 .host-strip__unit,
@@ -60,9 +64,10 @@
   color: var(--color-text-muted);
 }
 
-/* The ceiling is context, so it sits a step quieter than the unit above it. */
+/* One tone for the whole qualifier now that it reads as a single phrase; two
+   tones inside one line reads as an accident rather than a hierarchy. */
 .host-strip__ceiling {
-  color: var(--color-text-faint);
+  color: var(--color-text-muted);
 }
 
 /* Twenty samples of memory pressure, oldest left. The bars carry no labels
