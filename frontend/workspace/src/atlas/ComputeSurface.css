@@ -312,31 +312,6 @@
   border-top: 8px solid var(--color-bg-subtle);
 }
 
-.compute-surface .kernel-history-card {
-  grid-template-columns: minmax(160px, 1fr) 64px minmax(112px, auto);
-}
-
-.compute-surface .kernel-history-card__result {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.compute-surface .kernel-history-card__result strong {
-  color: var(--color-text);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.compute-surface .kernel-history-card__result small {
-  overflow: hidden;
-  color: var(--color-text-faint);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .compute-surface .remote-job-card {
   grid-template-columns: minmax(160px, 1fr) 64px minmax(118px, auto) auto;
 }
@@ -441,14 +416,6 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .compute-surface .kernel-history-card {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .compute-surface .kernel-history-card__result {
-    padding-left: 39px;
-  }
-
   .compute-surface .remote-job-card__result {
     padding-left: 39px;
   }
@@ -464,10 +431,6 @@
   }
 
   .compute-surface .remote-job-card__result {
-    grid-column: 1 / -1;
-  }
-
-  .compute-surface .kernel-history-card__result {
     grid-column: 1 / -1;
   }
 }

@@ -21,9 +21,11 @@ describe("live compute inventory", () => {
     expect(panel).toContain("<CommandCard")
     expect(panel).toContain("jobApi.list()")
     expect(panel).toContain("<RemoteJobCard")
-    expect(panel).toContain("<KernelResultCard")
-    expect(panel).toContain('aria-label="Recent local results"')
+    expect(panel).not.toContain("KernelResultCard")
+    expect(panel).not.toContain("recentLocal")
+    expect(panel).not.toContain('aria-label="Recent local results"')
     expect(panel).toContain('aria-label="Recent remote results"')
+    expect(panel).toContain('kernels.filter((kernel) => kernel.active || kernel.state === "starting")')
   })
 
   test("does not expose any manual kernel creation or restart path", () => {

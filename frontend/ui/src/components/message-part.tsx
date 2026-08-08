@@ -830,7 +830,6 @@ function KernelTool(props: ToolProps & { language: "python" | "r"; label: "Pytho
   return (
     <BasicTool
       {...props}
-      defaultOpen
       icon="code"
       trigger={{
         title: props.status === "completed" ? "Computed" : "Computing",
@@ -906,7 +905,6 @@ function SavedArtifactTool(props: ToolProps) {
   return (
     <BasicTool
       {...props}
-      defaultOpen
       icon="archive"
       trigger={{
         title: saved() ? "Saved artifact" : props.title || "Artifact",
@@ -985,7 +983,6 @@ function RemoteComputeTool(props: ToolProps) {
   return (
     <BasicTool
       {...props}
-      defaultOpen
       icon="console"
       trigger={{
         title: props.tool === "modal" ? "Modal compute" : "Remote compute result",

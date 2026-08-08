@@ -5,8 +5,12 @@ import { fileURLToPath } from "node:url"
 const source = () => readFileSync(fileURLToPath(new URL("./message-part.tsx", import.meta.url)), "utf8")
 const styles = () => readFileSync(fileURLToPath(new URL("./message-part.css", import.meta.url)), "utf8")
 
-test("notebook tools open source, text output, and figures by default", () => {
+test("notebook tools keep complete source, output, and figures behind a compact summary", () => {
   const part = source()
+  const kernel = part.slice(
+    part.indexOf("function KernelTool"),
+    part.indexOf('ToolRegistry.register({\n  name: "notebook"'),
+  )
 
   expect(part).toContain('name: "notebook"')
   expect(part).toContain('name: "rkernel"')
@@ -20,6 +24,7 @@ test("notebook tools open source, text output, and figures by default", () => {
   expect(part).toContain('props.input.action === "stop"')
   expect(part).toContain('trigger={{ title: "Kernel stopped"')
   expect(part).toContain('title: props.status === "completed" ? "Computed" : "Computing"')
+  expect(kernel).not.toContain("defaultOpen")
   expect(styles()).toContain("max-height: calc(5 * 1.55em + 20px)")
   expect(styles()).toContain("overflow: auto")
 })

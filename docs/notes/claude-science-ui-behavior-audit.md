@@ -42,7 +42,7 @@ This is a behavior index, not a request to reproduce Claude branding. It records
 
 | Surface              | Claude Science behavior                                                                  | OpenScience contract                                                                                                               |
 | -------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Default presentation | A step opens into a language/environment header, source, and separate output control.    | Notebook and R cards auto-open so code is never hidden behind Show steps.                                                          |
+| Default presentation | A step opens into a language/environment header, source, and separate output control.    | Notebook, artifact, and remote-compute cards start collapsed so completed work stays compact and expands on demand.                |
 | Source height        | Long source remains contained inside the operation instead of dominating the transcript. | Show exactly five code lines in a vertically and horizontally scrollable source window; retain the complete source in that window. |
 | Output               | Text output is visually separated from source.                                           | Text output is open by default and independently scrollable.                                                                       |
 | Figures              | Figures appear immediately after the cell that produced them.                            | Inline notebook images stay visible even when text output is collapsed.                                                            |
@@ -51,15 +51,15 @@ This is a behavior index, not a request to reproduce Claude branding. It records
 
 ## 5. Compute
 
-| Surface         | Claude Science behavior                                                                                      | OpenScience contract                                                                                                                               |
-| --------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Host strip      | Memory, CPU, live-kernel count, and running count are always visible.                                        | Host totals combine local kernels, shell commands, and remote jobs. Unknown metrics render as unavailable, never fabricated zeroes.                |
-| Project ledger  | Work is grouped by owning session with a current-session marker.                                             | Compute aggregates every session in the project and does not reset when the selected session changes.                                              |
-| Kernel row      | Language, state, age/cell count, activity label, RSS, CPU, and stop action form one dense row.               | Live rows show named kernel, state/recovery text, uptime, RSS, cores, and Stop.                                                                    |
-| Job row         | Long-running/background work stays visible independently of chat scroll.                                     | Shell commands and Modal/GPU jobs are first-class rows with command/target, resources, duration, status, output, artifacts, cleanup, and cancel.   |
-| Completed work  | Claude commonly leaves idle kernels visible.                                                                 | OpenScience intentionally stops finished kernels, then keeps up to five recent local completion rows so the trail remains without wasting compute. |
-| Manual creation | Claude exposes environment setup as part of agent work, not a user kernel launcher in the completed session. | Do not expose manual kernel creation. Kernels start only when an agent executes work.                                                              |
-| Cleanup         | Claude exposes stop/kill per kernel but may leave kernels idle.                                              | The research agent must stop every named kernel after outputs and artifacts are verified. Remote cleanup warnings remain visible.                  |
+| Surface         | Claude Science behavior                                                                                      | OpenScience contract                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Host strip      | Memory, CPU, live-kernel count, and running count are always visible.                                        | Host totals combine local kernels, shell commands, and remote jobs. Unknown metrics render as unavailable, never fabricated zeroes.              |
+| Project ledger  | Work is grouped by owning session with a current-session marker.                                             | Compute aggregates every session in the project and does not reset when the selected session changes.                                            |
+| Kernel row      | Language, state, age/cell count, activity label, RSS, CPU, and stop action form one dense row.               | Live rows show named kernel, state/recovery text, uptime, RSS, cores, and Stop.                                                                  |
+| Job row         | Long-running/background work stays visible independently of chat scroll.                                     | Shell commands and Modal/GPU jobs are first-class rows with command/target, resources, duration, status, output, artifacts, cleanup, and cancel. |
+| Completed work  | Claude commonly leaves idle kernels visible.                                                                 | OpenScience removes completed, stopped, and killed local kernels from Compute; their source, results, and artifacts remain in chat and Files.    |
+| Manual creation | Claude exposes environment setup as part of agent work, not a user kernel launcher in the completed session. | Do not expose manual kernel creation. Kernels start only when an agent executes work.                                                            |
+| Cleanup         | Claude exposes stop/kill per kernel but may leave kernels idle.                                              | The research agent must stop every named kernel after outputs and artifacts are verified. Remote cleanup warnings remain visible.                |
 
 ## 6. Files and artifacts
 
@@ -98,7 +98,7 @@ OpenScience's research prompt now requires at least two decision-useful figures 
 
 ## 9. Intentional OpenScience differences
 
-- Finished kernels are stopped automatically rather than left idle. Recent completion rows preserve visibility without retaining memory.
+- Finished kernels are stopped automatically rather than left idle, and disappear from Compute once they are no longer live.
 - Manual kernel creation is removed. The execution ledger describes real work; it is not a launcher.
 - Compute also includes shell subprocesses and Modal/GPU jobs, which the reference surface did not expose in this exact local run.
 - Project-wide Files and Compute remain stable while sessions switch, matching the requested cross-session workspace model.
@@ -108,13 +108,13 @@ OpenScience's research prompt now requires at least two decision-useful figures 
 - [x] Exact prompt starts exactly four named managed kernels.
 - [x] Four kernel rows are visible in Compute during execution.
 - [x] Python source and output remain visible in chat while working and after completion.
-- [x] Source is auto-open but capped to a five-line scroll window.
+- [x] Computed cards start collapsed; expanded source is capped to a five-line scroll window.
 - [x] Figures display inline beside their producing cells.
 - [x] Saved report, tables, and figures auto-appear in Files.
 - [x] Artifact titles are meaningful and previews open beside chat.
 - [x] Failed analysis is visible and can be retried without losing history.
 - [x] Every named kernel stops after result verification.
-- [x] Recent completed local work remains visible in Compute.
+- [x] Completed, stopped, and killed local kernels disappear from Compute.
 - [x] Modal/GPU jobs have live and recent-result rows with resources, logs, artifacts, cancel, and cleanup state.
 - [x] The right workspace remains project-scoped across session changes.
 - [x] Compute and artifact cards adapt at narrow container widths.

@@ -73,43 +73,6 @@ export function KernelCard(props: {
   )
 }
 
-const ago = (value: number | null) => {
-  if (!value) return "—"
-  const seconds = Math.max(0, Math.floor((Date.now() - value) / 1_000))
-  if (seconds < 60) return `${seconds}s ago`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
-
-export function KernelResultCard(props: { kernel: KernelStatus }): JSX.Element {
-  return (
-    <article class="kernel-card kernel-history-card" data-kernel-id={props.kernel.id} data-state={props.kernel.state}>
-      <div class="kernel-card__main">
-        <span class="kernel-card__language" aria-hidden="true">
-          {props.kernel.language === "python" ? "Py" : props.kernel.language === "r" ? "R" : "›_"}
-        </span>
-        <div class="kernel-card__copy">
-          <strong title={kernelLabel(props.kernel)}>{kernelLabel(props.kernel)}</strong>
-          <span>
-            <i data-tone={props.kernel.state === "crashed" ? "danger" : "muted"} aria-hidden="true" />
-            {kernelStateLabel(props.kernel.state)} · output preserved in chat and Files
-          </span>
-        </div>
-      </div>
-      <span class="kernel-card__uptime" aria-label={`Finished ${ago(props.kernel.last_activity_at)}`}>
-        {ago(props.kernel.last_activity_at)}
-      </span>
-      <span class="kernel-history-card__result">
-        <strong>{props.kernel.state === "crashed" ? "Needs review" : "Complete"}</strong>
-        <small>workspace cleared</small>
-      </span>
-    </article>
-  )
-}
-
 function Metric(props: { label: string; value: string }): JSX.Element {
   return (
     <span class="kernel-card__metric">
