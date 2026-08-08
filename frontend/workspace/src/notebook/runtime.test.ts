@@ -62,10 +62,10 @@ describe("kernel runtime presentation", () => {
   })
 
   test("exposes an idle kernel as ready without hiding canonical running states", () => {
-    expect(kernelStateLabel("idle")).toBe("ready")
-    expect(kernelStateLabel("running")).toBe("running")
-    expect(kernelStateLabel("starting")).toBe("starting")
-    expect(kernelStateLabel("lazy")).toBe("not started")
+    expect(kernelStateLabel("idle")).toBe("Ready")
+    expect(kernelStateLabel("running")).toBe("Running")
+    expect(kernelStateLabel("starting")).toBe("Starting")
+    expect(kernelStateLabel("lazy")).toBe("Not started")
   })
 
   test("summarizes live, running, and queued work independently", () => {
@@ -143,14 +143,14 @@ describe("kernel runtime presentation", () => {
         },
       })
 
-    expect(kernelNetworkLabel(sandboxed("deny"))).toBe("network disabled")
+    expect(kernelNetworkLabel(sandboxed("deny"))).toBe("Network disabled")
     expect(kernelNetworkTone(sandboxed("deny"))).toBe("muted")
-    expect(kernelNetworkLabel(sandboxed("allow"))).toBe("network allowed")
+    expect(kernelNetworkLabel(sandboxed("allow"))).toBe("Network allowed")
     expect(kernelNetworkTone(sandboxed("allow"))).toBe("pending")
 
     // A sandbox that was asked for but never took hold does not block anything,
     // whatever its recorded network setting says.
-    expect(kernelNetworkLabel(sandboxed("deny", false))).toBe("network allowed")
+    expect(kernelNetworkLabel(sandboxed("deny", false))).toBe("Network allowed")
     expect(kernelNetworkTone(sandboxed("deny", false))).toBe("pending")
 
     // Nothing measured yet is not the same as an open network.
@@ -158,7 +158,7 @@ describe("kernel runtime presentation", () => {
   })
 
   test("states the actual sandbox and network contract", () => {
-    expect(kernelEnvironmentLabel(kernel())).toBe("environment pending")
+    expect(kernelEnvironmentLabel(kernel())).toBe("Environment pending")
     expect(
       kernelEnvironmentLabel(
         kernel({
@@ -180,7 +180,7 @@ describe("kernel runtime presentation", () => {
           },
         }),
       ),
-    ).toBe("seatbelt sandbox")
+    ).toBe("Seatbelt sandbox")
     expect(
       kernelEnvironmentLabel(
         kernel({
@@ -202,7 +202,7 @@ describe("kernel runtime presentation", () => {
           },
         }),
       ),
-    ).toBe("sandbox unavailable · host access")
+    ).toBe("Sandbox unavailable · host access")
     expect(
       kernelEnvironmentLabel(
         kernel({
@@ -224,7 +224,7 @@ describe("kernel runtime presentation", () => {
           },
         }),
       ),
-    ).toBe("sandbox off · host access")
+    ).toBe("Sandbox off · host access")
     expect(kernelEnvironmentTone(kernel())).toBe("muted")
     expect(
       kernelEnvironmentTone(

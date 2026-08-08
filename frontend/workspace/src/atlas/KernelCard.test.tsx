@@ -79,7 +79,7 @@ describe("KernelCard lifecycle controls", () => {
       }),
     )
 
-    expect(host.querySelector(".kernel-card__state")?.textContent).toBe("ready")
+    expect(host.querySelector(".kernel-card__state")?.textContent).toBe("Ready")
     expect(host.textContent).toContain("r4")
     expect(host.textContent).toContain("8234")
     expect(host.textContent).toContain("PID and process start verified")
@@ -258,7 +258,7 @@ describe("KernelCard lifecycle controls", () => {
     const plate = host.querySelector<HTMLButtonElement>(".kernel-card__plate")
     expect(plate?.getAttribute("aria-expanded")).toBe("false")
     expect(host.querySelector(".kernel-card__language")?.textContent).toBe("Kernel 01 · Python")
-    expect(host.querySelector(".kernel-card__state")?.textContent).toBe("running")
+    expect(host.querySelector(".kernel-card__state")?.textContent).toBe("Running")
     // The two figures that survive the collapse.
     expect(host.querySelector(".kernel-card__usage")?.textContent).toContain("2.4")
     expect(host.querySelector(".kernel-card__usage")?.textContent).toContain("/ 16.4 GB")

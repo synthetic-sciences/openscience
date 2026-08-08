@@ -891,7 +891,7 @@ export function ComputeJobs(
                               style={{
                                 color: "var(--color-text-faint)",
                                 "font-family": FONT_MONO,
-                                "font-size": "11px",
+                                "font-size": "12px",
                                 flex: 1,
                                 "min-width": 0,
                               }}
@@ -1123,7 +1123,7 @@ function ArtifactRow(props: { item: Artifact; label?: string }): JSX.Element {
           style={{
             color: "var(--color-text)",
             "font-family": FONT_MONO,
-            "font-size": "13px",
+            "font-size": "14px",
             overflow: "hidden",
             "text-overflow": "ellipsis",
             "white-space": "nowrap",
@@ -1132,7 +1132,7 @@ function ArtifactRow(props: { item: Artifact; label?: string }): JSX.Element {
         >
           {props.item.path}
         </strong>
-        <span style={{ color: "var(--color-text-faint)", "font-family": FONT_MONO, "font-size": "11px" }}>
+        <span style={{ color: "var(--color-text-faint)", "font-family": FONT_MONO, "font-size": "12px" }}>
           {props.label ? `${props.label} · ` : ""}
           {bytes(props.item.size)} · sha256 {props.item.sha256.slice(0, 10)}
         </span>
@@ -1293,7 +1293,7 @@ const mark: JSX.CSSProperties = {
 
 const title: JSX.CSSProperties = {
   color: "var(--color-text)",
-  "font-size": "15px",
+  "font-size": "14px",
   "font-weight": 600,
   "letter-spacing": "-0.01em",
   "line-height": 1.2,
@@ -1302,7 +1302,7 @@ const title: JSX.CSSProperties = {
 const subtitle: JSX.CSSProperties = {
   color: "var(--color-text-faint)",
   "font-family": FONT_SANS,
-  "font-size": "11px",
+  "font-size": "12px",
   "line-height": 1.3,
 }
 
@@ -1330,7 +1330,7 @@ const formHeader: JSX.CSSProperties = {
 
 const formTitle: JSX.CSSProperties = {
   color: "var(--color-text)",
-  "font-size": "15px",
+  "font-size": "14px",
   "font-weight": 600,
   "letter-spacing": "-0.01em",
 }
@@ -1353,7 +1353,7 @@ const input: JSX.CSSProperties = {
   outline: "2px solid transparent",
   "outline-offset": "1px",
   "font-family": FONT_SANS,
-  "font-size": "13px",
+  "font-size": "14px",
   transition: "border-color 140ms ease, outline-color 140ms ease, background-color 140ms ease",
 }
 
@@ -1370,7 +1370,7 @@ const advancedToggle: JSX.CSSProperties = {
   background: "color-mix(in srgb, var(--color-bg-subtle) 82%, transparent)",
   color: "var(--color-text-muted)",
   "font-family": FONT_SANS,
-  "font-size": "13px",
+  "font-size": "14px",
   "font-weight": 550,
   padding: "0 10px",
   "text-align": "left",
@@ -1385,7 +1385,7 @@ const advancedGrid: JSX.CSSProperties = {
 const advancedHint: JSX.CSSProperties = {
   color: "var(--color-text-faint)",
   "font-family": FONT_SANS,
-  "font-size": "11px",
+  "font-size": "12px",
   "line-height": 1.4,
   padding: "2px 2px 0",
 }
@@ -1399,7 +1399,7 @@ const primaryButton: JSX.CSSProperties = {
   "min-height": "34px",
   padding: "0 13px",
   "font-family": FONT_SANS,
-  "font-size": "13px",
+  "font-size": "14px",
   "font-weight": 600,
   transition: "filter 140ms ease, transform 140ms ease",
 }
@@ -1413,7 +1413,7 @@ const secondaryButton: JSX.CSSProperties = {
   "min-height": "32px",
   padding: "0 10px",
   "font-family": FONT_SANS,
-  "font-size": "13px",
+  "font-size": "14px",
   "font-weight": 550,
 }
 
@@ -1427,7 +1427,7 @@ const empty: JSX.CSSProperties = {
   gap: "10px",
   padding: "36px 24px 44px",
   color: "var(--color-text-muted)",
-  "font-size": "13px",
+  "font-size": "14px",
   "line-height": 1.5,
   "text-align": "center",
 }
@@ -1446,7 +1446,7 @@ const emptyMark: JSX.CSSProperties = {
 
 const emptyTitle: JSX.CSSProperties = {
   color: "var(--color-text)",
-  "font-size": "15px",
+  "font-size": "14px",
   "font-weight": 600,
   "letter-spacing": "-0.01em",
 }
@@ -1454,7 +1454,7 @@ const emptyTitle: JSX.CSSProperties = {
 const emptyCopy: JSX.CSSProperties = {
   "max-width": "360px",
   color: "var(--color-text-muted)",
-  "font-size": "13px",
+  "font-size": "14px",
   "line-height": 1.5,
 }
 
@@ -1466,7 +1466,7 @@ const listHeader: JSX.CSSProperties = {
   padding: "10px 12px 4px",
   color: "var(--color-text-faint)",
   "font-family": FONT_SANS,
-  "font-size": "11px",
+  "font-size": "12px",
   "font-weight": 600,
 }
 
@@ -1523,14 +1523,14 @@ const clearButton: JSX.CSSProperties = {
   cursor: "pointer",
   color: "var(--icon-brand-base)",
   "font-family": FONT_SANS,
-  "font-size": "11.5px",
+  "font-size": "12px",
 }
 
 const runIndex: JSX.CSSProperties = {
   width: "16px",
   flex: "none",
   color: "var(--color-text-faint)",
-  "font-size": "10.5px",
+  "font-size": "10px",
   "font-variant-numeric": "tabular-nums",
 }
 
@@ -1544,7 +1544,7 @@ const runStack: JSX.CSSProperties = {
 
 const runName: JSX.CSSProperties = {
   color: "var(--color-text)",
-  "font-size": "13.5px",
+  "font-size": "14px",
   overflow: "hidden",
   "text-overflow": "ellipsis",
   "white-space": "nowrap",
@@ -1584,7 +1584,7 @@ const runAge: JSX.CSSProperties = {
   flex: "none",
   "text-align": "right",
   color: "var(--color-text-faint)",
-  "font-size": "10.5px",
+  "font-size": "10px",
   "font-variant-numeric": "tabular-nums",
   "white-space": "nowrap",
 }
@@ -1651,7 +1651,7 @@ const commandBox: JSX.CSSProperties = {
 const meta: JSX.CSSProperties = {
   color: "var(--color-text-faint)",
   "font-family": FONT_MONO,
-  "font-size": "11px",
+  "font-size": "12px",
   overflow: "hidden",
   "text-overflow": "ellipsis",
   "white-space": "nowrap",
@@ -1674,7 +1674,7 @@ const cardTitle: JSX.CSSProperties = {
   gap: "10px",
   color: "var(--color-text-faint)",
   "font-family": FONT_SANS,
-  "font-size": "11px",
+  "font-size": "12px",
   "font-weight": 600,
 }
 
@@ -1695,7 +1695,7 @@ const manifestGrid: JSX.CSSProperties = {
   gap: "7px 10px",
   color: "var(--color-text-faint)",
   "font-family": FONT_MONO,
-  "font-size": "11px",
+  "font-size": "12px",
   "line-height": 1.4,
 }
 
@@ -1723,7 +1723,7 @@ const logHeader: JSX.CSSProperties = {
   gap: "10px",
   color: "var(--color-text-faint)",
   "font-family": FONT_SANS,
-  "font-size": "11px",
+  "font-size": "12px",
   "font-weight": 600,
   "margin-top": "4px",
 }

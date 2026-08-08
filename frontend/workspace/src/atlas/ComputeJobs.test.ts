@@ -101,7 +101,7 @@ describe("compute jobs surface", () => {
 
   test("uses compact headers, rows, and cards", () => {
     expect(source).toContain('class="compute-jobs"')
-    expect(source).toContain('"font-size": "15px"')
+    expect(source).toContain('"font-size": "14px"')
     expect(source).toContain('"min-height": "44px"')
     expect(source).toContain('width: "32px"')
     expect(source).toContain('"border-radius": "12px"')

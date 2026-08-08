@@ -15,7 +15,7 @@
 /* Set in the same capitals as the instrument labels below it, and quiet:
    it names the block rather than competing with the figure it introduces. */
 .host-strip__title {
-  font-size: 9.5px;
+  font-size: 10px;
   color: var(--color-text-faint);
 }
 
@@ -123,7 +123,7 @@
 }
 
 .host-strip__cores-value {
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

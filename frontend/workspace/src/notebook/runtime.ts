@@ -97,8 +97,9 @@ export function kernelTone(state: KernelState): KernelTone {
 }
 
 export function kernelStateLabel(state: KernelState) {
-  if (state === "lazy") return "not started"
-  return state === "idle" ? "ready" : state
+  if (state === "lazy") return "Not started"
+  if (state === "idle") return "Ready"
+  return state.charAt(0).toUpperCase() + state.slice(1)
 }
 
 export function summarizeKernels(kernels: KernelStatus[]) {
@@ -205,15 +206,15 @@ export function kernelAtlasLabel(kernel?: KernelStatus) {
 }
 
 export function kernelEnvironmentLabel(kernel?: KernelStatus) {
-  if (kernel?.authority?.mode === "read_only") return "read-only · execution blocked"
+  if (kernel?.authority?.mode === "read_only") return "Read-only · execution blocked"
   const sandbox = kernel?.environment?.sandbox
-  if (!sandbox) return "environment pending"
+  if (!sandbox) return "Environment pending"
   // The network clause moved to its own line. Joined by a middot it made a
   // label long enough to wrap inside its pill, and it buried the one fact on
   // this card that changes what a run can reach.
-  if (sandbox.enforced) return `${sandbox.backend} sandbox`
-  if (sandbox.requested) return "sandbox unavailable · host access"
-  return "sandbox off · host access"
+  if (sandbox.enforced) return `${sandbox.backend.charAt(0).toUpperCase()}${sandbox.backend.slice(1)} sandbox`
+  if (sandbox.requested) return "Sandbox unavailable · host access"
+  return "Sandbox off · host access"
 }
 
 /**
@@ -226,7 +227,7 @@ export function kernelEnvironmentLabel(kernel?: KernelStatus) {
 export function kernelNetworkLabel(kernel?: KernelStatus) {
   const sandbox = kernel?.environment?.sandbox
   if (!sandbox) return null
-  return sandbox.enforced && sandbox.network === "deny" ? "network disabled" : "network allowed"
+  return sandbox.enforced && sandbox.network === "deny" ? "Network disabled" : "Network allowed"
 }
 
 /**
