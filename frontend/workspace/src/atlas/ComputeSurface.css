@@ -78,7 +78,7 @@
 .compute-surface .kernel-panel__header {
   box-sizing: border-box;
   min-height: 48px;
-  gap: 10px;
+  gap: 12px;
   padding: 7px 10px 7px 12px;
   background: var(--color-bg);
 }
@@ -210,7 +210,7 @@
 
 .compute-surface .kernel-panel__empty {
   min-height: 220px;
-  gap: 7px;
+  gap: 8px;
   padding: 30px 22px;
 }
 
@@ -253,9 +253,9 @@
 .compute-surface .kernel-card__plate {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   width: 100%;
-  padding: 16px 16px 14px;
+  padding: 16px;
   border: 0;
   background: none;
   color: inherit;
@@ -285,7 +285,7 @@
 .compute-surface .kernel-card__title {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -315,7 +315,7 @@
   display: flex;
   align-items: center;
   flex: none;
-  gap: 10px;
+  gap: 12px;
 }
 
 .compute-surface .kernel-card__uptime {
@@ -349,7 +349,7 @@
 .compute-surface .kernel-card__state {
   flex: none;
   min-height: 0;
-  gap: 5px;
+  gap: 6px;
   color: var(--color-text);
   box-shadow: inset 0 0 0 1px var(--color-border-strong);
 }
@@ -424,7 +424,7 @@
 .compute-surface .kernel-card__network {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   margin: -2px 0 2px;
   font-size: 10px;
   color: var(--color-text-muted);
@@ -505,7 +505,7 @@
 .compute-surface .kernel-card__usage-item {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
   flex: 1 1 0;
   min-width: 0;
 }
@@ -572,13 +572,13 @@
 .compute-surface .kernel-card__recovery,
 .compute-surface .kernel-card__controls,
 .compute-surface .kernel-card__identity {
-  margin: 16px 16px 0;
+  margin: 20px 16px 0;
 }
 
 /* The two grids are one ledger read as a single column of rows, so they sit
    closer to each other than to the blocks around them. */
 .compute-surface .kernel-card__metrics--usage {
-  margin-top: 9px;
+  margin-top: 12px;
 }
 
 .compute-surface .kernel-card__identity {
@@ -592,7 +592,7 @@
 .compute-surface .kernel-card__metrics--usage {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 9px 20px;
+  gap: 12px 20px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -643,8 +643,8 @@
 }
 
 .compute-surface .kernel-card__environment {
-  gap: 10px;
-  padding: 16px 0 0;
+  gap: 12px;
+  padding: 20px 0 0;
   border-top: 1px solid var(--color-border);
   border-radius: 0;
   background: none;
@@ -674,7 +674,7 @@
    that belongs to New kernel — so all three are outlined, and only Stop
    carries a colour, because it is the one that discards work. */
 .compute-surface .kernel-card__controls {
-  gap: 6px;
+  gap: 8px;
 }
 
 .compute-surface .kernel-card__controls button {
@@ -704,7 +704,7 @@
 }
 
 .compute-surface .kernel-card__identity > div {
-  gap: 5px;
+  gap: 8px;
   padding-top: 7px;
 }
 
