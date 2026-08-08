@@ -10,8 +10,11 @@ export type Reading = {
    *  beside it — the bars encode the fraction in use, and a headline counting
    *  down while the bars climb made the two read as different measurements. */
   headline: string
-  /** Stacked beneath the headline: the unit, then the ceiling. */
+  /** The qualifier beside the headline, e.g. "GB used of". */
   unit: string
+  /** The host total on its own, e.g. "16.4", set at the headline's size so the
+   *  pair reads as one measurement rather than a figure and a footnote. Empty
+   *  when the host never reported a total. */
   ceiling: string
   /** Cores are countable, so they stay discrete. */
   segments: number
@@ -61,8 +64,10 @@ export function hostReading(capacity?: Partial<Capacity>): Reading {
 
   return {
     headline: used ?? "—",
-    unit: used === undefined ? "Unavailable" : "GB used",
-    ceiling: total ? `of ${total}` : "",
+    // Carries the "of" when there is a ceiling to introduce, so the view has
+    // no string-building to do and reads "4.0 GB used of 16.4".
+    unit: used === undefined ? "Unavailable" : total ? "GB used of" : "GB used",
+    ceiling: total ?? "",
     segments,
     lit: cores === undefined ? 0 : Math.round(ratio(busy ?? 0, cores) * segments),
     cores: cores === undefined ? "—" : `${busy === undefined ? 0 : Math.round(busy)} / ${cores}`,

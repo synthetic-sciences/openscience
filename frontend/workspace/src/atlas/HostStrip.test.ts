@@ -147,8 +147,8 @@ describe("host strip", () => {
     expect(host.querySelector("[data-boundary]")).toBeNull()
     expect(values(host)).toEqual(["6.7", "2 / 8"])
     // 5a states the reading itself rather than a sentence about it.
-    expect(host.textContent).toContain("GB used")
-    expect(host.textContent).toContain("of 16.0")
+    expect(host.textContent).toContain("GB used of")
+    expect(host.textContent).toContain("16.0")
   })
 
   test("asks the route the compute strip is served from, naming itself to the server", async () => {

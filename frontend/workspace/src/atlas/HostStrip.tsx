@@ -97,10 +97,13 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
           <strong class="host-strip__headline">{reading().headline}</strong>
           <span class="host-strip__labels">
             <span class="host-strip__unit">{reading().unit}</span>
-            <Show when={reading().ceiling}>
-              <span class="host-strip__ceiling">{reading().ceiling}</span>
-            </Show>
           </span>
+          {/* The total is a figure, not a footnote: set at the headline's size
+              so "4.0 … 16.4" reads as one measurement, and a step quieter so
+              the figure that moves still leads. */}
+          <Show when={reading().ceiling}>
+            <strong class="host-strip__ceiling">{reading().ceiling}</strong>
+          </Show>
         </div>
         {/* Decorative: the same series is already stated as a number beside it,
             so a screen reader gains nothing from twenty bar heights. */}

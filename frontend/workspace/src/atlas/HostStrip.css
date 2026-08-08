@@ -54,8 +54,7 @@
   min-width: 0;
 }
 
-.host-strip__unit,
-.host-strip__ceiling {
+.host-strip__unit {
   font-size: 10px;
   white-space: nowrap;
 }
@@ -64,10 +63,16 @@
   color: var(--color-text-muted);
 }
 
-/* One tone for the whole qualifier now that it reads as a single phrase; two
-   tones inside one line reads as an accident rather than a hierarchy. */
+/* The same size as the headline, a step quieter in tone: the pair is one
+   measurement, and the number that moves is the one to read first. */
 .host-strip__ceiling {
-  color: var(--color-text-muted);
+  font-size: 44px;
+  line-height: 0.9;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Twenty samples of memory pressure, oldest left. The bars carry no labels
