@@ -13,6 +13,7 @@ import { Identifier } from "../../id/id"
 import { Session } from "../../session"
 import { lazy } from "../../util/lazy"
 import { Storage } from "../../storage/storage"
+import { CommandRuntime, CommandStatus } from "../../science/command/registry"
 
 const Language = z.enum(["python", "r"])
 const Key = z.object({
@@ -26,20 +27,14 @@ const List = z.object({
 const Owner = z.object({
   sessionID: Identifier.schema("session"),
 })
-const Create = Owner.extend({
-  name: z
-    .string()
-    .trim()
-    .min(1)
-    .max(120)
-    .refine((value) => value !== "agent", "The default agent kernel name is reserved."),
-  language: Language,
-})
 const ControlStatus = KernelStatus.extend({
   state_preserved: z.boolean().optional(),
 })
 const KernelParam = z.object({
   kernelID: z.string().regex(/^kernel-[a-z0-9]+$/),
+})
+const CommandParam = z.object({
+  commandID: z.string().regex(/^command-[a-f0-9-]+$/),
 })
 const Execute = Key.extend({
   code: z.string().max(2_000_000),
@@ -107,9 +102,9 @@ export const NotebookRoutes = lazy(() =>
     .get(
       "/compute",
       describeRoute({
-        summary: "Report host compute capacity",
+        summary: "Report live local compute capacity",
         operationId: "notebook.compute",
-        responses: { 200: { description: "Machine capacity and the share kernels hold" } },
+        responses: { 200: { description: "Machine capacity and the share live kernels and commands hold" } },
       }),
       async (c) => {
         // Both samplers measure across the window since THIS caller's previous
@@ -123,40 +118,118 @@ export const NotebookRoutes = lazy(() =>
         const caller = c.req.query("client")?.slice(0, 128) || "anonymous"
         const host = await KernelHost.snapshot(caller)
         const live = KernelRuntime.list().filter((kernel) => kernel.active)
+        const commands = CommandRuntime.list(Instance.project.id)
         const samples = await KernelMetrics.sampleAll(
           `compute:${caller}`,
-          live.flatMap((kernel) => (kernel.process_id === null ? [] : [kernel.process_id])),
+          [
+            ...live.flatMap((kernel) => (kernel.process_id === null ? [] : [kernel.process_id])),
+            ...commands.map((command) => command.process_id),
+          ],
         )
         const usage = [...samples.values()]
+        const kernelUsage = live.flatMap((kernel) => {
+          const value = kernel.process_id === null ? undefined : samples.get(kernel.process_id)
+          return value ? [value] : []
+        })
         const cpu = usage.filter((sample) => sample.cpu_percent !== undefined)
         const memory = usage.filter((sample) => sample.memory_bytes !== undefined)
+        const kernelCpu = kernelUsage.filter((sample) => sample.cpu_percent !== undefined)
+        const kernelMemory = kernelUsage.filter((sample) => sample.memory_bytes !== undefined)
         return c.json({
           memory: {
             total: host.memory.total,
             available: host.memory.available,
-            // No live kernels at all is a real measurement: they hold exactly
-            // zero bytes. Kernels that exist but went unsampled this poll stay
-            // omitted — that figure is genuinely unknown, not zero.
+            ...(live.length === 0 && commands.length === 0
+              ? { compute: 0 }
+              : memory.length
+                ? { compute: memory.reduce((sum, item) => sum + (item.memory_bytes ?? 0), 0) }
+                : {}),
             ...(live.length === 0
               ? { kernels: 0 }
-              : memory.length
-                ? { kernels: memory.reduce((sum, item) => sum + (item.memory_bytes ?? 0), 0) }
+              : kernelMemory.length
+                ? { kernels: kernelMemory.reduce((sum, item) => sum + (item.memory_bytes ?? 0), 0) }
                 : {}),
           },
           cpu: {
             cores: host.cpu.cores,
             ...(host.cpu.busy === undefined ? {} : { busy: host.cpu.busy }),
+            ...(live.length === 0 && commands.length === 0
+              ? { compute: 0 }
+              : cpu.length
+                ? { compute: cpu.reduce((sum, item) => sum + (item.cpu_percent ?? 0), 0) / 100 }
+                : {}),
             ...(live.length === 0
               ? { kernels: 0 }
-              : cpu.length
-                ? { kernels: cpu.reduce((sum, item) => sum + (item.cpu_percent ?? 0), 0) / 100 }
+              : kernelCpu.length
+                ? { kernels: kernelCpu.reduce((sum, item) => sum + (item.cpu_percent ?? 0), 0) / 100 }
                 : {}),
           },
           kernels: {
             live: live.length,
             running: live.filter((kernel) => kernel.state === "running").length,
           },
+          commands: {
+            live: commands.length,
+            running: commands.length,
+          },
         })
+      },
+    )
+    .get(
+      "/commands",
+      describeRoute({
+        summary: "List live project shell commands",
+        operationId: "notebook.commands",
+        responses: {
+          200: {
+            description: "Live shell commands and process resource usage",
+            content: { "application/json": { schema: resolver(z.object({ commands: CommandStatus.array() })) } },
+          },
+        },
+      }),
+      validator("query", List),
+      async (c) => {
+        const query = c.req.valid("query")
+        if (query.sessionID) {
+          const denied = await owner(c, query.sessionID)
+          if (denied) return denied
+        }
+        const commands = CommandRuntime.list(Instance.project.id, query.sessionID)
+        const caller = c.req.query("client")?.slice(0, 128) || "anonymous"
+        const samples = await KernelMetrics.sampleAll(
+          `commands:${caller}`,
+          commands.map((command) => command.process_id),
+        )
+        return c.json({
+          commands: commands.map((command) => {
+            const resources = samples.get(command.process_id)
+            return resources && Object.keys(resources).length ? { ...command, resources } : command
+          }),
+        })
+      },
+    )
+    .post(
+      "/commands/:commandID/stop",
+      describeRoute({
+        summary: "Stop a live shell command",
+        operationId: "notebook.command.stop",
+        responses: { 200: { description: "Command stopped" }, 404: { description: "Command not found" } },
+      }),
+      validator("param", CommandParam),
+      validator("json", Owner),
+      async (c) => {
+        const body = c.req.valid("json")
+        const denied = await owner(c, body.sessionID)
+        if (denied) return denied
+        const stopped = await CommandRuntime.stop(
+          c.req.valid("param").commandID,
+          Instance.project.id,
+          body.sessionID,
+        )
+        if (!stopped) {
+          return c.json({ error: "command_not_found", message: "The command is no longer running." }, 404)
+        }
+        return c.json({ stopped: true })
       },
     )
     .get(
@@ -207,34 +280,6 @@ export const NotebookRoutes = lazy(() =>
           return resources && Object.keys(resources).length ? { ...kernel, resources } : kernel
         })
         return c.json({ kernels })
-      },
-    )
-    .post(
-      "/kernels",
-      describeRoute({
-        summary: "Create a named session kernel record",
-        operationId: "notebook.kernel.create",
-        responses: {
-          200: {
-            description: "Lazy named kernel record",
-            content: { "application/json": { schema: resolver(KernelStatus) } },
-          },
-        },
-      }),
-      validator("json", Create),
-      async (c) => {
-        const body = c.req.valid("json")
-        const denied = await owner(c, body.sessionID)
-        if (denied) return denied
-        await KernelRuntime.restoreSession(Instance.project.id, body.sessionID)
-        return c.json(
-          await KernelRuntime.create({
-            projectID: Instance.project.id,
-            sessionID: body.sessionID,
-            name: body.name,
-            language: body.language,
-          }),
-        )
       },
     )
     .post(

@@ -17,6 +17,10 @@ review only if useful
   source claims from your inference.
 - If the user asks for a report, figure, dataset, notebook, or other output, create and
   verify that deliverable rather than returning only a narrative.
+- For multi-kernel analysis, preserve useful outputs from every track, correct failed or
+  misleading results, and finish with a consolidated reusable report plus registered tables,
+  figures, or datasets instead of a chat-only summary. Use `artifact` with `save_file` for the
+  finished files so they become project-wide, immutable, versioned artifacts.
 
 ## Specialists and delegation
 
@@ -30,6 +34,12 @@ review only if useful
 ## Compute and tools
 
 - Use a persistent kernel for iterative Python or R analysis whose state matters.
+- When the user requests multiple kernels, use distinct managed `kernel` names and issue the
+  independent notebook or R-kernel calls together so they run concurrently. Never substitute
+  shell processes and describe them as kernels.
+- Use exactly the requested kernel count. Prepare shared inputs once in one of those named
+  kernels, save the handoff dataset, then fan the independent tracks out across that kernel and
+  the remaining names; do not create an extra setup kernel.
 - Use shell for builds, tests, file operations, and non-interactive scripts.
 - Keep modest calculations, parsing, plotting, and statistics local.
 - Use remote compute only when the workload or user requires it. Never dispatch paid work

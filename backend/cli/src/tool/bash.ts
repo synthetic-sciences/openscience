@@ -22,6 +22,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Provenance } from "@/science/provenance/store"
 import { ProvenanceEnvelope } from "@/science/provenance/envelope"
 import { ExecutionAuthority } from "@/project/execution"
+import { CommandRuntime } from "@/science/command/registry"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENSCIENCE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 0
@@ -305,6 +306,24 @@ export const BashTool = Tool.define("bash", async () => {
             detached: process.platform !== "win32",
           })
 
+      let exited = false
+      let aborted = false
+      const kill = () => Shell.killTree(proc, { exited: () => exited, detached: process.platform !== "win32" })
+      const command = CommandRuntime.start(
+        {
+          projectID: Instance.project.id,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          ...(ctx.callID ? { callID: ctx.callID } : {}),
+          description: params.description,
+          command: params.command,
+        },
+        proc,
+        async () => {
+          aborted = true
+          await kill()
+        },
+      )
       let output = ""
 
       // Initialize metadata with empty output
@@ -345,10 +364,6 @@ export const BashTool = Tool.define("bash", async () => {
       proc.stderr?.on("data", capture("stderr"))
 
       let timedOut = false
-      let aborted = false
-      let exited = false
-
-      const kill = () => Shell.killTree(proc, { exited: () => exited, detached: process.platform !== "win32" })
 
       if (ctx.abort.aborted) {
         aborted = true
@@ -378,12 +393,14 @@ export const BashTool = Tool.define("bash", async () => {
 
         proc.once("exit", () => {
           exited = true
+          CommandRuntime.finish(command.id)
           cleanup()
           resolve()
         })
 
         proc.once("error", (error) => {
           exited = true
+          CommandRuntime.finish(command.id)
           cleanup()
           reject(error)
         })

@@ -517,16 +517,29 @@ function clip(s: string, max = 30_000): string {
 
 export const RKernelTool = Tool.define("rkernel", {
   description: [
-    "Execute R code in a persistent kernel. Objects, attached packages, and state persist across calls.",
+    "Execute R code in a persistent, managed kernel. Objects, attached packages, and state persist across calls that use the same kernel name.",
+    "For multiple independent analyses, issue multiple kernel calls in the same response with distinct `kernel` names. Those kernels execute concurrently and appear separately in Compute.",
+    "Never use shell subprocesses to imitate multiple kernels; use this tool's `kernel` parameter instead.",
     "Use instead of `bash Rscript` for analysis — no need to re-source data or reload packages between cells.",
     "Print output is captured; base-graphics and ggplot2 plots are captured as inline PNG images where the platform supports it.",
     "Requires Rscript on PATH; if R is not installed the tool reports a clear install hint.",
   ].join("\n"),
   parameters: z.object({
     code: z.string().describe("R code to execute in the persistent kernel"),
+    kernel: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+      .optional()
+      .describe("Stable name for an isolated managed kernel. Use a distinct name for each parallel analysis."),
     timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
   }),
   async execute(params, ctx) {
+    const name = params.kernel ?? "agent"
+    ctx.metadata({ title: `R · ${name}`, metadata: { kernel: name, language: "r" } })
+
     // Executes arbitrary code — same permission gate as bash.
     await ctx.ask({
       permission: "bash",
@@ -548,7 +561,7 @@ export const RKernelTool = Tool.define("rkernel", {
       {
         projectID: Instance.project.id,
         sessionID: ctx.sessionID,
-        name: "agent",
+        name,
         language: "r",
       },
       params.code,
@@ -565,15 +578,20 @@ export const RKernelTool = Tool.define("rkernel", {
     if (!parts.length) parts.push("(no output)")
     const output = clip(parts.join("\n"))
 
-    ctx.metadata({ metadata: { output, ok: result.ok, provenanceID: result.provenanceID } })
+    ctx.metadata({
+      title: `R · ${name}`,
+      metadata: { output, ok: result.ok, provenanceID: result.provenanceID, kernel: name, language: "r" },
+    })
 
     return {
-      title: result.ok ? "R cell" : "R cell (error)",
+      title: result.ok ? `R · ${name}` : `R · ${name} (error)`,
       output,
       metadata: {
         ok: result.ok,
         available: true,
         output,
+        kernel: name,
+        language: "r",
         provenanceID: result.provenanceID,
         hasImages: images.length,
         ...(images.length ? { artifact: { kind: "image", data: { images: dataUrls } } } : {}),

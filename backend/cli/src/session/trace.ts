@@ -419,6 +419,7 @@ export namespace SessionTrace {
           toolID: part.id,
           messageID: part.messageID,
           language: part.tool === "notebook" ? ("python" as const) : ("r" as const),
+          kernel: string(part.state.input.kernel) ?? "agent",
           status: part.state.status,
           ...times(part, now),
           executionCount: number(meta.executionCount),

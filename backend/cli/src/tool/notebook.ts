@@ -576,16 +576,29 @@ function clip(s: string, max = 30_000): string {
 
 export const NotebookTool = Tool.define("notebook", {
   description: [
-    "Execute Python code in a persistent kernel. Variables, imports, and state persist across calls.",
+    "Execute Python code in a persistent, managed kernel. Variables, imports, and state persist across calls that use the same kernel name.",
+    "For multiple independent analyses, issue multiple notebook calls in the same response with distinct `kernel` names. Those kernels execute concurrently and appear separately in Compute.",
+    "Never use shell subprocesses to imitate multiple kernels; use this tool's `kernel` parameter instead.",
     "Use instead of `bash python` for analysis — no need to re-import or re-load data between cells.",
     "numpy (np), pandas (pd), scipy, and matplotlib (plt) are pre-imported. Expression results auto-display like Jupyter.",
     "matplotlib figures are captured as inline PNG images. Not gated to any agent.",
   ].join("\n"),
   parameters: z.object({
     code: z.string().describe("Python code to execute in the persistent kernel"),
+    kernel: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+      .optional()
+      .describe("Stable name for an isolated managed kernel. Use a distinct name for each parallel analysis."),
     timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
   }),
   async execute(params, ctx) {
+    const name = params.kernel ?? "agent"
+    ctx.metadata({ title: `Python · ${name}`, metadata: { kernel: name, language: "python" } })
+
     // Executes arbitrary code — same permission gate as bash.
     await ctx.ask({
       permission: "bash",
@@ -598,7 +611,7 @@ export const NotebookTool = Tool.define("notebook", {
       {
         projectID: Instance.project.id,
         sessionID: ctx.sessionID,
-        name: "agent",
+        name,
         language: "python",
       },
       params.code,
@@ -623,15 +636,18 @@ export const NotebookTool = Tool.define("notebook", {
     const output = clip(parts.join("\n"))
 
     ctx.metadata({
-      metadata: { output, ok: result.ok, provenanceID: result.provenanceID },
+      title: `Python · ${name}`,
+      metadata: { output, ok: result.ok, provenanceID: result.provenanceID, kernel: name, language: "python" },
     })
 
     return {
-      title: result.ok ? "Python cell" : "Python cell (error)",
+      title: result.ok ? `Python · ${name}` : `Python · ${name} (error)`,
       output,
       metadata: {
         ok: result.ok,
         output,
+        kernel: name,
+        language: "python",
         provenanceID: result.provenanceID,
         executionCount: result.executionCount,
         hasImages: images.length,

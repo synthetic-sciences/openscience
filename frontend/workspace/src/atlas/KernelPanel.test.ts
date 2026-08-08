@@ -4,17 +4,20 @@ import { fileURLToPath } from "node:url"
 
 const source = () => readFileSync(fileURLToPath(new URL("./KernelPanel.tsx", import.meta.url)), "utf8")
 const card = () => readFileSync(fileURLToPath(new URL("./KernelCard.tsx", import.meta.url)), "utf8")
+const command = () => readFileSync(fileURLToPath(new URL("./CommandCard.tsx", import.meta.url)), "utf8")
 
-describe("live kernel inventory", () => {
+describe("live compute inventory", () => {
   test("is project-wide and stays mounted across session changes", () => {
     const panel = source()
 
-    expect(panel).toContain('aria-label="Live project kernels"')
+    expect(panel).toContain('aria-label="Live project compute"')
     expect(panel).toContain("[...grouped().keys()].sort")
     expect(panel).toContain("<For each={groups()}>")
     expect(panel).toContain("<em>current</em>")
     expect(panel).toContain("{ client }")
     expect(panel).not.toContain("{ sessionID: params.id, client }")
+    expect(panel).toContain('request<CommandsPayload>("/notebook/commands"')
+    expect(panel).toContain("<CommandCard")
   })
 
   test("does not expose any manual kernel creation or restart path", () => {
@@ -33,12 +36,13 @@ describe("live kernel inventory", () => {
   })
 
   test("keeps one safe control for an already-live process", () => {
-    const panel = `${source()}\n${card()}`
+    const panel = `${source()}\n${card()}\n${command()}`
 
     expect(panel).toContain("/stop`")
     expect(panel).toContain("kernelCanStop")
     expect(panel).toContain("Stop this")
     expect(panel).toContain("the next agent run will start fresh")
+    expect(panel).toContain("Its child processes were terminated")
   })
 
   test("polls unconditionally so an agent-started kernel appears", () => {
@@ -48,15 +52,15 @@ describe("live kernel inventory", () => {
     expect(panel).toContain("setInterval(refresh, 2_500)")
     expect(panel).toContain('document.addEventListener("visibilitychange", refresh)')
     expect(panel).toContain('document.removeEventListener("visibilitychange", refresh)')
-    expect(panel).toContain("inventory(request<KernelsPayload>")
+    expect(panel).toContain("Promise.all([")
   })
 
   test("explains idle and degraded states without claiming a failed poll is empty", () => {
     const panel = source()
 
-    expect(panel).toContain("No live kernels")
-    expect(panel).toContain("Kernels appear here the moment any session starts computing in this project.")
-    expect(panel).toContain('{view.error ? "Kernel inventory unavailable" : "No live kernels"}')
-    expect(panel).toContain("The last poll could not read this project's kernels")
+    expect(panel).toContain("No live compute")
+    expect(panel).toContain("Kernels and commands appear here the moment any session starts computing in this project.")
+    expect(panel).toContain('{view.error ? "Compute inventory unavailable" : "No live compute"}')
+    expect(panel).toContain("The last poll could not read this project's kernels and commands")
   })
 })

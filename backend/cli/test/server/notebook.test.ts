@@ -53,7 +53,7 @@ describe("/notebook routes", () => {
       paths[path]?.post?.requestBody?.content?.["application/json"]?.schema?.required ?? []
 
     expect(paths["/notebook/kernels"]?.get).toBeDefined()
-    expect(paths["/notebook/kernels"]?.post).toBeDefined()
+    expect(paths["/notebook/kernels"]?.post).toBeUndefined()
     expect(paths["/notebook/kernels/{kernelID}/restart"]?.post).toBeDefined()
     expect(paths["/notebook/kernels/{kernelID}/stop"]?.post).toBeDefined()
     expect(paths["/notebook/kernels/{kernelID}/interrupt"]?.post).toBeDefined()
@@ -65,7 +65,6 @@ describe("/notebook routes", () => {
     expect(paths["/notebook/stop"]?.post).toBeDefined()
     expect(paths["/notebook/interrupt"]?.post).toBeDefined()
     expect(required("/notebook/execute")).toContain("sessionID")
-    expect(required("/notebook/kernels")).toEqual(expect.arrayContaining(["sessionID", "name", "language"]))
     expect(required("/notebook/restart")).toContain("sessionID")
     expect(required("/notebook/stop")).toContain("sessionID")
     expect(required("/notebook/interrupt")).toContain("sessionID")
@@ -92,63 +91,6 @@ describe("/notebook routes", () => {
         expect(project.kernels).toEqual([])
         expect(scoped.kernels).toEqual([])
         expect(KernelRuntime.list()).toEqual([])
-      },
-    })
-  })
-
-  test("creates durable named Python and R kernel records without starting a process", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const result = await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const app = NotebookRoutes()
-        const session = await Session.create({})
-        const create = (name: string, language: "python" | "r") =>
-          app.request("/kernels", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionID: session.id, name, language }),
-          })
-        const python = await create("analysis", "python")
-        const duplicate = await create("analysis", "python")
-        const r = await create("statistics", "r")
-        const pythonBody = (await python.json()) as { id: string }
-        const duplicateBody = (await duplicate.json()) as { id: string }
-
-        expect(python.status).toBe(200)
-        expect(pythonBody).toMatchObject({
-          active: false,
-          state: "lazy",
-          name: "analysis",
-          language: "python",
-          target: { kind: "local" },
-          process_id: null,
-        })
-        expect(duplicateBody.id).toBe(pythonBody.id)
-        expect(await r.json()).toMatchObject({
-          active: false,
-          state: "lazy",
-          name: "statistics",
-          language: "r",
-          target: { kind: "local" },
-        })
-        await Instance.dispose()
-        return session.id
-      },
-    })
-
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const inventory = (await (
-          await NotebookRoutes().request(`/kernels?sessionID=${encodeURIComponent(result)}`)
-        ).json()) as { kernels: Array<{ name: string; state: string }> }
-        expect(inventory.kernels).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ name: "analysis", state: "lazy" }),
-            expect.objectContaining({ name: "statistics", state: "lazy" }),
-          ]),
-        )
       },
     })
   })

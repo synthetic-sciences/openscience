@@ -27,6 +27,20 @@ export type KernelResources = {
   vram_bytes?: number
 }
 
+export type CommandStatus = {
+  id: string
+  projectID: string
+  sessionID: string
+  messageID: string
+  callID?: string
+  description: string
+  command: string
+  state: "running"
+  process_id: number
+  started_at: number
+  resources?: Pick<KernelResources, "cpu_percent" | "memory_bytes">
+}
+
 export type ExecutionAuthority = {
   allowed: boolean
   reason: "allowed" | "project_untrusted" | "sandbox_unavailable"

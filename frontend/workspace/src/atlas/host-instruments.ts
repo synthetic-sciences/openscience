@@ -1,7 +1,8 @@
 export type Capacity = {
-  memory: { total: number; available: number; kernels?: number }
-  cpu: { cores: number; busy?: number; kernels?: number }
+  memory: { total: number; available: number; compute?: number; kernels?: number }
+  cpu: { cores: number; busy?: number; compute?: number; kernels?: number }
   kernels: { live: number; running: number }
+  commands?: { live: number; running: number }
 }
 
 export type Reading = {
@@ -54,11 +55,16 @@ export function hostReading(capacity?: Partial<Capacity>): Reading {
   const total = gb(memory?.total)
   // This pane accounts for compute, not every process on the user's machine.
   // Kernel RSS and CPU are the figures a user can affect by stopping work here.
-  const used = memory?.kernels
+  const used = memory?.compute ?? memory?.kernels
   const cores = cpu?.cores
-  const live = capacity?.kernels?.live
-  const running = capacity?.kernels?.running
-  const load = cpu?.kernels ?? 0
+  const kernels = capacity?.kernels?.live
+  const commands = capacity?.commands?.live
+  const live = kernels === undefined ? undefined : kernels + (commands ?? 0)
+  const running =
+    capacity?.kernels?.running === undefined
+      ? undefined
+      : capacity.kernels.running + (capacity.commands?.running ?? 0)
+  const load = cpu?.compute ?? cpu?.kernels ?? 0
 
   return {
     headline: bytes(used),
@@ -70,7 +76,9 @@ export function hostReading(capacity?: Partial<Capacity>): Reading {
     kernels:
       live === undefined
         ? "kernel count unavailable"
-        : `${live === 1 ? "kernel" : "kernels"} · ${running ?? 0} running`,
+        : commands === undefined
+          ? `${live === 1 ? "kernel" : "kernels"} · ${running ?? 0} running`
+          : `${kernels} ${kernels === 1 ? "kernel" : "kernels"} · ${commands} ${commands === 1 ? "command" : "commands"} · ${running ?? 0} running`,
   }
 }
 

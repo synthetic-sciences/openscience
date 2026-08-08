@@ -4,12 +4,15 @@ import { useParams } from "@solidjs/router"
 import { IconCpu } from "@/atlas/shared/Icon"
 import { identify } from "@/atlas/poll-identity"
 import { KernelCard, type KernelAction } from "@/atlas/KernelCard"
+import { CommandCard } from "@/atlas/CommandCard"
 import { useKernelList } from "@/atlas/use-kernel-list"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { kernelMemoryLabel, type KernelStatus } from "@/notebook/runtime"
+import { kernelMemoryLabel, type CommandStatus, type KernelStatus } from "@/notebook/runtime"
 
 type KernelsPayload = { kernels: KernelStatus[] }
+type CommandsPayload = { commands: CommandStatus[] }
+type Group = { kernels: KernelStatus[]; commands: CommandStatus[] }
 
 type KernelPanelProps = {
   request?: (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
@@ -28,17 +31,19 @@ export function inventory<T>(request: Promise<T>, settled: (error: string) => vo
   )
 }
 
-const usage = (kernels: KernelStatus[]) => {
-  const memory = kernels.reduce((total, kernel) => total + (kernel.resources?.memory_bytes ?? 0), 0)
-  const cpu = kernels.reduce((total, kernel) => total + (kernel.resources?.cpu_percent ?? 0), 0) / 100
-  const count = `${kernels.length} ${kernels.length === 1 ? "kernel" : "kernels"}`
-  const ram = kernels.some((kernel) => kernel.resources?.memory_bytes !== undefined)
+const usage = (group: Group) => {
+  const entries = [...group.kernels, ...group.commands]
+  const memory = entries.reduce((total, entry) => total + (entry.resources?.memory_bytes ?? 0), 0)
+  const cpu = entries.reduce((total, entry) => total + (entry.resources?.cpu_percent ?? 0), 0) / 100
+  const kernels = `${group.kernels.length} ${group.kernels.length === 1 ? "kernel" : "kernels"}`
+  const commands = `${group.commands.length} ${group.commands.length === 1 ? "command" : "commands"}`
+  const ram = entries.some((entry) => entry.resources?.memory_bytes !== undefined)
     ? kernelMemoryLabel(memory)
     : "— rss"
-  const cores = kernels.some((kernel) => kernel.resources?.cpu_percent !== undefined)
+  const cores = entries.some((entry) => entry.resources?.cpu_percent !== undefined)
     ? `${cpu.toFixed(1)} cores`
     : "— cpu"
-  return `${count} · ${ram} · ${cores}`
+  return `${kernels} · ${commands} · ${ram} · ${cores}`
 }
 
 export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
@@ -58,15 +63,30 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
     throw new Error(detail || `${response.status} ${response.statusText}`)
   }
   const load = () =>
-    inventory(request<KernelsPayload>("/notebook/kernels", undefined, { client }), (error) => setView("error", error))
+    inventory(
+      Promise.all([
+        request<KernelsPayload>("/notebook/kernels", undefined, { client }),
+        request<CommandsPayload>("/notebook/commands", undefined, { client }),
+      ]).then(([kernels, commands]) => ({ kernels: kernels.kernels, commands: commands.commands })),
+      (error) => setView("error", error),
+    )
   const [data, api] = createResource(load)
   const kernels = useKernelList(() => data.latest?.kernels)
+  const commands = () => data.latest?.commands ?? []
   const route = () => (params.id && params.id !== "new" ? params.id : undefined)
   const live = createMemo(() => kernels.filter((kernel) => kernel.active || kernel.state === "starting"))
   const title = (sessionID: string) => sync.session.get(sessionID)?.title?.trim() || "Untitled session"
   const grouped = createMemo(() => {
-    const groups = new Map<string, KernelStatus[]>()
-    for (const kernel of live()) groups.set(kernel.sessionID, [...(groups.get(kernel.sessionID) ?? []), kernel])
+    const groups = new Map<string, Group>()
+    const group = (sessionID: string) => groups.get(sessionID) ?? { kernels: [], commands: [] }
+    for (const kernel of live()) {
+      const value = group(kernel.sessionID)
+      groups.set(kernel.sessionID, { ...value, kernels: [...value.kernels, kernel] })
+    }
+    for (const command of commands()) {
+      const value = group(command.sessionID)
+      groups.set(command.sessionID, { ...value, commands: [...value.commands, command] })
+    }
     return groups
   })
   const groups = createMemo(() =>
@@ -74,7 +94,14 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
       const current = Number(route() === b) - Number(route() === a)
       if (current) return current
       const activity = (sessionID: string) =>
-        Math.max(...(grouped().get(sessionID) ?? []).map((kernel) => kernel.last_activity_at ?? kernel.started_at ?? 0))
+        Math.max(
+          ...(grouped()
+            .get(sessionID)
+            ?.kernels.map((kernel) => kernel.last_activity_at ?? kernel.started_at ?? 0) ?? []),
+          ...(grouped()
+            .get(sessionID)
+            ?.commands.map((command) => command.started_at) ?? []),
+        )
       return activity(b) - activity(a)
     }),
   )
@@ -95,6 +122,22 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
       .finally(() => setView("action", ""))
   }
 
+  const stop = (command: CommandStatus) => {
+    const key = `${command.id}:stop`
+    setView({ action: key, problem: "", notice: "" })
+    return request<{ stopped: boolean }>(`/notebook/commands/${encodeURIComponent(command.id)}/stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionID: command.sessionID }),
+    })
+      .then(() => {
+        setView("notice", "Command stopped. Its child processes were terminated.")
+        return api.refetch()
+      })
+      .catch((error) => setView("problem", error instanceof Error ? error.message : String(error)))
+      .finally(() => setView("action", ""))
+  }
+
   const refresh = () => {
     if (document.hidden) return
     void api.refetch()
@@ -107,11 +150,11 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   })
 
   return (
-    <section aria-label="Live project kernels" data-testid="kernel-panel" class="kernel-panel">
+    <section aria-label="Live project compute" data-testid="kernel-panel" class="kernel-panel">
       <div class="atlas-scroll kernel-panel__body">
         <Show when={view.error || view.problem}>
           <div role="alert" class="kernel-panel__message kernel-panel__message--error">
-            {view.problem ? `Kernel control failed. ${view.problem}` : `Kernel inventory unavailable. ${view.error}`}
+            {view.problem ? `Compute control failed. ${view.problem}` : `Compute inventory unavailable. ${view.error}`}
           </div>
         </Show>
         <Show when={view.notice}>
@@ -127,11 +170,11 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
               <span aria-hidden="true">
                 <IconCpu size={15} strokeWidth={1.4} />
               </span>
-              <strong>{view.error ? "Kernel inventory unavailable" : "No live kernels"}</strong>
+              <strong>{view.error ? "Compute inventory unavailable" : "No live compute"}</strong>
               <p>
                 {view.error
-                  ? "The last poll could not read this project's kernels, so this is not a count of what is running."
-                  : "Kernels appear here the moment any session starts computing in this project."}
+                  ? "The last poll could not read this project's kernels and commands, so this is not a count of what is running."
+                  : "Kernels and commands appear here the moment any session starts computing in this project."}
               </p>
             </div>
           }
@@ -148,15 +191,24 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
                         <em>current</em>
                       </Show>
                     </div>
-                    <span>{usage(grouped().get(sessionID) ?? [])}</span>
+                    <span>{usage(grouped().get(sessionID) ?? { kernels: [], commands: [] })}</span>
                   </header>
                   <div class="kernel-panel__list">
-                    <For each={grouped().get(sessionID) ?? []}>
+                    <For each={grouped().get(sessionID)?.kernels ?? []}>
                       {(kernel) => (
                         <KernelCard
                           kernel={kernel}
                           action={view.action}
                           onControl={(action) => void control(kernel, action)}
+                        />
+                      )}
+                    </For>
+                    <For each={grouped().get(sessionID)?.commands ?? []}>
+                      {(command) => (
+                        <CommandCard
+                          command={command}
+                          stopping={view.action === `${command.id}:stop`}
+                          onStop={() => void stop(command)}
                         />
                       )}
                     </For>

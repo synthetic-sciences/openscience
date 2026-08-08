@@ -42,7 +42,7 @@ const child = (name: string, calls: string[]) => () => {
 }
 
 describe("compute surface", () => {
-  test("renders one project-wide live kernel inventory", () => {
+  test("renders one project-wide live compute inventory", () => {
     const calls: string[] = []
     const host = mount(() => subject.ComputeSurface({ strip: child("strip", calls), kernels: child("kernels", calls) }))
 
@@ -53,7 +53,7 @@ describe("compute surface", () => {
     expect(host.querySelector('[role="tablist"]')).toBeNull()
   })
 
-  test("contains no manual launcher or jobs mode", () => {
+  test("contains no manual launcher or separate jobs mode", () => {
     const source = readFileSync(fileURLToPath(new URL("./ComputeSurface.tsx", import.meta.url)), "utf8")
 
     expect(source).not.toContain("ComputeJobs")
@@ -61,6 +61,7 @@ describe("compute surface", () => {
     expect(source).not.toContain("onEnsureSession")
     expect(source).not.toContain('role="tab"')
     expect(source).toContain("Compute only reflects what is live")
+    expect(source).toContain("kernels and shell")
   })
 
   test("uses its own width for narrow layouts", () => {

@@ -590,6 +590,144 @@
   }
 }
 
+[data-component="kernel-tool"] {
+  border-top: 1px solid var(--border-weak-base);
+  background: var(--background-base);
+
+  & > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border-weak-base);
+    color: var(--text-weak);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+
+    strong {
+      color: var(--text-base);
+      font-weight: var(--font-weight-medium);
+    }
+
+    span {
+      font-size: var(--font-size-xs);
+    }
+  }
+
+  [data-slot="kernel-tool-source"] {
+    max-height: 320px;
+    margin: 0;
+    padding: 10px 12px;
+    overflow: auto;
+    color: var(--text-base);
+    background: var(--background-base);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-small);
+    line-height: 1.55;
+    tab-size: 2;
+    white-space: pre;
+
+    code {
+      font: inherit;
+    }
+  }
+
+  [data-slot="kernel-tool-output"] {
+    border-top: 1px solid var(--border-weak-base);
+
+    summary {
+      padding: 7px 12px;
+      color: var(--text-weak);
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-small);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    & > pre {
+      max-height: 260px;
+      margin: 0;
+      padding: 8px 12px 10px;
+      overflow: auto;
+      color: var(--text-base);
+      font-family: var(--font-family-mono);
+      font-size: var(--font-size-small);
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    img {
+      display: block;
+      max-width: calc(100% - 24px);
+      height: auto;
+      margin: 0 12px 12px;
+      border: 1px solid var(--border-weak-base);
+      border-radius: 6px;
+    }
+  }
+}
+
+[data-component="saved-artifact-tool"] {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+[data-component="saved-artifact-tool"] > header,
+[data-component="saved-artifact-tool"] > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+[data-component="saved-artifact-tool"] > header strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="saved-artifact-tool"] > header span,
+[data-component="saved-artifact-tool"] > footer {
+  color: var(--text-weak);
+  font-size: 11px;
+}
+
+[data-component="saved-artifact-tool"] > code {
+  overflow: hidden;
+  color: var(--text-base);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="saved-artifact-tool"] details {
+  border-top: 1px solid var(--border-weak-base);
+  padding-top: 8px;
+}
+
+[data-component="saved-artifact-tool"] summary {
+  color: var(--text-weak);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+[data-component="saved-artifact-tool"] details pre {
+  margin-top: 8px;
+  max-height: 220px;
+  overflow: auto;
+  color: var(--text-base);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
 @property --border-angle {
   syntax: "<angle>";
   initial-value: 0deg;

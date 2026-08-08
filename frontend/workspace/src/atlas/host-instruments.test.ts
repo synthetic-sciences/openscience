@@ -2,27 +2,28 @@ import { describe, expect, test } from "bun:test"
 import { histogram, hostReading, sample, SAMPLES } from "./host-instruments"
 
 const capacity = {
-  memory: { total: 16_000_000_000, available: 13_100_000_000, kernels: 412_000_000 },
-  cpu: { cores: 8, busy: 2.1, kernels: 0.4 },
+  memory: { total: 16_000_000_000, available: 13_100_000_000, compute: 500_000_000, kernels: 412_000_000 },
+  cpu: { cores: 8, busy: 2.1, compute: 0.7, kernels: 0.4 },
   kernels: { live: 2, running: 1 },
+  commands: { live: 1, running: 1 },
 }
 
 describe("host reading", () => {
-  test("states kernel memory against machine capacity", () => {
+  test("states live compute memory against machine capacity", () => {
     const reading = hostReading(capacity)
 
-    expect(reading.headline).toBe("412.0 MB")
+    expect(reading.headline).toBe("500.0 MB")
     expect(reading.memory).toBe("of 16.0 GB memory")
-    expect(reading.memoryFill).toBeCloseTo(412_000_000 / 16_000_000_000, 5)
+    expect(reading.memoryFill).toBeCloseTo(500_000_000 / 16_000_000_000, 5)
   })
 
   test("states busy cores against the machine count", () => {
     const reading = hostReading(capacity)
 
-    expect(reading.cores).toBe("~0.4 of 8")
-    expect(reading.cpuFill).toBeCloseTo(0.4 / 8, 5)
-    expect(reading.live).toBe("2")
-    expect(reading.kernels).toBe("kernels · 1 running")
+    expect(reading.cores).toBe("~0.7 of 8")
+    expect(reading.cpuFill).toBeCloseTo(0.7 / 8, 5)
+    expect(reading.live).toBe("3")
+    expect(reading.kernels).toBe("2 kernels · 1 command · 2 running")
   })
 
   test("says unavailable rather than zero for a figure the platform withheld", () => {

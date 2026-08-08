@@ -1,5 +1,9 @@
 import z from "zod"
+import path from "node:path"
 import { Tool } from "./tool"
+import { ArtifactStore } from "@/artifact/store"
+import { File } from "@/file"
+import { ArtifactFile } from "@/file/artifacts"
 import { Instance } from "@/project/instance"
 import { Provenance } from "@/science/provenance/store"
 import type { Node, Run } from "@/science/provenance/store"
@@ -17,6 +21,7 @@ export const ArtifactTool = Tool.define("artifact", {
     "Store and retrieve large data artifacts by reference.",
     "Use this to keep large outputs (DataFrames, analysis results, raw data) out of context.",
     "Actions:",
+    "  - save_file: Promote a finished workspace file into the durable, immutable, versioned artifact store",
     "  - register: Store content on disk, returns a reference ID + summary",
     "  - update: Replace the current content while retaining an immutable version",
     "  - resolve: Retrieve full content by artifact ID",
@@ -25,7 +30,10 @@ export const ArtifactTool = Tool.define("artifact", {
     "  - read_version: Retrieve one immutable version by version ID",
   ].join(" "),
   parameters: z.object({
-    action: z.enum(["register", "update", "resolve", "list", "list_versions", "read_version"]).describe("The action"),
+    action: z
+      .enum(["save_file", "register", "update", "resolve", "list", "list_versions", "read_version"])
+      .describe("The action"),
+    path: z.string().trim().min(1).max(10_000).optional().describe("For save_file: workspace file path"),
     type: z.string().optional().describe('For register/update: artifact type (e.g. "dataframe", "analysis")'),
     content: z.string().optional().describe("For register/update: the large content to store"),
     summary: z.string().optional().describe("For register/update: brief summary for context window"),
@@ -71,6 +79,50 @@ export const ArtifactTool = Tool.define("artifact", {
       ...(ctx.callID ? { callID: ctx.callID } : {}),
       ...(typeof run === "string" ? { runID: run } : ctx.callID ? { runID: ctx.callID } : {}),
       ...(params.provenance_id ? { provenanceID: params.provenance_id } : {}),
+    }
+    if (params.action === "save_file") {
+      if (!params.path) return result("Error", "save_file requires `path`")
+      const file = await File.raw(params.path, { sessionID: ctx.sessionID })
+      const name = path.basename(params.path)
+      const classified = ArtifactFile.classify(name)
+      const saved = await ArtifactStore.save({
+        projectID: Instance.project.id,
+        sessionID: ctx.sessionID,
+        sourcePath: params.path,
+        filename: name,
+        kind: classified?.kind ?? "file",
+        content: file,
+        title: params.summary ?? name,
+        mimeType: file.type,
+        messageID: ctx.messageID,
+        captureQuality: "declared",
+      })
+      return result(
+        `Saved artifact: ${saved.title}`,
+        [
+          "Workspace file saved as a durable, immutable artifact version.",
+          `  ID: ${saved.id}`,
+          `  Version: ${saved.current.version}`,
+          `  Kind: ${saved.kind}`,
+          `  Path: ${saved.current.sourcePath}`,
+          `  Size: ${saved.current.size} bytes`,
+          `  SHA-256: ${saved.current.sha256}`,
+          "",
+          "The artifact is available project-wide in Files and can be opened, reviewed, renamed, versioned, or downloaded.",
+        ].join("\n"),
+        {
+          savedArtifact: {
+            id: saved.id,
+            versionID: saved.currentVersionID,
+            version: saved.current.version,
+            title: saved.title,
+            kind: saved.kind,
+            path: saved.current.sourcePath,
+            size: saved.current.size,
+            sha256: saved.current.sha256,
+          },
+        },
+      )
     }
     if (params.action === "register") {
       if (!params.type || !params.content) {
