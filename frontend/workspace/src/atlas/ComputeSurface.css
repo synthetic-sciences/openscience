@@ -245,6 +245,10 @@
   background: var(--color-error);
 }
 
+.compute-surface .kernel-card__copy i[data-tone="ready"] {
+  background: var(--color-success);
+}
+
 .compute-surface .kernel-card__uptime,
 .compute-surface .kernel-card__metric {
   color: var(--color-text-muted);
@@ -304,6 +308,110 @@
   outline-offset: 2px;
 }
 
+.compute-surface .remote-results {
+  border-top: 8px solid var(--color-bg-subtle);
+}
+
+.compute-surface .kernel-history-card {
+  grid-template-columns: minmax(160px, 1fr) 64px minmax(112px, auto);
+}
+
+.compute-surface .kernel-history-card__result {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.compute-surface .kernel-history-card__result strong {
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.compute-surface .kernel-history-card__result small {
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compute-surface .remote-job-card {
+  grid-template-columns: minmax(160px, 1fr) 64px minmax(118px, auto) auto;
+}
+
+.compute-surface .remote-job-card__result {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--color-text-muted);
+}
+
+.compute-surface .remote-job-card__result strong {
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.compute-surface .remote-job-card__result small {
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compute-surface .remote-job-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.compute-surface .remote-job-card__actions button {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.compute-surface .remote-job-card__actions button:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-border-strong, var(--color-border));
+}
+
+.compute-surface .remote-job-card__actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.compute-surface .remote-job-card__warning,
+.compute-surface .remote-job-card__output {
+  grid-column: 1 / -1;
+  margin: 0 0 2px 39px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.compute-surface .remote-job-card__warning {
+  border-color: color-mix(in srgb, var(--color-error) 28%, var(--color-border));
+  color: var(--color-error);
+}
+
 @container compute (max-width: 470px) {
   .compute-surface .kernel-session__header {
     grid-template-columns: minmax(0, 1fr);
@@ -328,6 +436,22 @@
   .compute-surface .kernel-card__uptime {
     padding-left: 39px;
   }
+
+  .compute-surface .remote-job-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .compute-surface .kernel-history-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .compute-surface .kernel-history-card__result {
+    padding-left: 39px;
+  }
+
+  .compute-surface .remote-job-card__result {
+    padding-left: 39px;
+  }
 }
 
 @container compute (max-width: 350px) {
@@ -337,6 +461,14 @@
 
   .compute-surface .kernel-card__uptime {
     display: none;
+  }
+
+  .compute-surface .remote-job-card__result {
+    grid-column: 1 / -1;
+  }
+
+  .compute-surface .kernel-history-card__result {
+    grid-column: 1 / -1;
   }
 }
 

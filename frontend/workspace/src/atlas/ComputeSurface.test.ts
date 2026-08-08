@@ -61,7 +61,8 @@ describe("compute surface", () => {
     expect(source).not.toContain("onEnsureSession")
     expect(source).not.toContain('role="tab"')
     expect(source).toContain("Compute only reflects what is live")
-    expect(source).toContain("kernels and shell")
+    expect(source).toContain("governed remote GPU jobs")
+    expect(source).toContain("Completed remote results stay")
   })
 
   test("uses its own width for narrow layouts", () => {

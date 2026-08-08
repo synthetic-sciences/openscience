@@ -22,6 +22,7 @@ test("kernel tools advertise and validate isolated managed names", async () => {
 
   expect(python.description).toContain("distinct `kernel` names")
   expect(python.description).toContain("Never use shell subprocesses")
+  expect(python.description).toContain("`action: stop`")
   expect(r.description).toContain("distinct `kernel` names")
   expect(python.parameters.parse({ code: "1 + 1", kernel: "descriptive-eda" }).kernel).toBe("descriptive-eda")
   expect(r.parameters.parse({ code: "1 + 1", kernel: "stratified_rates" }).kernel).toBe("stratified_rates")
@@ -48,6 +49,7 @@ test("four named notebook calls own four live managed kernels", async () => {
           names.map((name, index) =>
             tool.execute(
               {
+                action: "execute",
                 code: `import time\ntime.sleep(0.15)\nprint(${JSON.stringify(name)})`,
                 kernel: name,
                 timeout: 30_000,
@@ -64,6 +66,13 @@ test("four named notebook calls own four live managed kernels", async () => {
             .map((kernel) => kernel.name)
             .sort(),
         ).toEqual(names.toSorted())
+        const stopped = await Promise.all(
+          names.map((name, index) =>
+            tool.execute({ action: "stop", kernel: name, timeout: 30_000 }, context(session.id, `call_stop_${index}`)),
+          ),
+        )
+        expect(stopped.every((result) => result.metadata.stopped === true)).toBe(true)
+        expect(KernelRuntime.list(session.id).some((kernel) => kernel.active)).toBe(false)
       } finally {
         await Promise.all(identities.map((identity) => KernelRuntime.release(identity)))
       }

@@ -43,6 +43,8 @@ test("artifact save_file promotes a workspace result into immutable versions", a
         title: "Titanic analysis report",
         kind: "report",
         path: "results/titanic-report.md",
+        mimeType: "text/markdown",
+        preview: { kind: "text", data: "# Titanic analysis\n\nFirst verified result.\n" },
         sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
       })
       expect(second.metadata.savedArtifact).toMatchObject({
@@ -51,6 +53,28 @@ test("artifact save_file promotes a workspace result into immutable versions", a
       })
       expect(await ArtifactStore.list(Instance.project.id)).toHaveLength(1)
       expect(await ArtifactStore.get(Instance.project.id, firstSaved.id)).toMatchObject({ versionCount: 2 })
+    },
+  })
+})
+
+test("artifact save_file never persists a blank display title", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await executionSession()
+      const tool = await ArtifactTool.init()
+      await Bun.write(path.join(tmp.path, "result.csv"), "metric,value\naccuracy,0.91\n")
+
+      const saved = await tool.execute({ action: "save_file", path: "result.csv", summary: "   " }, context(session.id))
+
+      expect(saved.title).toBe("Saved artifact: result.csv")
+      expect(saved.metadata.savedArtifact).toMatchObject({
+        title: "result.csv",
+        kind: "dataset",
+        mimeType: "text/csv",
+        preview: { kind: "text", data: "metric,value\naccuracy,0.91\n" },
+      })
     },
   })
 })

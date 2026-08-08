@@ -85,6 +85,19 @@ export const ArtifactTool = Tool.define("artifact", {
       const file = await File.raw(params.path, { sessionID: ctx.sessionID })
       const name = path.basename(params.path)
       const classified = ArtifactFile.classify(name)
+      const title = params.summary?.trim() || name
+      const preview = await (async () => {
+        if (file.type.startsWith("image/") && file.size <= 1_500_000) {
+          const bytes = Buffer.from(await file.arrayBuffer()).toString("base64")
+          return { kind: "image" as const, data: `data:${file.type};base64,${bytes}` }
+        }
+        const text =
+          file.type.startsWith("text/") ||
+          ["application/json", "application/xml", "application/yaml", "application/x-yaml"].includes(file.type)
+        if (text && file.size <= 250_000) {
+          return { kind: "text" as const, data: (await file.text()).slice(0, 12_000) }
+        }
+      })()
       const saved = await ArtifactStore.save({
         projectID: Instance.project.id,
         sessionID: ctx.sessionID,
@@ -92,7 +105,7 @@ export const ArtifactTool = Tool.define("artifact", {
         filename: name,
         kind: classified?.kind ?? "file",
         content: file,
-        title: params.summary ?? name,
+        title,
         mimeType: file.type,
         messageID: ctx.messageID,
         captureQuality: "declared",
@@ -118,8 +131,10 @@ export const ArtifactTool = Tool.define("artifact", {
             title: saved.title,
             kind: saved.kind,
             path: saved.current.sourcePath,
+            mimeType: saved.current.mimeType,
             size: saved.current.size,
             sha256: saved.current.sha256,
+            ...(preview ? { preview } : {}),
           },
         },
       )

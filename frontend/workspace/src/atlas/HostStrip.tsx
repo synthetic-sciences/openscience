@@ -12,8 +12,27 @@ export function HostStrip(props: HostStripProps = {}): JSX.Element {
   const request = props.request ?? useSDK().request
   const client = identify()
   const load = () =>
-    request(`/notebook/compute?client=${encodeURIComponent(client)}`)
-      .then((response) => (response.ok ? (response.json() as Promise<Capacity>) : undefined))
+    Promise.all([
+      request(`/notebook/compute?client=${encodeURIComponent(client)}`).then((response) =>
+        response.ok ? (response.json() as Promise<Capacity>) : undefined,
+      ),
+      request("/settings/compute/jobs")
+        .then((response) => (response.ok ? response.json() : undefined))
+        .catch(() => undefined),
+    ])
+      .then(([capacity, value]) => {
+        if (!capacity || !Array.isArray(value)) return capacity
+        const jobs = value as Array<{ status?: string; lifecycle?: { resource?: string } }>
+        const live = jobs.filter(
+          (job) =>
+            !["succeeded", "failed", "cancelled", "interrupted"].includes(job.status ?? "") ||
+            ["starting", "active", "unknown"].includes(job.lifecycle?.resource ?? ""),
+        )
+        return {
+          ...capacity,
+          jobs: { live: live.length, running: live.filter((job) => job.status === "running").length },
+        }
+      })
       .catch(() => undefined)
   const [data, api] = createResource(load)
   const reading = createMemo(() => hostReading(data.latest))

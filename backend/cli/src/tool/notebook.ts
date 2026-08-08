@@ -579,24 +579,53 @@ export const NotebookTool = Tool.define("notebook", {
     "Execute Python code in a persistent, managed kernel. Variables, imports, and state persist across calls that use the same kernel name.",
     "For multiple independent analyses, issue multiple notebook calls in the same response with distinct `kernel` names. Those kernels execute concurrently and appear separately in Compute.",
     "Never use shell subprocesses to imitate multiple kernels; use this tool's `kernel` parameter instead.",
+    "After a named analysis is fully saved and verified, call this tool with `action: stop` and the same kernel name so completed workers do not idle.",
     "Use instead of `bash python` for analysis — no need to re-import or re-load data between cells.",
     "numpy (np), pandas (pd), scipy, and matplotlib (plt) are pre-imported. Expression results auto-display like Jupyter.",
     "matplotlib figures are captured as inline PNG images. Not gated to any agent.",
   ].join("\n"),
-  parameters: z.object({
-    code: z.string().describe("Python code to execute in the persistent kernel"),
-    kernel: z
-      .string()
-      .trim()
-      .min(1)
-      .max(64)
-      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
-      .optional()
-      .describe("Stable name for an isolated managed kernel. Use a distinct name for each parallel analysis."),
-    timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
-  }),
+  parameters: z
+    .object({
+      action: z.enum(["execute", "stop"]).optional().describe("Execute a cell (default) or stop this named kernel"),
+      code: z.string().optional().describe("Python code to execute; required when action is execute"),
+      kernel: z
+        .string()
+        .trim()
+        .min(1)
+        .max(64)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+        .optional()
+        .describe("Stable name for an isolated managed kernel. Use a distinct name for each parallel analysis."),
+      timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
+    })
+    .superRefine((params, issue) => {
+      if (params.action !== "stop" && !params.code) {
+        issue.addIssue({ code: "custom", path: ["code"], message: "code is required when action is execute" })
+      }
+    }),
   async execute(params, ctx) {
     const name = params.kernel ?? "agent"
+    const identity = {
+      projectID: Instance.project.id,
+      sessionID: ctx.sessionID,
+      name,
+      language: "python" as const,
+    }
+    if (params.action === "stop") {
+      ctx.metadata({ title: `Stopped Python · ${name}`, metadata: { kernel: name, language: "python", stopped: true } })
+      await KernelRuntime.release(identity)
+      return {
+        title: `Stopped Python · ${name}`,
+        output: `Managed kernel ${name} stopped. Its in-memory state was cleared.`,
+        metadata: {
+          kernel: name,
+          language: "python",
+          stopped: true,
+          ok: true,
+          output: `Managed kernel ${name} stopped.`,
+        },
+      }
+    }
     ctx.metadata({ title: `Python · ${name}`, metadata: { kernel: name, language: "python" } })
 
     // Executes arbitrary code — same permission gate as bash.
@@ -607,16 +636,11 @@ export const NotebookTool = Tool.define("notebook", {
       metadata: {},
     })
 
-    const result = await KernelRuntime.execute(
-      {
-        projectID: Instance.project.id,
-        sessionID: ctx.sessionID,
-        name,
-        language: "python",
-      },
-      params.code,
-      { timeout: params.timeout, signal: ctx.abort, origin: { messageID: ctx.messageID, callID: ctx.callID } },
-    )
+    const result = await KernelRuntime.execute(identity, params.code!, {
+      timeout: params.timeout,
+      signal: ctx.abort,
+      origin: { messageID: ctx.messageID, callID: ctx.callID },
+    })
 
     const images = result.outputs.filter((o) => o.type === "display" && o.data?.["image/png"])
     const dataUrls = images.map((o) => `data:image/png;base64,${o.data!["image/png"]}`)
@@ -644,6 +668,7 @@ export const NotebookTool = Tool.define("notebook", {
       title: result.ok ? `Python · ${name}` : `Python · ${name} (error)`,
       output,
       metadata: {
+        stopped: false,
         ok: result.ok,
         output,
         kernel: name,

@@ -520,24 +520,54 @@ export const RKernelTool = Tool.define("rkernel", {
     "Execute R code in a persistent, managed kernel. Objects, attached packages, and state persist across calls that use the same kernel name.",
     "For multiple independent analyses, issue multiple kernel calls in the same response with distinct `kernel` names. Those kernels execute concurrently and appear separately in Compute.",
     "Never use shell subprocesses to imitate multiple kernels; use this tool's `kernel` parameter instead.",
+    "After a named analysis is fully saved and verified, call this tool with `action: stop` and the same kernel name so completed workers do not idle.",
     "Use instead of `bash Rscript` for analysis — no need to re-source data or reload packages between cells.",
     "Print output is captured; base-graphics and ggplot2 plots are captured as inline PNG images where the platform supports it.",
     "Requires Rscript on PATH; if R is not installed the tool reports a clear install hint.",
   ].join("\n"),
-  parameters: z.object({
-    code: z.string().describe("R code to execute in the persistent kernel"),
-    kernel: z
-      .string()
-      .trim()
-      .min(1)
-      .max(64)
-      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
-      .optional()
-      .describe("Stable name for an isolated managed kernel. Use a distinct name for each parallel analysis."),
-    timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
-  }),
+  parameters: z
+    .object({
+      action: z.enum(["execute", "stop"]).optional().describe("Execute a cell (default) or stop this named kernel"),
+      code: z.string().optional().describe("R code to execute; required when action is execute"),
+      kernel: z
+        .string()
+        .trim()
+        .min(1)
+        .max(64)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+        .optional()
+        .describe("Stable name for an isolated managed kernel. Use a distinct name for each parallel analysis."),
+      timeout: z.number().default(120_000).describe("Execution timeout in ms (default: 120s, max: 600s)"),
+    })
+    .superRefine((params, issue) => {
+      if (params.action !== "stop" && !params.code) {
+        issue.addIssue({ code: "custom", path: ["code"], message: "code is required when action is execute" })
+      }
+    }),
   async execute(params, ctx) {
     const name = params.kernel ?? "agent"
+    const identity = {
+      projectID: Instance.project.id,
+      sessionID: ctx.sessionID,
+      name,
+      language: "r" as const,
+    }
+    if (params.action === "stop") {
+      ctx.metadata({ title: `Stopped R · ${name}`, metadata: { kernel: name, language: "r", stopped: true } })
+      await KernelRuntime.release(identity)
+      return {
+        title: `Stopped R · ${name}`,
+        output: `Managed kernel ${name} stopped. Its in-memory state was cleared.`,
+        metadata: {
+          kernel: name,
+          language: "r",
+          stopped: true,
+          ok: true,
+          available: true,
+          output: `Managed kernel ${name} stopped.`,
+        },
+      }
+    }
     ctx.metadata({ title: `R · ${name}`, metadata: { kernel: name, language: "r" } })
 
     // Executes arbitrary code — same permission gate as bash.
@@ -554,19 +584,18 @@ export const RKernelTool = Tool.define("rkernel", {
       const msg =
         "Rscript not found. Install R from https://www.r-project.org (or `brew install r`) so `Rscript` is on PATH."
       ctx.metadata({ metadata: { output: msg, ok: false } })
-      return { title: "R kernel unavailable", output: msg, metadata: { ok: false, available: false, output: msg } }
+      return {
+        title: "R kernel unavailable",
+        output: msg,
+        metadata: { kernel: name, language: "r", stopped: false, ok: false, available: false, output: msg },
+      }
     }
 
-    const result = await KernelRuntime.execute(
-      {
-        projectID: Instance.project.id,
-        sessionID: ctx.sessionID,
-        name,
-        language: "r",
-      },
-      params.code,
-      { timeout: params.timeout, signal: ctx.abort, origin: { messageID: ctx.messageID, callID: ctx.callID } },
-    )
+    const result = await KernelRuntime.execute(identity, params.code!, {
+      timeout: params.timeout,
+      signal: ctx.abort,
+      origin: { messageID: ctx.messageID, callID: ctx.callID },
+    })
 
     const images = result.outputs.filter((o) => o.type === "display" && o.data?.["image/png"])
     const dataUrls = images.map((o) => `data:image/png;base64,${o.data!["image/png"]}`)
@@ -587,6 +616,7 @@ export const RKernelTool = Tool.define("rkernel", {
       title: result.ok ? `R · ${name}` : `R · ${name} (error)`,
       output,
       metadata: {
+        stopped: false,
         ok: result.ok,
         available: true,
         output,

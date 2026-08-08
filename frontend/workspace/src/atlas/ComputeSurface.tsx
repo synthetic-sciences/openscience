@@ -13,8 +13,9 @@ type ComputeSurfaceProps = {
  * Project-scoped compute inventory.
  *
  * This surface never starts work. Agent execution creates kernels and shell
- * commands; Compute only reflects what is live and lets the user stop a process
- * that is already running. Keeping that boundary here prevents a session switch
+ * commands or governed remote GPU jobs; Compute only reflects what is live and
+ * lets the user stop work that is already running. Completed remote results stay
+ * readable without becoming a second launcher. Keeping that boundary here prevents a session switch
  * from turning this project-wide inspector into a second execution launcher.
  */
 export function ComputeSurface(props: ComputeSurfaceProps = {}): JSX.Element {

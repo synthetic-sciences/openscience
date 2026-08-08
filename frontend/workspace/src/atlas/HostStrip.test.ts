@@ -155,8 +155,9 @@ describe("host strip", () => {
     guard(() => subject.HostStrip({ request: track }))
     await Bun.sleep(20)
 
-    expect(paths.length).toBe(1)
-    const asked = new URL(paths[0] ?? "", "http://host")
+    expect(paths).toHaveLength(2)
+    expect(paths).toContain("/settings/compute/jobs")
+    const asked = new URL(paths.find((path) => path.startsWith("/notebook/compute")) ?? "", "http://host")
     expect(asked.pathname).toBe("/notebook/compute")
 
     // Both CPU figures the route serves are measured across the window since
@@ -178,8 +179,9 @@ describe("host strip", () => {
     )
     await Bun.sleep(20)
 
-    expect(others.length).toBe(1)
-    expect(new URL(others[0] ?? "", "http://host").searchParams.get("client")).not.toBe(client)
+    expect(others).toHaveLength(2)
+    const other = others.find((path) => path.startsWith("/notebook/compute")) ?? ""
+    expect(new URL(other, "http://host").searchParams.get("client")).not.toBe(client)
   })
 
   test("keeps the same tile nodes mounted across a poll that changes the data", async () => {
@@ -248,7 +250,10 @@ describe("host strip", () => {
     }
     let settleSecond: ((response: Response) => void) | undefined
     let requests = 0
-    const respond = (_path: string): Promise<Response> => {
+    const respond = (path: string): Promise<Response> => {
+      if (path === "/settings/compute/jobs") {
+        return Promise.resolve(new Response("[]", { headers: { "content-type": "application/json" } }))
+      }
       requests += 1
       if (requests === 1) return serving()
       return new Promise<Response>((resolve) => (settleSecond = resolve))
@@ -302,13 +307,13 @@ describe("host strip", () => {
     document.dispatchEvent(new Event("visibilitychange"))
     await settle(calls)
 
-    expect(calls.length).toBe(polled + 1)
+    expect(calls.length).toBe(polled + 2)
 
     cleanups.splice(0).forEach((cleanup) => cleanup())
     document.dispatchEvent(new Event("visibilitychange"))
     // Longer than the 2.5s poll, so a surviving interval would show up here.
     await Bun.sleep(2_700)
 
-    expect(calls.length).toBe(polled + 1)
+    expect(calls.length).toBe(polled + 2)
   })
 })

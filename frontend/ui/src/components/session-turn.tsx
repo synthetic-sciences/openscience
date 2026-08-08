@@ -96,11 +96,18 @@ function isAttachment(part: PartType | undefined) {
   )
 }
 
+const promotedTools = new Set(["notebook", "rkernel", "artifact", "modal", "compute_job"])
+
+function isPromotedTool(part: PartType | undefined): part is ToolPart {
+  return part?.type === "tool" && promotedTools.has(part.tool)
+}
+
 function AssistantMessageItem(props: {
   message: AssistantMessage
   responsePartId: string | undefined
   hideResponsePart: boolean
   hideReasoning: boolean
+  hidePromotedTools?: boolean
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -119,6 +126,10 @@ function AssistantMessageItem(props: {
 
     if (props.hideReasoning) {
       parts = parts.filter((part) => part?.type !== "reasoning")
+    }
+
+    if (props.hidePromotedTools) {
+      parts = parts.filter((part) => !isPromotedTool(part))
     }
 
     if (!props.hideResponsePart) return parts
@@ -270,6 +281,13 @@ export function SessionTurn(
     }
     return false
   })
+
+  const promoted = createMemo(() =>
+    assistantMessages().flatMap((message) => {
+      const parts = (data.store.part[message.id] ?? emptyParts).filter(isPromotedTool)
+      return parts.length ? [{ message, parts }] : []
+    }),
+  )
 
   const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? emptyPermissions)
   const nextPermission = createMemo(() => permissions()[0])
@@ -675,6 +693,7 @@ export function SessionTurn(
                               responsePartId={responsePartId()}
                               hideResponsePart={hideResponsePart()}
                               hideReasoning={false}
+                              hidePromotedTools
                             />
                           )}
                         </For>
@@ -684,6 +703,13 @@ export function SessionTurn(
                           </Card>
                         </Show>
                       </div>
+                    </Show>
+                    <Show when={promoted().length > 0}>
+                      <section data-slot="session-turn-promoted-results" aria-label="Analysis code and results">
+                        <For each={promoted()}>
+                          {(entry) => <Message message={entry.message} parts={entry.parts} />}
+                        </For>
+                      </section>
                     </Show>
                     <Show when={!props.stepsExpanded && requestParts().length > 0}>
                       <div data-slot="session-turn-permission-parts">

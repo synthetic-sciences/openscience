@@ -598,6 +598,14 @@
     gap: 12px;
   }
 
+  [data-slot="session-turn-promoted-results"] {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
   [data-slot="session-turn-artifact-save"] {
     width: 100%;
     min-width: 0;

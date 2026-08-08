@@ -60,6 +60,7 @@ export interface Job {
   reproducibility?: Reproducibility
   capture_error?: string
   cleanup_error?: string
+  session_id?: string
   remote_id?: string
   lifecycle?: {
     execution: string

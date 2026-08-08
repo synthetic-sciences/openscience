@@ -3,6 +3,7 @@ export type Capacity = {
   cpu: { cores: number; busy?: number; compute?: number; kernels?: number }
   kernels: { live: number; running: number }
   commands?: { live: number; running: number }
+  jobs?: { live: number; running: number }
 }
 
 export type Reading = {
@@ -59,11 +60,12 @@ export function hostReading(capacity?: Partial<Capacity>): Reading {
   const cores = cpu?.cores
   const kernels = capacity?.kernels?.live
   const commands = capacity?.commands?.live
-  const live = kernels === undefined ? undefined : kernels + (commands ?? 0)
+  const jobs = capacity?.jobs?.live
+  const live = kernels === undefined ? undefined : kernels + (commands ?? 0) + (jobs ?? 0)
   const running =
     capacity?.kernels?.running === undefined
       ? undefined
-      : capacity.kernels.running + (capacity.commands?.running ?? 0)
+      : capacity.kernels.running + (capacity.commands?.running ?? 0) + (capacity.jobs?.running ?? 0)
   const load = cpu?.compute ?? cpu?.kernels ?? 0
 
   return {
@@ -78,7 +80,9 @@ export function hostReading(capacity?: Partial<Capacity>): Reading {
         ? "kernel count unavailable"
         : commands === undefined
           ? `${live === 1 ? "kernel" : "kernels"} · ${running ?? 0} running`
-          : `${kernels} ${kernels === 1 ? "kernel" : "kernels"} · ${commands} ${commands === 1 ? "command" : "commands"} · ${running ?? 0} running`,
+          : jobs === undefined
+            ? `${kernels} ${kernels === 1 ? "kernel" : "kernels"} · ${commands} ${commands === 1 ? "command" : "commands"} · ${running ?? 0} running`
+            : `${kernels} ${kernels === 1 ? "kernel" : "kernels"} · ${commands} ${commands === 1 ? "command" : "commands"} · ${jobs} ${jobs === 1 ? "job" : "jobs"} · ${running ?? 0} running`,
   }
 }
 

@@ -6,6 +6,7 @@ const capacity = {
   cpu: { cores: 8, busy: 2.1, compute: 0.7, kernels: 0.4 },
   kernels: { live: 2, running: 1 },
   commands: { live: 1, running: 1 },
+  jobs: { live: 1, running: 1 },
 }
 
 describe("host reading", () => {
@@ -22,8 +23,8 @@ describe("host reading", () => {
 
     expect(reading.cores).toBe("~0.7 of 8")
     expect(reading.cpuFill).toBeCloseTo(0.7 / 8, 5)
-    expect(reading.live).toBe("3")
-    expect(reading.kernels).toBe("2 kernels · 1 command · 2 running")
+    expect(reading.live).toBe("4")
+    expect(reading.kernels).toBe("2 kernels · 1 command · 1 job · 3 running")
   })
 
   test("says unavailable rather than zero for a figure the platform withheld", () => {
