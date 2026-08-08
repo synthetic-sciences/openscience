@@ -128,6 +128,7 @@ test("untrusted project tokenCommand cannot spawn", async () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
         const model = await Provider.getModel("token-cmd", "m")
         const language = await Provider.getLanguage(model)
         await generateText({ model: language, prompt: "hi" }).catch(() => {})
@@ -147,6 +148,7 @@ test("untrusted project npm provider cannot install or import", async () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
         const model = await Provider.getModel("probe", "m")
         expect(model.api.npm).toBe("project-provider-probe")
         await expect(Provider.getLanguage(model)).rejects.toBeInstanceOf(Provider.InitError)

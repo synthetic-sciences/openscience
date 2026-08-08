@@ -40,6 +40,7 @@ describe("kernel control room", () => {
     expect(panel).toContain("kernelCanInterrupt")
     expect(panel).toContain("kernelCanStop")
     expect(panel).toContain("kernelCanForget")
+    expect(panel).toContain("if (!body) return undefined as T")
     expect(panel).toContain("aria-label={`Restart ${kernelLabel(props.kernel)}`}")
     expect(panel).toContain("aria-label={`Stop ${kernelLabel(props.kernel)}`}")
     expect(panel).toContain("aria-label={`Forget ${kernelLabel(props.kernel)}`}")
@@ -87,6 +88,18 @@ describe("kernel control room", () => {
     expect(runtime).toContain('"lazy" | "starting" | "idle" | "running" | "stopped" | "crashed"')
     expect(runtime).toContain("incarnation: number | null")
     expect(runtime).toContain("process_identity_verified: boolean | null")
+  })
+
+  test("keeps kernel cards mounted when project inventory polls", () => {
+    const panel = source()
+
+    // Session ids are stable primitives. Rebuilding wrapper objects here makes
+    // Solid remount every session group on each poll and collapses an expanded
+    // kernel card while the user is reading it.
+    expect(panel).toContain("[...grouped().keys()].sort")
+    expect(panel).toContain("<For each={groups()}>")
+    expect(panel).toContain("{(sessionID) => (")
+    expect(panel).not.toContain(".map(([sessionID, items]) => ({")
   })
 
   test("nests the kernel as its own card with a printed-record metric grid", () => {

@@ -35,6 +35,7 @@ test("built-in project formatter checks trust on every cached file edit", async 
     directory: tmp.path,
     fn: async () => {
       try {
+        await ProjectTrust.update(Instance.project, { trusted: false })
         Format.init()
         await Bus.publish(File.Event.Edited, { file: tmp.extra.file })
         expect(await Bun.file(tmp.extra.marker).exists()).toBe(false)
@@ -143,6 +144,7 @@ test("built-in project LSP denies, executes when trusted, and stops its cached c
     directory: tmp.path,
     fn: async () => {
       try {
+        await ProjectTrust.update(Instance.project, { trusted: false })
         await LSP.init()
         await LSP.touchFile(tmp.extra.file)
         expect(await Bun.file(tmp.extra.marker).exists()).toBe(false)

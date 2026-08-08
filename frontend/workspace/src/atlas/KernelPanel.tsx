@@ -89,7 +89,11 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
   })
   const request = async <T,>(path: string, init?: RequestInit, query?: Record<string, string>) => {
     const response = await transport(path, init, query)
-    if (response.ok) return response.json() as Promise<T>
+    if (response.ok) {
+      const body = await response.text()
+      if (!body) return undefined as T
+      return JSON.parse(body) as T
+    }
     const detail = await response.text().catch(() => "")
     throw new Error(detail || `${response.status} ${response.statusText}`)
   }
@@ -122,18 +126,20 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
     ),
   )
   const title = (sessionID: string) => sync.session.get(sessionID)?.title?.trim() || "Untitled session"
-  const groups = createMemo(() => {
+  const grouped = createMemo(() => {
     const grouped = new Map<string, KernelStatus[]>()
     for (const kernel of live()) grouped.set(kernel.sessionID, [...(grouped.get(kernel.sessionID) ?? []), kernel])
-    return [...grouped.entries()]
-      .map(([sessionID, items]) => ({
-        sessionID,
-        items,
-        current: route() === sessionID,
-        activity: Math.max(...items.map((kernel) => kernel.last_activity_at ?? kernel.started_at ?? 0)),
-      }))
-      .sort((a, b) => Number(b.current) - Number(a.current) || b.activity - a.activity)
+    return grouped
   })
+  const groups = createMemo(() =>
+    [...grouped().keys()].sort((a, b) => {
+      const current = Number(route() === b) - Number(route() === a)
+      if (current) return current
+      const activity = (sessionID: string) =>
+        Math.max(...(grouped().get(sessionID) ?? []).map((kernel) => kernel.last_activity_at ?? kernel.started_at ?? 0))
+      return activity(b) - activity(a)
+    }),
+  )
   const ensureSession = async () => {
     if (params.id && params.id !== "new") return params.id
     return props.onEnsureSession?.()
@@ -191,6 +197,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
       }
     }
     const key = `${kernel.id}:${action}`
+    const starting = action === "restart" && !kernel.active
     setView({ action: key, problem: "", notice: "" })
     const remove = action === "delete"
     return request<ControlResponse>(
@@ -211,7 +218,9 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
       .then((value) => {
         const notice =
           action === "restart"
-            ? "Kernel restarted in a fresh runtime. Previous in-memory variables and queued work were cleared."
+            ? starting
+              ? "Kernel started in a fresh runtime."
+              : "Kernel restarted in a fresh runtime. Previous in-memory variables and queued work were cleared."
             : action === "stop"
               ? "Kernel stopped. In-memory state was cleared. Run a cell to start fresh."
               : action === "delete"
@@ -368,19 +377,20 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
         >
           <div class="kernel-panel__sessions">
             <For each={groups()}>
-              {(group) => (
-                <section class="kernel-session" data-current={group.current ? "true" : undefined}>
+              {(sessionID) => (
+                <section class="kernel-session" data-current={route() === sessionID ? "true" : undefined}>
                   <header class="kernel-session__header">
                     <div>
-                      <strong>{title(group.sessionID)}</strong>
-                      <span>{group.current ? "Current session" : "Project session"}</span>
+                      <strong>{title(sessionID)}</strong>
+                      <span>{route() === sessionID ? "Current session" : "Project session"}</span>
                     </div>
                     <span>
-                      {group.items.length} {group.items.length === 1 ? "kernel" : "kernels"}
+                      {grouped().get(sessionID)?.length ?? 0}{" "}
+                      {grouped().get(sessionID)?.length === 1 ? "kernel" : "kernels"}
                     </span>
                   </header>
                   <div class="kernel-panel__list">
-                    <For each={group.items}>
+                    <For each={grouped().get(sessionID) ?? []}>
                       {(kernel, index) => (
                         <KernelCard
                           kernel={kernel}

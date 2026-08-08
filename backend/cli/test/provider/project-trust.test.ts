@@ -42,6 +42,7 @@ test("untrusted project provider remains readable without importing its file mod
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
         const model = await Provider.getModel("probe", "m")
         expect(model.api.npm.startsWith("file://")).toBe(true)
         expect(model.api.npm.endsWith("/test/fixture/provider-module.mjs")).toBe(true)

@@ -62,6 +62,7 @@ async function session(directory: string, trusted = true) {
     init: InstanceBootstrap,
     fn: async () => {
       if (trusted) return executionSession()
+      await ProjectTrust.update(Instance.project, { trusted: false })
       return Session.create({})
     },
   })

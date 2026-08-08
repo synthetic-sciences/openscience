@@ -53,6 +53,8 @@ describe("focused workspace shell", () => {
     expect(session).not.toContain('class="workspace-header__menu"')
     expect(session).not.toContain('class="workspace-header__search"')
     expect(session).not.toContain("<HeaderDivider")
+    expect(session).not.toContain("ProjectTrustControl")
+    expect(session).not.toContain("project code on")
     expect(session).not.toContain('<Wordmark size="sm"')
     expect(session).not.toContain('placeholder="Search sessions"')
     expect(session).not.toContain(">New session</span> above.")

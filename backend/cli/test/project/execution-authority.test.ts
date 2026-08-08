@@ -30,7 +30,10 @@ test("session execution authority is inspectable through the project route", asy
   const project = await Project.fromDirectory(tmp.path)
   const sessionID = await Instance.provide({
     directory: tmp.path,
-    fn: async () => (await Session.create({})).id,
+    fn: async () => {
+      await ProjectTrust.update(Instance.project, { trusted: false })
+      return (await Session.create({})).id
+    },
   })
   const fetch = Server.internalFetch()
   const response = await fetch(
@@ -58,6 +61,7 @@ test("read-only project authority rejects terminal, shell, and kernel before pro
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      await ProjectTrust.update(Instance.project, { trusted: false })
       const session = await Session.create({})
       const marker = path.join(tmp.path, "process-spawned")
       const decision = await ExecutionAuthority.decide({
@@ -72,7 +76,7 @@ test("read-only project authority rejects terminal, shell, and kernel before pro
         mode: "read_only",
         projectID: Instance.project.id,
         sessionID: session.id,
-        trustRevision: 1,
+        trustRevision: 2,
         sandbox: {
           enabled: true,
           network: "deny",

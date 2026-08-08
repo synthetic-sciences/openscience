@@ -140,23 +140,23 @@ export namespace ProjectTrust {
   export async function status(project: Project.Info): Promise<Status> {
     const canonical = root(project)
     const saved = await record(project)
-    if (saved?.root === canonical && saved.state === "trusted") {
+    if (saved?.root !== canonical || saved.state !== "revoked") {
       return {
         projectID: project.id,
         root: canonical,
-        revision: saved.revision,
+        revision: saved?.revision ?? 1,
         state: "trusted",
-        source: "persisted",
+        source: saved ? "persisted" : "default",
         canExecuteProjectCode: true,
-        time: saved.time,
+        time: saved?.time,
       }
     }
     return {
       projectID: project.id,
       root: canonical,
       revision: saved?.revision ?? 1,
-      state: saved?.state === "revoked" ? "revoked" : "untrusted",
-      source: saved ? "persisted" : "default",
+      state: "revoked",
+      source: "persisted",
       canExecuteProjectCode: false,
       time: saved?.time,
       remediation: remediation(project),

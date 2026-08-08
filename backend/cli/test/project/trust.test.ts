@@ -27,7 +27,7 @@ description: ${name} trust test skill.
   )
 }
 
-test("untrusted project opens read-only without importing or executing project code", async () => {
+test("project code is enabled by default", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const local = path.join(dir, ".openscience")
@@ -87,20 +87,20 @@ export default async function Probe() {
       const skills = await Skill.all()
       const mcps = await MCP.status()
 
-      expect(status.state).toBe("untrusted")
-      expect(status.canExecuteProjectCode).toBe(false)
-      expect(status.remediation?.body.root).toBe(Instance.project.worktree)
+      expect(status.state).toBe("trusted")
+      expect(status.source).toBe("default")
+      expect(status.canExecuteProjectCode).toBe(true)
+      expect(status.remediation).toBeUndefined()
       expect(visible.mcp?.probe).toBeDefined()
-      expect(executable.mcp?.probe).toBeUndefined()
-      expect(executable.formatter === false ? undefined : executable.formatter?.probe).toBeUndefined()
-      expect(executable.lsp === false ? undefined : executable.lsp?.probe).toBeUndefined()
-      expect(skills.some((item) => item.name === "project-probe")).toBe(false)
-      expect(mcps.probe).toBeUndefined()
+      expect(executable.mcp?.probe).toBeDefined()
+      expect(executable.formatter === false ? undefined : executable.formatter?.probe).toBeDefined()
+      expect(executable.lsp === false ? undefined : executable.lsp?.probe).toBeDefined()
+      expect(skills.some((item) => item.name === "project-probe")).toBe(true)
+      expect(mcps.probe).toBeDefined()
     },
   })
 
-  expect(await Bun.file(tmp.extra).exists()).toBe(false)
-  expect(await Bun.file(path.join(tmp.path, ".openscience", "node_modules")).exists()).toBe(false)
+  expect(await Bun.file(tmp.extra).exists()).toBe(true)
 })
 
 test("trust is canonical, project-isolated, and revocation stops project hooks", async () => {
@@ -159,7 +159,8 @@ test("trust is canonical, project-isolated, and revocation stops project hooks",
   })
   expect(alias.state).toBe("trusted")
   expect(alias.root).toBe(trusted.root)
-  expect(isolated.state).toBe("untrusted")
+  expect(isolated.state).toBe("trusted")
+  expect(isolated.source).toBe("default")
   expect(isolated.projectID).not.toBe(trusted.projectID)
 
   await Instance.disposeAll()
@@ -192,7 +193,7 @@ test("trust is canonical, project-isolated, and revocation stops project hooks",
   expect(await Bun.file(first.extra).exists()).toBe(false)
 })
 
-test("user-global plugins and skills remain available in an untrusted project", async () => {
+test("user-global and project-local plugins and skills are available by default", async () => {
   const file = path.join(Global.Path.home, ".claude", "skills", "global-probe", "SKILL.md")
   const global = path.dirname(file)
   const plugin = path.join(Global.Path.config, "plugin", "global-probe.ts")
@@ -224,7 +225,7 @@ test("user-global plugins and skills remain available in an untrusted project", 
       fn: async () => {
         const skills = await Skill.all()
         expect(skills.some((item) => item.name === "global-probe")).toBe(true)
-        expect(skills.some((item) => item.name === "local-probe")).toBe(false)
+        expect(skills.some((item) => item.name === "local-probe")).toBe(true)
       },
     })
     expect(await Bun.file(marker).text()).toBe("ran")
@@ -235,11 +236,12 @@ test("user-global plugins and skills remain available in an untrusted project", 
   }
 })
 
-test("denials carry structured remediation without blocking project inspection", async () => {
+test("explicit revocation carries structured remediation without blocking project inspection", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      await ProjectTrust.update(Instance.project, { trusted: false })
       const status = await ProjectTrust.status(Instance.project)
       expect(await Config.get()).toBeDefined()
       await expect(ProjectTrust.require(Instance.project, "startup_script")).rejects.toMatchObject({
@@ -253,12 +255,13 @@ test("denials carry structured remediation without blocking project inspection",
   })
 })
 
-test("untrusted startup scripts fail closed before spawning a shell", async () => {
+test("revoked startup scripts fail closed before spawning a shell", async () => {
   await using tmp = await tmpdir()
   const marker = path.join(tmp.path, "startup-ran")
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
+      await ProjectTrust.update(Instance.project, { trusted: false })
       await Project.update({
         projectID: Instance.project.id,
         commands: {
@@ -288,7 +291,7 @@ test("untrusted startup scripts fail closed before spawning a shell", async () =
   expect(await Bun.file(marker).text()).toBe("startup")
 })
 
-test("trust state is inspectable and revocable through the project permission surface", async () => {
+test("default trust is inspectable and revocable through the project permission surface", async () => {
   await using tmp = await tmpdir()
   const project = await Project.fromDirectory(tmp.path)
   const fetch = Server.internalFetch()
@@ -300,18 +303,11 @@ test("trust state is inspectable and revocable through the project permission su
   const status = ProjectTrust.Status.parse(await initial.json())
 
   expect(initial.status).toBe(200)
-  expect(status.state).toBe("untrusted")
-
-  const trusted = await fetch(`http://openscience.internal/project/${project.project.id}/trust`, {
-    method: "PUT",
-    headers,
-    body: JSON.stringify(status.remediation?.body),
-  })
-  expect(trusted.status).toBe(200)
-  expect(await trusted.json()).toMatchObject({
+  expect(status).toMatchObject({
     projectID: project.project.id,
     root: project.project.worktree,
     state: "trusted",
+    source: "default",
     canExecuteProjectCode: true,
   })
 
@@ -327,5 +323,17 @@ test("trust state is inspectable and revocable through the project permission su
     remediation: {
       code: "trust_project_required",
     },
+  })
+
+  const disabled = await ProjectTrust.status(project.project)
+  const trusted = await fetch(`http://openscience.internal/project/${project.project.id}/trust`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(disabled.remediation?.body),
+  })
+  expect(trusted.status).toBe(200)
+  expect(await trusted.json()).toMatchObject({
+    state: "trusted",
+    canExecuteProjectCode: true,
   })
 })
