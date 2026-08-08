@@ -67,7 +67,7 @@ adata.obs        # Cell metadata (DataFrame)
 adata.var        # Gene metadata (DataFrame)
 adata.uns        # Unstructured annotations (dict)
 adata.obsm       # Multi-dimensional cell data (PCA, UMAP)
-adata.raw        # Raw data backup
+adata.layers     # Alternative matrices, e.g. counts before normalization
 
 # Access cell and gene names
 adata.obs_names  # Cell barcodes
@@ -105,14 +105,17 @@ python scripts/qc_analysis.py input_file.h5ad --output filtered.h5ad
 ### 2. Normalization and Preprocessing
 
 ```python
+# Preserve raw counts before normalization
+adata.layers['counts'] = adata.X.copy()
+
 # Normalize to 10,000 counts per cell
 sc.pp.normalize_total(adata, target_sum=1e4)
 
 # Log-transform
 sc.pp.log1p(adata)
 
-# Save raw counts for later
-adata.raw = adata
+# Optionally store log-normalized values for plotting
+adata.layers['log1p'] = adata.X.copy()
 
 # Identify highly variable genes
 sc.pp.highly_variable_genes(adata, n_top_genes=2000)
@@ -180,8 +183,8 @@ markers = sc.get.rank_genes_groups_df(adata, group='0')
 marker_genes = ['CD3D', 'CD14', 'MS4A1', 'NKG7', 'FCGR3A']
 
 # Visualize markers
-sc.pl.umap(adata, color=marker_genes, use_raw=True)
-sc.pl.dotplot(adata, var_names=marker_genes, groupby='leiden')
+sc.pl.umap(adata, color=marker_genes, layer='log1p')
+sc.pl.dotplot(adata, var_names=marker_genes, groupby='leiden', layer='log1p')
 
 # Manual annotation
 cluster_to_celltype = {
@@ -301,12 +304,12 @@ sc.pp.combat(adata, key='batch')
 
 ## Common Pitfalls and Best Practices
 
-1. **Always save raw counts**: `adata.raw = adata` before filtering genes
+1. **Preserve counts before normalization**: `adata.layers['counts'] = adata.X.copy()`
 2. **Check QC plots carefully**: Adjust thresholds based on dataset quality
 3. **Use Leiden over Louvain**: More efficient and better results
 4. **Try multiple clustering resolutions**: Find optimal granularity
 5. **Validate cell type annotations**: Use multiple marker genes
-6. **Use `use_raw=True` for gene expression plots**: Shows original counts
+6. **Use explicit layers for expression plots**: For example, `layer='log1p'` for log-normalized values
 7. **Check PCA variance ratio**: Determine optimal number of PCs
 8. **Save intermediate results**: Long workflows can fail partway through
 
