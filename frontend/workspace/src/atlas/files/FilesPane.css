@@ -358,17 +358,6 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.files-tab--home {
-  flex: 0 0 auto;
-}
-.files-tab--home:hover {
-  background: var(--color-bg-subtle);
-  color: var(--color-text);
-}
-.files-tab--home[aria-selected="true"] {
-  background: var(--color-surface);
-  color: var(--color-text);
-}
 .files-tab:focus-visible {
   outline: 1px solid var(--color-text);
   outline-offset: -2px;

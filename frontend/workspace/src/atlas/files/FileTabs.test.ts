@@ -34,34 +34,35 @@ const mount = (view: () => JSX.Element) => {
 }
 
 describe("file tabs", () => {
-  test("always offers the Files tab and marks the active one", () => {
+  test("does not add a redundant Browse tab above the browser", () => {
     const host = mount(() =>
       subject.FileTabs({ open: ["train_lr.py"], active: undefined, onSelect: () => {}, onClose: () => {} }),
     )
 
-    expect(host.querySelector('[data-tab="files"]')?.getAttribute("aria-selected")).toBe("true")
-    expect(host.querySelector('[data-tab="files"]')?.textContent).toContain("Browse")
+    expect(host.querySelectorAll("[data-tab]")).toHaveLength(1)
+    expect(host.querySelector("[data-tab-label]")?.textContent).toBe("train_lr.py")
     expect(host.querySelector('[data-tab="train_lr.py"]')?.getAttribute("aria-selected")).toBe("false")
   })
 
-  // The browser is "no open file", not a reserved name: a file really can be
-  // called `files`, and a sentinel string would hand it the browser's own tab.
-  test("keeps the browser tab distinct from an open file that shares its name", () => {
-    const picked: Array<string | undefined> = []
+  test("hides the empty tab strip while browsing before a file is opened", () => {
+    const host = mount(() => subject.FileTabs({ open: [], active: undefined, onSelect: () => {}, onClose: () => {} }))
+
+    expect(host.querySelector('[role="tablist"]')).toBeNull()
+  })
+
+  test("keeps a real file named files selectable", () => {
+    const picked: string[] = []
     const host = mount(() =>
       subject.FileTabs({ open: ["files"], active: "files", onSelect: (id) => picked.push(id), onClose: () => {} }),
     )
-    const tabs = [...host.querySelectorAll<HTMLButtonElement>("[data-tab]")]
 
-    expect(tabs.map((node) => node.getAttribute("aria-selected"))).toEqual(["false", "true"])
+    host.querySelector<HTMLButtonElement>('[data-tab="files"]')?.click()
 
-    tabs[0]!.click()
-
-    expect(picked).toEqual([undefined])
+    expect(picked).toEqual(["files"])
   })
 
   test("selecting and closing report separately, and closing does not select", () => {
-    const picked: Array<string | undefined> = []
+    const picked: string[] = []
     const closed: string[] = []
     const host = mount(() =>
       subject.FileTabs({

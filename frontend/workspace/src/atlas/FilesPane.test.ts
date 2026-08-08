@@ -412,7 +412,7 @@ describe("files pane", () => {
     expect(host.querySelector('[data-tab="model.safetensors"]')).toBeNull()
   })
 
-  test("renders the tab strip, the picker and a table", async () => {
+  test("renders the picker and table directly without a Browse tab", async () => {
     startOn("project")
     const host = mount(() =>
       subject.FilesPane({
@@ -421,7 +421,7 @@ describe("files pane", () => {
     )
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    expect(host.querySelector('[data-tab="files"]')).not.toBeNull()
+    expect(host.querySelector('[role="tablist"]')).toBeNull()
     expect(host.querySelector("[data-source-button]")).not.toBeNull()
     expect(host.querySelector(".files-table")).not.toBeNull()
     expect(host.querySelectorAll("[data-file-row]").length).toBe(1)
@@ -873,15 +873,11 @@ describe("files pane", () => {
     expect(host.querySelector(".files-table")).toBeNull()
     expect(host.querySelector("[data-source-button]")).toBeNull()
 
-    host.querySelector<HTMLButtonElement>('[data-tab="files"]')?.click()
-
-    expect(host.querySelector("[data-stub-view]")).toBeNull()
-    expect(host.querySelector(".files-table")).not.toBeNull()
-
-    host.querySelector<HTMLButtonElement>('[data-tab="train_lr.py"]')?.click()
     host.querySelector<HTMLElement>('[data-tab-close="train_lr.py"]')?.click()
 
+    expect(host.querySelector("[data-stub-view]")).toBeNull()
     expect(host.querySelector('[data-tab="train_lr.py"]')).toBeNull()
+    expect(host.querySelector('[role="tablist"]')).toBeNull()
     expect(host.querySelector(".files-table")).not.toBeNull()
   })
 
