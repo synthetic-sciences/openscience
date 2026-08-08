@@ -5,18 +5,13 @@ export type Capacity = {
 }
 
 export type Reading = {
-  /** The figure set at display size: memory in use, against the total below
-   *  it. Used rather than free, so the headline agrees with the histogram
-   *  beside it — the bars encode the fraction in use, and a headline counting
-   *  down while the bars climb made the two read as different measurements. */
   headline: string
-  /** Stacked beneath the headline: the unit, then the ceiling. */
-  unit: string
-  ceiling: string
-  /** Cores are countable, so they stay discrete. */
-  segments: number
-  lit: number
+  memory: string
+  memoryFill: number
   cores: string
+  cpuFill: number
+  live: string
+  kernels: string
 }
 
 const ratio = (value: number, of: number) => {
@@ -27,6 +22,14 @@ const ratio = (value: number, of: number) => {
 const gb = (value?: number) => {
   if (value === undefined || !Number.isFinite(value) || value < 0) return undefined
   return (value / 1_000_000_000).toFixed(1)
+}
+
+const bytes = (value?: number) => {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return "—"
+  if (value < 1_000) return `${Math.round(value)} B`
+  if (value < 1_000_000) return `${(value / 1_000).toFixed(1)} KB`
+  if (value < 1_000_000_000) return `${(value / 1_000_000).toFixed(1)} MB`
+  return `${(value / 1_000_000_000).toFixed(1)} GB`
 }
 
 /** How many bars the histogram draws. At the 2.5s poll it spans about a
@@ -49,23 +52,25 @@ export function hostReading(capacity?: Partial<Capacity>): Reading {
   const memory = capacity?.memory
   const cpu = capacity?.cpu
   const total = gb(memory?.total)
-  // Derived rather than reported: the route carries total and available, and
-  // subtracting is the only figure consistent with the histogram's ratio.
-  const used =
-    memory?.total === undefined || memory?.available === undefined
-      ? undefined
-      : gb(Math.max(0, memory.total - memory.available))
+  // This pane accounts for compute, not every process on the user's machine.
+  // Kernel RSS and CPU are the figures a user can affect by stopping work here.
+  const used = memory?.kernels
   const cores = cpu?.cores
-  const busy = cpu?.busy
-  const segments = cores === undefined ? 8 : Math.min(12, Math.max(1, Math.round(cores)))
+  const live = capacity?.kernels?.live
+  const running = capacity?.kernels?.running
+  const load = cpu?.kernels ?? 0
 
   return {
-    headline: used ?? "—",
-    unit: used === undefined ? "Unavailable" : "GB used",
-    ceiling: total ? `of ${total}` : "",
-    segments,
-    lit: cores === undefined ? 0 : Math.round(ratio(busy ?? 0, cores) * segments),
-    cores: cores === undefined ? "—" : `${busy === undefined ? 0 : Math.round(busy)} / ${cores}`,
+    headline: bytes(used),
+    memory: total ? `of ${total} GB memory` : "memory unavailable",
+    memoryFill: memory?.total === undefined ? 0 : ratio(used ?? 0, memory.total),
+    cores: cores === undefined ? "—" : `~${Number(load.toFixed(1))} of ${cores}`,
+    cpuFill: cores === undefined ? 0 : ratio(load, cores),
+    live: live === undefined ? "—" : String(live),
+    kernels:
+      live === undefined
+        ? "kernel count unavailable"
+        : `${live === 1 ? "kernel" : "kernels"} · ${running ?? 0} running`,
   }
 }
 

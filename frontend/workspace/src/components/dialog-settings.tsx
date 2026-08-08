@@ -131,23 +131,25 @@ const SETTINGS_STYLES = `
   gap: 3px;
 }
 .settings-nav__label {
-  padding: 0 10px 6px;
+  padding: 0 7px 6px;
   color: var(--text-weaker);
-  font-size: 12px;
-  font-weight: 450;
+  font-size: 11px;
+  font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
 }
 .settings-nav__item {
   min-width: 0;
-  height: 38px;
-  display: flex;
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  border-radius: 9px;
-  font-size: 14px;
+  gap: 6px;
+  padding: 4px 7px;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 1.25;
   color: var(--text-weak);
   text-align: left;
   transition: background 120ms ease, color 120ms ease;
@@ -188,6 +190,17 @@ const SETTINGS_STYLES = `
   padding: 0 14px;
   border-bottom: 1px solid var(--border-weak-base);
   flex-shrink: 0;
+}
+.settings-main__title {
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 4px;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-page-header {
@@ -234,8 +247,8 @@ const SETTINGS_STYLES = `
 .settings-section-heading h3 {
   margin: 0;
   color: var(--text-strong);
-  font-size: 14px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.35;
 }
 .settings-section-heading p {
@@ -288,7 +301,7 @@ const SETTINGS_STYLES = `
 .settings-list-copy strong {
   color: var(--text-strong);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
 }
 .settings-list-copy span {
   overflow: hidden;
@@ -413,7 +426,7 @@ const SETTINGS_STYLES = `
     padding: 0 9px;
     border-bottom: 1px solid transparent;
     border-radius: 0;
-    font-size: 11px;
+    font-size: 12px;
   }
   .settings-nav__item:hover {
     background: transparent;
@@ -480,7 +493,7 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
                         onClick={() => navigate(panel.id)}
                         aria-current={current().id === panel.id ? "page" : undefined}
                       >
-                        <Icon name={panel.icon} size="medium" class="flex-shrink-0" />
+                        <Icon name={panel.icon} size="small" class="flex-shrink-0" />
                         <span class="truncate">{panel.title}</span>
                       </button>
                     )}
@@ -508,7 +521,7 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
                 onClick={forward}
                 aria-label="Forward"
               />
-              <span class="text-14-medium text-text-strong truncate pl-1">{current().title}</span>
+              <span class="settings-main__title">{current().title}</span>
             </div>
             <div class="flex items-center gap-1 flex-shrink-0">
               <IconButton

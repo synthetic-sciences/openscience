@@ -1,141 +1,108 @@
-/* 3a's instrument block. Where the previous pass drew two matched gauges, this
-   leads with a single figure at display size and puts its qualifiers in small
-   capitals beside it — a laboratory readout rather than a dashboard tile. Memory
-   in use leads, matching the histogram beside it, which plots the same. */
 .host-strip {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-sizing: border-box;
-  padding: 18px 18px 14px;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(112px, 0.8fr);
+  gap: 0;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
 }
 
-/* Set in the same capitals as the instrument labels below it, and quiet:
-   it names the block rather than competing with the figure it introduces. */
-.host-strip__title {
-  font-size: 10px;
+.host-strip__metric {
+  display: flex;
+  min-width: 0;
+  min-height: 74px;
+  box-sizing: border-box;
+  justify-content: center;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 14px;
+  border-right: 1px solid var(--color-border);
+}
+
+.host-strip__metric:last-child {
+  border-right: 0;
+}
+
+.host-strip__label {
   color: var(--color-text-faint);
+  font-size: 10px;
+  font-weight: 500;
 }
 
-.host-strip__memory {
+.host-strip__metric p {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
   min-width: 0;
-}
-
-.host-strip__figure {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-.host-strip__headline {
-  font-size: 44px;
-  line-height: 0.9;
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Unit and ceiling sit on one baseline beside the figure — "4.4 GB used of
-   16.4" — rather than stacked three deep. Stacking spent three lines saying
-   what one says, and the column of tiny type beside a 44px numeral was the
-   densest corner of the surface. */
-.host-strip__labels {
-  display: flex;
   align-items: baseline;
   gap: 4px;
-  min-width: 0;
-}
-
-.host-strip__unit,
-.host-strip__ceiling {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
   font-size: 10px;
   white-space: nowrap;
 }
 
-.host-strip__unit {
-  color: var(--color-text-muted);
+.host-strip__metric strong {
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
-/* One tone for the whole qualifier now that it reads as a single phrase; two
-   tones inside one line reads as an accident rather than a hierarchy. */
-.host-strip__ceiling {
-  color: var(--color-text-muted);
+.host-strip__metric p > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Twenty samples of memory pressure, oldest left. The bars carry no labels
-   because the current value is already stated at 44px beside them; this is
-   here to show direction, not to be read off. */
-.host-strip__history {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 34px;
-  flex: none;
-}
-
-.host-strip__bar {
-  width: 4px;
-  border-radius: 1px;
-  background: var(--color-border-strong);
-  transition: height 240ms ease;
-}
-
-/* The newest few in the accent, so the eye lands on now rather than on the
-   middle of the series. */
-.host-strip__bar[data-recent="true"] {
-  background: var(--surface-brand-base);
-}
-
-.host-strip__cores {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.host-strip__cores-label {
-  width: 52px;
-  flex: none;
-  font-size: 10px;
-  color: var(--color-text-muted);
-}
-
-.host-strip__segments {
-  display: flex;
-  gap: 3px;
-  flex: 1;
-  min-width: 0;
-}
-
-.host-strip__segment {
-  flex: 1;
-  height: 6px;
-  border-radius: 2px;
+.host-strip__meter {
+  display: block;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
   background: var(--color-border);
 }
 
-/* Busy cores read in the instrument blue, kept distinct from the terracotta so
-   the one solid accent on this surface still belongs to the primary action. */
-.host-strip__segment[data-lit="true"] {
-  background: var(--border-info-selected);
+.host-strip__meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-text-muted);
+  transition: width 180ms ease;
 }
 
-.host-strip__cores-value {
-  font-size: 10px;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.host-strip__metric--kernels p {
+  align-items: center;
+}
+
+@container compute (max-width: 500px) {
+  .host-strip {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .host-strip__metric {
+    min-height: 68px;
+    padding: 10px 12px;
+  }
+
+  .host-strip__metric:nth-child(2) {
+    border-right: 0;
+  }
+
+  .host-strip__metric--kernels {
+    min-height: 42px;
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--color-border);
+    border-right: 0;
+  }
+
+  .host-strip__metric--kernels .host-strip__label {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .host-strip__bar {
+  .host-strip__meter i {
     transition: none;
   }
 }

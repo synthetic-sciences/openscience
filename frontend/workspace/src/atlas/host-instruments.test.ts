@@ -8,32 +8,30 @@ const capacity = {
 }
 
 describe("host reading", () => {
-  test("leads with memory in use, which is what the histogram beside it plots", () => {
+  test("states kernel memory against machine capacity", () => {
     const reading = hostReading(capacity)
 
-    // 16.0 total less 13.1 available. Reading the headline off `available`
-    // made it count down while the bars climbed, so the two instruments
-    // appeared to disagree about the same machine.
-    expect(reading.headline).toBe("2.9")
-    expect(reading.unit).toBe("GB used")
-    expect(reading.ceiling).toBe("of 16.0")
+    expect(reading.headline).toBe("412.0 MB")
+    expect(reading.memory).toBe("of 16.0 GB memory")
+    expect(reading.memoryFill).toBeCloseTo(412_000_000 / 16_000_000_000, 5)
   })
 
-  test("states busy cores against the count, in whole segments", () => {
+  test("states busy cores against the machine count", () => {
     const reading = hostReading(capacity)
 
-    expect(reading.cores).toBe("2 / 8")
-    expect(reading.segments).toBe(8)
-    expect(reading.lit).toBe(2)
+    expect(reading.cores).toBe("~0.4 of 8")
+    expect(reading.cpuFill).toBeCloseTo(0.4 / 8, 5)
+    expect(reading.live).toBe("2")
+    expect(reading.kernels).toBe("kernels · 1 running")
   })
 
   test("says unavailable rather than zero for a figure the platform withheld", () => {
     const reading = hostReading({ kernels: { live: 0, running: 0 } })
 
     expect(reading.headline).toBe("—")
-    expect(reading.unit).toBe("Unavailable")
-    expect(reading.ceiling).toBe("")
-    expect(reading.lit).toBe(0)
+    expect(reading.memory).toBe("memory unavailable")
+    expect(reading.memoryFill).toBe(0)
+    expect(reading.cpuFill).toBe(0)
   })
 
   test("degrades only the figure a partial body left out, and never throws", () => {
@@ -41,17 +39,16 @@ describe("host reading", () => {
     // response — must not take the whole strip down. Dereferencing it would
     // throw inside a memo, and the only ErrorBoundary wraps the workspace.
     const noCpu = hostReading({ memory: { total: 16_000_000_000, available: 13_100_000_000 } })
-    expect(noCpu.headline).toBe("2.9")
+    expect(noCpu.headline).toBe("—")
     expect(noCpu.cores).toBe("—")
 
     const halfMemory = hostReading({ memory: { total: 16_000_000_000 } as never, cpu: { cores: 4 } })
     expect(halfMemory.headline).toBe("—")
-    expect(halfMemory.unit).toBe("Unavailable")
-    expect(halfMemory.ceiling).toBe("of 16.0")
+    expect(halfMemory.memory).toBe("of 16.0 GB memory")
 
-    const noMemory = hostReading({ cpu: { cores: 4, busy: 1 } })
+    const noMemory = hostReading({ cpu: { cores: 4, busy: 1, kernels: 0.25 } })
     expect(noMemory.headline).toBe("—")
-    expect(noMemory.cores).toBe("1 / 4")
+    expect(noMemory.cores).toBe("~0.3 of 4")
   })
 
   test("treats a missing busy figure as idle rather than unavailable", () => {
@@ -59,17 +56,16 @@ describe("host reading", () => {
     // core count is still true — read 0 of 8, not blank.
     const reading = hostReading({ cpu: { cores: 8 } })
 
-    expect(reading.cores).toBe("0 / 8")
-    expect(reading.lit).toBe(0)
+    expect(reading.cores).toBe("~0 of 8")
+    expect(reading.cpuFill).toBe(0)
   })
 
   test("caps the segments so a many-core host stays legible", () => {
-    const reading = hostReading({ cpu: { cores: 128, busy: 64 } })
+    const reading = hostReading({ cpu: { cores: 128, busy: 64, kernels: 64 } })
 
     // The reading still tells the truth; only the drawing is capped.
-    expect(reading.cores).toBe("64 / 128")
-    expect(reading.segments).toBe(12)
-    expect(reading.lit).toBe(6)
+    expect(reading.cores).toBe("~64 of 128")
+    expect(reading.cpuFill).toBe(0.5)
   })
 })
 

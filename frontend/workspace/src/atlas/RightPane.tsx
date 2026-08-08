@@ -195,7 +195,6 @@ export function RightPane(
     project?: string
     session?: string
     route?: string
-    onEnsureSession?: () => Promise<string | undefined>
   } = {},
 ): JSX.Element {
   const context = uiStore.context
@@ -415,7 +414,7 @@ export function RightPane(
                 <AtlasCanvas />
               </Match>
               <Match when={context() === "kernels"}>
-                <ComputeSurface onEnsureSession={props.onEnsureSession} />
+                <ComputeSurface />
               </Match>
               <Match when={context() === "trace"}>
                 <SessionTraceSurface session={session()} />

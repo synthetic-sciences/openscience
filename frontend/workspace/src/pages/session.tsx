@@ -1030,7 +1030,7 @@ export default function Page(): JSX.Element {
           </div>
         </div>
 
-        <RightPane project={sdk.scope} session={params.id ?? "new"} onEnsureSession={ensureSession} />
+        <RightPane project={sdk.scope} session={params.id ?? "new"} />
       </div>
     </div>
   )

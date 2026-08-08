@@ -23,6 +23,12 @@ test("settings enforce one sentence-case typography system", () => {
   expect(dialog).toContain("font-family: var(--font-family-sans)")
   expect(dialog).toContain(".settings-section-label")
   expect(dialog).toContain("text-transform: none")
+  expect(dialog).toMatch(/\.settings-nav__item\s*\{[^}]*min-height: 34px/s)
+  expect(dialog).toMatch(/\.settings-nav__item\s*\{[^}]*font-size: 13px/s)
+  expect(dialog).toMatch(/\.settings-nav__item\s*\{[^}]*font-weight: 500/s)
+  expect(dialog).toContain('size="small"')
+  expect(dialog).toContain('class="settings-main__title"')
+  expect(dialog).not.toContain("text-14-medium text-text-strong truncate pl-1")
 })
 
 test("settings dialog makes every registered capability navigable", () => {
