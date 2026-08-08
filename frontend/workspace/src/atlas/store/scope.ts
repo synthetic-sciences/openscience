@@ -10,6 +10,10 @@ export function workspaceScope(project: string, session: string) {
   return `${encodeURIComponent(clean(project, FALLBACK_PROJECT))}:${encodeURIComponent(clean(session, FALLBACK_SESSION))}`
 }
 
+export function projectScope(project: string) {
+  return encodeURIComponent(clean(project, FALLBACK_PROJECT))
+}
+
 export function defaultWorkspaceScope() {
-  return workspaceScope(FALLBACK_PROJECT, FALLBACK_SESSION)
+  return projectScope(FALLBACK_PROJECT)
 }

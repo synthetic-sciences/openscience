@@ -4,7 +4,11 @@ export const DEFAULT_PANE_WIDTH = 400
 export const INLINE_PANE_BREAKPOINT = 1100
 export const INLINE_PANE_CHROME = 568
 
-export function paneWidthKey(project: string, session = "new") {
+export function paneWidthKey(project: string) {
+  return `openscience-context-width-v6:${encodeURIComponent(project)}`
+}
+
+export function legacyPaneWidthKey(project: string, session = "new") {
   return `openscience-context-width-v5:${encodeURIComponent(project)}:${encodeURIComponent(session)}`
 }
 

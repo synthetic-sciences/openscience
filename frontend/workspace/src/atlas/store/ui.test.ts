@@ -52,7 +52,7 @@ describe("context pane state", () => {
     expect(state.open()).toBe(false)
   })
 
-  test("restores pane, context, and file only inside the matching project session", () => {
+  test("keeps pane, tabs, and files stable while the active session changes", () => {
     const storage = memoryStorage()
     const first = createContextState({ storage })
 
@@ -61,8 +61,9 @@ describe("context pane state", () => {
     first.setArtifactPaneTab("history")
 
     first.activateScope("project-a", "session-b")
-    expect(first.open()).toBe(false)
-    expect(first.file()).toBeUndefined()
+    expect(first.open()).toBe(true)
+    expect(first.file()?.path).toBe("results/a.csv")
+    expect(first.artifactPaneTab()).toBe("history")
     first.openContext("kernels")
 
     first.activateScope("project-b", "session-a")
@@ -71,14 +72,14 @@ describe("context pane state", () => {
 
     const restored = createContextState({ storage })
     restored.activateScope("project-a", "session-a")
-    expect(restored.context()).toBe("files")
-    expect(restored.file()?.path).toBe("results/a.csv")
+    expect(restored.context()).toBe("kernels")
+    expect(restored.files().map((file) => file.path)).toEqual(["results/a.csv"])
     expect(restored.artifactPaneTab()).toBe("history")
     expect(restored.open()).toBe(true)
 
     restored.activateScope("project-a", "session-b")
     expect(restored.context()).toBe("kernels")
-    expect(restored.file()).toBeUndefined()
+    expect(restored.open()).toBe(true)
   })
 
   test("keeps working in memory when storage reads and writes fail", () => {
@@ -98,6 +99,38 @@ describe("context pane state", () => {
 
     expect(state.open()).toBe(true)
     expect(state.file()?.path).toBe("notes.md")
+  })
+
+  test("migrates the active legacy session pane into one project pane", () => {
+    const legacy = workspaceScope("project-a", "session-a")
+    const storage = memoryStorage({
+      "openscience-context-state-v2": JSON.stringify({
+        version: 2,
+        scopes: { [legacy]: { tab: "kernels", mode: "tools", open: true } },
+      }),
+    })
+    const state = createContextState({ storage })
+
+    state.activateScope("project-a", "session-a")
+    expect(state.context()).toBe("kernels")
+    expect(state.open()).toBe(true)
+
+    state.activateScope("project-a", "session-b")
+    expect(state.context()).toBe("kernels")
+    expect(state.open()).toBe(true)
+  })
+
+  test("keeps prompt prefills session-scoped while the inspector is project-scoped", () => {
+    const state = createContextState({ storage: memoryStorage() })
+
+    state.activateScope("project-a", "session-a")
+    state.setPrefill("alpha")
+    state.activateScope("project-a", "session-b")
+    expect(state.prefill()).toBeUndefined()
+
+    state.setPrefill("beta")
+    state.activateScope("project-a", "session-a")
+    expect(state.prefill()).toBe("alpha")
   })
 
   test("active context toggles closed and a different context switches directly", () => {
@@ -130,7 +163,7 @@ describe("context pane state", () => {
     expect(state.open()).toBe(false)
   })
 
-  test("persists the terminal as a project-session context", () => {
+  test("persists the terminal as a project context", () => {
     const storage = memoryStorage()
     const state = createContextState({ storage })
 
@@ -143,10 +176,11 @@ describe("context pane state", () => {
     expect(restored.open()).toBe(true)
 
     restored.activateScope("project-a", "session-b")
-    expect(restored.open()).toBe(false)
+    expect(restored.context()).toBe("terminal")
+    expect(restored.open()).toBe(true)
   })
 
-  test("persists the local trace as a project-session work tab", () => {
+  test("persists the local trace in the project work strip", () => {
     const storage = memoryStorage()
     const state = createContextState({ storage })
 

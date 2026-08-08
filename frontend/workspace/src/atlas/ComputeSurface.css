@@ -234,13 +234,136 @@
   gap: 8px;
 }
 
+.compute-surface .kernel-panel__sessions {
+  display: grid;
+  gap: 16px;
+}
+
+.compute-surface .kernel-session {
+  display: grid;
+  gap: 8px;
+}
+
+.compute-surface .kernel-session__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.compute-surface .kernel-session__header > div {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 7px;
+}
+
+.compute-surface .kernel-session__header strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compute-surface .kernel-session[data-current="true"] .kernel-session__header > div > span {
+  color: var(--color-accent);
+}
+
+.compute-surface .kernel-panel__saved {
+  display: grid;
+  gap: 7px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.compute-surface .kernel-panel__saved > header,
+.compute-surface .kernel-panel__saved-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compute-surface .kernel-panel__saved > header {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.compute-surface .kernel-panel__saved > header strong {
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.compute-surface .kernel-panel__saved-row {
+  min-height: 42px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--color-bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.compute-surface .kernel-panel__saved-row > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.compute-surface .kernel-panel__saved-row > div:first-child strong,
+.compute-surface .kernel-panel__saved-row > div:first-child span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compute-surface .kernel-panel__saved-row > div:first-child strong {
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.compute-surface .kernel-panel__saved-row > div:first-child span {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.compute-surface .kernel-panel__saved-row > div:last-child {
+  display: flex;
+  gap: 5px;
+}
+
+.compute-surface .kernel-panel__saved-row button {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.compute-surface .kernel-panel__saved-row button:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+
+.compute-surface .kernel-panel__saved-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* 3a nests the kernel in its own card rather than letting it sit flat on the
    panel — the runtime is a distinct object with its own controls, and the
    inset says so. The card itself carries no padding: the head owns its own,
    so the divider under it can run the full width of the plate. */
 .compute-surface .kernel-card {
   gap: 0;
-  margin: 0 0 18px;
+  margin: 0;
   padding: 0;
   border-radius: 18px;
   background: var(--color-bg-elevated);

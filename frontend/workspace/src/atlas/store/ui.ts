@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { normalizeStoredArtifact, type StoredArtifact } from "@/artifacts/store"
-import { defaultWorkspaceScope, workspaceScope } from "./scope"
+import { defaultWorkspaceScope, projectScope, workspaceScope } from "./scope"
 
 export type RightPaneTab = "files" | "terminal" | "canvas" | "kernels" | "trace"
 export type RightPaneMode = "artifact" | "tools"
@@ -43,7 +43,7 @@ interface ContextState {
   tab: RightPaneTab
   mode: RightPaneMode
   open: boolean
-  /** Every contextual surface currently open in this project + session. */
+  /** Every contextual surface currently open in this project. */
   workTabs?: WorkTab[]
   /** The focused contextual tab. */
   activeWorkTab?: string
@@ -295,6 +295,7 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
   const storage = options.storage ?? browserStorage()
   const [store, setStore] = createStore({
     scope: defaultWorkspaceScope(),
+    transientScope: workspaceScope("__workspace__", "new"),
     scopes: restore(storage) as Record<string, ContextState>,
     transient: {} as Record<string, TransientState>,
   })
@@ -313,12 +314,12 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
   }
 
   const current = () => store.scopes[store.scope] ?? empty()
-  const transient = () => store.transient[store.scope] ?? { send: false }
+  const transient = () => store.transient[store.transientScope] ?? { send: false }
   const update = (next: ContextState) => {
     setStore("scopes", store.scope, next)
     persist()
   }
-  const updateTransient = (next: TransientState) => setStore("transient", store.scope, next)
+  const updateTransient = (next: TransientState) => setStore("transient", store.transientScope, next)
   const context = (): ContextTab => (current().mode === "artifact" ? "artifact" : current().tab)
   const closeContext = () => update({ ...current(), open: false })
   const select = (
@@ -486,7 +487,14 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
   return {
     scope: () => store.scope,
     activateScope(project: string, session: string) {
-      setStore("scope", workspaceScope(project, session))
+      const scope = projectScope(project)
+      const legacy = workspaceScope(project, session)
+      const remembered = store.scopes[scope]
+      if (!remembered && store.scopes[legacy]) {
+        setStore("scopes", scope, store.scopes[legacy])
+        persist()
+      }
+      setStore({ scope, transientScope: legacy })
     },
     context,
     open: () => current().open,

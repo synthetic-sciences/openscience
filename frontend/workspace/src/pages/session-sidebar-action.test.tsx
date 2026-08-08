@@ -178,7 +178,7 @@ describe("SessionSidebarActions", () => {
     await Promise.resolve()
     expect(state.open()).toBe(false)
 
-    button(host, "Open session compute")?.click()
+    button(host, "Open project compute")?.click()
     await Promise.resolve()
     expect(state.context()).toBe("kernels")
 

@@ -152,7 +152,7 @@ export default function Page(): JSX.Element {
   async function ensureSession() {
     if (params.id && params.id !== "new") return params.id
     const context = uiStore.context()
-    if ((["terminal", "files", "kernels"] as SessionContext[]).includes(context as SessionContext)) {
+    if (context === "terminal") {
       pending.context = context as SessionContext
     }
     if (pending.value) return pending.value
@@ -192,7 +192,7 @@ export default function Page(): JSX.Element {
   const openContext = (context: SessionContext) => {
     if (context === "canvas" && !atlasAvailable()) return
     uiStore.openContext(context)
-    if (!(["terminal", "files", "kernels"] as SessionContext[]).includes(context)) return
+    if (context !== "terminal") return
     void ensureSession()
   }
 

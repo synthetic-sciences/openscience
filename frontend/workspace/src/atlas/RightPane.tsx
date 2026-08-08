@@ -31,6 +31,7 @@ import {
   MIN_PANE_WIDTH,
   INLINE_PANE_BREAKPOINT,
   clampPaneWidth,
+  legacyPaneWidthKey,
   paneWidthForViewport,
   paneWidthKey,
   readPaneWidth,
@@ -201,10 +202,11 @@ export function RightPane(
   const artifact = artifactContext.active
   const project = () => props.project ?? props.route ?? window.location.pathname
   const session = () => props.session ?? "new"
-  const key = createMemo(() => paneWidthKey(project(), session()))
-  const legacy = createMemo(() =>
-    props.project && props.session ? [paneWidthKey(`${props.project}/${props.session}`)] : [],
-  )
+  const key = createMemo(() => paneWidthKey(project()))
+  const legacy = createMemo(() => [
+    legacyPaneWidthKey(project(), session()),
+    ...(props.project && props.session ? [legacyPaneWidthKey(`${props.project}/${props.session}`)] : []),
+  ])
   const initial = () => {
     try {
       return readPaneWidth(key(), localStorage, legacy())

@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import type { ArtifactKind } from "./model"
 import type { ArtifactInspection } from "@/science/renderers"
-import { defaultWorkspaceScope, workspaceScope } from "@/atlas/store/scope"
+import { defaultWorkspaceScope, projectScope, workspaceScope } from "@/atlas/store/scope"
 
 export type ArtifactContextKind = ArtifactKind | "file"
 
@@ -256,7 +256,13 @@ export function createArtifactState(options: { storage?: ArtifactStorage } = {})
   return {
     scope: () => store.scope,
     activateScope(project: string, session: string) {
-      setStore("scope", workspaceScope(project, session))
+      const scope = projectScope(project)
+      const legacy = workspaceScope(project, session)
+      if (!store.scopes[scope] && store.scopes[legacy]) {
+        setStore("scopes", scope, store.scopes[legacy])
+        persist()
+      }
+      setStore("scope", scope)
     },
     active,
     activate(value: ArtifactContext) {

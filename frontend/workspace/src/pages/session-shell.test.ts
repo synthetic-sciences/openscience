@@ -96,7 +96,7 @@ describe("focused workspace shell", () => {
     expect(action).toContain('ariaLabel="Open project terminal"')
     expect(action).toContain('ariaLabel="Open Atlas"')
     expect(action).not.toContain('ariaLabel="Open Evidence"')
-    expect(action).toContain('ariaLabel="Open session compute"')
+    expect(action).toContain('ariaLabel="Open project compute"')
     expect(action).toContain('ariaLabel="Open file details"')
     expect(session).toContain("context={uiStore.context()}")
     expect(session).toContain("contextOpen={uiStore.open()}")
@@ -203,10 +203,10 @@ describe("focused workspace shell", () => {
     expect(styles).toContain('.session-sidebar[data-collapsed="true"]')
   })
 
-  test("keeps research tools in a route-owned contextual surface", () => {
+  test("keeps research tools in a project-owned contextual surface", () => {
     const pane = read("../atlas/RightPane.tsx")
 
-    expect(pane).toContain("paneWidthKey(project(), session())")
+    expect(pane).toContain("paneWidthKey(project())")
     expect(pane).toContain("DEFAULT_PANE_WIDTH")
     expect(pane).toContain('"min(520px, calc(100vw - 48px))"')
     expect(pane).toContain('aria-label="Research inspector"')

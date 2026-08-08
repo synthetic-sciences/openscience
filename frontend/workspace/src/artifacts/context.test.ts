@@ -92,7 +92,7 @@ describe("artifact context", () => {
     expect(clearOwnedArtifact(undefined, active.id)).toBeUndefined()
   })
 
-  test("isolates and restores selected artifacts by project and session", () => {
+  test("keeps selected artifacts across sessions while isolating projects", () => {
     const storage = memoryStorage()
     const first = createArtifactState({ storage })
     const alpha = createArtifactContext({ directory: "/alpha", path: "result.csv" })
@@ -100,6 +100,8 @@ describe("artifact context", () => {
 
     first.activateScope("project-a", "session-a")
     first.activate(alpha)
+    first.activateScope("project-a", "session-b")
+    expect(first.active()?.id).toBe(alpha.id)
     first.activateScope("project-b", "session-a")
     expect(first.active()).toBeUndefined()
     first.activate(beta)
@@ -110,6 +112,6 @@ describe("artifact context", () => {
     restored.activateScope("project-b", "session-a")
     expect(restored.active()?.id).toBe(beta.id)
     restored.activateScope("project-a", "session-b")
-    expect(restored.active()).toBeUndefined()
+    expect(restored.active()?.id).toBe(alpha.id)
   })
 })

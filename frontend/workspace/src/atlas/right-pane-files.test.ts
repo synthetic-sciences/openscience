@@ -25,7 +25,7 @@ test("keeps the explorer and selected file preview inside the contextual pane", 
   expect(pane).toContain("when={!file.external}")
   expect(pane).toContain("<ExternalFileAccess")
   // Collection surfaces and individual files share one reorderable,
-  // closable, project/session-scoped work strip.
+  // closable, project-scoped work strip that survives chat changes.
   expect(pane).toContain("<WorkTabStrip")
   expect(pane.match(/<WorkTabStrip/g)).toHaveLength(1)
   expect(pane.indexOf("<WorkTabStrip")).toBeLessThan(pane.indexOf('class="research-inspector__controls"'))

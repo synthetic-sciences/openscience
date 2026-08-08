@@ -77,46 +77,21 @@ describe("/notebook routes", () => {
     )
   })
 
-  test("represents every real session with a lazy default Python record", async () => {
+  test("does not invent kernels for untouched sessions", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const app = NotebookRoutes()
-        const first = await Session.create({})
-        const second = await Session.create({})
-        const response = await app.request("/kernels")
-        const result = (await response.json()) as {
-          kernels: Array<{
-            active: boolean
-            state: string
-            sessionID: string
-            name: string
-            language: string
-            incarnation: number | null
-            execution_count: number
-            process_id: number | null
-            process_started_at: number | null
-          }>
+        const session = await Session.create({})
+        const project = (await (await app.request("/kernels")).json()) as { kernels: unknown[] }
+        const scoped = (await (await app.request(`/kernels?sessionID=${encodeURIComponent(session.id)}`)).json()) as {
+          kernels: unknown[]
         }
-        const defaults = result.kernels.filter((kernel) => kernel.name === "agent")
 
-        expect(defaults).toHaveLength(2)
-        expect(defaults.map((kernel) => kernel.sessionID).sort()).toEqual([first.id, second.id].sort())
-        expect(defaults).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              active: false,
-              state: "lazy",
-              language: "python",
-              incarnation: null,
-              execution_count: 0,
-              process_id: null,
-              process_started_at: null,
-              target: { kind: "local" },
-            }),
-          ]),
-        )
+        expect(project.kernels).toEqual([])
+        expect(scoped.kernels).toEqual([])
+        expect(KernelRuntime.list()).toEqual([])
       },
     })
   })
@@ -297,14 +272,6 @@ describe("/notebook routes", () => {
               name: "notebook:analysis.ipynb",
               language: "python",
               execution_count: 2,
-            }),
-            expect.objectContaining({
-              active: false,
-              state: "lazy",
-              sessionID: session.id,
-              name: "agent",
-              language: "python",
-              execution_count: 0,
             }),
           ]),
         )
@@ -1040,7 +1007,7 @@ describe("/notebook routes", () => {
           await app.request(`/kernels?sessionID=${encodeURIComponent(session.id)}`)
         ).json()) as typeof inventory
         expect(listed.kernels.some((value) => value.id === kernel.id)).toBe(false)
-        expect(listed.kernels).toContainEqual(expect.objectContaining({ name: "agent", language: "python" }))
+        expect(listed.kernels).toEqual([])
       },
     })
   }, 30_000)

@@ -5,6 +5,7 @@ import {
   MAX_PANE_WIDTH,
   MIN_PANE_WIDTH,
   clampPaneWidth,
+  legacyPaneWidthKey,
   paneWidthForViewport,
   paneWidthKey,
   readPaneWidth,
@@ -12,11 +13,10 @@ import {
 } from "./right-pane-layout"
 
 describe("context pane layout", () => {
-  test("keys width by project route and session", () => {
-    expect(paneWidthKey("project-a", "session-a")).not.toBe(paneWidthKey("project-a", "session-b"))
-    expect(paneWidthKey("project-a", "session-a")).not.toBe(paneWidthKey("project-b", "session-a"))
-    expect(paneWidthKey("project-a")).toBe("openscience-context-width-v5:project-a:new")
-    expect(paneWidthKey("project-a")).not.toContain("openscience-context-width-v4")
+  test("keys width by project so the inspector does not jump between sessions", () => {
+    expect(paneWidthKey("project-a")).not.toBe(paneWidthKey("project-b"))
+    expect(paneWidthKey("project-a")).toBe("openscience-context-width-v6:project-a")
+    expect(paneWidthKey("project-a")).not.toContain("session-a")
   })
 
   test("uses a readable default and clamps resize bounds", () => {
@@ -33,14 +33,14 @@ describe("context pane layout", () => {
     expect(paneWidthForViewport(MAX_PANE_WIDTH, 900)).toBe(332)
   })
 
-  test("reads and writes one route without leaking into another", () => {
+  test("reads and writes one project without leaking into another", () => {
     const values = new Map<string, string>()
     const storage = {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => values.set(key, value),
     }
-    const first = paneWidthKey("project-a", "session-a")
-    const second = paneWidthKey("project-a", "session-b")
+    const first = paneWidthKey("project-a")
+    const second = paneWidthKey("project-b")
 
     expect(readPaneWidth(first, storage)).toBe(DEFAULT_PANE_WIDTH)
     savePaneWidth(first, 540, storage)
@@ -54,8 +54,8 @@ describe("context pane layout", () => {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => values.set(key, value),
     }
-    const current = paneWidthKey("project-a", "session-a")
-    const legacy = paneWidthKey("project-a/session-a")
+    const current = paneWidthKey("project-a")
+    const legacy = legacyPaneWidthKey("project-a", "session-a")
     values.set(legacy, "612")
 
     expect(readPaneWidth(current, storage, [legacy])).toBe(MAX_PANE_WIDTH)

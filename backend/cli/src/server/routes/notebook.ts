@@ -55,13 +55,6 @@ const identity = (input: { sessionID: string; id: string; language: Language }):
   language: input.language,
 })
 
-const primary = (sessionID: string): KernelIdentity => ({
-  projectID: Instance.project.id,
-  sessionID,
-  name: "agent",
-  language: "python",
-})
-
 const owner = async (c: Context, sessionID: string) =>
   Session.get(sessionID)
     .then((session) => {
@@ -189,12 +182,10 @@ export const NotebookRoutes = lazy(() =>
         const owners = new Set<string>()
         if (query.sessionID) {
           owners.add(query.sessionID)
-          KernelRuntime.ensure(primary(query.sessionID))
         }
         if (!query.sessionID) {
           for await (const session of Session.list()) {
             owners.add(session.id)
-            KernelRuntime.ensure(primary(session.id))
           }
         }
         const live = KernelRuntime.list(query.sessionID).filter((kernel) => owners.has(kernel.sessionID))
