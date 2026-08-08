@@ -19,11 +19,7 @@ const uptime = (started: number, now: number) => {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }
 
-export function CommandCard(props: {
-  command: CommandStatus
-  stopping: boolean
-  onStop: () => void
-}): JSX.Element {
+export function CommandCard(props: { command: CommandStatus; stopping: boolean; onStop: () => void }): JSX.Element {
   const [now, setNow] = createSignal(Date.now())
   const timer = setInterval(() => setNow(Date.now()), 1_000)
   onCleanup(() => clearInterval(timer))

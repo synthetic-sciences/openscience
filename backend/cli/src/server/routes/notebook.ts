@@ -119,13 +119,10 @@ export const NotebookRoutes = lazy(() =>
         const host = await KernelHost.snapshot(caller)
         const live = KernelRuntime.list().filter((kernel) => kernel.active)
         const commands = CommandRuntime.list(Instance.project.id)
-        const samples = await KernelMetrics.sampleAll(
-          `compute:${caller}`,
-          [
-            ...live.flatMap((kernel) => (kernel.process_id === null ? [] : [kernel.process_id])),
-            ...commands.map((command) => command.process_id),
-          ],
-        )
+        const samples = await KernelMetrics.sampleAll(`compute:${caller}`, [
+          ...live.flatMap((kernel) => (kernel.process_id === null ? [] : [kernel.process_id])),
+          ...commands.map((command) => command.process_id),
+        ])
         const usage = [...samples.values()]
         const kernelUsage = live.flatMap((kernel) => {
           const value = kernel.process_id === null ? undefined : samples.get(kernel.process_id)
@@ -221,11 +218,7 @@ export const NotebookRoutes = lazy(() =>
         const body = c.req.valid("json")
         const denied = await owner(c, body.sessionID)
         if (denied) return denied
-        const stopped = await CommandRuntime.stop(
-          c.req.valid("param").commandID,
-          Instance.project.id,
-          body.sessionID,
-        )
+        const stopped = await CommandRuntime.stop(c.req.valid("param").commandID, Instance.project.id, body.sessionID)
         if (!stopped) {
           return c.json({ error: "command_not_found", message: "The command is no longer running." }, 404)
         }
