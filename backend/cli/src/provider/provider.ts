@@ -1435,9 +1435,10 @@ export namespace Provider {
             ...model,
             providerID: "openai-codex",
             cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            // Codex OAuth advertises a separate 272k window even when the
-            // copied public-API entry has a million-token context.
-            limit: { ...model.limit, context: 272_000 },
+            // Keep each model's catalog window. Flattening the whole Codex
+            // family to a legacy input allowance made flagship and mini
+            // models advertise the same, incorrect context in every picker.
+            limit: { ...model.limit },
             // Codex advertises its own fast tier independently of the public
             // API catalog, so synthesize only the modes in the OAuth contract.
             modes: codexOAuthModes(model.id),

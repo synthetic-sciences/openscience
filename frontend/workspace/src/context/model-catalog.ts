@@ -83,9 +83,24 @@ export function routableModelKey(model: ModelKey, hasModel: (model: ModelKey) =>
 }
 
 export function displayProviderForModel(provider: ModelProviderDisplay, modelID: string): ModelProviderDisplay {
+  if (provider.id === "openai-codex") return { id: "openai", name: "OpenAI" }
   if (provider.id !== "openrouter") return provider
   const [vendor] = modelID.replace(/^~/, "").split("/")
   return OPENROUTER_VENDOR_DISPLAY[vendor?.toLowerCase() ?? ""] ?? provider
+}
+
+export function modelContext(limit: number): string {
+  if (limit >= 1_000_000) {
+    const value = limit / 1_000_000
+    const rounded = Math.abs(value - Math.round(value)) < 0.1 ? Math.round(value) : Number(value.toFixed(1))
+    return `${rounded.toLocaleString()}m`
+  }
+  if (limit >= 1_000) return `${Math.round(limit / 1_000).toLocaleString()}k`
+  return limit.toLocaleString()
+}
+
+export function modelSummary(input: { reasoning: boolean; context: number; provider: string }): string {
+  return `${input.reasoning ? "Reasoning" : "General"} · ${modelContext(input.context)} context · ${input.provider}`
 }
 
 /** Stable key shared by native ids and OpenRouter vendor/model slugs. */

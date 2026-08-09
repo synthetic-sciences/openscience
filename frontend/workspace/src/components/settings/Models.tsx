@@ -4,7 +4,7 @@ import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
 import { useGlobalSync } from "@/context/global-sync"
 import { useModels, type ModelKey } from "@/context/models"
-import { displayProviderForModel } from "@/context/model-catalog"
+import { displayProviderForModel, modelSummary } from "@/context/model-catalog"
 import { CodexConnection } from "./CodexConnection"
 import { ManagedInference } from "./ManagedInference"
 import { ProviderKeys } from "./ProviderKeys"
@@ -30,12 +30,6 @@ const scopes: Array<{ id: Scope; label: string }> = [
   { id: "latest", label: "Latest" },
   { id: "long", label: "Long context" },
 ]
-
-const context = (limit: number) => {
-  if (limit >= 1_000_000) return `${(limit / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}m`
-  if (limit >= 1_000) return `${Math.round(limit / 1_000).toLocaleString()}k`
-  return limit.toLocaleString()
-}
 
 export default function Models() {
   const sync = useGlobalSync()
@@ -274,8 +268,11 @@ export default function Models() {
                             </Show>
                           </span>
                           <span class="truncate text-11-regular text-text-weak">
-                            {model.reasoning ? "Reasoning" : "General"} · {context(model.context)} context ·{" "}
-                            {model.provider}
+                            {modelSummary({
+                              reasoning: model.reasoning,
+                              context: model.context,
+                              provider: model.provider,
+                            })}
                           </span>
                         </div>
                         <div class="flex shrink-0 items-center gap-2">

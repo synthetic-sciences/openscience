@@ -30,6 +30,10 @@ test("settings enforce one sentence-case typography system", () => {
   expect(dialog).toContain('size="small"')
   expect(dialog).toContain('class="settings-main__title"')
   expect(dialog).not.toContain("text-14-medium text-text-strong truncate pl-1")
+  expect(dialog).toContain(".text-16-medium, .text-14-medium, .text-13-medium, .text-12-medium")
+  expect(dialog).toContain("font-size: 12px !important")
+  expect(dialog).toContain("@media (prefers-reduced-transparency: reduce)")
+  expect(dialog).toContain("@media (prefers-reduced-motion: reduce)")
 })
 
 test("settings dialog makes every registered capability navigable", () => {
