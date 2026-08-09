@@ -1,5 +1,6 @@
 import { Show, type JSX } from "solid-js"
 import { IconActivity, IconCpu, IconFile, IconFolderTree, IconLayoutGrid, IconTerminal } from "@/atlas/shared/Icon"
+import { preloadTerminal } from "@/components/terminal"
 
 export type SessionContext = "files" | "terminal" | "canvas" | "kernels" | "trace" | "artifact"
 
@@ -25,6 +26,8 @@ export function CompactContextActions(props: {
         type="button"
         role="menuitem"
         aria-pressed={props.context === "terminal" && props.contextOpen}
+        onPointerEnter={preloadTerminal}
+        onFocus={preloadTerminal}
         onClick={() => props.onContext("terminal")}
       >
         <IconTerminal size={13} strokeWidth={1.5} />
@@ -73,6 +76,7 @@ export function SidebarAction(props: {
   shortcut?: string
   active?: boolean
   disabled?: boolean
+  onWarm?: () => void
   onClick: () => void
   children: JSX.Element
 }): JSX.Element {
@@ -84,6 +88,8 @@ export function SidebarAction(props: {
       aria-pressed={props.active === undefined ? undefined : props.active}
       data-selected={props.active ? "true" : undefined}
       disabled={props.disabled}
+      onPointerEnter={() => props.onWarm?.()}
+      onFocus={() => props.onWarm?.()}
       onClick={() => props.onClick()}
     >
       <span class="session-sidebar__action-icon" aria-hidden="true">
@@ -126,6 +132,7 @@ export function SessionSidebarActions(props: {
           ariaLabel="Open project terminal"
           shortcut="⌃`"
           active={props.context === "terminal" && props.contextOpen}
+          onWarm={preloadTerminal}
           onClick={(_event?: Event) => props.onContext("terminal")}
         >
           <IconTerminal size={15} strokeWidth={1.5} />

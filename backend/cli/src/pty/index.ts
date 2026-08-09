@@ -108,7 +108,7 @@ export namespace Pty {
     const args = terminalArgs(command)
     const cwd = authority.workspace
     const source = await OpenScience.subprocessEnv(process.env)
-    const env = terminalEnv(source, Instance.project.id, input.sessionID)
+    const env = terminalEnv(source, Instance.project.id, input.sessionID, command)
     const sandbox = Sandbox.wrapArgv({
       file: command,
       args,

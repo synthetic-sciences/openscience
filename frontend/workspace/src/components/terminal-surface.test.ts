@@ -26,14 +26,24 @@ describe("contextual project terminal", () => {
     expect(pane).toContain("<TerminalSurface />")
     expect(action).toContain('ariaLabel="Open project terminal"')
     expect(action).toContain('props.onContext("terminal")')
+    expect(action).toContain("onWarm={preloadTerminal}")
     expect(surface).toContain('aria-label="Session terminal"')
     expect(surface).toContain("useExecutionAuthority")
     expect(surface).toContain("!authority.allowed()")
-    expect(surface).toContain("Session shell")
+    expect(surface).toContain('class="terminal-surface__tabs-row"')
+    expect(surface).toContain('class="terminal-surface__new"')
     expect(surface).toContain('role="tablist"')
     expect(surface).toContain('role="tabpanel"')
     expect(surface).toContain("active={active()?.id === pty.id}")
     expect(surface).toContain("terminal.close(pty.id)")
+    expect(surface).not.toContain('aria-label="Copy terminal selection"')
+    expect(surface).not.toContain('aria-label="Copy all output"')
+    expect(surface).not.toContain('aria-label="Find in terminal"')
+    expect(surface).not.toContain('aria-label="Scroll to first output"')
+    expect(surface).not.toContain('aria-label="Follow latest output"')
+    expect(surface).not.toContain("terminal-surface__toolbar")
+    expect(surface).not.toContain("terminal-surface__status-dot")
+    expect(surface).not.toContain("terminal-surface__tab-dot")
   })
 
   test("offers keyboard and palette commands while keeping PTY requests project scoped", async () => {
@@ -50,14 +60,18 @@ describe("contextual project terminal", () => {
     expect(context).toContain("load(sdk.scope, params.id)")
     expect(context).toContain("sdk.client.pty")
     expect(terminal).toContain("sdk.request.url(`/pty/${local.pty.id}/connect`)")
+    expect(terminal).toContain("onOpenSearch")
+    expect(terminal).toContain("export const preloadTerminal")
+    expect(terminal).toContain("void write(t.getSelection())")
+    expect(terminal).toContain("t.selectAll()")
   })
 
   test("keeps existing terminals closable while authority only gates new process creation", async () => {
     const surface = await read("../atlas/TerminalSurface.tsx")
 
     expect(surface).toContain('useExecutionAuthority("terminal")')
-    expect(surface).toContain("disabled={!available() || starting() || !authority.allowed()}")
-    expect(surface).toContain("disabled={starting() || !authority.allowed()}")
+    expect(surface).toContain("disabled={!available() || state.starting || !authority.allowed()}")
+    expect(surface).toContain("disabled={state.starting || !authority.allowed()}")
     expect(surface).toContain("terminal.close(pty.id)")
     expect(surface).not.toContain(
       "disabled={!authority.allowed()}\n                      onClick={() => void terminal.close",

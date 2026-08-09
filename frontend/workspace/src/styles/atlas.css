@@ -6052,32 +6052,95 @@ button.research-launchpad__status-item:hover {
   background: color-mix(in srgb, var(--color-bg) 94%, var(--color-bg-subtle));
 }
 
-.terminal-surface__toolbar {
+.terminal-surface__search button {
+  appearance: none;
+  height: 25px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  font-family: var(--font-family-sans);
+  font-size: 10px;
+  color: var(--color-text-faint);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.terminal-surface__search button:hover:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-bg-subtle);
+}
+
+.terminal-surface__search button:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
+.terminal-surface__search {
   min-height: 34px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px 4px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
-}
-
-.terminal-surface__identity {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  gap: 5px;
+  padding: 4px 6px 4px 10px;
   color: var(--color-text-faint);
+  background: color-mix(in srgb, var(--color-bg-subtle) 48%, var(--color-bg));
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  animation: atlas-terminal-search-in 120ms ease-out;
 }
 
-.terminal-surface__identity span {
-  overflow: hidden;
+.terminal-surface__search input {
+  min-width: 40px;
+  flex: 1;
+  height: 25px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 76%, transparent);
+  border-radius: 6px;
+  outline: 0;
   font-family: var(--font-family-mono);
   font-size: 10px;
-  letter-spacing: 0.01em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-bg) 90%, transparent);
+}
+
+.terminal-surface__search input:focus {
+  border-color: color-mix(in srgb, var(--color-accent) 48%, var(--color-border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 9%, transparent);
+}
+
+.terminal-surface__search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.terminal-surface__search-count {
+  min-width: 34px;
+  font-family: var(--font-family-mono);
+  font-size: 9px;
+  color: var(--color-text-faint);
+  text-align: right;
+}
+
+.terminal-surface__search button {
+  width: 24px;
+  padding: 0;
+}
+
+@keyframes atlas-terminal-search-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .terminal-surface__new,
@@ -6192,16 +6255,30 @@ button.research-launchpad__status-item:hover {
   font-size: 11px;
 }
 
-.terminal-surface__tabs {
+.terminal-surface__tabs-row {
   min-height: 32px;
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.terminal-surface__tabs {
+  min-width: 0;
+  min-height: 32px;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 3px;
   padding: 4px 6px;
   overflow-x: auto;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
   scrollbar-width: none;
+}
+
+.terminal-surface__tabs-row > .terminal-surface__new {
+  height: 24px;
+  flex: 0 0 auto;
+  margin: 4px 6px 4px 0;
 }
 
 .terminal-surface__tabs::-webkit-scrollbar {
