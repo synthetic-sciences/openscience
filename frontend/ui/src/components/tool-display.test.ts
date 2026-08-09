@@ -1,5 +1,14 @@
 import { describe, test, expect } from "bun:test"
-import { artifactActions, humanizeToolName, skillName, stripRedactedReasoning, writtenFiles } from "./tool-display"
+import {
+  artifactActions,
+  generatedArtifacts,
+  humanizeToolName,
+  savedArtifact,
+  scienceTaskLabel,
+  skillName,
+  stripRedactedReasoning,
+  writtenFiles,
+} from "./tool-display"
 
 describe("humanizeToolName", () => {
   test("titlecases a simple id", () => {
@@ -107,5 +116,53 @@ describe("stripRedactedReasoning", () => {
   })
   test("leaves normal reasoning untouched", () => {
     expect(stripRedactedReasoning("plain reasoning text")).toBe("plain reasoning text")
+  })
+})
+
+describe("scienceTaskLabel", () => {
+  test("prefers an explicit action title", () => {
+    expect(scienceTaskLabel({ title: "Benchmarking survival classifiers.", code: "from pathlib import Path" })).toBe(
+      "Benchmarking survival classifiers",
+    )
+  })
+
+  test("never uses an import as the visible label", () => {
+    expect(scienceTaskLabel({ code: "from pathlib import Path\nimport pandas as pd", language: "python" })).toBe(
+      "Python cell",
+    )
+  })
+
+  test("derives conservative labels for older scientific calls", () => {
+    expect(scienceTaskLabel({ code: "df = pd.read_csv('data/titanic.csv')" })).toBe("Loading titanic.csv")
+    expect(scienceTaskLabel({ code: "model = LogisticRegression().fit(X, y)" })).toBe("Fitting statistical models")
+    expect(scienceTaskLabel({ code: "plt.plot(x, y)\nplt.savefig('figures/roc.png')" })).toBe("Rendering roc.png")
+  })
+})
+
+describe("generatedArtifacts", () => {
+  const artifact = {
+    title: "ROC curve",
+    kind: "figure",
+    path: "figures/roc.png",
+    id: "art_1",
+    versionID: "ver_1",
+    version: 1,
+    size: 42,
+    sha256: "abc123",
+    preview: { kind: "image" as const, data: "data:image/png;base64,abc" },
+  }
+
+  test("normalizes saved artifact metadata", () => {
+    expect(savedArtifact(artifact)).toEqual(artifact)
+  })
+
+  test("collects only completed artifact versions and deduplicates them", () => {
+    expect(
+      generatedArtifacts([
+        { type: "tool", tool: "artifact", state: { status: "completed", metadata: { savedArtifact: artifact } } },
+        { type: "tool", tool: "artifact", state: { status: "completed", metadata: { savedArtifact: artifact } } },
+        { type: "tool", tool: "artifact", state: { status: "error", metadata: { savedArtifact: artifact } } },
+      ]),
+    ).toEqual([artifact])
   })
 })

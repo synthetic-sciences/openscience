@@ -399,7 +399,7 @@ export const NotebookRoutes = lazy(() =>
         const result = await KernelRuntime.execute(
           identity(body),
           body.code,
-          { timeout: body.timeout },
+          { timeout: body.timeout, origin: { source: body.id } },
           { cwd: await SessionFilesystem.workspace(body.sessionID) },
         ).catch((error) => {
           if (error instanceof KernelStartupCancelled) return error

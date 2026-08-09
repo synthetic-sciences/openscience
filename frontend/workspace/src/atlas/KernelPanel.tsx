@@ -5,7 +5,7 @@ import { IconCpu } from "@/atlas/shared/Icon"
 import { identify } from "@/atlas/poll-identity"
 import { KernelCard, type KernelAction } from "@/atlas/KernelCard"
 import { CommandCard } from "@/atlas/CommandCard"
-import type { Job, Status } from "@/atlas/ComputeJobsAPI"
+import type { Job } from "@/atlas/ComputeJobsAPI"
 import { RemoteJobCard, jobLive } from "@/atlas/RemoteJobCard"
 import { useKernelList } from "@/atlas/use-kernel-list"
 import { useSDK } from "@/context/sdk"
@@ -15,7 +15,6 @@ import { kernelMemoryLabel, type CommandStatus, type KernelStatus } from "@/note
 type KernelsPayload = { kernels: KernelStatus[] }
 type CommandsPayload = { commands: CommandStatus[] }
 type Group = { kernels: KernelStatus[]; commands: CommandStatus[]; jobs: Job[] }
-const terminal = new Set<Status>(["succeeded", "failed", "cancelled", "interrupted"])
 const projectJobs = "__project_jobs__"
 
 type KernelPanelProps = {
@@ -115,11 +114,6 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
     }
     return groups
   })
-  const recentRemote = createMemo(() =>
-    jobs()
-      .filter((job) => job.target.kind === "modal" && terminal.has(job.status) && !jobLive(job))
-      .slice(0, 5),
-  )
   const groups = createMemo(() =>
     [...grouped().keys()].sort((a, b) => {
       const current = Number(route() === b) - Number(route() === a)
@@ -215,7 +209,7 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
         </Show>
 
         <Show
-          when={groups().length > 0 || recentRemote().length > 0}
+          when={groups().length > 0}
           fallback={
             <div class="kernel-panel__empty">
               <span aria-hidden="true">
@@ -277,29 +271,6 @@ export function KernelPanel(props: KernelPanelProps = {}): JSX.Element {
                 </section>
               )}
             </For>
-            <Show when={recentRemote().length > 0}>
-              <section class="remote-results" aria-label="Recent remote results">
-                <header class="kernel-session__header">
-                  <div class="kernel-session__identity">
-                    <span aria-hidden="true">↳</span>
-                    <strong>Recent remote results</strong>
-                  </div>
-                  <span>{recentRemote().length} completed</span>
-                </header>
-                <div class="kernel-panel__list">
-                  <For each={recentRemote()}>
-                    {(job) => (
-                      <RemoteJobCard
-                        job={job}
-                        cancelling={false}
-                        onCancel={() => Promise.resolve()}
-                        onOutput={() => jobApi.log(job.id).then((value) => value.log)}
-                      />
-                    )}
-                  </For>
-                </div>
-              </section>
-            </Show>
           </div>
         </Show>
       </div>

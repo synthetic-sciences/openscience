@@ -19,7 +19,7 @@ import { Binary } from "@synsci/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part } from "./message-part"
-import { artifactActions, stripRedactedReasoning, writtenFiles } from "./tool-display"
+import { artifactActions, generatedArtifacts, stripRedactedReasoning, writtenFiles } from "./tool-display"
 import { Markdown } from "./markdown"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -96,10 +96,22 @@ function isAttachment(part: PartType | undefined) {
   )
 }
 
-const promotedTools = new Set(["notebook", "rkernel", "artifact", "modal", "compute_job"])
+const promotedTools = new Set(["notebook", "rkernel", "modal", "compute_job"])
 
 function isPromotedTool(part: PartType | undefined): part is ToolPart {
-  return part?.type === "tool" && promotedTools.has(part.tool)
+  if (part?.type !== "tool" || !promotedTools.has(part.tool)) return false
+  if (part.state.status === "error") return false
+  if (part.state.status !== "running" && part.state.status !== "completed") return false
+  const metadata = "metadata" in part.state ? (part.state.metadata as Record<string, unknown> | undefined) : undefined
+  return metadata?.ok !== false
+}
+
+function isGeneratedTool(part: PartType | undefined): part is ToolPart {
+  return part?.type === "tool" && part.tool === "artifact" && part.state.status === "completed"
+}
+
+function isHiddenTool(part: PartType | undefined): part is ToolPart {
+  return isPromotedTool(part) || isGeneratedTool(part)
 }
 
 function AssistantMessageItem(props: {
@@ -129,7 +141,7 @@ function AssistantMessageItem(props: {
     }
 
     if (props.hidePromotedTools) {
-      parts = parts.filter((part) => !isPromotedTool(part))
+      parts = parts.filter((part) => !isHiddenTool(part))
     }
 
     if (!props.hideResponsePart) return parts
@@ -287,6 +299,10 @@ export function SessionTurn(
       const parts = (data.store.part[message.id] ?? emptyParts).filter(isPromotedTool)
       return parts.length ? [{ message, parts }] : []
     }),
+  )
+
+  const generated = createMemo(() =>
+    generatedArtifacts(assistantMessages().flatMap((message) => data.store.part[message.id] ?? emptyParts)),
   )
 
   const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? emptyPermissions)
@@ -828,6 +844,48 @@ export function SessionTurn(
                           </Button>
                         </Show>
                       </div>
+                    </Show>
+                    <Show when={!working() && generated().length > 0}>
+                      <section
+                        data-slot="session-turn-generated"
+                        aria-label={`${generated().length} generated artifacts`}
+                      >
+                        <header>
+                          <strong>Generated</strong>
+                          <span>· {generated().length}</span>
+                        </header>
+                        <div data-slot="session-turn-generated-list">
+                          <For each={generated()}>
+                            {(artifact) => (
+                              <button
+                                type="button"
+                                data-slot="session-turn-generated-artifact"
+                                title={`Open ${artifact.title} in Files`}
+                                onClick={() => {
+                                  if (data.openArtifact) {
+                                    data.openArtifact(artifact.id)
+                                    return
+                                  }
+                                  data.openFile?.(artifact.path)
+                                }}
+                              >
+                                <span data-slot="session-turn-generated-preview">
+                                  <Show
+                                    when={artifact.preview?.kind === "image" ? artifact.preview.data : undefined}
+                                    fallback={<FileIcon node={{ path: artifact.path, type: "file" }} />}
+                                  >
+                                    {(image) => <img src={image()} alt="" loading="lazy" />}
+                                  </Show>
+                                </span>
+                                <span data-slot="session-turn-generated-copy">
+                                  <strong>{artifact.title}</strong>
+                                  <small>{artifact.kind}</small>
+                                </span>
+                              </button>
+                            )}
+                          </For>
+                        </div>
+                      </section>
                     </Show>
                     {/* Explicit save: offer the written files as durable versioned artifacts */}
                     <Show when={isLastUserMessage() && !working() && !!data.saveArtifact && written().length > 0}>

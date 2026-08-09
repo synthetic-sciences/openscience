@@ -84,8 +84,10 @@ export interface ExecuteOptions {
   signal?: AbortSignal
   /** Whether to capture rich (MIME) display outputs. Default true. */
   rich?: boolean
-  /** Message and tool call that requested this execution, for lineage. */
-  origin?: { messageID?: string; callID?: string }
+  /** Message, tool call, and human-facing cell identity used for lineage/UI. */
+  origin?: { messageID?: string; callID?: string; title?: string; source?: string }
+  /** Internal lifecycle hook fired when a queued cell actually starts. */
+  onStart?: () => void
 }
 
 export interface KernelStartOptions {

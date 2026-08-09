@@ -20,6 +20,7 @@ const kernel = (value: Partial<KernelStatus> = {}): KernelStatus => ({
   process_identity_verified: null,
   started_at: null,
   last_activity_at: null,
+  last_cell: null,
   ...value,
 })
 

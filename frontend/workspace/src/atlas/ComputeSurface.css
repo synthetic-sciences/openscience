@@ -308,6 +308,65 @@
   outline-offset: 2px;
 }
 
+.compute-surface .kernel-card__cell {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0 0 1px 39px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-bg-subtle);
+}
+
+.compute-surface .kernel-card__cell summary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  color: var(--color-text-faint);
+  font-size: 10px;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.compute-surface .kernel-card__cell summary strong,
+.compute-surface .kernel-card__cell summary small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compute-surface .kernel-card__cell summary strong {
+  color: var(--color-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.compute-surface .kernel-card__cell summary small {
+  color: var(--color-text-faint);
+  font-size: 10px;
+}
+
+.compute-surface .kernel-card__cell pre {
+  max-height: calc(5 * 1.45em + 16px);
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.compute-surface .kernel-card__cell code {
+  font: inherit;
+}
+
 .compute-surface .remote-results {
   border-top: 8px solid var(--color-bg-subtle);
 }

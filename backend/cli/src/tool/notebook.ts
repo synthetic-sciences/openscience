@@ -373,6 +373,7 @@ class PythonKernel implements Kernel {
 
   private async run(code: string, opts?: ExecuteOptions): Promise<ExecuteResult> {
     if (!this.ready) throw new Error("Python kernel is not running")
+    opts?.onStart?.()
     const proc = this.proc!
     this.lastUsed = Date.now()
     const timeout = Math.min(Math.max(opts?.timeout ?? 120_000, 5_000), 600_000)
@@ -578,6 +579,8 @@ export const NotebookTool = Tool.define("notebook", {
   description: [
     "Execute Python code in a persistent, managed kernel. Variables, imports, and state persist across calls that use the same kernel name.",
     "For multiple independent analyses, issue multiple notebook calls in the same response with distinct `kernel` names. Those kernels execute concurrently and appear separately in Compute.",
+    "Always set `title` to a concise description of the scientific action, not a code fragment or import.",
+    "Set `source` when the cell belongs to a script or .ipynb file so Compute can identify that source.",
     "Never use shell subprocesses to imitate multiple kernels; use this tool's `kernel` parameter instead.",
     "After a named analysis is fully saved and verified, call this tool with `action: stop` and the same kernel name so completed workers do not idle.",
     "Use instead of `bash python` for analysis — no need to re-import or re-load data between cells.",
@@ -588,6 +591,20 @@ export const NotebookTool = Tool.define("notebook", {
     .object({
       action: z.enum(["execute", "stop"]).optional().describe("Execute a cell (default) or stop this named kernel"),
       code: z.string().optional().describe("Python code to execute; required when action is execute"),
+      title: z
+        .string()
+        .trim()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe("Short action label for this cell, for example 'Benchmarking survival classifiers'"),
+      source: z
+        .string()
+        .trim()
+        .min(1)
+        .max(1024)
+        .optional()
+        .describe("Script or notebook path this cell belongs to, when applicable"),
       kernel: z
         .string()
         .trim()
@@ -626,7 +643,11 @@ export const NotebookTool = Tool.define("notebook", {
         },
       }
     }
-    ctx.metadata({ title: `Python · ${name}`, metadata: { kernel: name, language: "python" } })
+    const title = params.title ?? "Python cell"
+    ctx.metadata({
+      title,
+      metadata: { kernel: name, language: "python", task: title, ...(params.source ? { source: params.source } : {}) },
+    })
 
     // Executes arbitrary code — same permission gate as bash.
     await ctx.ask({
@@ -639,7 +660,7 @@ export const NotebookTool = Tool.define("notebook", {
     const result = await KernelRuntime.execute(identity, params.code!, {
       timeout: params.timeout,
       signal: ctx.abort,
-      origin: { messageID: ctx.messageID, callID: ctx.callID },
+      origin: { messageID: ctx.messageID, callID: ctx.callID, title, source: params.source },
     })
 
     const images = result.outputs.filter((o) => o.type === "display" && o.data?.["image/png"])
@@ -660,12 +681,20 @@ export const NotebookTool = Tool.define("notebook", {
     const output = clip(parts.join("\n"))
 
     ctx.metadata({
-      title: `Python · ${name}`,
-      metadata: { output, ok: result.ok, provenanceID: result.provenanceID, kernel: name, language: "python" },
+      title,
+      metadata: {
+        output,
+        ok: result.ok,
+        provenanceID: result.provenanceID,
+        kernel: name,
+        language: "python",
+        task: title,
+        ...(params.source ? { source: params.source } : {}),
+      },
     })
 
     return {
-      title: result.ok ? `Python · ${name}` : `Python · ${name} (error)`,
+      title: result.ok ? title : `${title} (error)`,
       output,
       metadata: {
         stopped: false,
@@ -673,6 +702,8 @@ export const NotebookTool = Tool.define("notebook", {
         output,
         kernel: name,
         language: "python",
+        task: title,
+        ...(params.source ? { source: params.source } : {}),
         provenanceID: result.provenanceID,
         executionCount: result.executionCount,
         hasImages: images.length,

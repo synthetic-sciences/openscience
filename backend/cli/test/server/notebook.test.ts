@@ -450,7 +450,8 @@ describe("/notebook routes", () => {
           return waitForKernel(attempt + 1)
         }
         await waitForKernel()
-        const second = execute("queue_value.append('second') or queue_value")
+        const secondCode = "(__import__('time').sleep(0.4), queue_value.append('second'), queue_value)[-1]"
+        const second = execute(secondCode)
         await Bun.sleep(20)
         const status = await app.request(
           `/status?sessionID=${encodeURIComponent(session.id)}&id=analysis.ipynb&language=python`,
@@ -458,8 +459,29 @@ describe("/notebook routes", () => {
         expect(await status.json()).toMatchObject({
           state: "running",
           queue_depth: 1,
+          last_cell: {
+            source: "analysis.ipynb",
+            code: "(__import__('time').sleep(0.5), globals().__setitem__('queue_value', ['first']), 'first')[-1]",
+            status: "running",
+            execution_count: 1,
+          },
         })
-        const [firstResponse, secondResponse] = await Promise.all([first, second])
+        const firstResponse = await first
+        await Bun.sleep(20)
+        const secondStatus = await app.request(
+          `/status?sessionID=${encodeURIComponent(session.id)}&id=analysis.ipynb&language=python`,
+        )
+        expect(await secondStatus.json()).toMatchObject({
+          state: "running",
+          queue_depth: 0,
+          last_cell: {
+            source: "analysis.ipynb",
+            code: secondCode,
+            status: "running",
+            execution_count: 2,
+          },
+        })
+        const secondResponse = await second
         const firstResult = (await firstResponse.json()) as {
           execution_count: number
           outputs: Array<{ data?: Record<string, string> }>

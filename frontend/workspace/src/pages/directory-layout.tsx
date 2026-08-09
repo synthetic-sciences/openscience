@@ -21,6 +21,7 @@ import { showToast } from "@synsci/ui/toast"
 import { useLanguage } from "@/context/language"
 import { uiStore } from "@/atlas/store/ui"
 import { artifactContext } from "@/artifacts/context"
+import { normalizeStoredArtifact } from "@/artifacts/store"
 import { useGlobalSync } from "@/context/global-sync"
 import { decode64, setCurrentDirectory } from "@/utils/base64"
 import { assetUrl } from "@/utils/markdown-assets"
@@ -140,6 +141,24 @@ export default function Layout(props: ParentProps) {
               uiStore.openFile(dir, path)
             }
 
+            const openArtifact = (id: string) => {
+              void sdk
+                .request(`/file/artifact-store/${encodeURIComponent(id)}`)
+                .then(async (response) => {
+                  if (!response.ok) throw new Error(`artifact could not be opened (${response.status})`)
+                  const artifact = normalizeStoredArtifact(await response.json())
+                  if (!artifact) throw new Error("artifact metadata is invalid")
+                  uiStore.openSaved(artifact)
+                })
+                .catch((error: unknown) => {
+                  showToast({
+                    variant: "error",
+                    title: "artifact could not be opened",
+                    description: error instanceof Error ? error.message : String(error),
+                  })
+                })
+            }
+
             // "Save as artifact…" at the end of an assistant turn promotes a
             // written scratch file into a durable, immutable artifact version
             // via the explicit-save route.
@@ -199,6 +218,7 @@ export default function Layout(props: ParentProps) {
                 onQuestionReject={rejectQuestion}
                 onNavigateToSession={navigateToSession}
                 onOpenFile={openFile}
+                onOpenArtifact={openArtifact}
                 onSaveArtifact={saveArtifact}
               >
                 <MarkdownImages resolve={image}>

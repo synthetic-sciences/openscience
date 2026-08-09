@@ -70,6 +70,15 @@ export type KernelStatus = {
   process_identity_verified: boolean | null
   started_at: number | null
   last_activity_at: number | null
+  last_cell: {
+    title: string | null
+    source: string | null
+    code: string
+    status: "running" | "succeeded" | "failed"
+    execution_count: number | null
+    message_id: string | null
+    call_id: string | null
+  } | null
   authority?: ExecutionAuthority | null
   // Live usage sampled by the server at request time. Absent fields mean the
   // platform could not report them — render "Unavailable", never 0.

@@ -1,6 +1,6 @@
 # Claude Science UI behavior audit
 
-Observed on 2026-08-08 against these local reference surfaces:
+Observed on 2026-08-09 against these local reference surfaces:
 
 - Project shell: `http://localhost:8765/projects/proj_41efbe3a56fc`
 - Completed four-kernel reference: `http://localhost:8765/projects/proj_41efbe3a56fc/frames/4654d750-f605-4d90-a749-0d6a9ecf2615`
@@ -11,13 +11,13 @@ This is a behavior index, not a request to reproduce Claude branding. It records
 
 ## 1. Project shell and navigation
 
-| Surface            | Claude Science behavior                                                                                           | OpenScience contract                                                                                           |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Project identity   | Back control and project name anchor the shell.                                                                   | Keep project identity at the top of the sessions rail.                                                         |
-| Primary navigation | New, Search, Customize, Files, and Compute use one compact type scale and icon rhythm.                            | Use the same typography as the sessions rail for every primary item, including Customize and settings content. |
-| Session list       | Sessions are grouped by time, have a readable activity state, and expose row actions without taking over the row. | Preserve session titles and activity dots; keep utility controls visually secondary.                           |
-| Open work          | Multiple sessions remain open as tabs.                                                                            | Session tabs may change while the right inspector remains project-scoped and mounted.                          |
-| Density            | Dividers, labels, and counters are quiet; content carries the emphasis.                                           | Avoid oversized settings type, heavy borders, or card-on-card decoration.                                      |
+| Surface            | Claude Science behavior                                                                                           | OpenScience contract                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Project identity   | Back control and project name anchor the shell.                                                                   | Keep project identity at the top of the sessions rail.                                                               |
+| Primary navigation | New, Search, Customize, Files, and Compute use one compact type scale and icon rhythm.                            | Use the same 12px/400 typography as the sessions rail for settings navigation; reserve 500 only for the active item. |
+| Session list       | Sessions are grouped by time, have a readable activity state, and expose row actions without taking over the row. | Preserve session titles and activity dots; keep utility controls visually secondary.                                 |
+| Open work          | Multiple sessions remain open as tabs.                                                                            | Session tabs may change while the right inspector remains project-scoped and mounted.                                |
+| Density            | Dividers, labels, and counters are quiet; content carries the emphasis.                                           | Avoid oversized settings type, heavy borders, or card-on-card decoration.                                            |
 
 ## 2. Right-side workspace
 
@@ -30,24 +30,25 @@ This is a behavior index, not a request to reproduce Claude branding. It records
 
 ## 3. Conversation activity ledger
 
-| Surface               | Claude Science behavior                                                                                                | OpenScience contract                                                                                                                      |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Progress grouping     | Steps are grouped into summaries such as “Ran 3 commands” or “Saved artifacts.”                                        | Routine reasoning may remain in Show steps, but scientific code, outputs, figures, artifacts, and remote results are promoted outside it. |
-| Step labels           | Each operation has a task label and a compact result summary such as lines of output, figure count, or artifact count. | Tool headers state language, kernel, state, and useful output identity.                                                                   |
-| Live state            | Background cells visibly move through queued/running/finished/failed states.                                           | Named kernels, commands, and remote jobs poll into Compute while the turn is running.                                                     |
-| Failures              | Failures stay visible and are followed by a short diagnosis and retry.                                                 | Preserve failed code/output in chat; retries appear as later cards rather than replacing history.                                         |
-| Narrative checkpoints | The agent explains handoffs: kernels ready, a plot needs correction, outputs are being saved.                          | Final answers summarize the completed tracks, key metrics, artifact location, and cleanup state.                                          |
+| Surface               | Claude Science behavior                                                                                              | OpenScience contract                                                                                                                      |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Progress grouping     | Steps are grouped into summaries such as “Ran 3 commands” or “Saved artifacts.”                                      | Routine reasoning may remain in Show steps, but scientific code, outputs, figures, artifacts, and remote results are promoted outside it. |
+| Step labels           | Each operation has an action label (“Benchmarking classifiers”), not its first source line or import.                | Notebook/R calls carry a concise task title and optional script/notebook source; older calls get conservative inferred labels.            |
+| Live state            | Background cells visibly move through queued/running/finished/failed states.                                         | Named kernels, commands, and remote jobs poll into Compute while the turn is running.                                                     |
+| Failures              | Failures remain as compact receipts under the step group; successful retries are promoted into the main result flow. | Keep failed cells collapsed in Show steps, never promote raw traces, and retain later successful retries as separate results.             |
+| Narrative checkpoints | The agent explains handoffs: kernels ready, a plot needs correction, outputs are being saved.                        | Final answers summarize the completed tracks, key metrics, artifact location, and cleanup state.                                          |
 
 ## 4. Code and output cards
 
-| Surface              | Claude Science behavior                                                                  | OpenScience contract                                                                                                               |
-| -------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Default presentation | A step opens into a language/environment header, source, and separate output control.    | Notebook, artifact, and remote-compute cards start collapsed so completed work stays compact and expands on demand.                |
-| Source height        | Long source remains contained inside the operation instead of dominating the transcript. | Show exactly five code lines in a vertically and horizontally scrollable source window; retain the complete source in that window. |
-| Output               | Text output is visually separated from source.                                           | Text output is open by default and independently scrollable.                                                                       |
-| Figures              | Figures appear immediately after the cell that produced them.                            | Inline notebook images stay visible even when text output is collapsed.                                                            |
-| Identity             | The environment name is always visible.                                                  | Show the stable named kernel (`env titanic-quality`, etc.) in each card.                                                           |
-| Completion           | Stopped workers get a compact lifecycle receipt.                                         | Render `Kernel stopped` cards and keep the source/results above them.                                                              |
+| Surface              | Claude Science behavior                                                                   | OpenScience contract                                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Default presentation | A step opens into a language/environment header, source, and separate output control.     | Notebook, artifact, and remote-compute cards start collapsed so completed work stays compact and expands on demand.                |
+| Source height        | Long source remains contained inside the operation instead of dominating the transcript.  | Show exactly five code lines in a vertically and horizontally scrollable source window; retain the complete source in that window. |
+| Output               | Text output is visually separated from source.                                            | Text output is open by default and independently scrollable.                                                                       |
+| Figures              | Figures appear immediately after the cell that produced them.                             | Inline notebook images stay visible even when text output is collapsed.                                                            |
+| Identity             | The environment name is always visible.                                                   | Show the stable named kernel (`env titanic-quality`, etc.) in each card.                                                           |
+| Completion           | Stopped workers get a compact lifecycle receipt.                                          | Render `Kernel stopped` cards and keep the source/results above them.                                                              |
+| Failures             | Failed cells are collapsed receipts, with the diagnosis/retry represented by later steps. | Keep failure detail available under Show steps while promoting only successful scientific results.                                 |
 
 ## 5. Compute
 
@@ -55,22 +56,23 @@ This is a behavior index, not a request to reproduce Claude branding. It records
 | --------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Host strip      | Memory, CPU, live-kernel count, and running count are always visible.                                        | Host totals combine local kernels, shell commands, and remote jobs. Unknown metrics render as unavailable, never fabricated zeroes.              |
 | Project ledger  | Work is grouped by owning session with a current-session marker.                                             | Compute aggregates every session in the project and does not reset when the selected session changes.                                            |
-| Kernel row      | Language, state, age/cell count, activity label, RSS, CPU, and stop action form one dense row.               | Live rows show named kernel, state/recovery text, uptime, RSS, cores, and Stop.                                                                  |
+| Kernel row      | Language, state, age/cell count, activity label, RSS, CPU, and stop action form one dense row.               | Live rows show named kernel, state/recovery text, uptime, RSS, cores, Stop, and a collapsed latest-cell inspector with source and full code.     |
 | Job row         | Long-running/background work stays visible independently of chat scroll.                                     | Shell commands and Modal/GPU jobs are first-class rows with command/target, resources, duration, status, output, artifacts, cleanup, and cancel. |
-| Completed work  | Claude commonly leaves idle kernels visible.                                                                 | OpenScience removes completed, stopped, and killed local kernels from Compute; their source, results, and artifacts remain in chat and Files.    |
+| Completed work  | The completed reference has an empty Compute surface after its workers finish.                               | Compute is live-only: completed, failed, cancelled, stopped, and killed work disappears; durable outputs remain in chat and Files.               |
 | Manual creation | Claude exposes environment setup as part of agent work, not a user kernel launcher in the completed session. | Do not expose manual kernel creation. Kernels start only when an agent executes work.                                                            |
 | Cleanup         | Claude exposes stop/kill per kernel but may leave kernels idle.                                              | The research agent must stop every named kernel after outputs and artifacts are verified. Remote cleanup warnings remain visible.                |
 
 ## 6. Files and artifacts
 
-| Surface              | Claude Science behavior                                                                                                      | OpenScience contract                                                                                         |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Automatic collection | Generated files appear without a Browse step.                                                                                | `save_file` promotes files into the project artifact store automatically.                                    |
-| Grouping             | Artifacts are grouped by session and show a count and relative time.                                                         | Files is project-wide, groups by session, and marks artifacts created by the active run.                     |
-| Grid/list            | Images get thumbnails; CSV cards show dimensions/schema; reports show rendered content; grid and list layouts are available. | Figures preview inline, text/Markdown renders in chat, and existing Files previews retain grid/list support. |
-| Actions              | Open in split, download, and more-actions controls are adjacent to each artifact.                                            | Chat provides `Open beside chat`; Files owns project-level artifact actions.                                 |
-| Naming               | Artifacts use meaningful names and the final answer links the consolidated report.                                           | Blank summaries fall back to filename; the agent is prompted to provide descriptive non-empty titles.        |
-| Versioning           | Saved outputs are durable products of the session.                                                                           | Artifact cards show kind, version, size, and checksum; overwrites create durable versions.                   |
+| Surface              | Claude Science behavior                                                                                                      | OpenScience contract                                                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Automatic collection | Generated files appear without a Browse step.                                                                                | `save_file` promotes files into the project artifact store automatically.                                                                 |
+| Grouping             | Artifacts are grouped by session and show a count and relative time.                                                         | Files is project-wide, groups by session, and marks artifacts created by the active run.                                                  |
+| Grid/list            | Images get thumbnails; CSV cards show dimensions/schema; reports show rendered content; grid and list layouts are available. | Figures preview inline, text/Markdown renders in chat, and existing Files previews retain grid/list support.                              |
+| Actions              | Open in split, download, and more-actions controls are adjacent to each artifact.                                            | Chat provides `Open beside chat`; Files owns project-level artifact actions.                                                              |
+| Naming               | Artifacts use meaningful names and the final answer links the consolidated report.                                           | Blank summaries fall back to filename; the agent is prompted to provide descriptive non-empty titles.                                     |
+| Versioning           | Saved outputs are durable products of the session.                                                                           | Artifact cards show kind, version, size, and checksum; overwrites create durable versions.                                                |
+| Generated strip      | A `GENERATED · N` strip closes the turn; clicking a card opens that durable artifact in the Files surface beside chat.       | Render one end-of-turn Generated strip from completed saved-artifact receipts and open the durable artifact record, not the scratch path. |
 
 ## 7. Scientific result quality
 
@@ -99,6 +101,7 @@ OpenScience's research prompt now requires at least two decision-useful figures 
 ## 9. Intentional OpenScience differences
 
 - Finished kernels are stopped automatically rather than left idle, and disappear from Compute once they are no longer live.
+- Completed remote jobs also leave Compute; their receipts and durable outputs remain in chat and Files.
 - Manual kernel creation is removed. The execution ledger describes real work; it is not a launcher.
 - Compute also includes shell subprocesses and Modal/GPU jobs, which the reference surface did not expose in this exact local run.
 - Project-wide Files and Compute remain stable while sessions switch, matching the requested cross-session workspace model.
@@ -112,9 +115,12 @@ OpenScience's research prompt now requires at least two decision-useful figures 
 - [x] Figures display inline beside their producing cells.
 - [x] Saved report, tables, and figures auto-appear in Files.
 - [x] Artifact titles are meaningful and previews open beside chat.
-- [x] Failed analysis is visible and can be retried without losing history.
+- [x] A `Generated · N` strip opens durable artifact versions beside chat.
+- [x] Failed analysis stays as a compact step receipt and can be retried without losing history.
+- [x] Cell labels describe the scientific action instead of displaying an import or first code line.
+- [x] Live kernel rows expose the latest cell title, script/notebook source, and a collapsed five-line code viewport.
 - [x] Every named kernel stops after result verification.
 - [x] Completed, stopped, and killed local kernels disappear from Compute.
-- [x] Modal/GPU jobs have live and recent-result rows with resources, logs, artifacts, cancel, and cleanup state.
+- [x] Modal/GPU jobs have live rows with resources, logs, artifacts, cancel, and cleanup state; completed jobs leave Compute.
 - [x] The right workspace remains project-scoped across session changes.
 - [x] Compute and artifact cards adapt at narrow container widths.

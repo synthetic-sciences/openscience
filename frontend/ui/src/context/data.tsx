@@ -51,6 +51,9 @@ export type NavigateToSessionFn = (sessionID: string) => void
 /** Explicit save: register a written file as a durable, versioned artifact. */
 export type SaveArtifactFn = (path: string) => Promise<{ version: number }>
 
+/** Open a durable saved artifact version in the contextual Files surface. */
+export type OpenArtifactFn = (id: string) => void
+
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: {
@@ -61,6 +64,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     onQuestionReject?: QuestionRejectFn
     onNavigateToSession?: NavigateToSessionFn
     onOpenFile?: (path: string) => void
+    onOpenArtifact?: OpenArtifactFn
     onSaveArtifact?: SaveArtifactFn
   }) => {
     return {
@@ -75,6 +79,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       rejectQuestion: props.onQuestionReject,
       navigateToSession: props.onNavigateToSession,
       openFile: props.onOpenFile,
+      openArtifact: props.onOpenArtifact,
       saveArtifact: props.onSaveArtifact,
     }
   },

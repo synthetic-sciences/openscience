@@ -52,7 +52,7 @@ import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { NotebookView, type NotebookCellProps } from "./notebook-cell"
-import { skillName, stripRedactedReasoning } from "./tool-display"
+import { savedArtifact, scienceTaskLabel, skillName, stripRedactedReasoning } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
 
 export { ARTIFACT_TOOL, ToolRegistry, type ToolComponent, type ToolProps } from "./tool-registry"
@@ -807,7 +807,14 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
 function KernelTool(props: ToolProps & { language: "python" | "r"; label: "Python" | "R" }) {
   const code = () => (typeof props.input.code === "string" ? props.input.code : "")
   const kernel = () => (typeof props.input.kernel === "string" ? props.input.kernel : props.language)
-  const preview = () => code().trim().split("\n").find(Boolean)?.slice(0, 120)
+  const task = () => scienceTaskLabel({ title: props.input.title, code: code(), language: props.language })
+  const source = () => (typeof props.input.source === "string" ? props.input.source : undefined)
+  const count = () => (typeof props.metadata.executionCount === "number" ? props.metadata.executionCount : undefined)
+  const failed = () => props.metadata.ok === false || props.status === "error"
+  const subtitle = () =>
+    [props.label, `env ${kernel()}`, count() === undefined ? undefined : `cell ${count()}`, source()]
+      .filter(Boolean)
+      .join(" · ")
   const images = () => {
     const artifact = props.metadata.artifact
     if (!artifact || typeof artifact !== "object") return []
@@ -832,14 +839,14 @@ function KernelTool(props: ToolProps & { language: "python" | "r"; label: "Pytho
       {...props}
       icon="code"
       trigger={{
-        title: props.status === "completed" ? "Computed" : "Computing",
-        subtitle: preview(),
+        title: failed() ? `Failed · ${task()}` : props.status === "completed" ? task() : `Running · ${task()}`,
+        subtitle: subtitle(),
       }}
     >
       <div data-component="kernel-tool">
         <header>
           <strong>{props.label}</strong>
-          <span>env {kernel()}</span>
+          <span>{subtitle()}</span>
         </header>
         <pre data-slot="kernel-tool-source">
           <code>{code()}</code>
@@ -874,32 +881,15 @@ ToolRegistry.register({
 
 function SavedArtifactTool(props: ToolProps) {
   const data = useData()
-  const saved = () => {
-    const value = props.metadata.savedArtifact
-    if (!value || typeof value !== "object") return
-    if (
-      typeof value.title !== "string" ||
-      typeof value.kind !== "string" ||
-      typeof value.path !== "string" ||
-      typeof value.id !== "string" ||
-      typeof value.versionID !== "string" ||
-      typeof value.version !== "number" ||
-      typeof value.size !== "number" ||
-      typeof value.sha256 !== "string"
-    )
+  const saved = () => savedArtifact(props.metadata.savedArtifact)
+  const open = () => {
+    const artifact = saved()
+    if (!artifact) return
+    if (data.openArtifact) {
+      data.openArtifact(artifact.id)
       return
-    return value as {
-      title: string
-      kind: string
-      path: string
-      id: string
-      versionID: string
-      mimeType?: string
-      version: number
-      size: number
-      sha256: string
-      preview?: { kind: "image" | "text"; data: string }
     }
+    data.openFile?.(artifact.path)
   }
 
   return (
@@ -945,7 +935,7 @@ function SavedArtifactTool(props: ToolProps) {
               )}
             </Show>
             <footer>
-              <button type="button" onClick={() => data.openFile?.(artifact().path)}>
+              <button type="button" onClick={open}>
                 Open beside chat
               </button>
               <span>{artifact().size.toLocaleString()} bytes</span>

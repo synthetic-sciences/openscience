@@ -147,9 +147,9 @@ const SETTINGS_STYLES = `
   gap: 6px;
   padding: 4px 7px;
   border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.25;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
   color: var(--text-weak);
   text-align: left;
   transition: background 120ms ease, color 120ms ease;
@@ -161,6 +161,7 @@ const SETTINGS_STYLES = `
 .settings-nav__item[data-active="true"] {
   background: var(--surface-raised-strong);
   color: var(--text-strong);
+  font-weight: 500;
   box-shadow: none;
 }
 .settings-nav__item:focus-visible {
