@@ -112,12 +112,13 @@ describe.skipIf(skip)("egress: a real sandbox, a real proxy, a real remote host"
         `pypi=$(curl -sS -I -m 30 -o /dev/null -w '%{http_code}' https://pypi.org/simple/)`,
         `eutils=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi')`,
         `example=$(curl -sS -I -m 15 -o /dev/null -w '%{http_code}' https://example.com/)`,
-        // The load-bearing pair. `unset` inside a subshell strips the proxy
-        // vars for this one curl only — the checks above still route
-        // through the shim — so a 200 here would mean the socket is a
-        // convenience rather than the only way out, which is the entire
-        // claim this file exists to prove.
-        `direct=$(unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy; curl -sS -I -m 10 -o /dev/null -w '%{http_code}' https://pypi.org/)`,
+        // The load-bearing pair. `unset` inside a subshell strips every proxy
+        // var — including `ALL_PROXY`, curl's protocol-agnostic fallback,
+        // which a host could export even with `HTTPS_PROXY` unset — for this
+        // one curl only; the checks above still route through the shim. So a
+        // 200 here would mean the socket is a convenience rather than the
+        // only way out, which is the entire claim this file exists to prove.
+        `direct=$(unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy NO_PROXY no_proxy; curl -sS -I -m 10 -o /dev/null -w '%{http_code}' https://pypi.org/)`,
         `resolved=$(timeout 10 getent hosts pypi.org)`,
         `printf 'PYPI=%s\\nEUTILS=%s\\nEXAMPLE=%s\\nDIRECT=%s\\nGETENT=[%s]\\n' "$pypi" "$eutils" "$example" "$direct" "$resolved"`,
       ].join("\n")
@@ -159,7 +160,14 @@ describe.skipIf(skip)("egress: a real sandbox, a real proxy, a real remote host"
     const host = proxy(Egress.DEFAULT_RULES)
     try {
       const out = path.join(work.path, "numpy.whl")
-      const script = `curl -sS -m 120 -o ${JSON.stringify(out)} -w '%{http_code} %{size_download}' ${JSON.stringify(WHEEL_URL)}`
+      // curl's own budget stays comfortably inside the outer 120_000ms: the
+      // bwrap spawn and shim-readiness wait run before curl even starts, and
+      // `finally`'s cleanup runs after it ends. Matching the two would let a
+      // download that genuinely needs close to 120s race the outer bun:test
+      // timeout instead of curl's own — trading a diagnostic
+      // `curl: (28) Operation timed out` for a generic "test timed out" and
+      // deferring `host.stop()` until the abandoned promise chain resolves.
+      const script = `curl -sS -m 90 -o ${JSON.stringify(out)} -w '%{http_code} %{size_download}' ${JSON.stringify(WHEEL_URL)}`
 
       const { stdout, stderr } = await run(script, work.path, host.socket)
       expect(stdout.trim(), `stderr=${stderr}`).toBe(`200 ${WHEEL_SIZE}`)
