@@ -377,10 +377,18 @@ export namespace Sandbox {
     if (policy.network === "allowlist") {
       if (!policy.egress) throw new Error("sandbox network 'allowlist' requires an egress socket path")
       // --unshare-net (above) is what makes this the only route to the network —
-      // there is no other network device inside the namespace. The --bind here
+      // there is no other network device inside the namespace. The --ro-bind here
       // only makes the socket path reachable at all, for when it lives under a
       // path the sandbox re-mounts (the /tmp tmpfs, a fresh /dev or /proc).
-      args.push("--bind", policy.egress, policy.egress)
+      // Read-only, not read-write: the bind shares the host inode, so a
+      // sandboxed process could otherwise discover the path via
+      // /proc/self/mountinfo and `chmod 000` it, which persists on the host
+      // and disables egress for every other kernel/terminal/job sharing this
+      // one process-lifetime socket. A read-only bind blocks chmod (EROFS)
+      // while still permitting connect() — verified live: chmod fails with
+      // "Read-only file system" and a plain client still receives a reply
+      // over the same bind.
+      args.push("--ro-bind", policy.egress, policy.egress)
     }
     // Explicit, not a location choice: --tmpfs /tmp (above) masks the whole
     // host /tmp subtree unconditionally, so anything under it — a generated

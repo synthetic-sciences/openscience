@@ -231,12 +231,17 @@ describe("Sandbox network policy", () => {
 
   // The namespace must stay severed — the socket is the ONLY route out. If
   // --unshare-net were dropped here the proxy would become advisory.
-  test("allowlist unshares the network AND binds the socket", () => {
+  test("allowlist unshares the network AND binds the socket read-only", () => {
     const args = Sandbox.bubblewrapArgs({ writable: ["/w"], network: "allowlist", egress: "/run/os/e.sock" })
     expect(args).toContain("--unshare-net")
     const at = args.indexOf("/run/os/e.sock")
     expect(at).toBeGreaterThan(0)
-    expect(args[at - 1]).toBe("--bind")
+    // --ro-bind, not --bind: the bind shares the host inode, so a read-write
+    // bind would let a sandboxed process `chmod 000` the socket and disable
+    // egress host-wide (persists past this process, shared by every
+    // kernel/terminal/job). Read-only blocks chmod while still permitting
+    // connect() — verified live in the fix-round report.
+    expect(args[at - 1]).toBe("--ro-bind")
   })
 
   test("allowlist without a socket path is refused rather than silently opened", () => {
@@ -248,9 +253,10 @@ describe("Sandbox network policy", () => {
   // before the gate sees it — so a lexical variant of an over-broad path (a
   // trailing slash, a double slash, an unresolved "..") can't slip past the
   // gate's string checks the way the raw string comparison once did. An
-  // over-broad egress must never reach argv as a read-write --bind: that would
-  // defeat write containment entirely, not just widen network access. Proven
-  // previously by calling bubblewrapArgs directly with an unfiltered
+  // over-broad egress must never reach argv as a --bind at all — even
+  // read-only, that would expose the whole subtree's contents, not just
+  // widen network access. Proven previously by calling bubblewrapArgs
+  // directly with an unfiltered
   // `egress: $HOME`, which emitted "--bind $HOME $HOME" and let a sandboxed
   // write escape to the real $HOME — and, before normalization was added, the
   // exact same escape via `egress: $HOME + "/"` (a trailing slash was enough
@@ -278,7 +284,7 @@ describe("Sandbox network policy", () => {
     ).toThrow()
   })
 
-  test("a legitimate, non-broad egress socket is still bound", () => {
+  test("a legitimate, non-broad egress socket is still bound, read-only", () => {
     if (!Sandbox.available()) return
     const p = Sandbox.plan({
       command: "true",
@@ -289,8 +295,78 @@ describe("Sandbox network policy", () => {
     })
     expect(p.args).toContain("/run/os/e.sock")
     const at = (p.args ?? []).indexOf("/run/os/e.sock")
-    expect((p.args ?? [])[at - 1]).toBe("--bind")
+    expect((p.args ?? [])[at - 1]).toBe("--ro-bind")
   })
+
+  // Live regression for the read-only bind's actual purpose: the egress
+  // socket is one-per-CLI-process, shared by every kernel/terminal/job, so a
+  // sandboxed process that could `chmod 000` it would disable egress
+  // host-wide until restart (the bind shares the host inode, so the mode
+  // change persists on the host — even the host proxy can no longer
+  // connect()). Runs a real bwrap with the exact args bubblewrapArgs()
+  // produces (not the full shim/proxy plan() composes, which is exercised
+  // elsewhere) to prove both properties of --ro-bind at once: chmod fails
+  // closed inside the sandbox, and a plain client can still connect()
+  // through the same bind.
+  const python = Bun.which("python3") ?? Bun.which("python")
+  test.skipIf(Sandbox.backend() !== "bubblewrap" || !python)(
+    "the sandboxed process can connect through the egress bind but cannot chmod it",
+    async () => {
+      await using tmp = await tmpdir()
+      const sockPath = path.join(tmp.path, "e.sock")
+      const received: string[] = []
+      const server = Bun.listen<undefined>({
+        unix: sockPath,
+        socket: {
+          data(sock, chunk) {
+            received.push(chunk.toString())
+            sock.write(`ACK:${chunk.toString()}`)
+          },
+        },
+      })
+      try {
+        const args = Sandbox.bubblewrapArgs({ writable: [tmp.path], network: "allowlist", egress: sockPath })
+
+        const chmod = Bun.spawnSync({
+          cmd: ["bwrap", ...args, "--", "chmod", "000", sockPath],
+          stdout: "pipe",
+          stderr: "pipe",
+        })
+        expect(chmod.exitCode).not.toBe(0)
+        expect(chmod.stderr.toString()).toContain("Read-only file system")
+        // Mode must be unchanged on the host — the whole point of --ro-bind.
+        expect(fs.statSync(sockPath).mode & 0o777).toBeGreaterThan(0)
+
+        // Bun.spawn, not spawnSync: the server above replies from a Bun.listen
+        // "data" callback on this same event loop, so a *synchronous* spawn
+        // would block that loop for as long as the child runs — the child
+        // blocks on recv() waiting for a reply the loop can't yet deliver,
+        // deadlocking both sides until the test times out (reproduced while
+        // writing this test).
+        const clientSource = [
+          "import socket",
+          "s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)",
+          `s.connect(${JSON.stringify(sockPath)})`,
+          "s.send(b'hi')",
+          "print(s.recv(1024).decode(), end='')",
+        ].join("\n")
+        const connectProc = Bun.spawn({
+          cmd: ["bwrap", ...args, "--", python!, "-c", clientSource],
+          stdout: "pipe",
+          stderr: "pipe",
+        })
+        const [connectOut, connectErr] = await Promise.all([
+          new Response(connectProc.stdout).text(),
+          new Response(connectProc.stderr).text(),
+        ])
+        await connectProc.exited
+        expect(connectOut, connectErr).toBe("ACK:hi")
+        expect(received).toContain("hi")
+      } finally {
+        server.stop(true)
+      }
+    },
+  )
 
   // Seatbelt has no namespace, so the enforcement argument does not transfer.
   // Falling back to deny is safe; falling back to allow would silently grant
